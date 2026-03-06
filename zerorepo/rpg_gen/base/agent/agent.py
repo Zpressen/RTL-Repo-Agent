@@ -56,10 +56,17 @@ class BaseAgent:
     def init_memory(self):
         self._memory.clear_memory()
         tool_decriptions = self._env.tool_handler.describe_registered_tools()
-        system_prompt = self._sys_prompt.format_map(
-            {"Tool_Description": tool_decriptions}
-        )
-        self.logger.info(f"Agent System Prompt: {system_prompt}")    
+        system_prompt = self._sys_prompt
+        # Only apply template substitution when the explicit placeholder exists.
+        # This avoids treating JSON braces in prompts as format placeholders.
+        if "{Tool_Description}" in system_prompt:
+            system_prompt = system_prompt.replace(
+                "{Tool_Description}",
+                tool_decriptions
+            )
+        prompt_lines = system_prompt.split('\n')
+        display_prompt = '\n'.join(prompt_lines[:30]) + '\n... (truncated)' if len(prompt_lines) > 30 else system_prompt
+        self.logger.info(f"Agent System Prompt:\n{display_prompt}")    
         self._memory.add_message(SystemMessage(
             content=system_prompt
         ))

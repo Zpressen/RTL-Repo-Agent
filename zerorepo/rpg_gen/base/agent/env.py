@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+from copy import deepcopy
 from typing import List, Optional, Dict, Union
 from pydantic import BaseModel
 from ..tools import (
@@ -160,7 +161,7 @@ class BaseEnv:
                 all_results = [result]
             else:
                 all_results: List[ToolResult] = asyncio.run(
-                    self.tool_excutor.sequential_tool_call(
+                    self.tool_executor.sequential_tool_call(
                         tool_calls=parsed_actions,
                         env_params=[self * len(parsed_actions)]
                     )
@@ -335,7 +336,7 @@ class ReviewEnv(BaseEnv):
                 all_results = [result]
             else:
                 all_results: List[ToolResult] = asyncio.run(
-                    self.tool_excutor.sequential_tool_call(
+                    self.tool_executor.sequential_tool_call(
                         tool_calls=parsed_actions,
                         env_params=[self * len(parsed_actions)]
                     )

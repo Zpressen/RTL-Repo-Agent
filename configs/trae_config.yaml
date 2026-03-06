@@ -11,16 +11,16 @@ agents:
 model_providers:
     openai:
         provider: openai
-        api_key: ""
-        # base_url: ""
+        api_key: "sk-69b2599638a24105962d6b186788d6ce"
+        base_url: "https://api.deepseek.com"
         # api_version: ""
         # tenant_id: ""
         # token_scope: ""
 models:
     trae_agent_model:
         model_provider: openai
-        model: gpt-5-mini-20250807
-        max_completion_tokens: 16134
+        model: deepseek-coder
+        max_completion_tokens: 8192
         temperature: 0.0
         top_p: 1
         top_k: 0

@@ -12,11 +12,10 @@ This script serves as the main entry point for the ZeroRepo system, responsible 
 import argparse
 import sys
 import logging
+import os
 from pathlib import Path
 from typing import Optional, Dict, Any
 
-from zerorepo.zerorepo import ZeroRepo
-from zerorepo.rpg_gen.base.llm_client import LLMConfig
 from zerorepo.config.checkpoint_config import create_default_manager
 from zerorepo.utils.logs import setup_logger
 
@@ -109,9 +108,16 @@ Supported LLM Models:
     parser.add_argument(
         "--phase",
         type=str,
-        choices=["all", "design", "implementation"],
+        choices=["all", "design", "implementation", "rtl_phase1"],
         default="all",
-        help="Specify execution phase: 'all'=full pipeline, 'design'=design only, 'implementation'=implementation only"
+        help="Specify execution phase: 'all'=full pipeline, 'design'=design only, 'implementation'=implementation only, 'rtl_phase1'=RTL SpecFacts parsing"
+    )
+
+    parser.add_argument(
+        "--rtl-spec",
+        type=str,
+        default=None,
+        help="RTL spec file path or project name (used with rtl_phase1)"
     )
 
     parser.add_argument(
@@ -206,20 +212,173 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
         config_path = Path(args.config)
         checkpoint_dir = Path(args.checkpoint)
         repo_path = Path(args.repo)
-        
+
+        # RTL Phase 1: SpecFacts & Contract Grounding
+        if args.phase == "rtl_phase1":
+            logger.info("🔧 Initializing RTL Spec2Repo Phase 1...")
+
+            # Load config to get LLM settings
+            import yaml
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f)
+            llm_config_dict = config.get('llm', {})
+
+            # Import RTL specific modules
+            from zerorepo.rtl_spec_reader import RTLSpecReader, DEFAULT_RTL_DATASET_DIR
+
+            # Determine spec source
+            if args.rtl_spec:
+                spec_path = Path(args.rtl_spec)
+                if spec_path.exists() and spec_path.is_file():
+                    # Direct file path
+                    dataset_dir = spec_path.parent
+                    project_name = spec_path.stem
+                else:
+                    # Project name
+                    dataset_dir = DEFAULT_RTL_DATASET_DIR
+                    project_name = args.rtl_spec
+            else:
+                dataset_dir = DEFAULT_RTL_DATASET_DIR
+                project_name = None
+
+            reader = RTLSpecReader(dataset_dir=dataset_dir)
+
+            if project_name:
+                # Process single project
+                spec = reader.read_spec_by_name(project_name)
+                if spec is None:
+                    logger.error(f"Project not found: {project_name}")
+                    return False
+                specs = [spec]
+            else:
+                # Process all projects
+                specs = reader.read_all_specs()
+                if not specs:
+                    logger.warning(f"No spec files found in {dataset_dir}")
+                    return True
+
+            logger.info(f"Found {len(specs)} project(s) to process")
+
+            # Process each spec
+            for spec in specs:
+                logger.info(f"\n{'='*60}")
+                logger.info(f"Processing: {spec.project_name}")
+                logger.info(f"{'='*60}")
+
+                # Create checkpoint directory
+                spec_output_dir = spec.output_dir
+                spec_checkpoint_dir = spec_output_dir / ".zerorepo"
+                spec_checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
+                # Save repo_data.json (compatible format)
+                import json
+                repo_data = spec.to_dict()
+                repo_data_file = spec_checkpoint_dir / "repo_data.json"
+                with open(repo_data_file, 'w', encoding='utf-8') as f:
+                    json.dump(repo_data, f, indent=2, ensure_ascii=False)
+
+                # Save full spec content
+                spec_content_file = spec_checkpoint_dir / "spec_content.md"
+                with open(spec_content_file, 'w', encoding='utf-8') as f:
+                    f.write(spec.spec_content)
+
+                logger.info(f"SpecFacts saved to: {spec_checkpoint_dir}")
+                logger.info(f"  - repo_data.json")
+                logger.info(f"  - spec_content.md")
+
+                # Run Phase 1: SpecFacts & Contract Grounding
+                from zerorepo.rtl_impl.phase1_spec_parsing import SpecFactsDesigner
+
+                # Default policy for RTL phase1:
+                # - use agent by default
+                # - strict agent mode by default (no regex fallback)
+                # - optional override:
+                #   RTL_PHASE1_USE_AGENT=false => disable agent
+                #   RTL_PHASE1_ALLOW_REGEX_FALLBACK=true => non-strict mode
+                llm_config = None
+                use_agent_env = os.getenv("RTL_PHASE1_USE_AGENT", "").lower()
+                use_agent = use_agent_env in {"1", "true", "yes", "on"} if use_agent_env else True
+                allow_regex_fallback = os.getenv("RTL_PHASE1_ALLOW_REGEX_FALLBACK", "").lower() in {
+                    "1", "true", "yes", "on"
+                }
+                strict_agent = not allow_regex_fallback
+
+                if use_agent:
+                    try:
+                        from zerorepo.rpg_gen.base.llm_client import LLMConfig
+                        if args.llm_config:
+                            llm_config = LLMConfig.from_source(args.llm_config)
+                        elif llm_config_dict:
+                            llm_config = LLMConfig.from_dict(llm_config_dict)
+                        else:
+                            msg = (
+                                "Agent mode requires LLM config, but neither --llm-config "
+                                "nor config['llm'] is available."
+                            )
+                            if strict_agent:
+                                raise RuntimeError(msg)
+                            logger.warning("%s Falling back to regex parser for rtl_phase1.", msg)
+                            use_agent = False
+                        use_agent = use_agent and (llm_config is not None)
+                    except Exception as e:
+                        if strict_agent:
+                            raise
+                        logger.warning(
+                            "LLM stack unavailable (%s). Falling back to regex parser for rtl_phase1.",
+                            e
+                        )
+                        use_agent = False
+
+                # Run SpecFactsDesigner
+                designer = SpecFactsDesigner(
+                    llm_config=llm_config,
+                    logger=logger,
+                    use_agent=use_agent,
+                    strict_agent=strict_agent,
+                )
+                spec_facts = designer.run(
+                    spec_content=spec.spec_content,
+                    spec_name=spec.project_name
+                )
+
+                # Save SpecFacts
+                spec_facts_file = spec_checkpoint_dir / "spec_facts.json"
+                with open(spec_facts_file, 'w', encoding='utf-8') as f:
+                    json.dump(spec_facts.to_dict(), f, indent=2, ensure_ascii=False)
+
+                logger.info(f"  - spec_facts.json")
+
+                # Convert SpecFacts to RPG and save
+                from zerorepo.rtl_impl.phase1_spec_parsing import SpecFactsToRpgAdapter
+                adapter = SpecFactsToRpgAdapter(spec_facts)
+                rpg = adapter.create_rpg_from_specfacts()
+
+                rpg_file = spec_checkpoint_dir / "rpg.json"
+                with open(rpg_file, 'w', encoding='utf-8') as f:
+                    json.dump(adapter.get_rpg_dict(rpg), f, indent=2, ensure_ascii=False)
+
+                logger.info(f"  - rpg.json")
+                logger.info(f"✅ Phase 1 completed for {spec.project_name}")
+
+            logger.info(f"\n{'='*60}")
+            logger.info(f"🎉 RTL Phase 1 completed for {len(specs)} project(s)")
+            logger.info(f"{'='*60}")
+            return True
+
         logger.info("🔧 Initializing ZeroRepo system...")
-        
+        from zerorepo.zerorepo import ZeroRepo
+
         # Create global checkpoint manager
         logger.info(f"📋 Setting up global checkpoint manager: {checkpoint_dir}")
         create_default_manager(checkpoint_dir)
-        
+
         # Dry run mode
         if args.dry_run:
             logger.info("🧪 Dry run mode - validating configuration only")
             zero_repo = ZeroRepo(config_path, checkpoint_dir, repo_path)
             logger.info("✅ Configuration validation passed, system initialized successfully")
             return True
-        
+
         # Create ZeroRepo instance
         zero_repo = ZeroRepo(
             config_path=config_path,
@@ -230,16 +389,17 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
 
         # Override LLM config from --llm-config file if provided
         if args.llm_config:
+            from zerorepo.rpg_gen.base.llm_client import LLMConfig
             llm_cfg = LLMConfig.from_source(args.llm_config)
             zero_repo.config["llm"] = llm_cfg.to_dict()
             logger.info(f"LLM config overridden from: {args.llm_config}")
-        
+
         # Execute based on specified phase
         if args.phase == "design":
             logger.info("🎨 Executing design phase...")
             result = zero_repo.run_design_phase(resume=args.resume)
             logger.info("✅ Design phase completed")
-            
+
         elif args.phase == "implementation":
             logger.info("⚡ Executing implementation phase...")
             result = zero_repo.run_implementation_phase(
@@ -247,7 +407,7 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
                 force_rebuild=args.force_rebuild
             )
             logger.info("✅ Implementation phase completed")
-            
+
         else:  # phase == "all"
             logger.info("🔄 Executing full pipeline...")
             result = zero_repo.run()
