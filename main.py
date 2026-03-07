@@ -108,9 +108,9 @@ Supported LLM Models:
     parser.add_argument(
         "--phase",
         type=str,
-        choices=["all", "design", "implementation", "rtl_phase1"],
+        choices=["all", "design", "implementation", "rtl", "rtl_phase1", "rtl_phase2"],
         default="all",
-        help="Specify execution phase: 'all'=full pipeline, 'design'=design only, 'implementation'=implementation only, 'rtl_phase1'=RTL SpecFacts parsing"
+        help="Specify execution phase: 'all'=full pipeline, 'design'=design only, 'implementation'=implementation only, 'rtl'=RTL full pipeline with resume, 'rtl_phase1'=RTL SpecFacts parsing, 'rtl_phase2'=RTL Module Graph (requires Phase 1 output)"
     )
 
     parser.add_argument(
@@ -213,8 +213,8 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
         checkpoint_dir = Path(args.checkpoint)
         repo_path = Path(args.repo)
 
-        # RTL Phase 1: SpecFacts & Contract Grounding
-        if args.phase == "rtl_phase1":
+        # RTL Phase (full pipeline with resume)
+        if args.phase in ["rtl", "rtl_phase1", "rtl_phase2"]:
             logger.info("🔧 Initializing RTL Spec2Repo Phase 1...")
 
             # Load config to get LLM settings
@@ -270,21 +270,30 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
                 spec_checkpoint_dir = spec_output_dir / ".zerorepo"
                 spec_checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
-                # Save repo_data.json (compatible format)
-                import json
-                repo_data = spec.to_dict()
-                repo_data_file = spec_checkpoint_dir / "repo_data.json"
-                with open(repo_data_file, 'w', encoding='utf-8') as f:
-                    json.dump(repo_data, f, indent=2, ensure_ascii=False)
+                # Check for resume - if Phase 1 outputs exist, skip Phase 1
+                spec_facts_file = spec_checkpoint_dir / "spec_facts.json"
+                rpg_file = spec_checkpoint_dir / "rpg.json"
+                phase1_skipped = False
 
-                # Save full spec content
-                spec_content_file = spec_checkpoint_dir / "spec_content.md"
-                with open(spec_content_file, 'w', encoding='utf-8') as f:
-                    f.write(spec.spec_content)
+                if args.resume and spec_facts_file.exists() and rpg_file.exists():
+                    logger.info(f"⏭️ Phase 1 skipped (resume mode, outputs exist): {spec.project_name}")
+                    phase1_skipped = True
+                else:
+                    # Save repo_data.json (compatible format)
+                    import json
+                    repo_data = spec.to_dict()
+                    repo_data_file = spec_checkpoint_dir / "repo_data.json"
+                    with open(repo_data_file, 'w', encoding='utf-8') as f:
+                        json.dump(repo_data, f, indent=2, ensure_ascii=False)
 
-                logger.info(f"SpecFacts saved to: {spec_checkpoint_dir}")
-                logger.info(f"  - repo_data.json")
-                logger.info(f"  - spec_content.md")
+                    # Save full spec content
+                    spec_content_file = spec_checkpoint_dir / "spec_content.md"
+                    with open(spec_content_file, 'w', encoding='utf-8') as f:
+                        f.write(spec.spec_content)
+
+                    logger.info(f"SpecFacts saved to: {spec_checkpoint_dir}")
+                    logger.info(f"  - repo_data.json")
+                    logger.info(f"  - spec_content.md")
 
                 # Run Phase 1: SpecFacts & Contract Grounding
                 from zerorepo.rtl_impl.phase1_spec_parsing import SpecFactsDesigner
@@ -329,40 +338,181 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
                         )
                         use_agent = False
 
-                # Run SpecFactsDesigner
-                designer = SpecFactsDesigner(
-                    llm_config=llm_config,
-                    logger=logger,
-                    use_agent=use_agent,
-                    strict_agent=strict_agent,
-                )
-                spec_facts = designer.run(
-                    spec_content=spec.spec_content,
-                    spec_name=spec.project_name
-                )
+                # Run SpecFactsDesigner (only if not skipped)
+                if not phase1_skipped:
+                    designer = SpecFactsDesigner(
+                        llm_config=llm_config,
+                        logger=logger,
+                        use_agent=use_agent,
+                        strict_agent=strict_agent,
+                    )
+                    spec_facts = designer.run(
+                        spec_content=spec.spec_content,
+                        spec_name=spec.project_name
+                    )
 
-                # Save SpecFacts
-                spec_facts_file = spec_checkpoint_dir / "spec_facts.json"
-                with open(spec_facts_file, 'w', encoding='utf-8') as f:
-                    json.dump(spec_facts.to_dict(), f, indent=2, ensure_ascii=False)
+                    # Save SpecFacts
+                    spec_facts_file = spec_checkpoint_dir / "spec_facts.json"
+                    with open(spec_facts_file, 'w', encoding='utf-8') as f:
+                        json.dump(spec_facts.to_dict(), f, indent=2, ensure_ascii=False)
 
-                logger.info(f"  - spec_facts.json")
+                    logger.info(f"  - spec_facts.json")
 
-                # Convert SpecFacts to RPG and save
-                from zerorepo.rtl_impl.phase1_spec_parsing import SpecFactsToRpgAdapter
-                adapter = SpecFactsToRpgAdapter(spec_facts)
-                rpg = adapter.create_rpg_from_specfacts()
+                    # Convert SpecFacts to RPG and save
+                    from zerorepo.rtl_impl.phase1_spec_parsing import SpecFactsToRpgAdapter
+                    adapter = SpecFactsToRpgAdapter(spec_facts)
+                    rpg = adapter.create_rpg_from_specfacts()
 
-                rpg_file = spec_checkpoint_dir / "rpg.json"
-                with open(rpg_file, 'w', encoding='utf-8') as f:
-                    json.dump(adapter.get_rpg_dict(rpg), f, indent=2, ensure_ascii=False)
+                    rpg_file = spec_checkpoint_dir / "rpg.json"
+                    with open(rpg_file, 'w', encoding='utf-8') as f:
+                        json.dump(adapter.get_rpg_dict(rpg), f, indent=2, ensure_ascii=False)
 
-                logger.info(f"  - rpg.json")
-                logger.info(f"✅ Phase 1 completed for {spec.project_name}")
+                    logger.info(f"  - rpg.json")
+                    logger.info(f"✅ Phase 1 completed for {spec.project_name}")
+                else:
+                    # Load existing spec_facts and rpg for Phase 2
+                    import json
+                    with open(spec_facts_file, 'r', encoding='utf-8') as f:
+                        spec_facts_dict = json.load(f)
+                    # Note: rpg is needed for Phase 2, load it too
+                    # For now, we'll reload it in Phase 2 section
 
-            logger.info(f"\n{'='*60}")
-            logger.info(f"🎉 RTL Phase 1 completed for {len(specs)} project(s)")
-            logger.info(f"{'='*60}")
+                # ===== Phase 2: Module Graph Construction =====
+                # Run Phase 2 if phase is 'rtl' or 'rtl_phase2'
+                if args.phase in ["rtl", "rtl_phase2"]:
+                    # Check for resume - if module_graph.json exists, skip Phase 2
+                    module_graph_file = spec_checkpoint_dir / "module_graph.json"
+                    phase2_skipped = False
+
+                    if args.resume and module_graph_file.exists():
+                        logger.info(f"⏭️ Phase 2 skipped (resume mode, output exists): {spec.project_name}")
+                        phase2_skipped = True
+                    else:
+                        # Run Phase 2
+                        logger.info(f"🔧 Running Phase 2: Module Graph Construction...")
+
+                        # Import Phase 2 modules
+                        from zerorepo.rtl_impl.phase2_module_graph import Phase2Designer
+                        from zerorepo.rtl_impl.phase1_spec_parsing.spec_models import (
+                            SpecFacts, DirectorySpec, FileSpec, PortSpec,
+                            FunctionalRequirement, PriorityType, ParamSpec,
+                            ModuleNode, RoleType
+                        )
+
+                        # Load spec_facts from file
+                        with open(spec_facts_file, 'r', encoding='utf-8') as f:
+                            spec_facts_dict = json.load(f)
+
+                        # Reconstruct SpecFacts object with all needed fields
+                        def parse_directory_spec(d_dict):
+                            files = []
+                            for f in d_dict.get("files", []):
+                                files.append(FileSpec(
+                                    path=f.get("path", ""),
+                                    responsibility=f.get("responsibility", ""),
+                                    directory=f.get("directory", "")
+                                ))
+                            return DirectorySpec(
+                                name=d_dict.get("name", ""),
+                                description=d_dict.get("description", ""),
+                                files=files
+                            )
+
+                        def parse_port_spec(p_dict):
+                            return PortSpec(
+                                name=p_dict.get("name", ""),
+                                direction=p_dict.get("direction", "input"),
+                                width_expr=p_dict.get("width_expr", "1"),
+                                domain=p_dict.get("domain", "clk"),
+                                desc=p_dict.get("desc", "")
+                            )
+
+                        def parse_functional_requirement(req_dict):
+                            return FunctionalRequirement(
+                                id=req_dict.get("id", ""),
+                                priority=PriorityType(req_dict.get("priority", "must")),
+                                statement=req_dict.get("statement", ""),
+                                corner=req_dict.get("corner", ""),
+                                verify=req_dict.get("verify", "")
+                            )
+
+                        def parse_module_node(m_dict):
+                            ports = [parse_port_spec(p) for p in m_dict.get("ports", [])]
+                            params = [ParamSpec(
+                                name=p.get("name", ""),
+                                default=p.get("default", ""),
+                                desc=p.get("desc", "")
+                            ) for p in m_dict.get("params", [])]
+                            return ModuleNode(
+                                name=m_dict.get("name", ""),
+                                file_path=m_dict.get("file_path", ""),
+                                role=RoleType(m_dict.get("role", "datapath")),
+                                responsibility=m_dict.get("responsibility", ""),
+                                ports=ports,
+                                params=params,
+                                clocks_resets=m_dict.get("clocks_resets", [])
+                            )
+
+                        # Build SpecFacts
+                        spec_facts = SpecFacts(
+                            project_name=spec_facts_dict.get("project_name", ""),
+                            top_module=spec_facts_dict.get("top_module", ""),
+                            rtl_language=spec_facts_dict.get("rtl_language", "verilog"),
+                            toolchain=spec_facts_dict.get("toolchain", []),
+                            abstract=spec_facts_dict.get("abstract", ""),
+                            files=spec_facts_dict.get("files", {}),
+                            directories=[parse_directory_spec(d) for d in spec_facts_dict.get("directories", [])],
+                            functional_requirements=[parse_functional_requirement(r) for r in spec_facts_dict.get("functional_requirements", [])],
+                            top_ports=[parse_port_spec(p) for p in spec_facts_dict.get("top_ports", [])],
+                            modules=[parse_module_node(m) for m in spec_facts_dict.get("modules", [])],
+                        )
+
+                        # Load rpg if Phase 1 was skipped
+                        if phase1_skipped:
+                            # Need to create a minimal RPG for Phase 2
+                            from zerorepo.rpg_gen.base import RPG
+                            rpg = RPG(
+                                repo_name=spec_facts.project_name or "rtl_project",
+                                repo_info=spec_facts.abstract or "",
+                                excluded_files=[]
+                            )
+                            logger.info(f"  [Resuming] Loaded spec_facts, created minimal RPG for Phase 2")
+
+                        # Run Phase 2
+                        phase2_designer = Phase2Designer(
+                            llm_config=llm_config,
+                            checkpoint_dir=spec_checkpoint_dir,
+                            use_agent=use_agent,
+                            strict_agent=strict_agent,
+                        )
+
+                        phase2_result = phase2_designer.run(
+                            spec_facts=spec_facts,
+                            rpg=rpg,
+                        )
+
+                        if phase2_result.get("success"):
+                            logger.info(f"  - module_graph.json")
+                            logger.info(f"✅ Phase 2 completed for {spec.project_name}")
+                        else:
+                            logger.error(f"❌ Phase 2 failed for {spec.project_name}")
+
+            # Summary
+            if args.phase == "rtl":
+                logger.info(f"\n{'='*60}")
+                logger.info(f"🎉 RTL Pipeline completed for {len(specs)} project(s)")
+                logger.info(f"  - Phase 1: spec_facts.json, rpg.json")
+                logger.info(f"  - Phase 2: module_graph.json")
+                logger.info(f"{'='*60}")
+            elif args.phase == "rtl_phase1":
+                logger.info(f"\n{'='*60}")
+                logger.info(f"🎉 RTL Phase 1 completed for {len(specs)} project(s)")
+                logger.info(f"{'='*60}")
+            elif args.phase == "rtl_phase2":
+                logger.info(f"\n{'='*60}")
+                logger.info(f"🎉 RTL Phase 2 completed for {len(specs)} project(s)")
+                logger.info(f"{'='*60}")
+
             return True
 
         logger.info("🔧 Initializing ZeroRepo system...")

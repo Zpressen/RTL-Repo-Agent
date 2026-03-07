@@ -37,7 +37,7 @@ if [[ "${RTL_MODE}" == "true" ]]; then
 
     CHECKPOINT_DIR="${GENERATING_PROJECT}/zerorepo"
     REPO_DIR="${GENERATING_PROJECT}"
-    PHASE="rtl_phase1"  # RTL 模式固定为 phase1
+    PHASE="rtl"  # RTL 模式运行完整流程 (Phase 1 + Phase 2)
 else
     CHECKPOINT_DIR="${GENERATING_PROJECT}/checkpoints"
     REPO_DIR="${GENERATING_PROJECT}/workspace"
