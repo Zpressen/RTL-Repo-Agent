@@ -1,0 +1,811 @@
+{
+  "project_name": "axi_uart_periph",
+  "top_module": "axi_uart_top",
+  "rtl_language": "SystemVerilog-2017",
+  "toolchain": [
+    "iverilog",
+    "verilator",
+    "svlint",
+    "make"
+  ],
+  "repo_root": ".",
+  "abstract": "axi_uart_periph implements an AXI4-Lite slave UART peripheral with TX/RX FIFOs, CSR regmap, optional parity and interrupt, delivered with a runnable SV testbench and one-command simulation.",
+  "clock_reset": {
+    "clock_port": "clk",
+    "clock_description": "system clock, rising edge triggers all sequential logic",
+    "reset_port": "rst_n",
+    "reset_polarity": "active-low",
+    "reset_release": "sync",
+    "reset_value_requirement": "All output ports shall have defined values (no X/Z); uart_tx shall be 1 during reset and after reset when idle; irq shall be 0 during reset; CSRs reset to values per Regmap"
+  },
+  "default_params": [
+    {
+      "name": "ADDR_W",
+      "default": "16",
+      "range": "-",
+      "desc": "Address width, covers 64KB address space"
+    },
+    {
+      "name": "DATA_W",
+      "default": "32",
+      "range": "fixed",
+      "desc": "Data width, fixed at 32 for this project"
+    },
+    {
+      "name": "FIFO_DEPTH",
+      "default": "16",
+      "range": "[1, 1024]",
+      "desc": "TX/RX FIFO depth; affects STAT.TX_FULL/TX_EMPTY/RX_FULL/RX_EMPTY and overrun conditions"
+    },
+    {
+      "name": "OVERSAMPLE",
+      "default": "16",
+      "range": "[8, 32]",
+      "desc": "RX oversampling factor; affects RX alignment and sampling tick interval"
+    },
+    {
+      "name": "CLK_FREQ_HZ",
+      "default": "50_000_000",
+      "range": "-",
+      "desc": "System clock frequency for BAUD_DIV calculation"
+    },
+    {
+      "name": "BAUD_DEFAULT",
+      "default": "115200",
+      "range": "-",
+      "desc": "Default baud rate after reset"
+    }
+  ],
+  "directories": [],
+  "files": {
+    "rtl/axi_uart_top.sv": "Top integration and port wiring only; no complex logic",
+    "rtl/modules/axi_lite_regs.sv": "AXI-Lite slave + CSR + register side effects; single source of truth for CSR",
+    "rtl/modules/baud_gen.sv": "Divider to baud_tick and optional oversample tick generation",
+    "rtl/modules/uart_tx.sv": "Serialize bytes: idle/start/data/parity/stop FSM",
+    "rtl/modules/uart_rx.sv": "Detect start bit, sample bits at midpoints, assemble byte",
+    "rtl/modules/fifo_sync.sv": "Parameterized synchronous FIFO for TX/RX",
+    "rtl/pkg/uart_pkg.sv": "typedef/params/helpers package",
+    "tb/axi_uart_tb.sv": "Pure SV testbench; covers TEST-001/010/011/020/030/040",
+    "tb/models/uart_ref.py": "Optional golden model",
+    "scripts/run_sim.sh": "One-command compile+simulation with PASS/FAIL exit code",
+    "scripts/lint.sh": "Optional lint script",
+    "Makefile": "Build entry point for sim and lint targets",
+    "README.md": "Project documentation"
+  },
+  "build_entry": "make sim",
+  "run_entry": "vvp sim.out",
+  "glossary": [
+    {
+      "term": "baud_tick",
+      "definition": "UART '每 1 bit time' 的边界 tick（驱动 TX shift / RX bit 采样推进）"
+    },
+    {
+      "term": "os_tick",
+      "definition": "oversample tick（默认 16x；用于 RX 起始位对齐与中点采样）"
+    },
+    {
+      "term": "frame",
+      "definition": "UART 帧（start + data + optional parity + stop）"
+    }
+  ],
+  "goals": [
+    {
+      "id": "G1",
+      "description": "实现 AXI4-Lite Slave（32-bit，word-aligned），可访问 CSR 与数据寄存器"
+    },
+    {
+      "id": "G2",
+      "description": "实现 UART TX（8N1 默认，可配置 parity），支持可编程波特率"
+    }
+  ],
+  "constraints": [
+    {
+      "key": "synthesizable_subset_only",
+      "value": "SystemVerilog-2017 synthesizable subset only; no dynamic array, class, mailbox in RTL (TB only)",
+      "source_section": "0. Meta 信息"
+    },
+    {
+      "key": "always_ff_style",
+      "value": "Sequential logic must use always_ff @(posedge clk)",
+      "source_section": "0. Meta 信息"
+    },
+    {
+      "key": "always_comb_style",
+      "value": "Combinational logic must use always_comb",
+      "source_section": "0. Meta 信息"
+    },
+    {
+      "key": "reset_polarity",
+      "value": "rst_n is active-low with synchronous release",
+      "source_section": "0. Meta 信息"
+    },
+    {
+      "key": "assignment_style",
+      "value": "Non-blocking (<=) for sequential; blocking (=) for combinational",
+      "source_section": "0. Meta 信息"
+    },
+    {
+      "key": "no_xz_outputs",
+      "value": "All outputs must never be X/Z at any time (TB can add X-check)",
+      "source_section": "0. Meta 信息"
+    },
+    {
+      "key": "axi_single_outstanding",
+      "value": "Single outstanding: max 1 write transaction (AW+W→B) and 1 read transaction (AR→R) at a time",
+      "source_section": "5.3 Protocol Contract: AXI4-Lite Slave"
+    },
+    {
+      "key": "ready_backpressure_allowed",
+      "value": "*_ready signals may backpressure (pull low) but must not cause deadlock",
+      "source_section": "5.3 Protocol Contract: AXI4-Lite Slave"
+    },
+    {
+      "key": "word_aligned_only",
+      "value": "Only word-aligned addresses supported (addr[1:0]==0); misaligned access returns SLVERR",
+      "source_section": "5.3 Protocol Contract: AXI4-Lite Slave"
+    },
+    {
+      "key": "txdata_uses_lower_byte",
+      "value": "TXDATA write uses only WDATA[7:0]",
+      "source_section": "5.3 Protocol Contract: AXI4-Lite Slave"
+    },
+    {
+      "key": "tx_fifo_full_slverr",
+      "value": "If TX FIFO full on write: no enqueue, BRESP=SLVERR (avoid software infinite wait)",
+      "source_section": "5.3 Protocol Contract: AXI4-Lite Slave"
+    },
+    {
+      "key": "rxdata_empty_returns_zero",
+      "value": "If RX FIFO empty on read: return RDATA=0 with RRESP=OKAY",
+      "source_section": "5.3 Protocol Contract: AXI4-Lite Slave"
+    },
+    {
+      "key": "uart_idle_high",
+      "value": "UART TX idle level = 1",
+      "source_section": "5.4 Protocol Contract: UART"
+    },
+    {
+      "key": "uart_frame_8n1_default",
+      "value": "Default frame: start=0, 8 data bits (LSB first), parity disabled, 1 stop bit",
+      "source_section": "5.4 Protocol Contract: UART"
+    },
+    {
+      "key": "uart_tx_reset_high",
+      "value": "uart_tx shall be driven to 1 during reset and after reset when idle",
+      "source_section": "5.1 Clock & Reset"
+    },
+    {
+      "key": "irq_reset_low",
+      "value": "irq shall be 0 during reset",
+      "source_section": "5.1 Clock & Reset"
+    },
+    {
+      "key": "single_clock_domain",
+      "value": "All logic in single clock domain clk; no multi-clock/CDC",
+      "source_section": "2.2 Non-goals"
+    },
+    {
+      "key": "tx_busy_definition",
+      "value": "STAT.TX_BUSY=1 when FSM not in IDLE (implementation choice documented)",
+      "source_section": "9.2 TX FSM"
+    },
+    {
+      "key": "framing_err_drop_byte",
+      "value": "If stop bit != 1: set FRAMING_ERR and drop the byte",
+      "source_section": "9.3 RX Sampling"
+    },
+    {
+      "key": "rx_overrun_drop",
+      "value": "If RX FIFO full when valid frame arrives: set RX_OVERRUN and drop",
+      "source_section": "9.3 RX Sampling"
+    },
+    {
+      "key": "axi_lite_regs_single_source",
+      "value": "axi_lite_regs.sv is the single source of truth for CSR and side effects (not分散 in multiple modules)",
+      "source_section": "10. Repository Blueprint"
+    }
+  ],
+  "soft_preferences": [
+    {
+      "key": "iverilog_primary",
+      "value": "iverilog is primary tool; verilator optional for lint",
+      "source_section": "0. Meta 信息"
+    },
+    {
+      "key": "repo_size_target",
+      "value": "≤50 files (this example ~10-15 files)",
+      "source_section": "Project intent"
+    },
+    {
+      "key": "lint_optional",
+      "value": "Lint is optional via verilator --lint-only or svlint",
+      "source_section": "0. Meta 信息"
+    },
+    {
+      "key": "tb_pure_sv",
+      "value": "Testbench is pure SV (or cocotb optional)",
+      "source_section": "10. Repository Blueprint"
+    },
+    {
+      "key": "assertion_macros",
+      "value": "Use ASSERT_EQ and ASSERT_TRUE macros in TB",
+      "source_section": "11. Verification Plan"
+    }
+  ],
+  "top_ports": [
+    {
+      "name": "clk",
+      "direction": "input",
+      "width_expr": "1",
+      "domain": "clk",
+      "desc": "system clock"
+    },
+    {
+      "name": "rst_n",
+      "direction": "input",
+      "width_expr": "1",
+      "domain": "clk",
+      "desc": "active-low reset (sync deassert)"
+    },
+    {
+      "name": "s_axi_awaddr",
+      "direction": "input",
+      "width_expr": "ADDR_W",
+      "domain": "clk",
+      "desc": "write address (byte address)"
+    },
+    {
+      "name": "s_axi_awprot",
+      "direction": "input",
+      "width_expr": "3",
+      "domain": "clk",
+      "desc": "protection type (ignored, must be accepted)"
+    },
+    {
+      "name": "s_axi_awvalid",
+      "direction": "input",
+      "width_expr": "1",
+      "domain": "clk",
+      "desc": "write address valid"
+    },
+    {
+      "name": "s_axi_awready",
+      "direction": "output",
+      "width_expr": "1",
+      "domain": "clk",
+      "desc": "write address ready"
+    },
+    {
+      "name": "s_axi_wdata",
+      "direction": "input",
+      "width_expr": "DATA_W",
+      "domain": "clk",
+      "desc": "write data"
+    },
+    {
+      "name": "s_axi_wstrb",
+      "direction": "input",
+      "width_expr": "DATA_W/8",
+      "domain": "clk",
+      "desc": "byte enables"
+    },
+    {
+      "name": "s_axi_wvalid",
+      "direction": "input",
+      "width_expr": "1",
+      "domain": "clk",
+      "desc": "write data valid"
+    },
+    {
+      "name": "s_axi_wready",
+      "direction": "output",
+      "width_expr": "1",
+      "domain": "clk",
+      "desc": "write data ready"
+    },
+    {
+      "name": "s_axi_bresp",
+      "direction": "output",
+      "width_expr": "2",
+      "domain": "clk",
+      "desc": "write response (OKAY=2'b00, SLVERR=2'b10)"
+    },
+    {
+      "name": "s_axi_bvalid",
+      "direction": "output",
+      "width_expr": "1",
+      "domain": "clk",
+      "desc": "write response valid"
+    },
+    {
+      "name": "s_axi_bready",
+      "direction": "input",
+      "width_expr": "1",
+      "domain": "clk",
+      "desc": "write response ready"
+    },
+    {
+      "name": "s_axi_araddr",
+      "direction": "input",
+      "width_expr": "ADDR_W",
+      "domain": "clk",
+      "desc": "read address"
+    },
+    {
+      "name": "s_axi_arprot",
+      "direction": "input",
+      "width_expr": "3",
+      "domain": "clk",
+      "desc": "protection type (ignored, must be accepted)"
+    },
+    {
+      "name": "s_axi_arvalid",
+      "direction": "input",
+      "width_expr": "1",
+      "domain": "clk",
+      "desc": "read address valid"
+    },
+    {
+      "name": "s_axi_arready",
+      "direction": "output",
+      "width_expr": "1",
+      "domain": "clk",
+      "desc": "read address ready"
+    },
+    {
+      "name": "s_axi_rdata",
+      "direction": "output",
+      "width_expr": "DATA_W",
+      "domain": "clk",
+      "desc": "read data"
+    },
+    {
+      "name": "s_axi_rresp",
+      "direction": "output",
+      "width_expr": "2",
+      "domain": "clk",
+      "desc": "read response (OKAY/SLVERR)"
+    },
+    {
+      "name": "s_axi_rvalid",
+      "direction": "output",
+      "width_expr": "1",
+      "domain": "clk",
+      "desc": "read data valid"
+    },
+    {
+      "name": "s_axi_rready",
+      "direction": "input",
+      "width_expr": "1",
+      "domain": "clk",
+      "desc": "read data ready"
+    },
+    {
+      "name": "uart_tx",
+      "direction": "output",
+      "width_expr": "1",
+      "domain": "clk",
+      "desc": "UART TX line (idle=1)"
+    },
+    {
+      "name": "uart_rx",
+      "direction": "input",
+      "width_expr": "1",
+      "domain": "clk",
+      "desc": "UART RX line"
+    },
+    {
+      "name": "irq",
+      "direction": "output",
+      "width_expr": "1",
+      "domain": "clk",
+      "desc": "interrupt level"
+    }
+  ],
+  "params": [],
+  "protocol_contracts": [
+    {
+      "protocol_name": "AXI4-Lite Slave",
+      "rules": [],
+      "source_section": "5.3 Protocol Contract"
+    },
+    {
+      "protocol_name": "UART",
+      "rules": [],
+      "source_section": "5.4 Protocol Contract"
+    }
+  ],
+  "registers": [
+    {
+      "name": "CTRL",
+      "address": "0x00",
+      "access": "rw",
+      "reset_value": "0x0000_0000",
+      "description": "Enable, IRQ enables, parity config",
+      "fields": [
+        {
+          "name": "EN",
+          "bit_range": "bit0",
+          "access": "rw",
+          "reset_value": "0",
+          "description": "1=enable UART; 0=TX idle, RX disabled (RX does not sample)"
+        },
+        {
+          "name": "TX_IRQ_EN",
+          "bit_range": "bit1",
+          "access": "rw",
+          "reset_value": "0",
+          "description": "TX interrupt enable"
+        },
+        {
+          "name": "PARITY_ODD",
+          "bit_range": "bit5",
+          "access": "rw",
+          "reset_value": "0",
+          "description": "0=even parity, 1=odd parity"
+        }
+      ],
+      "side_effects": "-"
+    },
+    {
+      "name": "BAUD",
+      "address": "0x04",
+      "access": "rw",
+      "reset_value": "BAUD_DEFAULT encoded",
+      "description": "Baud divider (implementation-defined encoding)",
+      "fields": [
+        {
+          "name": "DIV",
+          "bit_range": "bits[15:0]",
+          "access": "rw",
+          "reset_value": "encoded BAUD_DEFAULT",
+          "description": "baud_div = cycles per bit time tick"
+        }
+      ],
+      "side_effects": "baud_tick asserted every baud_div cycles"
+    },
+    {
+      "name": "STAT",
+      "address": "0x08",
+      "access": "ro",
+      "reset_value": "0x0000_0000",
+      "description": "FIFO status, busy flags, error flags",
+      "fields": [
+        {
+          "name": "TX_FULL",
+          "bit_range": "bit0",
+          "access": "ro",
+          "reset_value": "-",
+          "description": "TX FIFO full flag"
+        },
+        {
+          "name": "TX_EMPTY",
+          "bit_range": "bit1",
+          "access": "ro",
+          "reset_value": "-",
+          "description": "TX FIFO empty flag"
+        },
+        {
+          "name": "RX_FULL",
+          "bit_range": "bit2",
+          "access": "ro",
+          "reset_value": "-",
+          "description": "RX FIFO full flag"
+        }
+      ],
+      "side_effects": "-"
+    },
+    {
+      "name": "TXDATA",
+      "address": "0x0C",
+      "access": "wo",
+      "reset_value": "-",
+      "description": "Write byte to TX FIFO",
+      "fields": [],
+      "side_effects": "If TX FIFO non-full: push WDATA[7:0]; If full: no push, AXI write response SLVERR"
+    },
+    {
+      "name": "RXDATA",
+      "address": "0x10",
+      "access": "ro",
+      "reset_value": "-",
+      "description": "Read byte from RX FIFO (read pops)",
+      "fields": [],
+      "side_effects": "If RX FIFO non-empty: RDATA[7:0]=byte and pop 1 entry; else: RDATA=0 (no error set)"
+    },
+    {
+      "name": "IRQ_STAT",
+      "address": "0x14",
+      "access": "rw1c",
+      "reset_value": "0x0",
+      "description": "IRQ status (write-1-clear for latched errors)",
+      "fields": [],
+      "side_effects": "Write-1-clear for latched errors"
+    }
+  ],
+  "functional_requirements": [
+    {
+      "id": "REQ-001",
+      "priority": "must",
+      "statement": "When rst_n==0, the design shall reset all CSRs to their reset values. uart_tx shall be driven to 1 during reset and after reset when idle. irq shall be 0 during reset.",
+      "corner": "Reset assertion and synchronous release",
+      "verify": "SIM(TEST-001), FORMAL(PROP-001)"
+    }
+  ],
+  "tests": [
+    {
+      "id": "TEST-001",
+      "name": "",
+      "purpose": "验证 reset 后 CSR/输出符合 REQ-001",
+      "steps": [
+        "rst_n=0 持续 N 个 clk",
+        "释放 rst_n=1（同步释放）",
+        "读 CTRL/STAT/IRQ_STAT"
+      ],
+      "checks": [
+        "uart_tx==1",
+        "irq==0",
+        "CSR 为 reset 值"
+      ],
+      "pass_condition": ""
+    }
+  ],
+  "modules": [
+    {
+      "name": "axi_uart_top",
+      "file_path": "rtl/axi_uart_top.sv",
+      "role": "top",
+      "responsibility": "Top integration and port wiring; no complex logic",
+      "ports": [],
+      "params": [],
+      "clocks_resets": []
+    },
+    {
+      "name": "axi_lite_regs",
+      "file_path": "rtl/modules/axi_lite_regs.sv",
+      "role": "control",
+      "responsibility": "AXI-Lite slave + CSR + register side effects; single source of truth for CSR",
+      "ports": [],
+      "params": [],
+      "clocks_resets": []
+    },
+    {
+      "name": "baud_gen",
+      "file_path": "rtl/modules/baud_gen.sv",
+      "role": "datapath",
+      "responsibility": "Divider to baud_tick and optional oversample tick generation",
+      "ports": [],
+      "params": [],
+      "clocks_resets": []
+    },
+    {
+      "name": "uart_tx",
+      "file_path": "rtl/modules/uart_tx.sv",
+      "role": "datapath",
+      "responsibility": "Serialize bytes: idle/start/data/parity/stop FSM",
+      "ports": [],
+      "params": [],
+      "clocks_resets": []
+    },
+    {
+      "name": "uart_rx",
+      "file_path": "rtl/modules/uart_rx.sv",
+      "role": "datapath",
+      "responsibility": "Detect start bit, sample bits at midpoints, assemble byte",
+      "ports": [],
+      "params": [],
+      "clocks_resets": []
+    },
+    {
+      "name": "fifo_sync",
+      "file_path": "rtl/modules/fifo_sync.sv",
+      "role": "primitive",
+      "responsibility": "Parameterized synchronous FIFO for TX/RX",
+      "ports": [],
+      "params": [],
+      "clocks_resets": []
+    },
+    {
+      "name": "uart_pkg",
+      "file_path": "rtl/pkg/uart_pkg.sv",
+      "role": "package",
+      "responsibility": "typedef/params/helpers package",
+      "ports": [],
+      "params": [],
+      "clocks_resets": []
+    },
+    {
+      "name": "axi_uart_tb",
+      "file_path": "tb/axi_uart_tb.sv",
+      "role": "tb",
+      "responsibility": "Testbench covering TEST-001/010/011/020/030/040",
+      "ports": [],
+      "params": [],
+      "clocks_resets": []
+    }
+  ],
+  "edges": [
+    {
+      "src": "axi_uart_top",
+      "dst": "axi_lite_regs",
+      "edge_type": "instantiates",
+      "desc": "Top instantiates AXI-Lite register module"
+    },
+    {
+      "src": "axi_uart_top",
+      "dst": "baud_gen",
+      "edge_type": "instantiates",
+      "desc": "Top instantiates baud rate generator"
+    },
+    {
+      "src": "axi_uart_top",
+      "dst": "uart_tx",
+      "edge_type": "instantiates",
+      "desc": "Top instantiates UART transmitter"
+    },
+    {
+      "src": "axi_uart_top",
+      "dst": "uart_rx",
+      "edge_type": "instantiates",
+      "desc": "Top instantiates UART receiver"
+    },
+    {
+      "src": "axi_uart_top",
+      "dst": "fifo_sync",
+      "edge_type": "instantiates",
+      "desc": "Top instantiates sync FIFOs for TX/RX"
+    },
+    {
+      "src": "axi_uart_top",
+      "dst": "uart_pkg",
+      "edge_type": "uses_package",
+      "desc": "Top uses package for typedef/params"
+    },
+    {
+      "src": "axi_lite_regs",
+      "dst": "uart_pkg",
+      "edge_type": "uses_package",
+      "desc": "Register module uses package for CSR definitions"
+    },
+    {
+      "src": "axi_lite_regs",
+      "dst": "fifo_sync",
+      "edge_type": "drives_or_consumes",
+      "desc": "Register module interfaces with FIFOs for TXDATA/RXDATA"
+    },
+    {
+      "src": "uart_tx",
+      "dst": "fifo_sync",
+      "edge_type": "drives_or_consumes",
+      "desc": "TX module consumes from TX FIFO"
+    },
+    {
+      "src": "uart_rx",
+      "dst": "fifo_sync",
+      "edge_type": "drives_or_consumes",
+      "desc": "RX module produces to RX FIFO"
+    },
+    {
+      "src": "baud_gen",
+      "dst": "uart_tx",
+      "edge_type": "drives_or_consumes",
+      "desc": "Baud generator provides baud_tick to TX FSM"
+    },
+    {
+      "src": "baud_gen",
+      "dst": "uart_rx",
+      "edge_type": "drives_or_consumes",
+      "desc": "Baud generator provides oversample tick to RX"
+    }
+  ],
+  "non_goals": [
+    {
+      "id": "NG1",
+      "description": "不支持 AXI full（只支持 AXI4-Lite）"
+    },
+    {
+      "id": "NG2",
+      "description": "不支持 multi-clock / CDC（所有逻辑单时钟域 clk）"
+    }
+  ],
+  "open_decision_objects": [],
+  "open_decisions": [],
+  "acceptance_gates": [
+    {
+      "name": "make_sim_exit_zero",
+      "command": "make sim",
+      "pass_rule": "make sim exit code == 0",
+      "gate_id": "AC-001",
+      "gate_type": "sim"
+    },
+    {
+      "name": "all_tests_pass",
+      "command": "make sim",
+      "pass_rule": "TEST-001/010/011/020/022/030/040 all PASS",
+      "gate_id": "AC-002",
+      "gate_type": "sim"
+    },
+    {
+      "name": "no_xz_outputs",
+      "command": "make sim",
+      "pass_rule": "No X/Z outputs (TB enables X-check)",
+      "gate_id": "AC-003",
+      "gate_type": "sim"
+    },
+    {
+      "name": "node00_compile_pass",
+      "command": "make sim",
+      "pass_rule": "Compilation passes (no syntax errors); TB starts and ends (no infinite loop)",
+      "gate_id": "Node-00",
+      "gate_type": "compile"
+    },
+    {
+      "name": "node01_lint_pass",
+      "command": "make lint",
+      "pass_rule": "lint/compilation passes; unused port warnings acceptable but no X driving",
+      "gate_id": "Node-01",
+      "gate_type": "lint"
+    }
+  ],
+  "spec_file_path": "",
+  "phase1_complete": true,
+  "phase1_ready_for_phase2": true,
+  "missing_must_have_fields": [],
+  "has_conflicting_constraints": false,
+  "blocking_issues": [],
+  "coverage_report": {
+    "req_ids_in_spec": [
+      "REQ-001"
+    ],
+    "req_ids_extracted": [
+      "REQ-001"
+    ],
+    "req_missing": [],
+    "test_ids_in_spec": [
+      "TEST-001"
+    ],
+    "test_ids_extracted": [
+      "TEST-001"
+    ],
+    "test_missing": [],
+    "field_coverage": {
+      "functional_requirements": {
+        "present_count": 1,
+        "expected_count": 1,
+        "expected": true,
+        "pass": true
+      },
+      "tests": {
+        "present_count": 1,
+        "expected_count": 1,
+        "expected": true,
+        "pass": true
+      },
+      "params": {
+        "present_count": 6,
+        "expected": false,
+        "pass": true
+      },
+      "protocol_contracts": {
+        "present_count": 2,
+        "expected": false,
+        "pass": true
+      },
+      "glossary": {
+        "present_count": 3,
+        "expected": false,
+        "pass": true
+      },
+      "goals": {
+        "present_count": 2,
+        "expected": false,
+        "pass": true
+      }
+    },
+    "decision_resolution_summary": {
+      "resolved_count": 0,
+      "unresolved_count": 0,
+      "unresolved_keys": []
+    }
+  }
+}

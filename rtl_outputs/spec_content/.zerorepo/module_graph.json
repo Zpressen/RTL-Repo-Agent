@@ -1,0 +1,851 @@
+{
+  "nodes": [
+    {
+      "name": "axi_uart_top",
+      "file_path": "rtl/axi_uart_top.sv",
+      "role": "top",
+      "responsibility": "Top-level integration module that connects all submodules and interfaces with external AXI4-Lite and UART signals",
+      "ports": [
+        {
+          "name": "clk",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "rst_n",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_awaddr",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_awprot",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_awvalid",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_awready",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_wdata",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_wstrb",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_wvalid",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_wready",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_bresp",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_bvalid",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_bready",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_araddr",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_arprot",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_arvalid",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_arready",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_rdata",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_rresp",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_rvalid",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_rready",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "uart_tx",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "uart_rx",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "irq",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        }
+      ],
+      "params": [
+        {
+          "name": "ADDR_W",
+          "default": "32",
+          "desc": ""
+        },
+        {
+          "name": "DATA_W",
+          "default": "32",
+          "desc": ""
+        }
+      ],
+      "clocks_resets": []
+    },
+    {
+      "name": "axi_lite_regs",
+      "file_path": "rtl/modules/axi_lite_regs.sv",
+      "role": "control",
+      "responsibility": "AXI4-Lite slave interface and CSR register map with side effects, generates control signals and interrupt",
+      "ports": [
+        {
+          "name": "clk",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "rst_n",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_awaddr",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_awprot",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_awvalid",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_awready",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_wdata",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_wstrb",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_wvalid",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_wready",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_bresp",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_bvalid",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_bready",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_araddr",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_arprot",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_arvalid",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_arready",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_rdata",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_rresp",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_rvalid",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "s_axi_rready",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "baud_div",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "tx_fifo_wdata",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "tx_fifo_wr",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "tx_fifo_full",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "rx_fifo_rdata",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "rx_fifo_rd",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "rx_fifo_empty",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "tx_busy",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "rx_error",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "parity_en",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "parity_odd",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "irq",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        }
+      ],
+      "params": [
+        {
+          "name": "ADDR_W",
+          "default": "32",
+          "desc": ""
+        },
+        {
+          "name": "DATA_W",
+          "default": "32",
+          "desc": ""
+        },
+        {
+          "name": "BAUD_DIV_W",
+          "default": "16",
+          "desc": ""
+        },
+        {
+          "name": "RX_ERR_W",
+          "default": "3",
+          "desc": ""
+        }
+      ],
+      "clocks_resets": []
+    },
+    {
+      "name": "baud_gen",
+      "file_path": "rtl/modules/baud_gen.sv",
+      "role": "datapath",
+      "responsibility": "Baud rate generator that produces baud_tick for TX and optional oversample_tick for RX",
+      "ports": [
+        {
+          "name": "clk",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "rst_n",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "baud_div",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "baud_tick",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "oversample_tick",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        }
+      ],
+      "params": [
+        {
+          "name": "BAUD_DIV_W",
+          "default": "16",
+          "desc": ""
+        },
+        {
+          "name": "OVERSAMPLE",
+          "default": "16",
+          "desc": ""
+        }
+      ],
+      "clocks_resets": []
+    },
+    {
+      "name": "uart_tx",
+      "file_path": "rtl/modules/uart_tx.sv",
+      "role": "datapath",
+      "responsibility": "UART transmitter with FSM (idle/start/data/parity/stop), serializes bytes from FIFO",
+      "ports": [
+        {
+          "name": "clk",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "rst_n",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "baud_tick",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "tx_data",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "tx_valid",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "tx_ready",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "tx_line",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "tx_busy",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "parity_en",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "parity_odd",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        }
+      ],
+      "params": [],
+      "clocks_resets": []
+    },
+    {
+      "name": "uart_rx",
+      "file_path": "rtl/modules/uart_rx.sv",
+      "role": "datapath",
+      "responsibility": "UART receiver that detects start bit, samples at midpoints, assembles byte with error detection",
+      "ports": [
+        {
+          "name": "clk",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "rst_n",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "baud_tick",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "oversample_tick",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "rx_line",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "rx_data",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "rx_valid",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "rx_error",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "parity_en",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "parity_odd",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        }
+      ],
+      "params": [
+        {
+          "name": "RX_ERR_W",
+          "default": "3",
+          "desc": ""
+        }
+      ],
+      "clocks_resets": []
+    },
+    {
+      "name": "fifo_sync",
+      "file_path": "rtl/modules/fifo_sync.sv",
+      "role": "primitive",
+      "responsibility": "Parameterized synchronous FIFO for TX and RX data buffering",
+      "ports": [
+        {
+          "name": "clk",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "rst_n",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "wr_data",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "wr_en",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "full",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "rd_data",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "rd_en",
+          "direction": "input",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "empty",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        },
+        {
+          "name": "level",
+          "direction": "output",
+          "width_expr": "1",
+          "desc": ""
+        }
+      ],
+      "params": [
+        {
+          "name": "DATA_W",
+          "default": "8",
+          "desc": ""
+        },
+        {
+          "name": "DEPTH",
+          "default": "16",
+          "desc": ""
+        },
+        {
+          "name": "DEPTH_W",
+          "default": "$clog2(DEPTH)+1",
+          "desc": ""
+        }
+      ],
+      "clocks_resets": []
+    },
+    {
+      "name": "uart_pkg",
+      "file_path": "rtl/pkg/uart_pkg.sv",
+      "role": "package",
+      "responsibility": "Shared package containing type definitions, parameters, and helper functions for UART peripheral",
+      "ports": [],
+      "params": [],
+      "clocks_resets": []
+    },
+    {
+      "name": "axi_uart_tb",
+      "file_path": "tb/axi_uart_tb.sv",
+      "role": "tb",
+      "responsibility": "Testbench covering TEST-001/010/011/020/030/040 test cases with AXI and UART stimulus",
+      "ports": [],
+      "params": [],
+      "clocks_resets": []
+    }
+  ],
+  "edges": [
+    {
+      "src": "axi_uart_top",
+      "dst": "axi_lite_regs",
+      "edge_type": "instantiates",
+      "desc": ""
+    },
+    {
+      "src": "axi_uart_top",
+      "dst": "baud_gen",
+      "edge_type": "instantiates",
+      "desc": ""
+    },
+    {
+      "src": "axi_uart_top",
+      "dst": "uart_tx",
+      "edge_type": "instantiates",
+      "desc": ""
+    },
+    {
+      "src": "axi_uart_top",
+      "dst": "uart_rx",
+      "edge_type": "instantiates",
+      "desc": ""
+    },
+    {
+      "src": "axi_uart_top",
+      "dst": "fifo_sync",
+      "edge_type": "instantiates",
+      "desc": ""
+    },
+    {
+      "src": "axi_uart_top",
+      "dst": "fifo_sync",
+      "edge_type": "instantiates",
+      "desc": ""
+    },
+    {
+      "src": "axi_lite_regs",
+      "dst": "uart_pkg",
+      "edge_type": "instantiates",
+      "desc": ""
+    },
+    {
+      "src": "uart_tx",
+      "dst": "baud_gen",
+      "edge_type": "instantiates",
+      "desc": ""
+    },
+    {
+      "src": "uart_rx",
+      "dst": "baud_gen",
+      "edge_type": "instantiates",
+      "desc": ""
+    },
+    {
+      "src": "uart_tx",
+      "dst": "fifo_sync",
+      "edge_type": "instantiates",
+      "desc": ""
+    },
+    {
+      "src": "uart_rx",
+      "dst": "fifo_sync",
+      "edge_type": "instantiates",
+      "desc": ""
+    },
+    {
+      "src": "axi_lite_regs",
+      "dst": "fifo_sync",
+      "edge_type": "instantiates",
+      "desc": ""
+    },
+    {
+      "src": "axi_lite_regs",
+      "dst": "fifo_sync",
+      "edge_type": "instantiates",
+      "desc": ""
+    },
+    {
+      "src": "axi_lite_regs",
+      "dst": "baud_gen",
+      "edge_type": "instantiates",
+      "desc": ""
+    },
+    {
+      "src": "axi_lite_regs",
+      "dst": "uart_tx",
+      "edge_type": "instantiates",
+      "desc": ""
+    },
+    {
+      "src": "axi_lite_regs",
+      "dst": "uart_rx",
+      "edge_type": "instantiates",
+      "desc": ""
+    },
+    {
+      "src": "axi_lite_regs",
+      "dst": "uart_tx",
+      "edge_type": "instantiates",
+      "desc": ""
+    },
+    {
+      "src": "axi_lite_regs",
+      "dst": "uart_rx",
+      "edge_type": "instantiates",
+      "desc": ""
+    },
+    {
+      "src": "axi_uart_tb",
+      "dst": "axi_uart_top",
+      "edge_type": "instantiates",
+      "desc": ""
+    },
+    {
+      "src": "axi_uart_tb",
+      "dst": "uart_pkg",
+      "edge_type": "instantiates",
+      "desc": ""
+    }
+  ],
+  "compile_order": [
+    "uart_pkg",
+    "fifo_sync",
+    "baud_gen",
+    "uart_tx",
+    "uart_rx",
+    "axi_lite_regs",
+    "axi_uart_top",
+    "axi_uart_tb"
+  ],
+  "file_to_modules": {
+    "rtl/axi_uart_top.sv": [
+      "axi_uart_top"
+    ],
+    "rtl/modules/axi_lite_regs.sv": [
+      "axi_lite_regs"
+    ],
+    "rtl/modules/baud_gen.sv": [
+      "baud_gen"
+    ],
+    "rtl/modules/uart_tx.sv": [
+      "uart_tx"
+    ],
+    "rtl/modules/uart_rx.sv": [
+      "uart_rx"
+    ],
+    "rtl/modules/fifo_sync.sv": [
+      "fifo_sync"
+    ],
+    "rtl/pkg/uart_pkg.sv": [
+      "uart_pkg"
+    ],
+    "tb/axi_uart_tb.sv": [
+      "axi_uart_tb"
+    ]
+  }
+}

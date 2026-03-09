@@ -87,20 +87,30 @@ class ToolExecutor:
             return await _run()
 
     # --- Multiple calls ---
-    async def parallel_tool_call(self, tool_calls: List[ToolCall], env_params: List[Any]=[], extra_kwargs: List[Dict]=[]) -> list[ToolResult]:
+    async def parallel_tool_call(
+        self,
+        tool_calls: List[ToolCall],
+        env_params: Optional[List[Any]] = None,
+        extra_kwargs: Optional[List[Dict[str, Any]]] = None,
+    ) -> list[ToolResult]:
         if not env_params:
-            env_params = [None * len(tool_calls)]
-        if not extra_kwargs or len(extra_kwargs) == 0:
-            extra_kwargs = [{} * len(tool_calls)]
+            env_params = [None for _ in tool_calls]
+        if not extra_kwargs:
+            extra_kwargs = [{} for _ in tool_calls]
         
         tasks = [self.execute_tool_call(c, env_param, **extra_kwarg) for c, env_param, extra_kwarg in zip(tool_calls, env_params, extra_kwargs)]
         return await asyncio.gather(*tasks)
 
-    async def sequential_tool_call(self, tool_calls: List[ToolCall], env_params: List[ToolCall]=[], extra_kwargs: List[Dict]=[]) -> list[ToolResult]:
+    async def sequential_tool_call(
+        self,
+        tool_calls: List[ToolCall],
+        env_params: Optional[List[Any]] = None,
+        extra_kwargs: Optional[List[Dict[str, Any]]] = None,
+    ) -> list[ToolResult]:
         if not env_params:
-            env_params = [{} * len(tool_calls)]
-        if not extra_kwargs or len(extra_kwargs) == 0:
-            extra_kwargs = [{} * len(tool_calls)]
+            env_params = [None for _ in tool_calls]
+        if not extra_kwargs:
+            extra_kwargs = [{} for _ in tool_calls]
         
         results: list[ToolResult] = []
         for c, env_param, extra_kwarg in zip(tool_calls, env_params, extra_kwargs):

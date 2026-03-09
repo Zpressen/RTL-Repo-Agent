@@ -6,7 +6,7 @@
 # ============================================================================
 llm:
   model: "qwen3.5-plus"
-  max_tokens: 15000
+  max_tokens: 65536
   temperature: 0.6
   reasoning_effort: "high"
   provider: "openai"

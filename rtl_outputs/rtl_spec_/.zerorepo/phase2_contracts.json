@@ -1,0 +1,2194 @@
+{
+  "schema_version": "phase2.module_contracts.v1",
+  "project_name": "axi_uart_periph",
+  "top_module": "axi_uart_top",
+  "module_specs": [
+    {
+      "module_name": "axi_lite_regs",
+      "file_path": "rtl/modules/axi_lite_regs.sv",
+      "role": "controller",
+      "responsibility": "AXI-Lite slave + CSR + register side effects",
+      "depends_on_modules": [],
+      "depends_on_packages": [
+        "uart_pkg"
+      ],
+      "interface": {
+        "module_name": "axi_lite_regs",
+        "params": [],
+        "ports": [
+          {
+            "name": "ARADDR",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "ARREADY",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "ARVALID",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "AWADDR",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "AWREADY",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "AWVALID",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "BREADY",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "BRESP",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "BVALID",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "RDATA",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "RREADY",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "RRESP",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "RVALID",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "WDATA",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "WREADY",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "WVALID",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "aclk",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "aresetn",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "baud_rate_reg",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "rx_fifo_empty",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "rx_fifo_rd_en",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "tx_fifo_data",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "tx_fifo_full",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "tx_fifo_wr_en",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "uart_ctrl_reg",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          }
+        ],
+        "clock_ports": [],
+        "reset_ports": [
+          "aresetn"
+        ],
+        "protocol_contracts": []
+      },
+      "related_req_ids": [
+        "REQ_AXI_PROTOCOL",
+        "REQ_CSR_MAP",
+        "REQ_FIFO_INTERFACE",
+        "REQ_UART_CTRL"
+      ],
+      "related_test_ids": [
+        "TEST_AXI_READ",
+        "TEST_AXI_WRITE",
+        "TEST_CONCURRENT_AXI",
+        "TEST_REG_SIDE_EFFECTS"
+      ],
+      "related_prop_ids": [
+        "PROP-001",
+        "PROP-010"
+      ],
+      "related_node_ids": [
+        "NODE_AXI_FSM",
+        "NODE_FIFO_CTRL",
+        "NODE_REG_FILE",
+        "NODE_STATUS_REG"
+      ],
+      "related_code_anchor_ids": [
+        "CA_AXI_001",
+        "CA_AXI_002",
+        "CA_AXI_003",
+        "CA_AXI_004",
+        "CA_AXI_005"
+      ],
+      "implementation_hints": [
+        "['AXI-Lite slave protocol handler for read/write transactions', 'Memory-mapped register file for UART configuration', 'TX FIFO write trigger on data register write', 'RX FIFO read trigger on data register read', 'Status registers reflect FIFO full/empty flags', 'Baud rate register controls baud_gen', 'UART control register sets parity, data bits, enable']"
+      ]
+    },
+    {
+      "module_name": "axi_uart_tb",
+      "file_path": "tb/axi_uart_tb.sv",
+      "role": "tb",
+      "responsibility": "testbench with drivers and checks",
+      "depends_on_modules": [],
+      "depends_on_packages": [],
+      "interface": {
+        "module_name": "axi_uart_tb",
+        "params": [],
+        "ports": [],
+        "clock_ports": [],
+        "reset_ports": [],
+        "protocol_contracts": [
+          "AXI4-Lite Slave",
+          "UART"
+        ]
+      },
+      "related_req_ids": [],
+      "related_test_ids": [],
+      "related_prop_ids": [],
+      "related_node_ids": [],
+      "related_code_anchor_ids": [],
+      "implementation_hints": []
+    },
+    {
+      "module_name": "axi_uart_top",
+      "file_path": "rtl/axi_uart_top.sv",
+      "role": "top",
+      "responsibility": "top integration, port wiring",
+      "depends_on_modules": [
+        "axi_lite_regs",
+        "baud_gen",
+        "fifo_sync",
+        "uart_rx",
+        "uart_tx"
+      ],
+      "depends_on_packages": [],
+      "interface": {
+        "module_name": "axi_uart_top",
+        "params": [],
+        "ports": [
+          {
+            "name": "ARADDR",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "ARREADY",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "ARVALID",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "AWADDR",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "AWREADY",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "AWVALID",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "BREADY",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "BRESP",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "BVALID",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "RDATA",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "RREADY",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "RRESP",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "RVALID",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "WDATA",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "WREADY",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "WSTRB",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "WVALID",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "aclk",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "aresetn",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "rx_serial",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "tx_serial",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          }
+        ],
+        "clock_ports": [],
+        "reset_ports": [
+          "aresetn"
+        ],
+        "protocol_contracts": []
+      },
+      "related_req_ids": [
+        "REQ_AXI_EXTERNAL",
+        "REQ_SYSTEM_RESET",
+        "REQ_TOP_INTEGRATION",
+        "REQ_UART_EXTERNAL"
+      ],
+      "related_test_ids": [
+        "TEST_CONCURRENT_TX_RX",
+        "TEST_FULL_SYSTEM",
+        "TEST_LOOPBACK",
+        "TEST_TOP_INTEGRATION"
+      ],
+      "related_prop_ids": [
+        "PROP-001",
+        "PROP-010"
+      ],
+      "related_node_ids": [
+        "NODE_TOP_CLK_RST",
+        "NODE_TOP_INST",
+        "NODE_TOP_PARAM",
+        "NODE_TOP_WIRE"
+      ],
+      "related_code_anchor_ids": [
+        "CA_TOP_001",
+        "CA_TOP_002",
+        "CA_TOP_003",
+        "CA_TOP_004"
+      ],
+      "implementation_hints": [
+        "['Instantiate axi_lite_regs for AXI interface', 'Instantiate baud_gen for clock division', 'Instantiate uart_tx for serial transmission', 'Instantiate uart_rx for serial reception', 'Instantiate fifo_sync for TX and RX buffering', 'Connect all inter-module signals', 'Route AXI ports to external interface', 'Route UART serial ports to external pins']"
+      ]
+    },
+    {
+      "module_name": "baud_gen",
+      "file_path": "rtl/modules/baud_gen.sv",
+      "role": "datapath",
+      "responsibility": "divider to baud_tick and optional oversample tick",
+      "depends_on_modules": [],
+      "depends_on_packages": [],
+      "interface": {
+        "module_name": "baud_gen",
+        "params": [],
+        "ports": [
+          {
+            "name": "baud_rate",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "baud_tick",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "clk",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "enable",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "rst_n",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "sample_tick",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          }
+        ],
+        "clock_ports": [
+          "clk"
+        ],
+        "reset_ports": [
+          "rst_n"
+        ],
+        "protocol_contracts": []
+      },
+      "related_req_ids": [
+        "REQ_BAUD_ACCURACY",
+        "REQ_BAUD_RANGE"
+      ],
+      "related_test_ids": [
+        "TEST_BAUD_ENABLE",
+        "TEST_BAUD_FREQ"
+      ],
+      "related_prop_ids": [
+        "PROP-001",
+        "PROP-010"
+      ],
+      "related_node_ids": [
+        "NODE_BAUD_DIV",
+        "NODE_BAUD_EN"
+      ],
+      "related_code_anchor_ids": [
+        "CA_BAUD_001",
+        "CA_BAUD_002",
+        "CA_BAUD_003"
+      ],
+      "implementation_hints": [
+        "['Divide clk by baud_rate to generate baud_tick', 'Generate sample_tick at OVERSAMPLE_RATIO frequency', 'Enable gate controls counter operation', 'Tick outputs are single-cycle pulses']"
+      ]
+    },
+    {
+      "module_name": "fifo_sync",
+      "file_path": "rtl/modules/fifo_sync.sv",
+      "role": "storage",
+      "responsibility": "parameterized sync FIFO for TX/RX",
+      "depends_on_modules": [],
+      "depends_on_packages": [],
+      "interface": {
+        "module_name": "fifo_sync",
+        "params": [],
+        "ports": [
+          {
+            "name": "clk",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "count",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "empty",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "full",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "rd_data",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "rd_en",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "rst_n",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "wr_data",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "wr_en",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          }
+        ],
+        "clock_ports": [
+          "clk"
+        ],
+        "reset_ports": [
+          "rst_n"
+        ],
+        "protocol_contracts": []
+      },
+      "related_req_ids": [
+        "REQ_FIFO_DEPTH",
+        "REQ_FIFO_THROUGHPUT"
+      ],
+      "related_test_ids": [
+        "TEST_FIFO_EMPTY",
+        "TEST_FIFO_FULL",
+        "TEST_FIFO_WRAP"
+      ],
+      "related_prop_ids": [
+        "PROP-001",
+        "PROP-010"
+      ],
+      "related_node_ids": [
+        "NODE_FIFO_PTR",
+        "NODE_FIFO_RD",
+        "NODE_FIFO_WR"
+      ],
+      "related_code_anchor_ids": [
+        "CA_FIFO_001",
+        "CA_FIFO_002",
+        "CA_FIFO_003",
+        "CA_FIFO_004"
+      ],
+      "implementation_hints": [
+        "['Synchronous write on wr_en when !full', 'Synchronous read on rd_en when !empty', 'Gray code pointers for safe depth comparison', 'Count output reflects current occupancy']"
+      ]
+    },
+    {
+      "module_name": "uart_pkg",
+      "file_path": "rtl/pkg/uart_pkg.sv",
+      "role": "package",
+      "responsibility": "typedefs and constants",
+      "depends_on_modules": [],
+      "depends_on_packages": [],
+      "interface": {
+        "module_name": "uart_pkg",
+        "params": [],
+        "ports": [],
+        "clock_ports": [],
+        "reset_ports": [],
+        "protocol_contracts": []
+      },
+      "related_req_ids": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003",
+        "REQ-004",
+        "REQ-005"
+      ],
+      "related_test_ids": [
+        "TEST-001",
+        "TEST-010",
+        "TEST-011",
+        "TEST-020",
+        "TEST-022",
+        "TEST-030",
+        "TEST-040"
+      ],
+      "related_prop_ids": [
+        "PROP-001",
+        "PROP-010"
+      ],
+      "related_node_ids": [
+        "Node-01"
+      ],
+      "related_code_anchor_ids": [],
+      "implementation_hints": [
+        "['Define uart_width_t as enum for data width (5-8 bits)', 'Define uart_parity_t as enum (none, even, odd)', 'Define default UART configuration constants', 'All parameters must be synthesizable and simulation-friendly']"
+      ]
+    },
+    {
+      "module_name": "uart_rx",
+      "file_path": "rtl/modules/uart_rx.sv",
+      "role": "datapath",
+      "responsibility": "detect start, sample bits at midpoints, assemble byte",
+      "depends_on_modules": [
+        "fifo_sync"
+      ],
+      "depends_on_packages": [],
+      "interface": {
+        "module_name": "uart_rx",
+        "params": [],
+        "ports": [
+          {
+            "name": "baud_tick",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "clk",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "data_bits",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "parity_mode",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "rst_n",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "rx_busy",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "rx_data",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "rx_error",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "rx_serial",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "rx_valid",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "sample_tick",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          }
+        ],
+        "clock_ports": [
+          "clk"
+        ],
+        "reset_ports": [
+          "rst_n"
+        ],
+        "protocol_contracts": []
+      },
+      "related_req_ids": [
+        "REQ_UART_RX_ERROR",
+        "REQ_UART_RX_FRAME",
+        "REQ_UART_RX_PARITY"
+      ],
+      "related_test_ids": [
+        "TEST_RX_ERROR",
+        "TEST_RX_FRAME",
+        "TEST_RX_NOISE",
+        "TEST_RX_PARITY"
+      ],
+      "related_prop_ids": [
+        "PROP-001",
+        "PROP-010"
+      ],
+      "related_node_ids": [
+        "RX_FSM",
+        "RX_PARITY_CHK",
+        "RX_SAMPLE",
+        "RX_START_DET"
+      ],
+      "related_code_anchor_ids": [
+        "CA_RX_001",
+        "CA_RX_002",
+        "CA_RX_003",
+        "CA_RX_004"
+      ],
+      "implementation_hints": [
+        "['Detect start bit on falling edge of rx_serial', 'Sample each bit at midpoint using sample_tick', 'Assemble received bits LSB first', 'Verify stop bit high', 'Compute and check parity if enabled', 'rx_valid pulses when byte complete', 'rx_error set on framing or parity error']"
+      ]
+    },
+    {
+      "module_name": "uart_tx",
+      "file_path": "rtl/modules/uart_tx.sv",
+      "role": "datapath",
+      "responsibility": "serialize bytes: idle/start/data/parity/stop FSM",
+      "depends_on_modules": [
+        "fifo_sync"
+      ],
+      "depends_on_packages": [],
+      "interface": {
+        "module_name": "uart_tx",
+        "params": [],
+        "ports": [
+          {
+            "name": "baud_tick",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "clk",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "data_bits",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "parity_mode",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "rst_n",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "tx_busy",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "tx_data",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "tx_done",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "tx_serial",
+            "direction": "output",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          },
+          {
+            "name": "tx_start",
+            "direction": "input",
+            "width_expr": "1",
+            "domain": "clk",
+            "description": "",
+            "signed": false
+          }
+        ],
+        "clock_ports": [
+          "clk"
+        ],
+        "reset_ports": [
+          "rst_n"
+        ],
+        "protocol_contracts": []
+      },
+      "related_req_ids": [
+        "REQ_UART_FRAME",
+        "REQ_UART_PARITY"
+      ],
+      "related_test_ids": [
+        "TEST_TX_BACK2BACK",
+        "TEST_TX_FRAME",
+        "TEST_TX_PARITY"
+      ],
+      "related_prop_ids": [
+        "PROP-001",
+        "PROP-010"
+      ],
+      "related_node_ids": [
+        "TX_FSM",
+        "TX_PARITY",
+        "TX_SHIFT"
+      ],
+      "related_code_anchor_ids": [
+        "CA_TX_001",
+        "CA_TX_002",
+        "CA_TX_003",
+        "CA_TX_004"
+      ],
+      "implementation_hints": [
+        "['FSM states: IDLE, START, DATA, PARITY, STOP', 'Shift out LSB first on each baud_tick', 'Generate start bit (0), data bits, optional parity, stop bit (1)', 'tx_done pulses when frame complete', 'tx_busy high during transmission']"
+      ]
+    }
+  ],
+  "module_interfaces": [
+    {
+      "module_name": "axi_lite_regs",
+      "params": [],
+      "ports": [
+        {
+          "name": "ARADDR",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "ARREADY",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "ARVALID",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "AWADDR",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "AWREADY",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "AWVALID",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "BREADY",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "BRESP",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "BVALID",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "RDATA",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "RREADY",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "RRESP",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "RVALID",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "WDATA",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "WREADY",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "WVALID",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "aclk",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "aresetn",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "baud_rate_reg",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "rx_fifo_empty",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "rx_fifo_rd_en",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "tx_fifo_data",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "tx_fifo_full",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "tx_fifo_wr_en",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "uart_ctrl_reg",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        }
+      ],
+      "clock_ports": [],
+      "reset_ports": [
+        "aresetn"
+      ],
+      "protocol_contracts": []
+    },
+    {
+      "module_name": "axi_uart_tb",
+      "params": [],
+      "ports": [],
+      "clock_ports": [],
+      "reset_ports": [],
+      "protocol_contracts": [
+        "AXI4-Lite Slave",
+        "UART"
+      ]
+    },
+    {
+      "module_name": "axi_uart_top",
+      "params": [],
+      "ports": [
+        {
+          "name": "ARADDR",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "ARREADY",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "ARVALID",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "AWADDR",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "AWREADY",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "AWVALID",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "BREADY",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "BRESP",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "BVALID",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "RDATA",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "RREADY",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "RRESP",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "RVALID",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "WDATA",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "WREADY",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "WSTRB",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "WVALID",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "aclk",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "aresetn",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "rx_serial",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "tx_serial",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        }
+      ],
+      "clock_ports": [],
+      "reset_ports": [
+        "aresetn"
+      ],
+      "protocol_contracts": []
+    },
+    {
+      "module_name": "baud_gen",
+      "params": [],
+      "ports": [
+        {
+          "name": "baud_rate",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "baud_tick",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "clk",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "enable",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "rst_n",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "sample_tick",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        }
+      ],
+      "clock_ports": [
+        "clk"
+      ],
+      "reset_ports": [
+        "rst_n"
+      ],
+      "protocol_contracts": []
+    },
+    {
+      "module_name": "fifo_sync",
+      "params": [],
+      "ports": [
+        {
+          "name": "clk",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "count",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "empty",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "full",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "rd_data",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "rd_en",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "rst_n",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "wr_data",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "wr_en",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        }
+      ],
+      "clock_ports": [
+        "clk"
+      ],
+      "reset_ports": [
+        "rst_n"
+      ],
+      "protocol_contracts": []
+    },
+    {
+      "module_name": "uart_pkg",
+      "params": [],
+      "ports": [],
+      "clock_ports": [],
+      "reset_ports": [],
+      "protocol_contracts": []
+    },
+    {
+      "module_name": "uart_rx",
+      "params": [],
+      "ports": [
+        {
+          "name": "baud_tick",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "clk",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "data_bits",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "parity_mode",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "rst_n",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "rx_busy",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "rx_data",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "rx_error",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "rx_serial",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "rx_valid",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "sample_tick",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        }
+      ],
+      "clock_ports": [
+        "clk"
+      ],
+      "reset_ports": [
+        "rst_n"
+      ],
+      "protocol_contracts": []
+    },
+    {
+      "module_name": "uart_tx",
+      "params": [],
+      "ports": [
+        {
+          "name": "baud_tick",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "clk",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "data_bits",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "parity_mode",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "rst_n",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "tx_busy",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "tx_data",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "tx_done",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "tx_serial",
+          "direction": "output",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        },
+        {
+          "name": "tx_start",
+          "direction": "input",
+          "width_expr": "1",
+          "domain": "clk",
+          "description": "",
+          "signed": false
+        }
+      ],
+      "clock_ports": [
+        "clk"
+      ],
+      "reset_ports": [
+        "rst_n"
+      ],
+      "protocol_contracts": []
+    }
+  ],
+  "module_requirement_map": {
+    "axi_lite_regs": {
+      "related_req_ids": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003",
+        "REQ-004",
+        "REQ-005",
+        "REQ_AXI_PROTOCOL",
+        "REQ_CSR_MAP",
+        "REQ_FIFO_INTERFACE",
+        "REQ_UART_CTRL"
+      ],
+      "related_test_ids": [
+        "TEST-001",
+        "TEST-010",
+        "TEST-011",
+        "TEST-020",
+        "TEST-022",
+        "TEST-030",
+        "TEST-040",
+        "TEST_AXI_READ",
+        "TEST_AXI_WRITE",
+        "TEST_CONCURRENT_AXI",
+        "TEST_REG_SIDE_EFFECTS"
+      ],
+      "related_prop_ids": [
+        "PROP-001",
+        "PROP-010"
+      ],
+      "related_node_ids": [
+        "NODE_AXI_FSM",
+        "NODE_FIFO_CTRL",
+        "NODE_REG_FILE",
+        "NODE_STATUS_REG",
+        "Node-02",
+        "Node-07"
+      ]
+    },
+    "axi_uart_tb": {
+      "related_req_ids": [],
+      "related_test_ids": [],
+      "related_prop_ids": [],
+      "related_node_ids": []
+    },
+    "axi_uart_top": {
+      "related_req_ids": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003",
+        "REQ-004",
+        "REQ-005",
+        "REQ_AXI_EXTERNAL",
+        "REQ_SYSTEM_RESET",
+        "REQ_TOP_INTEGRATION",
+        "REQ_UART_EXTERNAL"
+      ],
+      "related_test_ids": [
+        "TEST-001",
+        "TEST-010",
+        "TEST-011",
+        "TEST-020",
+        "TEST-022",
+        "TEST-030",
+        "TEST-040",
+        "TEST_CONCURRENT_TX_RX",
+        "TEST_FULL_SYSTEM",
+        "TEST_LOOPBACK",
+        "TEST_TOP_INTEGRATION"
+      ],
+      "related_prop_ids": [
+        "PROP-001",
+        "PROP-010"
+      ],
+      "related_node_ids": [
+        "NODE_TOP_CLK_RST",
+        "NODE_TOP_INST",
+        "NODE_TOP_PARAM",
+        "NODE_TOP_WIRE",
+        "Node-01"
+      ]
+    },
+    "baud_gen": {
+      "related_req_ids": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003",
+        "REQ-004",
+        "REQ-005",
+        "REQ_BAUD_ACCURACY",
+        "REQ_BAUD_RANGE"
+      ],
+      "related_test_ids": [
+        "TEST-001",
+        "TEST-010",
+        "TEST-011",
+        "TEST-020",
+        "TEST-022",
+        "TEST-030",
+        "TEST-040",
+        "TEST_BAUD_ENABLE",
+        "TEST_BAUD_FREQ"
+      ],
+      "related_prop_ids": [
+        "PROP-001",
+        "PROP-010"
+      ],
+      "related_node_ids": [
+        "NODE_BAUD_DIV",
+        "NODE_BAUD_EN",
+        "Node-04",
+        "Node-08"
+      ]
+    },
+    "fifo_sync": {
+      "related_req_ids": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003",
+        "REQ-004",
+        "REQ-005",
+        "REQ_FIFO_DEPTH",
+        "REQ_FIFO_THROUGHPUT"
+      ],
+      "related_test_ids": [
+        "TEST-001",
+        "TEST-010",
+        "TEST-011",
+        "TEST-020",
+        "TEST-022",
+        "TEST-030",
+        "TEST-040",
+        "TEST_FIFO_EMPTY",
+        "TEST_FIFO_FULL",
+        "TEST_FIFO_WRAP"
+      ],
+      "related_prop_ids": [
+        "PROP-001",
+        "PROP-010"
+      ],
+      "related_node_ids": [
+        "NODE_FIFO_PTR",
+        "NODE_FIFO_RD",
+        "NODE_FIFO_WR",
+        "Node-03"
+      ]
+    },
+    "uart_pkg": {
+      "related_req_ids": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003",
+        "REQ-004",
+        "REQ-005"
+      ],
+      "related_test_ids": [
+        "TEST-001",
+        "TEST-010",
+        "TEST-011",
+        "TEST-020",
+        "TEST-022",
+        "TEST-030",
+        "TEST-040"
+      ],
+      "related_prop_ids": [
+        "PROP-001",
+        "PROP-010"
+      ],
+      "related_node_ids": [
+        "Node-01"
+      ]
+    },
+    "uart_rx": {
+      "related_req_ids": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003",
+        "REQ-004",
+        "REQ-005",
+        "REQ_UART_RX_ERROR",
+        "REQ_UART_RX_FRAME",
+        "REQ_UART_RX_PARITY"
+      ],
+      "related_test_ids": [
+        "TEST-001",
+        "TEST-010",
+        "TEST-011",
+        "TEST-020",
+        "TEST-022",
+        "TEST-030",
+        "TEST-040",
+        "TEST_RX_ERROR",
+        "TEST_RX_FRAME",
+        "TEST_RX_NOISE",
+        "TEST_RX_PARITY"
+      ],
+      "related_prop_ids": [
+        "PROP-001",
+        "PROP-010"
+      ],
+      "related_node_ids": [
+        "Node-06",
+        "RX_FSM",
+        "RX_PARITY_CHK",
+        "RX_SAMPLE",
+        "RX_START_DET"
+      ]
+    },
+    "uart_tx": {
+      "related_req_ids": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003",
+        "REQ-004",
+        "REQ-005",
+        "REQ_UART_FRAME",
+        "REQ_UART_PARITY"
+      ],
+      "related_test_ids": [
+        "TEST-001",
+        "TEST-010",
+        "TEST-011",
+        "TEST-020",
+        "TEST-022",
+        "TEST-030",
+        "TEST-040",
+        "TEST_TX_BACK2BACK",
+        "TEST_TX_FRAME",
+        "TEST_TX_PARITY"
+      ],
+      "related_prop_ids": [
+        "PROP-001",
+        "PROP-010"
+      ],
+      "related_node_ids": [
+        "Node-05",
+        "TX_FSM",
+        "TX_PARITY",
+        "TX_SHIFT"
+      ]
+    }
+  },
+  "module_anchor_map": {
+    "axi_lite_regs": {
+      "related_code_anchor_ids": [
+        "ANCHOR-AXI-002",
+        "ANCHOR-COV-001",
+        "ANCHOR-CSR-001",
+        "ANCHOR-NOBURST-001",
+        "ANCHOR-NODE-001",
+        "ANCHOR-REGS-001",
+        "ANCHOR-REQ-001",
+        "ANCHOR-REQ-002",
+        "ANCHOR-REQ-004",
+        "ANCHOR-REQ-005",
+        "ANCHOR-RW1C-001",
+        "CA_AXI_001",
+        "CA_AXI_002",
+        "CA_AXI_003",
+        "CA_AXI_004",
+        "CA_AXI_005"
+      ],
+      "related_hint_ids": [
+        "HINT-017",
+        "HINT-018",
+        "HINT-025",
+        "HINT-026",
+        "HINT-034"
+      ]
+    },
+    "axi_uart_tb": {
+      "related_code_anchor_ids": [],
+      "related_hint_ids": []
+    },
+    "axi_uart_top": {
+      "related_code_anchor_ids": [
+        "ANCHOR-AXI-001",
+        "ANCHOR-FIFO-002",
+        "ANCHOR-IRQ-001",
+        "ANCHOR-PARAM-001",
+        "ANCHOR-PROP-001",
+        "ANCHOR-REGS-001",
+        "ANCHOR-REQ-001",
+        "ANCHOR-REQ-002",
+        "ANCHOR-REQ-004",
+        "ANCHOR-RESET-001",
+        "ANCHOR-TX-001",
+        "CA_TOP_001",
+        "CA_TOP_002",
+        "CA_TOP_003",
+        "CA_TOP_004"
+      ],
+      "related_hint_ids": [
+        "HINT-003",
+        "HINT-012",
+        "HINT-016"
+      ]
+    },
+    "baud_gen": {
+      "related_code_anchor_ids": [
+        "ANCHOR-REQ-005",
+        "CA_BAUD_001",
+        "CA_BAUD_002",
+        "CA_BAUD_003"
+      ],
+      "related_hint_ids": []
+    },
+    "fifo_sync": {
+      "related_code_anchor_ids": [
+        "ANCHOR-FIFO-001",
+        "ANCHOR-FIFO-002",
+        "CA_FIFO_001",
+        "CA_FIFO_002",
+        "CA_FIFO_003",
+        "CA_FIFO_004"
+      ],
+      "related_hint_ids": [
+        "HINT-034"
+      ]
+    },
+    "uart_pkg": {
+      "related_code_anchor_ids": [],
+      "related_hint_ids": []
+    },
+    "uart_rx": {
+      "related_code_anchor_ids": [
+        "ANCHOR-REQ-003",
+        "ANCHOR-RXFSM-001",
+        "ANCHOR-UART-001",
+        "CA_RX_001",
+        "CA_RX_002",
+        "CA_RX_003",
+        "CA_RX_004"
+      ],
+      "related_hint_ids": [
+        "HINT-019",
+        "HINT-020",
+        "HINT-027",
+        "HINT-028"
+      ]
+    },
+    "uart_tx": {
+      "related_code_anchor_ids": [
+        "ANCHOR-REQ-001",
+        "ANCHOR-REQ-002",
+        "ANCHOR-RESET-001",
+        "ANCHOR-TX-001",
+        "ANCHOR-TXFSM-001",
+        "ANCHOR-TXSTATE-001",
+        "CA_TX_001",
+        "CA_TX_002",
+        "CA_TX_003",
+        "CA_TX_004"
+      ],
+      "related_hint_ids": [
+        "HINT-019",
+        "HINT-027"
+      ]
+    }
+  },
+  "file_ownership_map": {
+    "rtl/axi_uart_top.sv": [
+      "axi_uart_top"
+    ],
+    "rtl/modules/axi_lite_regs.sv": [
+      "axi_lite_regs"
+    ],
+    "rtl/modules/baud_gen.sv": [
+      "baud_gen"
+    ],
+    "rtl/modules/fifo_sync.sv": [
+      "fifo_sync"
+    ],
+    "rtl/modules/uart_rx.sv": [
+      "uart_rx"
+    ],
+    "rtl/modules/uart_tx.sv": [
+      "uart_tx"
+    ],
+    "rtl/pkg/uart_pkg.sv": [
+      "uart_pkg"
+    ],
+    "tb/axi_uart_tb.sv": [
+      "axi_uart_tb"
+    ]
+  },
+  "module_build_order": [
+    "uart_pkg",
+    "fifo_sync",
+    "axi_lite_regs",
+    "baud_gen",
+    "uart_rx",
+    "uart_tx",
+    "axi_uart_top",
+    "axi_uart_tb"
+  ],
+  "phase2_gate_status": {
+    "core_modules_total": 6,
+    "core_modules_passed": 6,
+    "non_core_modules_total": 0,
+    "non_core_modules_passed": 0,
+    "island_modules": [],
+    "blocking_issues": [],
+    "pass_flag": true
+  },
+  "phase2_complete": true,
+  "phase2_ready_for_phase3": true
+}

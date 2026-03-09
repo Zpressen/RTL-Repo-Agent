@@ -160,10 +160,11 @@ class BaseEnv:
                 )
                 all_results = [result]
             else:
+                env_params = [self for _ in parsed_actions]
                 all_results: List[ToolResult] = asyncio.run(
                     self.tool_executor.sequential_tool_call(
                         tool_calls=parsed_actions,
-                        env_params=[self * len(parsed_actions)]
+                        env_params=env_params
                     )
                 )
             
@@ -335,10 +336,11 @@ class ReviewEnv(BaseEnv):
                 )
                 all_results = [result]
             else:
+                env_params = [self for _ in parsed_actions]
                 all_results: List[ToolResult] = asyncio.run(
                     self.tool_executor.sequential_tool_call(
                         tool_calls=parsed_actions,
-                        env_params=[self * len(parsed_actions)]
+                        env_params=env_params
                     )
                 )
             

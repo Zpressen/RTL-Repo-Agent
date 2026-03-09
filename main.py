@@ -110,7 +110,7 @@ Supported LLM Models:
         type=str,
         choices=["all", "design", "implementation", "rtl", "rtl_phase1", "rtl_phase2"],
         default="all",
-        help="Specify execution phase: 'all'=full pipeline, 'design'=design only, 'implementation'=implementation only, 'rtl'=RTL full pipeline with resume, 'rtl_phase1'=RTL SpecFacts parsing, 'rtl_phase2'=RTL Module Graph (requires Phase 1 output)"
+        help="Specify execution phase: 'all'=full pipeline, 'design'=design only, 'implementation'=implementation only, 'rtl'=RTL full pipeline with resume, 'rtl_phase1'=RTL SpecFacts parsing, 'rtl_phase2'=RTL Module Contract Realization (requires Phase 1 output)"
     )
 
     parser.add_argument(
@@ -351,6 +351,9 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
                         spec_name=spec.project_name
                     )
 
+                    # Write enhanced split sidecars (anchor/hint/trace)
+                    designer.write_enhanced_sidecars(spec_facts, spec_checkpoint_dir)
+
                     # Save SpecFacts
                     spec_facts_file = spec_checkpoint_dir / "spec_facts.json"
                     with open(spec_facts_file, 'w', encoding='utf-8') as f:
@@ -377,95 +380,30 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
                     # Note: rpg is needed for Phase 2, load it too
                     # For now, we'll reload it in Phase 2 section
 
-                # ===== Phase 2: Module Graph Construction =====
+                # ===== Phase 2: Module Contract Realization =====
                 # Run Phase 2 if phase is 'rtl' or 'rtl_phase2'
                 if args.phase in ["rtl", "rtl_phase2"]:
-                    # Check for resume - if module_graph.json exists, skip Phase 2
-                    module_graph_file = spec_checkpoint_dir / "module_graph.json"
+                    # Check for resume - if phase2_contracts.json exists, skip Phase 2
+                    phase2_contracts_file = spec_checkpoint_dir / "phase2_contracts.json"
                     phase2_skipped = False
 
-                    if args.resume and module_graph_file.exists():
+                    if args.resume and phase2_contracts_file.exists():
                         logger.info(f"⏭️ Phase 2 skipped (resume mode, output exists): {spec.project_name}")
                         phase2_skipped = True
                     else:
                         # Run Phase 2
-                        logger.info(f"🔧 Running Phase 2: Module Graph Construction...")
+                        logger.info(f"🔧 Running Phase 2: Module Contract Realization...")
 
                         # Import Phase 2 modules
                         from zerorepo.rtl_impl.phase2_module_graph import Phase2Designer
-                        from zerorepo.rtl_impl.phase1_spec_parsing.spec_models import (
-                            SpecFacts, DirectorySpec, FileSpec, PortSpec,
-                            FunctionalRequirement, PriorityType, ParamSpec,
-                            ModuleNode, RoleType
-                        )
+                        from zerorepo.rtl_impl.phase1_spec_parsing.spec_models import SpecFacts
 
                         # Load spec_facts from file
                         with open(spec_facts_file, 'r', encoding='utf-8') as f:
                             spec_facts_dict = json.load(f)
 
-                        # Reconstruct SpecFacts object with all needed fields
-                        def parse_directory_spec(d_dict):
-                            files = []
-                            for f in d_dict.get("files", []):
-                                files.append(FileSpec(
-                                    path=f.get("path", ""),
-                                    responsibility=f.get("responsibility", ""),
-                                    directory=f.get("directory", "")
-                                ))
-                            return DirectorySpec(
-                                name=d_dict.get("name", ""),
-                                description=d_dict.get("description", ""),
-                                files=files
-                            )
-
-                        def parse_port_spec(p_dict):
-                            return PortSpec(
-                                name=p_dict.get("name", ""),
-                                direction=p_dict.get("direction", "input"),
-                                width_expr=p_dict.get("width_expr", "1"),
-                                domain=p_dict.get("domain", "clk"),
-                                desc=p_dict.get("desc", "")
-                            )
-
-                        def parse_functional_requirement(req_dict):
-                            return FunctionalRequirement(
-                                id=req_dict.get("id", ""),
-                                priority=PriorityType(req_dict.get("priority", "must")),
-                                statement=req_dict.get("statement", ""),
-                                corner=req_dict.get("corner", ""),
-                                verify=req_dict.get("verify", "")
-                            )
-
-                        def parse_module_node(m_dict):
-                            ports = [parse_port_spec(p) for p in m_dict.get("ports", [])]
-                            params = [ParamSpec(
-                                name=p.get("name", ""),
-                                default=p.get("default", ""),
-                                desc=p.get("desc", "")
-                            ) for p in m_dict.get("params", [])]
-                            return ModuleNode(
-                                name=m_dict.get("name", ""),
-                                file_path=m_dict.get("file_path", ""),
-                                role=RoleType(m_dict.get("role", "datapath")),
-                                responsibility=m_dict.get("responsibility", ""),
-                                ports=ports,
-                                params=params,
-                                clocks_resets=m_dict.get("clocks_resets", [])
-                            )
-
-                        # Build SpecFacts
-                        spec_facts = SpecFacts(
-                            project_name=spec_facts_dict.get("project_name", ""),
-                            top_module=spec_facts_dict.get("top_module", ""),
-                            rtl_language=spec_facts_dict.get("rtl_language", "verilog"),
-                            toolchain=spec_facts_dict.get("toolchain", []),
-                            abstract=spec_facts_dict.get("abstract", ""),
-                            files=spec_facts_dict.get("files", {}),
-                            directories=[parse_directory_spec(d) for d in spec_facts_dict.get("directories", [])],
-                            functional_requirements=[parse_functional_requirement(r) for r in spec_facts_dict.get("functional_requirements", [])],
-                            top_ports=[parse_port_spec(p) for p in spec_facts_dict.get("top_ports", [])],
-                            modules=[parse_module_node(m) for m in spec_facts_dict.get("modules", [])],
-                        )
+                        # Reconstruct full SpecFacts object with enhanced fields
+                        spec_facts = SpecFacts.from_dict(spec_facts_dict)
 
                         # Load rpg if Phase 1 was skipped
                         if phase1_skipped:
@@ -482,8 +420,8 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
                         phase2_designer = Phase2Designer(
                             llm_config=llm_config,
                             checkpoint_dir=spec_checkpoint_dir,
-                            use_agent=use_agent,
-                            strict_agent=strict_agent,
+                            use_agent=True,
+                            strict_agent=True,
                         )
 
                         phase2_result = phase2_designer.run(
@@ -492,7 +430,7 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
                         )
 
                         if phase2_result.get("success"):
-                            logger.info(f"  - module_graph.json")
+                            logger.info(f"  - phase2_contracts.json")
                             logger.info(f"✅ Phase 2 completed for {spec.project_name}")
                         else:
                             logger.error(f"❌ Phase 2 failed for {spec.project_name}")
@@ -502,7 +440,7 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
                 logger.info(f"\n{'='*60}")
                 logger.info(f"🎉 RTL Pipeline completed for {len(specs)} project(s)")
                 logger.info(f"  - Phase 1: spec_facts.json, rpg.json")
-                logger.info(f"  - Phase 2: module_graph.json")
+                logger.info(f"  - Phase 2: phase2_contracts.json")
                 logger.info(f"{'='*60}")
             elif args.phase == "rtl_phase1":
                 logger.info(f"\n{'='*60}")

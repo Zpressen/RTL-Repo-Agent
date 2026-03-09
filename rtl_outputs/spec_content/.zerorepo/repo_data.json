@@ -1,0 +1,33 @@
+{
+  "repository_name": "spec_content",
+  "repository_purpose": "RTL project from spec: spec_content.md",
+  "spec_file_path": "/home/mokita/RPG-ZeroRepo/rtl_dataset/spec_content.md",
+  "output_dir": "/home/mokita/RPG-ZeroRepo/rtl_outputs/spec_content",
+  "top_module": "axi_uart_periph",
+  "language": "SystemVerilog-2017",
+  "toolchain": [
+    "iverilog",
+    "verilator",
+    "svlint",
+    "make"
+  ],
+  "files": {
+    "axi_uart_top.sv": "modules/",
+    "axi_lite_regs.sv": "baud_gen.sv",
+    "uart_tx.sv": "uart_rx.sv",
+    "fifo_sync.sv": "pkg/",
+    "uart_pkg.sv": "typedef/params/helpers",
+    "axi_uart_tb.sv": "纯 SV TB（或 cocotb/）",
+    "rtl/axi_uart_top.sv": "：只做集成，不承载复杂逻辑",
+    "rtl/modules/axi_lite_regs.sv": "：CSR 与 side effects 的唯一来源（避免分散在多个模块）",
+    "tb/axi_uart_tb.sv": "：覆盖 TEST-001/010/011/020/030/040（见第 11 章）"
+  },
+  "modules": [
+    "axi_uart_top",
+    "axi_lite_regs",
+    "baud_gen",
+    "uart_tx",
+    "uart_rx",
+    "fifo_sync"
+  ]
+}
