@@ -5,4 +5,8 @@ from .rpg import (
     Edge
 )
 from .util import NodeType, EdgeType
-from .dep_graph import DependencyGraph
+
+try:
+    from .dep_graph import DependencyGraph
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    DependencyGraph = None

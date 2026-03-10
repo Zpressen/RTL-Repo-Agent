@@ -1,8 +1,9 @@
 import yaml
 import json
 import logging
-from typing import Union, Dict, Tuple, Optional, Any
-from pathlib import Path
+import re
+from typing import Union, Dict, Tuple, Optional, Any, List
+from pathlib import Path, PurePosixPath
 from zerorepo.rpg_gen.base import (
     RPG, NodeType, Node, NodeMetaData,
     RepoSkeleton, LLMConfig
@@ -10,8 +11,6 @@ from zerorepo.rpg_gen.base import (
 from zerorepo.utils.logs import setup_logger
 from zerorepo.config.checkpoint_config import CheckpointManager, CheckpointFiles, get_checkpoint_manager
 from .file_design import FileDesigner
-from .func_design import FuncDesigner
-from .plan_tasks import TaskBatch, TaskPlanner
 
 # 封装完整的类去构建repo
 class ImplBuilder:
@@ -117,6 +116,95 @@ class ImplBuilder:
             self.logger.error(f"Failed to load JSON data from {self.repo_data_path}: {e}")
             raise
 
+    def _is_rtl_repo(self) -> bool:
+        rtl_metadata = self.repo_data.get("rtl_metadata", {}) if hasattr(self, "repo_data") else {}
+        return rtl_metadata.get("mode") == "rtl_spec2repo"
+
+    def _should_preserve_rtl_blueprint(self) -> bool:
+        rtl_metadata = self.repo_data.get("rtl_metadata", {}) if hasattr(self, "repo_data") else {}
+        return self._is_rtl_repo() and bool(rtl_metadata.get("preserve_repo_blueprint", False))
+
+    def _get_rtl_file_feature_map(self) -> Dict[str, List[str]]:
+        rtl_metadata = self.repo_data.get("rtl_metadata", {})
+        file_specs = rtl_metadata.get("file_specs", []) or []
+        files = rtl_metadata.get("files", {}) or {}
+
+        file_feature_map: Dict[str, List[str]] = {}
+        all_paths = sorted(set(files.keys()) | {str(item.get("file_path", "")).strip() for item in file_specs if isinstance(item, dict)})
+        file_spec_by_path = {
+            str(item.get("file_path", "")).strip(): item
+            for item in file_specs
+            if isinstance(item, dict) and str(item.get("file_path", "")).strip()
+        }
+
+        for file_path in all_paths:
+            item = file_spec_by_path.get(file_path)
+            if isinstance(item, dict):
+                feature_paths = self._build_feature_paths_for_file_spec(item)
+            else:
+                feature_paths = self._build_fallback_feature_paths(
+                    bucket_name="root_files",
+                    file_path=file_path,
+                    description=str(files.get(file_path, "")).strip(),
+                )
+            file_feature_map[file_path] = sorted(set(feature_paths))
+
+        return file_feature_map
+
+    def _build_feature_paths_for_file_spec(
+        self,
+        file_spec: Dict[str, Any],
+    ) -> List[str]:
+        bucket_name = str(file_spec.get("bucket", "root_files")).strip() or "root_files"
+        file_label = self._rtl_file_label(str(file_spec.get("file_path", "")).strip())
+        responsibility = self._safe_feature_leaf(str(file_spec.get("responsibility", "")).strip() or file_label)
+
+        paths = [f"{bucket_name}/files/{file_label}/responsibility/{responsibility}"]
+        for branch, key in (
+            ("requirements", "related_req_ids"),
+            ("tests", "related_test_ids"),
+            ("properties", "related_prop_ids"),
+            ("nodes", "related_node_ids"),
+            ("anchors", "related_code_anchor_ids"),
+            ("hints", "related_hint_ids"),
+        ):
+            for value in sorted(set(file_spec.get(key, []) or [])):
+                paths.append(f"{bucket_name}/files/{file_label}/{branch}/{self._safe_feature_leaf(str(value))}")
+        return paths
+
+    def _build_fallback_feature_paths(
+        self,
+        bucket_name: str,
+        file_path: str,
+        description: str,
+    ) -> List[str]:
+        file_label = self._rtl_file_label(file_path)
+        leaf = self._safe_feature_leaf(description or PurePosixPath(file_path).name)
+        return [
+            f"{bucket_name}/files/{file_label}/responsibility/{leaf}",
+        ]
+
+    def _rtl_file_label(self, file_path: str) -> str:
+        path = PurePosixPath(file_path)
+        parts = list(path.parts)
+        if parts[:2] == ["rtl", "modules"]:
+            rel = parts[2:]
+        elif parts[:2] == ["rtl", "pkg"]:
+            rel = parts[2:]
+        elif parts[:1] == ["tb"]:
+            rel = parts[1:]
+        elif parts[:1] == ["scripts"]:
+            rel = parts[1:]
+        else:
+            rel = parts
+        label = "__".join(rel) if rel else path.name
+        return label or path.name
+
+    def _safe_feature_leaf(self, text: str) -> str:
+        text = re.sub(r"[\\/]+", " ", text)
+        text = re.sub(r"\s+", " ", text).strip()
+        return text or "file responsibility"
+    
     def create_initial_rpg(self) -> RPG:
         """Create initial RPG from JSON repository data"""
         repo_name = self.repo_data.get("repository_name", "repo")
@@ -228,18 +316,33 @@ class ImplBuilder:
     ) -> Tuple[RepoSkeleton, RPG]:
         
         self.logger.info("=== Building Repository Skeleton ===")
-        
         skeleton_designer = FileDesigner(
             file_map={},
             llm_config=self.llm_cfg,
             config_path=self.skeleton_cfg,
             rpg=rpg
         )
-        
-        skeleton, updated_rpg, results = skeleton_designer.run(
-            skeleton_result_path=self.skeleton_result_path,
-            agent_result_path=self.skeleton_agent_result_path
-        )
+
+        if self._should_preserve_rtl_blueprint():
+            self.logger.info("Using RTL seeded skeleton path to preserve repository blueprint")
+            rtl_metadata = self.repo_data.get("rtl_metadata", {})
+            file_feature_map = self._get_rtl_file_feature_map()
+            file_content_map = {
+                file_path: ""
+                for file_path in (rtl_metadata.get("files", {}) or {}).keys()
+            }
+            skeleton, updated_rpg, results = skeleton_designer.build_seeded_skeleton(
+                file_feature_map=file_feature_map,
+                file_content_map=file_content_map,
+            )
+            skeleton.save_json(self.skeleton_result_path)
+            with open(self.skeleton_agent_result_path, 'w') as f:
+                json.dump(results, f, indent=4)
+        else:
+            skeleton, updated_rpg, results = skeleton_designer.run(
+                skeleton_result_path=self.skeleton_result_path,
+                agent_result_path=self.skeleton_agent_result_path
+            )
         
         if not results.get("success", False):
             self.logger.error("Skeleton generation failed")
@@ -259,6 +362,7 @@ class ImplBuilder:
     ) -> Tuple[RPG, Dict[str, Any]]:
         """Build repository graph using GraphDesigner"""
         self.logger.info("=== Building Repository Graph ===")
+        from .func_design import FuncDesigner
         graph_designer = FuncDesigner(
             repo_skeleton=skeleton,
             llm_config=self.llm_cfg,
@@ -281,8 +385,9 @@ class ImplBuilder:
             json.dump(final_rpg.to_dict(), f, indent=4)
 
         return final_skeleton, final_rpg, graph_results
-    
+
     def plan_all_tasks(self, rpg, graph_data):    
+        from .plan_tasks import TaskPlanner
         planner = TaskPlanner(
             rpg=rpg,
             llm_cfg=self.llm_cfg,
@@ -305,6 +410,8 @@ class ImplBuilder:
         else:
             with open(self.state_file, 'r') as f:
                 state_dict = json.load(f)
+
+        state_dict = self._repair_incomplete_state(state_dict)
         
         self.load_repo_data()
         if not state_dict.get("build_skeleton", False):
@@ -363,6 +470,42 @@ class ImplBuilder:
         # 设计阶段完成，返回任务批次供代码生成阶段使用
         self.logger.info(f"Design phase completed. Generated {len(plan_batches)} task batches.")
         return plan_batches, skeleton, rpg, graph_data
+
+    def _repair_incomplete_state(self, state_dict: Dict[str, Any]) -> Dict[str, Any]:
+        repaired = dict(state_dict or {})
+
+        stage_requirements = {
+            "build_skeleton": [self.skeleton_result_path, self.global_rpg_path],
+            "build_function": [self.skeleton_result_path, self.global_rpg_path, self.graph_result_path],
+            "plan_tasks": [self.tasks_result_path, self.graph_result_path, self.global_rpg_path],
+        }
+
+        updated = False
+        for stage, required_paths in stage_requirements.items():
+            if not repaired.get(stage, False):
+                continue
+            missing = [str(path) for path in required_paths if not path.exists()]
+            if missing:
+                self.logger.warning(
+                    "Checkpoint state marked '%s' as complete, but artifacts are missing: %s. "
+                    "Resetting this and downstream stages.",
+                    stage,
+                    missing,
+                )
+                reset = False
+                for reset_stage in ("build_skeleton", "build_function", "plan_tasks"):
+                    if reset_stage == stage:
+                        reset = True
+                    if reset:
+                        if repaired.get(reset_stage, False):
+                            repaired[reset_stage] = False
+                            updated = True
+                break
+
+        if updated:
+            with open(self.state_file, 'w') as f:
+                json.dump(repaired, f, indent=4)
+        return repaired
         
     
         

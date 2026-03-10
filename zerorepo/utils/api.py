@@ -1,10 +1,17 @@
 import re
 from typing import Dict, List
-import tiktoken
+
+try:
+    import tiktoken
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    tiktoken = None
+
 from .envs import ANSWER_END_TAG, ANSWER_START_TAG, THINKING
 
 
 def count_tokens(text, model="gpt-4o"):
+    if tiktoken is None:
+        return len(str(text).split())
     encoding = tiktoken.encoding_for_model(model)  # get the encoder for the given model
     tokens = encoding.encode(text)  # encode text into tokens
     return len(tokens)  # return token count
@@ -52,6 +59,20 @@ def truncate_by_token(
         "text-davinci-003": "p50k_base",
         "code-davinci-002": "p50k_base",
     }
+
+    if tiktoken is None:
+        words = str(text).split()
+        if len(words) <= max_tokens:
+            return text
+        head_keep = max_tokens // 2 + max_tokens % 2
+        tail_keep = max_tokens // 2
+        removed = max(0, len(words) - (head_keep + tail_keep))
+        head_str = " ".join(words[:head_keep])
+        tail_str = " ".join(words[-tail_keep:]) if tail_keep > 0 else ""
+        marker = (
+            f"\n\n... [stderr output truncated: {removed} approximate tokens omitted in the middle] ...\n\n"
+        )
+        return head_str + marker + tail_str
 
     encoding_name = model_to_encoding.get(model, "cl100k_base")
     enc = tiktoken.get_encoding(encoding_name)
@@ -104,6 +125,9 @@ def calculate_tokens(text: str, model: str = "gpt-4o") -> int:
         "text-davinci-003": "p50k_base",
         "code-davinci-002": "p50k_base",
     }
+
+    if tiktoken is None:
+        return len(str(text).split())
 
     encoding_name = model_to_encoding.get(model, "cl100k_base")
     enc = tiktoken.get_encoding(encoding_name)

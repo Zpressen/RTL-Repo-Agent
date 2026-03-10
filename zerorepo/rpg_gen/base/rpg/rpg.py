@@ -10,8 +10,12 @@ from typing import (
 )
 from collections import defaultdict, deque
 from .util import NodeType, EdgeType
-from .dep_graph import DependencyGraph
 from ..unit import CodeUnit
+
+try:
+    from .dep_graph import DependencyGraph
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    DependencyGraph = None
 
 
 MAX_LEVEL = 5
@@ -466,7 +470,10 @@ class RPG:
 
         dep_graph_data = data.get("dep_graph")
         if dep_graph_data:
-            rpg.dep_graph = DependencyGraph.from_dict(dep_graph_data)
+            if DependencyGraph is not None:
+                rpg.dep_graph = DependencyGraph.from_dict(dep_graph_data)
+            else:
+                logging.warning("DependencyGraph support unavailable; skipping dep_graph restore")
 
         return rpg
 
@@ -1626,6 +1633,8 @@ class RPG:
         )
 
     def parse_dep_graph(self, repo_dir: str) -> DependencyGraph:
+        if DependencyGraph is None:
+            raise ModuleNotFoundError("DependencyGraph requires optional dependency 'networkx'")
         dep_graph = DependencyGraph(repo_dir)
         dep_graph.build()
         dep_graph.parse()

@@ -9,7 +9,8 @@ from zerorepo.rpg_gen.base import (
     FileNode, RepoSkeleton
 )
 from zerorepo.rpg_gen.base.node import show_project_structure_from_tree
-from .util import convert_raw_skeleton_to_repo_node_tree
+from zerorepo.rpg_gen.base.rpg import NodeMetaData, NodeType
+from .util import convert_raw_skeleton_to_repo_node_tree, add_file_node_with_features
 from .prompts import (
     GROUP_SKELETON,
     GROUP_SKELETON_REVIEW,
@@ -40,9 +41,7 @@ class FileDesigner:
         # Load configuration
         self.config = self._load_config(config_path)
         
-        # Initialize agents when repo_data is available
-        if self.rpg:
-            self._init_agents()
+        self.raw_agent = None
     
     def _load_config(self, config_path: Optional[str] = None) -> Dict:
         """Load configuration from YAML file"""
@@ -108,6 +107,9 @@ class FileDesigner:
             Tuple[Dict, RPG, Dict]: (raw_skeleton_dict, updated_rpg, raw_agent_results)
         """
         logging.info("[FileDesigner] === Generating raw skeleton ===")
+
+        if self.raw_agent is None:
+            self._init_agents()
         
         # Use config value if not provided
         max_steps = self.config.get('raw_skeleton', {}).get('max_steps', 20)
@@ -221,6 +223,85 @@ class FileDesigner:
         }
         
         return tree_root, self.rpg, group_agent_results
+
+    def build_seeded_skeleton(
+        self,
+        file_feature_map: Dict[str, List[str]],
+        file_content_map: Optional[Dict[str, str]] = None,
+    ) -> Tuple[RepoSkeleton, RPG, Dict[str, Any]]:
+        """Build a skeleton directly from a known repository blueprint."""
+        logging.info("[FileDesigner] === Building seeded skeleton from known file tree ===")
+
+        file_content_map = file_content_map or {}
+        tree_root = DirectoryNode(
+            name=self.rpg.repo_name if self.rpg else "repo",
+            path="."
+        )
+
+        all_paths = sorted(set(file_feature_map.keys()) | set(file_content_map.keys()))
+        for file_path in all_paths:
+            add_file_node_with_features(
+                base_node=tree_root,
+                file_path=file_path,
+                feature_paths=file_feature_map.get(file_path, []),
+                file_map=file_content_map,
+            )
+
+            for feature_path in file_feature_map.get(file_path, []):
+                parent_feature_path = "/".join(feature_path.split("/")[:-1]).strip("/")
+                if not parent_feature_path:
+                    continue
+                feature_node = self.rpg.get_node_by_feature_path(parent_feature_path)
+                if feature_node is None:
+                    logging.warning(
+                        "[FileDesigner] Feature node not found for seeded mapping: %s",
+                        parent_feature_path,
+                    )
+                    continue
+
+                if feature_node.meta is None:
+                    feature_node.meta = NodeMetaData(
+                        type_name=NodeType.FILE,
+                        path=file_path,
+                    )
+                else:
+                    feature_node.meta.type_name = NodeType.FILE
+                    if not feature_node.meta.path:
+                        feature_node.meta.path = file_path
+                    elif isinstance(feature_node.meta.path, list):
+                        if file_path not in feature_node.meta.path:
+                            feature_node.meta.path.append(file_path)
+                    elif feature_node.meta.path != file_path:
+                        feature_node.meta.path = [feature_node.meta.path, file_path]
+
+        skeleton = RepoSkeleton({})
+        skeleton.root = tree_root
+        skeleton.path_to_node = {}
+
+        def _collect_nodes(node: RepoNode):
+            skeleton.path_to_node[node.path] = node
+            if node.is_dir:
+                for child in node.children():
+                    _collect_nodes(child)
+
+        _collect_nodes(skeleton.root)
+        skeleton.add_missing_init_files()
+
+        results = {
+            "mode": "seeded_skeleton",
+            "final_file_count": len(skeleton.get_all_file_nodes()),
+            "final_node_count": len(skeleton.path_to_node),
+            "success": True,
+        }
+
+        logging.info(
+            "[FileDesigner] Seeded RepoSkeleton ready. Files: %d, Nodes: %d",
+            results["final_file_count"],
+            results["final_node_count"],
+        )
+        logging.info(show_project_structure_from_tree(node=skeleton.root, show_features=False))
+
+        return skeleton, self.rpg, results
     
     
     def run(

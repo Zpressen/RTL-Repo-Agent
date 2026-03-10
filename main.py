@@ -348,18 +348,12 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
                     )
                     spec_facts = designer.run(
                         spec_content=spec.spec_content,
-                        spec_name=spec.project_name
+                        spec_name=spec.project_name,
+                        checkpoint_dir=spec_checkpoint_dir,
                     )
 
-                    # Write enhanced split sidecars (anchor/hint/trace)
-                    designer.write_enhanced_sidecars(spec_facts, spec_checkpoint_dir)
-
-                    # Save SpecFacts
-                    spec_facts_file = spec_checkpoint_dir / "spec_facts.json"
-                    with open(spec_facts_file, 'w', encoding='utf-8') as f:
-                        json.dump(spec_facts.to_dict(), f, indent=2, ensure_ascii=False)
-
                     logger.info(f"  - spec_facts.json")
+                    logger.info(f"  - phase1_diagnostics.json")
 
                     # Convert SpecFacts to RPG and save
                     from zerorepo.rtl_impl.phase1_spec_parsing import SpecFactsToRpgAdapter
@@ -380,9 +374,13 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
                     # Note: rpg is needed for Phase 2, load it too
                     # For now, we'll reload it in Phase 2 section
 
-                # ===== Phase 2: Module Contract Realization =====
+                # ===== Phase 2: File-Centered Prop-Level Enrichment =====
                 # Run Phase 2 if phase is 'rtl' or 'rtl_phase2'
                 if args.phase in ["rtl", "rtl_phase2"]:
+                    from zerorepo.rtl_impl.phase1_spec_parsing.spec_models import SpecFacts
+                    from zerorepo.rtl_impl.phase2_module_graph.models import Phase2Contracts
+                    from zerorepo.rtl_impl import RTLPropLevelAdapter
+
                     # Check for resume - if phase2_contracts.json exists, skip Phase 2
                     phase2_contracts_file = spec_checkpoint_dir / "phase2_contracts.json"
                     phase2_skipped = False
@@ -392,11 +390,10 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
                         phase2_skipped = True
                     else:
                         # Run Phase 2
-                        logger.info(f"🔧 Running Phase 2: Module Contract Realization...")
+                        logger.info(f"🔧 Running Phase 2: File-Centered Prop-Level Enrichment...")
 
                         # Import Phase 2 modules
                         from zerorepo.rtl_impl.phase2_module_graph import Phase2Designer
-                        from zerorepo.rtl_impl.phase1_spec_parsing.spec_models import SpecFacts
 
                         # Load spec_facts from file
                         with open(spec_facts_file, 'r', encoding='utf-8') as f:
@@ -434,6 +431,51 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
                             logger.info(f"✅ Phase 2 completed for {spec.project_name}")
                         else:
                             logger.error(f"❌ Phase 2 failed for {spec.project_name}")
+                            return False
+
+                    if not phase2_contracts_file.exists():
+                        logger.error("phase2_contracts.json not found for %s", spec.project_name)
+                        return False
+
+                    # Export repo_data.json for generic impl-level compatibility
+                    with open(spec_facts_file, 'r', encoding='utf-8') as f:
+                        spec_facts_dict = json.load(f)
+                    spec_facts = SpecFacts.from_dict(spec_facts_dict)
+
+                    with open(phase2_contracts_file, 'r', encoding='utf-8') as f:
+                        phase2_contracts_dict = json.load(f)
+                    phase2_contracts = Phase2Contracts.from_dict(phase2_contracts_dict)
+
+                    adapter = RTLPropLevelAdapter(logger=logger)
+                    adapter.export_repo_data(
+                        spec_facts=spec_facts,
+                        phase2_contracts=phase2_contracts,
+                        checkpoint_dir=spec_checkpoint_dir,
+                    )
+                    logger.info("  - repo_data.json")
+
+                    # Hand off to the generic implementation layer instead of
+                    # stopping after repo_data export.
+                    from zerorepo.config.checkpoint_config import create_default_manager
+                    from zerorepo.zerorepo import ZeroRepo
+
+                    create_default_manager(spec_checkpoint_dir)
+                    repo_root = (spec_facts.repo_root or "").strip().strip("/")
+                    target_repo_path = spec.output_dir / repo_root if repo_root else spec.output_dir / "workspace"
+                    target_repo_path.mkdir(parents=True, exist_ok=True)
+
+                    zero_repo = ZeroRepo(
+                        config_path=config_path,
+                        checkpoint_dir=spec_checkpoint_dir,
+                        repo_path=target_repo_path,
+                        logger=logger,
+                    )
+
+                    zero_repo.run_impl_level()
+                    logger.info(
+                        "✅ RTL compatible repo_data exported and impl_level started for %s",
+                        spec.project_name,
+                    )
 
             # Summary
             if args.phase == "rtl":
@@ -441,6 +483,8 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
                 logger.info(f"🎉 RTL Pipeline completed for {len(specs)} project(s)")
                 logger.info(f"  - Phase 1: spec_facts.json, rpg.json")
                 logger.info(f"  - Phase 2: phase2_contracts.json")
+                logger.info(f"  - Prop adapter: repo_data.json")
+                logger.info(f"  - Impl handoff: impl_level.run()")
                 logger.info(f"{'='*60}")
             elif args.phase == "rtl_phase1":
                 logger.info(f"\n{'='*60}")

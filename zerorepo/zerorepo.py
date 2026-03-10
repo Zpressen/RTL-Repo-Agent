@@ -8,11 +8,6 @@ from datetime import datetime
 
 from .rpg_gen.base import LLMConfig
 from .rpg_gen.base import RPG, RepoSkeleton
-from .rpg_gen.prop_level.prop_builder import PropBuilder
-from .rpg_gen.impl_level.impl_builder import ImplBuilder
-from .rpg_gen.impl_level.plan_tasks.task_manager import TaskManager
-from .rpg_gen.impl_level.plan_tasks.task_batch import TaskBatch
-from .code_gen.code_gen import IterativeCodeGenerator
 from .utils.logs import setup_logger
 from .config.checkpoint_config import (
     CheckpointManager, CheckpointFiles, create_default_manager, set_checkpoint_manager
@@ -38,6 +33,7 @@ class PersistentTaskExecutor:
     def __enter__(self):
         """Initialize the IterativeCodeGenerator"""
         self.logger.info("🐳 Initializing IterativeCodeGenerator container...")
+        from .code_gen.code_gen import IterativeCodeGenerator
         
         code_gen_cfg = self.config["code_generation"]
 
@@ -224,6 +220,7 @@ class ZeroRepo:
     def _initialize_prop_builder(self) -> None:
         """Initialize PropBuilder with configuration"""
         if self.prop_builder is None:
+            from .rpg_gen.prop_level.prop_builder import PropBuilder
             prop_config = self.config.get('prop_level', {})
             
             self.prop_builder = PropBuilder(
@@ -238,6 +235,7 @@ class ZeroRepo:
     def _initialize_impl_builder(self) -> None:
         """Initialize ImplBuilder with configuration"""
         if self.impl_builder is None:
+            from .rpg_gen.impl_level.impl_builder import ImplBuilder
             impl_config = self.config.get('impl_level', {})
             
             skeleton_cfg = impl_config['file_design_cfg_path']
@@ -390,6 +388,7 @@ class ZeroRepo:
         self.logger.info("=== Starting Code Generation with TaskManager ===")
         
         try:
+            from .rpg_gen.impl_level.plan_tasks.task_manager import TaskManager
             # Load task batches and graph data if not provided
             if plan_batches is None or graph_data is None:
                 tasks_file = Path(self.checkpoint_manager.tasks_path)
