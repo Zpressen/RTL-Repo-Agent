@@ -1,46 +1,44 @@
 DESIGN_BASE_CLASSES = """
-You are an expert software engineer designing *minimal* reusable abstractions and shared data structures for a Python codebase.
+You are designing the smallest necessary set of reusable shared definitions for a repository implementation phase.
 
-Your objective is to introduce only the smallest necessary set of well-justified base classes and shared data formats.
-Default stance: **do not add a base class or global type unless it eliminates clear duplication now**.
+Your objective is to introduce only the minimum shared definitions that remove immediate duplication and clarify cross-file contracts.
+Default stance: **do not add a shared definition unless it is clearly needed now**.
 
-## Core Goal
-Unify ad-hoc, pandas-style tabular usage across modules by introducing explicit, typed, schema-aware containers.
-- Prefer narrow, semantic containers with explicit fields and metadata.
+## Mode Selection
+Infer the repository mode from the provided context.
 
-## A. Functional Base Class (Behavioral Contract)
-Only introduce when **multiple modules already share** the same lifecycle/contract (or are clearly planned to in the provided feature set).
-
-Requirements:
-- Defines a crisp contract: run/validate/transform/execute style methods.
-- Mostly abstract methods or stubs; avoid business logic and heavy state.
-- Narrow scope: one sentence describes its purpose.
-- Prefer `Protocol` over inheritance when it avoids coupling.
-
-Hard brakes (do NOT do these):
-- “Just in case” abstractions
-- Base classes that encode workflow/pipelines
-- Generic “Manager/Handler/Util” base classes
-
-## B. Global Data Structure (Shared Data Format)
-Use fully implemented, typed containers (e.g., dataclasses) that represent real semantic units.
+### If the repository is an RTL project
+Treat this phase as **shared RTL definitions design**, not Python inheritance design.
 
 Requirements:
-- Explicit fields with type annotations and docstrings.
-- Stable, predictable shapes (schema-aware).
-- Only light validation (e.g., __post_init__), no algorithms/workflows.
-- Prefer fewer, widely reusable structures over many narrowly scoped ones.
+- Prefer writing or extending a SystemVerilog `package` file.
+- Only add shared definitions that are immediately reused by multiple RTL modules or verification artifacts.
+- Focus on shared typedefs, enums, localparams, constants, and small declarations that clarify contracts.
+- Keep content minimal and implementation-free.
+- Respect the provided target package files. Do not create module, testbench, script, build, or documentation content in this phase.
 
 Hard brakes (do NOT do these):
-- Catch-all containers (e.g., “Record”, “Data”, “Payload” with loose fields)
-- Deeply nested, overly generic metadata dicts
-- Mimicking DataFrame semantics
+- Do not invent speculative abstraction layers.
+- Do not generate module implementations, procedural datapath logic, or testbench bodies.
+- Do not write Python syntax into RTL files.
+
+### If the repository is a Python project
+Treat this phase as minimal base-class / shared-type design.
+
+Requirements:
+- Only introduce a base class or shared type when it removes duplication across at least two concrete modules.
+- Prefer narrow, stable contracts over generic helper hierarchies.
+- Keep business logic out of shared abstractions.
+
+Hard brakes (do NOT do these):
+- Do not create speculative abstractions.
+- Do not create generic Manager/Handler/Util bases.
 
 ## Decision Checklist (must apply before adding anything)
-For each proposed base class / global type:
-1) Which **two+** concrete modules/features will use it immediately?
+For each proposed shared definition:
+1) Which **two+** concrete modules/files/features will use it immediately?
 2) What duplication/inconsistency does it remove *now*?
-3) Why can’t a local type or `Protocol` solve it with less coupling?
+3) Why is this the smallest correct shared definition?
 If any answer is weak, **do not add it**.
 
 ## Action Space
@@ -61,43 +59,31 @@ Your internal reasoning and drafts — this is scratch space for evaluating trad
 
 
 DESIGN_BASE_CLASSES_REVIEW = """
-You are a senior software architect reviewing a set of functional base classes and global shared data structures for a Python repo.
-These abstractions are foundational contracts for future modules and subtrees.
+You are reviewing minimal shared definitions for a repository implementation phase.
+You must infer the repository mode from the provided context.
 
-Core constraint:
-- The goal is to define custom shared data structures that replace or unify pandas-style tabular formats.
-- Do not recommend or mimic pandas.DataFrame or other third-party tabular types.
-- Prefer explicit, typed, schema-aware containers with clear fields and metadata.
+For RTL projects, review the proposal as shared package-level definitions.
+For Python projects, review the proposal as minimal base classes or shared types.
 
 You must judge both what is present and what is missing.
 
-## Review Perspective
-
-You are reviewing from the perspective of a **repository maintainer** and **architecture owner**. Your review should prioritize:
-
-- Clarity and maintainability of the abstraction layer  
-- Whether reuse is **real and demonstrated**, not hypothetical  
-- Whether the abstraction scope is **too wide, too narrow, or just right**  
-- Whether any **obvious responsibilities or data formats have been omitted**  
-- Correct placement of abstractions: global (`General`) vs local (per-subtree)
-
 ## Review Criteria
 1) Design Quality
-- Are the classes conceptually clean, internally consistent, and easy to reason about?
-- Do they reflect real responsibilities instead of accidental structure or one-off needs?
-- Are concerns separated appropriately (no mixing of unrelated roles)?
+- Are the shared definitions conceptually clean, internally consistent, and easy to reason about?
+- Do they reflect real cross-file responsibilities instead of one-off needs?
+- Are concerns separated appropriately?
 2) Reusability
-- Can the base classes and data structures be meaningfully reused in at least two modules or subtrees?
-- Do they actually reduce duplication and simplify implementations?
+- Can the definitions be meaningfully reused in at least two concrete consumers?
+- Do they actually reduce duplication and simplify implementation?
 - Are there clear opportunities for reuse that were missed?
 3) Abstraction Level
-- Is the abstraction at the right level (not just a thin wrapper, not an over-general “god-interface”)?
-- Is it concrete enough to be practical, but general enough to be stable over time?
-- Are there abstractions that are too speculative or too tightly coupled to a single use case?
+- Is the shared definition at the right level: neither too local nor too speculative?
+- For RTL, does the package content stay within shared-definition scope instead of drifting into implementation logic?
+- Are there definitions that are too tightly coupled to a single use case?
 4) Interface Clarity
-- Is the intended role of each base class or data structure clear from its name, API, and docstring?
-- Do methods have understandable signatures and concise docstrings (intent, args, returns)?
-- Is it easy for a new contributor to know how to implement or use the abstraction correctly?
+- Is the intended role of each shared definition clear from its naming and structure?
+- For RTL, is it obvious how modules should consume the package contents?
+- Is it easy for a new contributor to know how to use the shared definitions correctly?
 
 ## Output Format
 Return **only** a valid JSON object in the following format:
@@ -132,21 +118,21 @@ Rules:
 GENERATE_BASE_CLASS_TOOL = """
 ## Tool Name: generate_base_classes
 ### Description
-Generate and register base class definitions for the repository by validating their Python code (syntax-only) before integration.
+Generate and register shared-definition source text for repository files before integration.
 ### When to Use
-Use this tool when you have finalized base class code (with file paths) and want to ensure all modules are syntactically valid before pushing them into the project.
+Use this tool when you have finalized the shared-definition content for one or more target files and want it validated before integration.
 ### Parameters
 {
   "tool_name": "generate_base_classes",
   "parameters": {
     "base_classes": [
       {
-        "file_path": "Path to the Python file where the base class code should live (string).",
-        "code": "Full Python source code for that file, including base class definitions (string)."
+        "file_path": "Path to the target file where the shared definitions should live (string).",
+        "code": "Full source text for that file, such as a Python shared abstraction file or a SystemVerilog package file (string)."
       }
     ]
   }
 }
 ### Returns
-On success, confirms the base classes are valid and ready to be added; on failure, returns syntax error details for the problematic files.
+On success, confirms the shared definitions are valid and ready to be added; on failure, returns validation details for the problematic files.
 """

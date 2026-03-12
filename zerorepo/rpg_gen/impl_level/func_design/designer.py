@@ -43,17 +43,96 @@ class FuncDesigner:
         repo_skeleton: Optional[RepoSkeleton] = None,
         llm_config: Optional[Union[str, Dict, LLMConfig]] = None,
         repo_rpg: Optional[RPG] = None,
+        repo_data: Optional[Dict[str, Any]] = None,
         config_path: Optional[str] = None,
         logger: logging.Logger = None
     ):
         self.skeleton = repo_skeleton
         self.repo_rpg = repo_rpg
+        self.repo_data = repo_data or {}
         self.llm_config = llm_config
         # Load configuration
         self.config = self._load_config(config_path)
             
         self.logger = setup_logger() if not logger \
             else logger
+
+    def _build_rtl_dataflow_context(self) -> Optional[Dict[str, Any]]:
+        rtl_metadata = self.repo_data.get("rtl_metadata", {}) if self.repo_data else {}
+        if rtl_metadata.get("mode") != "rtl_spec2repo":
+            return None
+
+        file_specs = rtl_metadata.get("file_specs", []) or []
+        normalized_specs: List[Dict[str, Any]] = []
+        component_names: List[str] = []
+        seen_components = set()
+        depends_on_files: Dict[str, List[str]] = {}
+        owned_modules: Dict[str, List[str]] = {}
+        related_req_ids: Dict[str, List[str]] = {}
+        related_test_ids: Dict[str, List[str]] = {}
+        related_prop_ids: Dict[str, List[str]] = {}
+        file_graph_seed: List[Dict[str, str]] = []
+
+        for item in file_specs:
+            if not isinstance(item, dict):
+                continue
+
+            file_path = str(item.get("file_path", "")).strip()
+            if not file_path:
+                continue
+
+            if file_path not in seen_components:
+                component_names.append(file_path)
+                seen_components.add(file_path)
+
+            spec_entry = {
+                "file_path": file_path,
+                "bucket": str(item.get("bucket", "")).strip(),
+                "file_kind": str(item.get("file_kind", "")).strip(),
+                "responsibility": str(item.get("responsibility", "")).strip(),
+                "depends_on_files": list(item.get("depends_on_files", []) or []),
+                "owned_modules": list(item.get("owned_modules", []) or []),
+                "related_req_ids": list(item.get("related_req_ids", []) or []),
+                "related_test_ids": list(item.get("related_test_ids", []) or []),
+                "related_prop_ids": list(item.get("related_prop_ids", []) or []),
+            }
+            normalized_specs.append(spec_entry)
+
+            depends = sorted({str(dep).strip() for dep in spec_entry["depends_on_files"] if str(dep).strip()})
+            modules = sorted({str(mod).strip() for mod in spec_entry["owned_modules"] if str(mod).strip()})
+            req_ids = sorted({str(req).strip() for req in spec_entry["related_req_ids"] if str(req).strip()})
+            test_ids = sorted({str(test).strip() for test in spec_entry["related_test_ids"] if str(test).strip()})
+            prop_ids = sorted({str(prop).strip() for prop in spec_entry["related_prop_ids"] if str(prop).strip()})
+
+            depends_on_files[file_path] = depends
+            owned_modules[file_path] = modules
+            related_req_ids[file_path] = req_ids
+            related_test_ids[file_path] = test_ids
+            related_prop_ids[file_path] = prop_ids
+
+            for upstream in depends:
+                file_graph_seed.append(
+                    {
+                        "source": upstream,
+                        "target": file_path,
+                        "reason": "depends_on_files",
+                    }
+                )
+
+        return {
+            "component_names": component_names,
+            "file_specs": normalized_specs,
+            "depends_on_files": depends_on_files,
+            "owned_modules": owned_modules,
+            "related_req_ids": related_req_ids,
+            "related_test_ids": related_test_ids,
+            "related_prop_ids": related_prop_ids,
+            "skeleton_overview": self.skeleton.to_tree_string() if self.skeleton else "",
+            "file_graph_seed": file_graph_seed,
+            "module_specs": rtl_metadata.get("module_specs", []) or [],
+            "top_module": rtl_metadata.get("top_module", ""),
+            "toolchain": rtl_metadata.get("toolchain", ""),
+        }
 
     def _load_config(self, config_path: Optional[str] = None) -> Dict:
         """Load configuration from YAML file"""
@@ -157,6 +236,7 @@ class FuncDesigner:
             max_review_times=self.config.get('data_flow', {}).get('max_review_times', 0),
             repo_rpg=self.repo_rpg,
             repo_skeleton=self.skeleton,
+            rtl_context=self._build_rtl_dataflow_context(),
             register_tools=[GenerateDataFlowTool],
             logger=self.logger
         )
@@ -208,6 +288,7 @@ class FuncDesigner:
             max_review_times=self.config.get('data_flow', {}).get('max_review_times', 0),
             repo_rpg=self.repo_rpg,
             repo_skeleton=self.skeleton,
+            rtl_context=self._build_rtl_dataflow_context(),
             register_tools=[GenerateBaseClassesTool],
             logger=self.logger
         )

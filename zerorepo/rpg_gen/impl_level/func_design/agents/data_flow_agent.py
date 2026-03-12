@@ -140,6 +140,7 @@ class GenerateDataFlowTool(Tool):
         try:
             data_flow = arguments.get("data_flow", [])
             repo_rpg: RPG = env.repo_rpg
+            rtl_context = getattr(env, "rtl_context", None)
 
             if not data_flow:
                 return ToolExecResult(
@@ -150,7 +151,11 @@ class GenerateDataFlowTool(Tool):
                 )
             
             # Validate data flow
-            passed, err_msg = cls._validate_data_flow(data_flow, repo_rpg.get_functional_areas())
+            required_components = repo_rpg.get_functional_areas()
+            if rtl_context and rtl_context.get("component_names"):
+                required_components = rtl_context["component_names"]
+
+            passed, err_msg = cls._validate_data_flow(data_flow, required_components)
             
             if not passed:
                 return ToolExecResult(
@@ -311,6 +316,7 @@ class DataFlowEnv(ReviewEnv):
         register_tools: List = [],
         repo_skeleton: RepoSkeleton=None,
         repo_rpg: RPG = None,
+        rtl_context: Optional[Dict[str, Any]] = None,
         logger: logging.Logger = None
     ):
         super().__init__(
@@ -321,32 +327,93 @@ class DataFlowEnv(ReviewEnv):
         )
         self.repo_rpg = repo_rpg
         self.repo_skeleton = repo_skeleton
+        self.rtl_context = rtl_context
         # self.data_flow = []
         self.is_completed = False
         self.logger = logger or logging.getLogger(__name__)
+
+    def _is_rtl_mode(self) -> bool:
+        return bool(self.rtl_context and self.rtl_context.get("component_names"))
+
+    def _format_rtl_file_specs(self) -> str:
+        if not self.rtl_context:
+            return ""
+
+        lines: List[str] = []
+        for spec in self.rtl_context.get("file_specs", []):
+            file_path = spec.get("file_path", "")
+            bucket = spec.get("bucket", "")
+            file_kind = spec.get("file_kind", "")
+            responsibility = spec.get("responsibility", "")
+            depends = ", ".join(spec.get("depends_on_files", [])) or "-"
+            modules = ", ".join(spec.get("owned_modules", [])) or "-"
+            req_ids = ", ".join(spec.get("related_req_ids", [])) or "-"
+            test_ids = ", ".join(spec.get("related_test_ids", [])) or "-"
+            prop_ids = ", ".join(spec.get("related_prop_ids", [])) or "-"
+            lines.append(
+                f"- {file_path} | bucket={bucket} | kind={file_kind}\n"
+                f"  responsibility: {responsibility or '-'}\n"
+                f"  depends_on_files: {depends}\n"
+                f"  owned_modules: {modules}\n"
+                f"  related_req_ids: {req_ids}\n"
+                f"  related_test_ids: {test_ids}\n"
+                f"  related_prop_ids: {prop_ids}"
+            )
+        return "\n".join(lines)
+
+    def _format_rtl_file_graph_seed(self) -> str:
+        if not self.rtl_context:
+            return ""
+
+        seed = self.rtl_context.get("file_graph_seed", [])
+        if not seed:
+            return "- No explicit depends_on_files edges were provided."
+
+        lines = [
+            f"- {item.get('source', '')} -> {item.get('target', '')} ({item.get('reason', 'seed')})"
+            for item in seed
+        ]
+        return "\n".join(lines)
     
     def load_review_message(self, tool_calls: List[ToolCall]):
         repo_name = self.repo_rpg.repo_name
         repo_info = self.repo_rpg.repo_info
         
         repo_skeleton_str = self.repo_skeleton.to_tree_string()
-        
-        tree_overview = self.repo_rpg.visualize_dir_map(max_depth=3, feature_only=False)
-        trees_names = self.repo_rpg.get_functional_areas()
         tool_str = json.dumps([tool_call.to_dict() for tool_call in tool_calls], indent=2)
-        
-        review_input = (
-            "You should review a component data flow design based on the following information:\n"
-            f"Repository Name: {repo_name}\n"
-            f"Description: {repo_info}\n"
-            f"Repository Skeleton: {repo_skeleton_str}\n"
-            f"Functional Graph Overview: {tree_overview}\n"
-            f"Available Subgraph Names: {', '.join(trees_names)}\n"
-            f"Proposed data flow:\n{tool_str}\n"
-            "Please evaluate the data flow according to the review criteria and produce a consolidated review.\n"
-            "Respond with a valid JSON object that follows the required output format in the system prompt.\n"
-            "Do not include any text outside of the JSON object."
-        )
+
+        if self._is_rtl_mode():
+            available_files = ", ".join(self.rtl_context.get("component_names", []))
+            review_input = (
+                "You should review an RTL file-level data flow design based on the following information:\n"
+                f"Repository Name: {repo_name}\n"
+                f"Description: {repo_info}\n"
+                f"Repository Skeleton: {repo_skeleton_str}\n"
+                f"Functional Graph Overview: {self.rtl_context.get('skeleton_overview', repo_skeleton_str)}\n"
+                f"Available RTL Files: {available_files}\n"
+                f"RTL File Specs:\n{self._format_rtl_file_specs()}\n"
+                f"File Dependency Seed:\n{self._format_rtl_file_graph_seed()}\n"
+                f"Owned Modules By File:\n{json.dumps(self.rtl_context.get('owned_modules', {}), indent=2)}\n"
+                f"Proposed data flow:\n{tool_str}\n"
+                "Please evaluate the data flow according to the review criteria and produce a consolidated review.\n"
+                "Respond with a valid JSON object that follows the required output format in the system prompt.\n"
+                "Do not include any text outside of the JSON object."
+            )
+        else:
+            tree_overview = self.repo_rpg.visualize_dir_map(max_depth=3, feature_only=False)
+            trees_names = self.repo_rpg.get_functional_areas()
+            review_input = (
+                "You should review a component data flow design based on the following information:\n"
+                f"Repository Name: {repo_name}\n"
+                f"Description: {repo_info}\n"
+                f"Repository Skeleton: {repo_skeleton_str}\n"
+                f"Functional Graph Overview: {tree_overview}\n"
+                f"Available Subgraph Names: {', '.join(trees_names)}\n"
+                f"Proposed data flow:\n{tool_str}\n"
+                "Please evaluate the data flow according to the review criteria and produce a consolidated review.\n"
+                "Respond with a valid JSON object that follows the required output format in the system prompt.\n"
+                "Do not include any text outside of the JSON object."
+            )
         
         return review_input
     
@@ -362,6 +429,8 @@ class DataFlowEnv(ReviewEnv):
                 if data_flow:
                     # Check if we have adequate data flow coverage
                     component_names = self.repo_rpg.get_functional_areas()
+                    if self._is_rtl_mode():
+                        component_names = self.rtl_context.get("component_names", [])
                     data_flow_cmpt_names = []
                     for flow_item in data_flow:
                         data_flow_cmpt_names.append(flow_item["source"])
@@ -392,6 +461,7 @@ class DataFlowAgent(AgentwithReview):
         max_review_times: int = 1,
         repo_rpg: RPG = None,
         repo_skeleton: RepoSkeleton=None,
+        rtl_context: Optional[Dict[str, Any]] = None,
         register_tools: Optional[List[Tool]] = None,
         logger: Optional[logging.Logger] = None,
         **kwargs
@@ -414,6 +484,7 @@ class DataFlowAgent(AgentwithReview):
         
         self.repo_rpg = repo_rpg
         self.repo_skeleton=repo_skeleton
+        self.rtl_context = rtl_context
         
         # Create custom environment
         self._env = DataFlowEnv(
@@ -424,8 +495,12 @@ class DataFlowAgent(AgentwithReview):
             register_tools=register_tools,
             repo_skeleton=repo_skeleton,
             repo_rpg=repo_rpg,
+            rtl_context=rtl_context,
             logger=logger
         )
+
+    def _is_rtl_mode(self) -> bool:
+        return bool(self.rtl_context and self.rtl_context.get("component_names"))
     
     def generate_data_flow(
         self,
@@ -438,25 +513,44 @@ class DataFlowAgent(AgentwithReview):
         repo_name = self.repo_rpg.repo_name
         repo_info = self.repo_rpg.repo_info
         skeleton_info = self.repo_skeleton.to_tree_string()
-        
-        tree_overview = self.repo_rpg.visualize_dir_map(max_depth=3, feature_only=False)
-        subgraph_names = self.repo_rpg.get_functional_areas()
 
-        # Build task description
-        task = (
-            f"Based on the repository structure and dependency relationships, generate data flow between components:\n"
-            f"Repository Name: {repo_name}\n"
-            f"Repository Info: {repo_info}\n"
-            # f"Repository Skeleton: {skeleton_info}\n"
-            f"Functional Graph Overview: {tree_overview}\n\n"
-            f"Component Names: {', '.join(subgraph_names)}\n"
-            "Please use the generate_data_flow tool to create comprehensive data flow definitions.\n"
-            "Focus on:\n"
-            "1. What data flows between components\n"
-            "2. Data types and formats\n"
-            "3. Any transformations applied\n"
-            "4. Direction of data flow"
-        )
+        if self._is_rtl_mode():
+            tree_overview = self.rtl_context.get("skeleton_overview", skeleton_info)
+            component_names = self.rtl_context.get("component_names", [])
+            file_specs = json.dumps(self.rtl_context.get("file_specs", []), indent=2)
+            file_graph_seed = json.dumps(self.rtl_context.get("file_graph_seed", []), indent=2)
+            task = (
+                "Based on the RTL repository structure and deterministic file dependency relationships, "
+                "generate file-level data flow between RTL implementation artifacts:\n"
+                f"Repository Name: {repo_name}\n"
+                f"Repository Info: {repo_info}\n"
+                f"RTL Skeleton Overview: {tree_overview}\n\n"
+                f"RTL File Paths: {', '.join(component_names)}\n"
+                f"RTL File Specs:\n{file_specs}\n\n"
+                f"File Dependency Seed:\n{file_graph_seed}\n"
+                "Please use the generate_data_flow tool to create comprehensive file-level data flow definitions.\n"
+                "In RTL mode:\n"
+                "1. source and target must be file paths from the RTL File Paths list\n"
+                "2. use depends_on_files, owned_modules, and related req/test/prop ids as the primary grounding context\n"
+                "3. describe meaningful artifacts that move between files, modules, packages, testbenches, and scripts\n"
+                "4. keep the flow acyclic and cover every RTL file at least once"
+            )
+        else:
+            tree_overview = self.repo_rpg.visualize_dir_map(max_depth=3, feature_only=False)
+            subgraph_names = self.repo_rpg.get_functional_areas()
+            task = (
+                f"Based on the repository structure and dependency relationships, generate data flow between components:\n"
+                f"Repository Name: {repo_name}\n"
+                f"Repository Info: {repo_info}\n"
+                f"Functional Graph Overview: {tree_overview}\n\n"
+                f"Component Names: {', '.join(subgraph_names)}\n"
+                "Please use the generate_data_flow tool to create comprehensive data flow definitions.\n"
+                "Focus on:\n"
+                "1. What data flows between components\n"
+                "2. Data types and formats\n"
+                "3. Any transformations applied\n"
+                "4. Direction of data flow"
+            )
         
         task += f"\n{extra_message}\n".strip()
         
