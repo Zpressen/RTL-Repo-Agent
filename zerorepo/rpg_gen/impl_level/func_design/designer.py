@@ -27,6 +27,15 @@ from .util import (
     validate_file_implementation_list,
     topo_sort_file_graph
 )
+from ..rtl_trace import (
+    load_rtl_spec_facts,
+    build_rtl_trace_catalog,
+    build_trace_context,
+    build_implementation_node_catalog,
+    build_code_anchor_catalog,
+    build_implementation_hint_catalog,
+    build_file_implementation_context_by_path,
+)
 from zerorepo.utils.logs import setup_logger
 
 class FileImplementationGraph(BaseModel):
@@ -61,6 +70,11 @@ class FuncDesigner:
         rtl_metadata = self.repo_data.get("rtl_metadata", {}) if self.repo_data else {}
         if rtl_metadata.get("mode") != "rtl_spec2repo":
             return None
+        spec_facts = load_rtl_spec_facts(self.repo_data, self.logger)
+        trace_catalog = build_rtl_trace_catalog(spec_facts)
+        implementation_node_catalog = build_implementation_node_catalog(spec_facts)
+        code_anchor_catalog = build_code_anchor_catalog(spec_facts)
+        implementation_hint_catalog = build_implementation_hint_catalog(spec_facts)
 
         file_specs = rtl_metadata.get("file_specs", []) or []
         normalized_specs: List[Dict[str, Any]] = []
@@ -71,6 +85,8 @@ class FuncDesigner:
         related_req_ids: Dict[str, List[str]] = {}
         related_test_ids: Dict[str, List[str]] = {}
         related_prop_ids: Dict[str, List[str]] = {}
+        file_trace_ids_by_path: Dict[str, List[str]] = {}
+        file_secondary_context_by_path: Dict[str, Dict[str, Any]] = {}
         file_graph_seed: List[Dict[str, str]] = []
 
         for item in file_specs:
@@ -80,21 +96,28 @@ class FuncDesigner:
             file_path = str(item.get("file_path", "")).strip()
             if not file_path:
                 continue
+            file_kind = str(item.get("file_kind", "")).strip()
 
-            if file_path not in seen_components:
+            if file_kind != "documentation" and file_path not in seen_components:
                 component_names.append(file_path)
                 seen_components.add(file_path)
 
             spec_entry = {
                 "file_path": file_path,
                 "bucket": str(item.get("bucket", "")).strip(),
-                "file_kind": str(item.get("file_kind", "")).strip(),
+                "file_kind": file_kind,
                 "responsibility": str(item.get("responsibility", "")).strip(),
+                "implementation_status": str(item.get("implementation_status", "")).strip(),
+                "implementation_summary": str(item.get("implementation_summary", "")).strip(),
                 "depends_on_files": list(item.get("depends_on_files", []) or []),
                 "owned_modules": list(item.get("owned_modules", []) or []),
+                "target_units": list(item.get("target_units", []) or []),
                 "related_req_ids": list(item.get("related_req_ids", []) or []),
                 "related_test_ids": list(item.get("related_test_ids", []) or []),
                 "related_prop_ids": list(item.get("related_prop_ids", []) or []),
+                "related_node_ids": list(item.get("related_node_ids", []) or []),
+                "related_code_anchor_ids": list(item.get("related_code_anchor_ids", []) or []),
+                "related_hint_ids": list(item.get("related_hint_ids", []) or []),
             }
             normalized_specs.append(spec_entry)
 
@@ -109,6 +132,14 @@ class FuncDesigner:
             related_req_ids[file_path] = req_ids
             related_test_ids[file_path] = test_ids
             related_prop_ids[file_path] = prop_ids
+            file_trace_ids_by_path[file_path] = req_ids + test_ids + prop_ids
+            file_secondary_context_by_path[file_path] = {
+                "responsibility": spec_entry["responsibility"],
+                "implementation_summary": spec_entry["implementation_summary"],
+                "related_node_ids": list(spec_entry["related_node_ids"]),
+                "related_code_anchor_ids": list(spec_entry["related_code_anchor_ids"]),
+                "related_hint_ids": list(spec_entry["related_hint_ids"]),
+            }
 
             for upstream in depends:
                 file_graph_seed.append(
@@ -122,15 +153,39 @@ class FuncDesigner:
         return {
             "component_names": component_names,
             "file_specs": normalized_specs,
+            "file_specs_by_path": {
+                item["file_path"]: item for item in normalized_specs if item.get("file_path")
+            },
             "depends_on_files": depends_on_files,
             "owned_modules": owned_modules,
             "related_req_ids": related_req_ids,
             "related_test_ids": related_test_ids,
             "related_prop_ids": related_prop_ids,
+            "trace_catalog": trace_catalog,
+            "file_trace_ids_by_path": file_trace_ids_by_path,
+            "file_trace_context_by_path": {
+                path: build_trace_context(trace_ids, trace_catalog)
+                for path, trace_ids in file_trace_ids_by_path.items()
+            },
+            "file_secondary_context_by_path": file_secondary_context_by_path,
+            "implementation_node_catalog": implementation_node_catalog,
+            "code_anchor_catalog": code_anchor_catalog,
+            "implementation_hint_catalog": implementation_hint_catalog,
+            "file_implementation_context_by_path": build_file_implementation_context_by_path(
+                normalized_specs,
+                implementation_node_catalog,
+                code_anchor_catalog,
+                implementation_hint_catalog,
+            ),
             "skeleton_overview": self.skeleton.to_tree_string() if self.skeleton else "",
             "file_graph_seed": file_graph_seed,
             "module_specs": rtl_metadata.get("module_specs", []) or [],
-            "top_module": rtl_metadata.get("top_module", ""),
+            "top_module": spec_facts.get("top_module") or rtl_metadata.get("top_module", ""),
+            "top_ports": list(spec_facts.get("top_ports", []) or []),
+            "top_params": list(spec_facts.get("params", []) or []),
+            "params": list(spec_facts.get("params", []) or []),
+            "clock_reset": dict(spec_facts.get("clock_reset", {}) or {}),
+            "default_params": list(spec_facts.get("default_params", []) or []),
             "toolchain": rtl_metadata.get("toolchain", ""),
         }
 
@@ -332,6 +387,9 @@ class FuncDesigner:
             Tuple[Dict, RPG, Dict]: (interfaces, updated_rpg, agent_results)
         """
         logging.info("[FuncDesigner] === Designing interfaces with full orchestration ===")
+        rtl_context = self._build_rtl_dataflow_context()
+        if rtl_context:
+            return self._design_interfaces_rtl(data_flow=data_flow, rtl_context=rtl_context)
         
         # Use config value if not provided
         max_steps = self.config.get('interfaces', {}).get('max_steps', 10)
@@ -513,6 +571,127 @@ class FuncDesigner:
         
         logging.info(f"[FuncDesigner] Interface design complete: {len(all_interfaces)} subtrees processed")
         
+        return final_interfaces, self.repo_rpg, agent_results
+
+    def _design_interfaces_rtl(
+        self,
+        data_flow: List[Dict],
+        rtl_context: Dict[str, Any]
+    ) -> Tuple[Dict, RPG, Dict]:
+        max_steps = self.config.get('interfaces', {}).get('max_steps', 10)
+        max_retry = self.config.get('interfaces', {}).get('max_retry', 3)
+        subtree_order = self._build_subtree_dependency_order(data_flow)
+        ordered_paths: List[str] = []
+        seen = set()
+        for item in subtree_order + list(rtl_context.get("component_names", [])):
+            if item and item not in seen:
+                ordered_paths.append(item)
+                seen.add(item)
+
+        file_specs_by_path = rtl_context.get("file_specs_by_path", {})
+        all_interfaces = {}
+        implemented_subtrees: Dict[str, List[FileNode]] = {}
+        all_agent_results = {}
+
+        for file_path in ordered_paths:
+            file_spec = file_specs_by_path.get(file_path, {})
+            if file_spec.get("file_kind") == "documentation":
+                self.logger.info(f"[FuncDesigner] Skipping RTL documentation file in interface phase: {file_path}")
+                continue
+
+            file_node = self.skeleton.find_file(file_path) if self.skeleton else None
+            if not file_node:
+                self.logger.warning(f"[FuncDesigner] RTL file node not found for path: {file_path}")
+                continue
+
+            self.logger.info(f"[FuncDesigner] Designing RTL interface for file: {file_path}")
+            self.interface_agent = InterfaceAgent(
+                llm_cfg=self.llm_config,
+                design_context_window=self.config.get('interfaces', {}).get('design_context_window', 30),
+                review_context_window=self.config.get('interfaces', {}).get('review_context_window', 10),
+                max_review_times=self.config.get('interfaces', {}).get('max_review_times', 0),
+                repo_rpg=self.repo_rpg,
+                repo_skeleton=self.skeleton,
+                register_tools=[DesignInterfacesTool],
+                file_node=file_node,
+                tgt_subgraph_name=file_path,
+                rtl_context=rtl_context,
+                logger=self.logger
+            )
+
+            subtree_agent_results = {}
+            subtree_interfaces = {}
+            subtree_implemented: List[FileNode] = []
+
+            try:
+                result = self.interface_agent.design_file_interface(
+                    tgt_subtree_implemented=[],
+                    all_implemented_subtrees=deepcopy(implemented_subtrees),
+                    max_steps=max_steps,
+                    max_retries=max_retry
+                )
+                subtree_agent_results[file_path] = {
+                    "success": result.get("success", False),
+                    "agent_results": result.get("agent_results", {})
+                }
+
+                if result.get("success", False):
+                    if "code" in result:
+                        file_node.code = result["code"]
+                    subtree_implemented.append(file_node)
+                    subtree_interfaces[file_path] = {
+                        "file_code": result.get("code", ""),
+                        "units": result.get("units", []),
+                        "units_to_features": result.get("feature_interface_map", {}),
+                        "units_to_code": result.get("unit_to_code", {}),
+                        "units_to_spec": result.get("unit_to_spec", {}),
+                        "unit_to_kind": result.get("unit_to_kind", {}),
+                        "units_to_trace_context": result.get("unit_to_trace_context", {}),
+                        "units_to_implementation_context": result.get("unit_to_implementation_context", {}),
+                        "secondary_context": result.get("secondary_context", {}),
+                    }
+                    if "repo_rpg" in result:
+                        self.repo_rpg = result["repo_rpg"]
+                    self.logger.info(f"[FuncDesigner] Successfully designed RTL interface for: {file_path}")
+                else:
+                    self.logger.error(f"[FuncDesigner] Failed to design RTL interface for: {file_path}")
+
+            except Exception as e:
+                self.logger.error(f"[FuncDesigner] Exception designing RTL interface for {file_path}: {e}")
+                subtree_agent_results[file_path] = {
+                    "success": False,
+                    "agent_results": {"error": str(e)}
+                }
+
+            implemented_subtrees[file_path] = subtree_implemented
+            all_interfaces[file_path] = {
+                "files_order": [file_path],
+                "interfaces": subtree_interfaces
+            }
+            all_agent_results[file_path] = {
+                "files_order": [file_path],
+                "files": subtree_agent_results
+            }
+
+        final_interfaces = {
+            "subtrees": all_interfaces,
+            "implemented_subtrees": {
+                subtree: [fn.path for fn in implemented_subtrees[subtree]]
+                for subtree in implemented_subtrees
+            },
+            "processing_order": ordered_paths
+        }
+        total_files = sum(
+            len(subtree_info.get("files", {}))
+            for subtree_info in all_agent_results.values()
+        )
+        agent_results = {
+            "subtrees": all_agent_results,
+            "subtree_count": len(all_agent_results),
+            "total_files": total_files,
+            "success": True
+        }
+        self.logger.info(f"[FuncDesigner] RTL interface design complete: {len(all_interfaces)} files processed")
         return final_interfaces, self.repo_rpg, agent_results
     
 

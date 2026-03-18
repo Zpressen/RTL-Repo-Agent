@@ -22,6 +22,8 @@ class TaskBatch:
     units_key: List[str]
     unit_to_code: Dict[str, str]
     unit_to_features: Dict[str, List]
+    unit_to_spec: Dict[str, str] = field(default_factory=dict)
+    unit_to_kind: Dict[str, str] = field(default_factory=dict)
     priority: int = 0  # Higher priority = implement earlier
     subtree: str = ""  # Which functional area this belongs to (e.g., "Algorithms", "Data Processing")
     task_type: str = "implementation"  # Task type: "implementation", "integration_test", "final_test_docs"
@@ -35,13 +37,15 @@ class TaskBatch:
         if not isinstance(self.units_key, list) or not self.units_key:
             raise ValueError("TaskBatch validation error: 'units_key' must be a non-empty list.")
 
-        missing_in_code = [k for k in self.units_key if k not in self.unit_to_code]
+        unit_catalog = self.unit_to_spec or self.unit_to_code
+        missing_in_code = [k for k in self.units_key if k not in unit_catalog]
         missing_in_features = [k for k in self.units_key if k not in self.unit_to_features]
 
         if missing_in_code or missing_in_features:
             msg_parts = ["TaskBatch validation error: units_key contains keys not present in mappings."]
             if missing_in_code:
-                msg_parts.append(f"Missing in unit_to_code: {missing_in_code}")
+                missing_mapping = "unit_to_spec/unit_to_code" if self.unit_to_spec else "unit_to_code"
+                msg_parts.append(f"Missing in {missing_mapping}: {missing_in_code}")
             if missing_in_features:
                 msg_parts.append(f"Missing in unit_to_features: {missing_in_features}")
             raise ValueError(" ".join(msg_parts))
@@ -53,6 +57,8 @@ class TaskBatch:
             "file_path": self.file_path,
             "units_key": self.units_key,
             "unit_to_code": self.unit_to_code,
+            "unit_to_spec": self.unit_to_spec,
+            "unit_to_kind": self.unit_to_kind,
             "unit_to_features": self.unit_to_features,
             "priority": self.priority,
             "subtree": self.subtree,
@@ -66,7 +72,9 @@ class TaskBatch:
             task=input["task"],
             file_path=input["file_path"],
             units_key=input["units_key"],
-            unit_to_code=input["unit_to_code"],
+            unit_to_code=input.get("unit_to_code", {}),
+            unit_to_spec=input.get("unit_to_spec", {}),
+            unit_to_kind=input.get("unit_to_kind", {}),
             unit_to_features=input["unit_to_features"],
             priority=input.get("priority", 0),
             subtree=input.get("subtree", ""),

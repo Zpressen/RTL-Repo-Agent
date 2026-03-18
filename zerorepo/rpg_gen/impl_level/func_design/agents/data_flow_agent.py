@@ -16,6 +16,7 @@ from ..prompts import (
     COMPONENT_DATA_FLOW_REVIEW,
     GENERATE_DATA_FLOW_TOOL
 )
+from zerorepo.rpg_gen.impl_level.rtl_trace import format_trace_context
 
 # ========================
 # 1. REVIEW MODELS
@@ -345,19 +346,40 @@ class DataFlowEnv(ReviewEnv):
             bucket = spec.get("bucket", "")
             file_kind = spec.get("file_kind", "")
             responsibility = spec.get("responsibility", "")
+            implementation_status = spec.get("implementation_status", "")
+            implementation_summary = spec.get("implementation_summary", "")
             depends = ", ".join(spec.get("depends_on_files", [])) or "-"
             modules = ", ".join(spec.get("owned_modules", [])) or "-"
+            target_units = ", ".join(
+                [
+                    str(unit.get("unit_name", "")).strip()
+                    for unit in (spec.get("target_units", []) or [])
+                    if isinstance(unit, dict) and str(unit.get("unit_name", "")).strip()
+                ]
+            ) or "-"
             req_ids = ", ".join(spec.get("related_req_ids", [])) or "-"
             test_ids = ", ".join(spec.get("related_test_ids", [])) or "-"
             prop_ids = ", ".join(spec.get("related_prop_ids", [])) or "-"
+            trace_ids = (
+                list(spec.get("related_req_ids", []) or [])
+                + list(spec.get("related_test_ids", []) or [])
+                + list(spec.get("related_prop_ids", []) or [])
+            )
+            trace_context = format_trace_context(
+                list((self.rtl_context.get("file_trace_context_by_path", {}) or {}).get(file_path, []) or [])
+            ) if trace_ids else "- No canonical trace context."
             lines.append(
                 f"- {file_path} | bucket={bucket} | kind={file_kind}\n"
+                f"  implementation_status: {implementation_status or '-'}\n"
                 f"  responsibility: {responsibility or '-'}\n"
+                f"  implementation_summary: {implementation_summary or '-'}\n"
                 f"  depends_on_files: {depends}\n"
                 f"  owned_modules: {modules}\n"
+                f"  target_units: {target_units}\n"
                 f"  related_req_ids: {req_ids}\n"
                 f"  related_test_ids: {test_ids}\n"
-                f"  related_prop_ids: {prop_ids}"
+                f"  related_prop_ids: {prop_ids}\n"
+                f"  trace_context:\n{trace_context}"
             )
         return "\n".join(lines)
 

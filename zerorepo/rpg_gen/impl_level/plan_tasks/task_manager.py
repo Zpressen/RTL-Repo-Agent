@@ -810,7 +810,7 @@ class TaskManager:
             self.logger.info(f"Skipping code write for special task with marker {batch.file_path}: {batch.task_id}")
             return
         
-        if task_type in ['integration_test', 'final_test_docs']:
+        if task_type in ['integration_test', 'final_test_docs', 'subtree_verification', 'final_repo_validation']:
             self.logger.info(f"Skipping code write for {task_type} task: {batch.task_id}")
             return
         
@@ -928,7 +928,7 @@ class TaskManager:
                     file_path = self.current_task.batch.file_path
                     
                     # Skip RPG update for integration tests, final tests, and special marker tasks
-                    if (task_type in ['integration_test', 'final_test_docs'] or 
+                    if (task_type in ['integration_test', 'final_test_docs', 'subtree_verification', 'final_repo_validation'] or
                         (file_path.startswith('<') and file_path.endswith('>'))):
                         self.logger.info(f"Skipping RPG update for {task_type} task: {self.current_task.task_id}")
                     else:
