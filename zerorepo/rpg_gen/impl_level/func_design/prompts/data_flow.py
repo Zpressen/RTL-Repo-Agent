@@ -31,6 +31,14 @@ Each edge represents one meaningful handoff between distinct RTL/build files.
 - Reuse logical data types across edges when they represent the same structure, instead of inventing many ad-hoc labels.
 - Ensure naming is consistent and domain-aware so the flow is understandable as an RTL architecture diagram.
 
+## RTL Knowledge Graph Usage
+- A read-only RTL KG query tool may be available in this task.
+- The repository KG is written by the pipeline after skeleton/graph/code stages; you only query it.
+- Before inventing file/module dependencies, instance relationships, or signal connectivity, prefer querying the RTL KG.
+- Write only read-only Cypher. Do not attempt to modify the graph.
+- Query using RTL-native entities and relations such as `Module`, `Instance`, `Port`, `Signal`, `Param`, `Package`, `OF_MODULE`, `CONNECTS`, `DRIVES`, `IMPORTS`, and `INCLUDES`.
+- Use KG facts to confirm repository structure first, then synthesize the final file-level data flow DAG.
+
 ## Action Space
 {Tool_Description}
 

@@ -11,6 +11,7 @@ from zerorepo.rpg_gen.base import (
 from zerorepo.utils.logs import setup_logger
 from zerorepo.config.checkpoint_config import CheckpointManager, CheckpointFiles, get_checkpoint_manager
 from .file_design import FileDesigner
+from zerorepo.rtl_impl.rtl_kg import RTLKgService
 
 # 封装完整的类去构建repo
 class ImplBuilder:
@@ -23,7 +24,8 @@ class ImplBuilder:
         repo_path: Union[str, Path],
         ckpt_dir: Union[str, Path],
         logger: logging.Logger,
-        checkpoint_manager: Optional[CheckpointManager] = None
+        checkpoint_manager: Optional[CheckpointManager] = None,
+        rtl_kg_config: Optional[Dict[str, Any]] = None,
     ):
         """
         Initialize ImplBuilder with checkpoint management
@@ -47,6 +49,8 @@ class ImplBuilder:
         self.repo_path = repo_path if isinstance(repo_path, Path) \
             else Path(repo_path)
         self.repo_path.mkdir(exist_ok=True)
+        self.rtl_kg_config = dict(rtl_kg_config or {})
+        self.rtl_kg_service: Optional[RTLKgService] = None
         
         # Initialize checkpoint manager
         self.checkpoint_manager = checkpoint_manager
@@ -105,6 +109,8 @@ class ImplBuilder:
         try:
             with open(self.repo_data_path, 'r', encoding='utf-8') as f:
                 self.repo_data = json.load(f)
+            self.repo_data["_repo_data_path"] = str(self.repo_data_path)
+            self.repo_data["_repo_data_dir"] = str(self.repo_data_path.parent)
             self.logger.info(f"Successfully loaded JSON data from {self.repo_data_path}")
             # Validate required fields
             required_fields = ["repository_name", "Component"]
@@ -119,6 +125,19 @@ class ImplBuilder:
     def _is_rtl_repo(self) -> bool:
         rtl_metadata = self.repo_data.get("rtl_metadata", {}) if hasattr(self, "repo_data") else {}
         return rtl_metadata.get("mode") == "rtl_spec2repo"
+
+    def _get_rtl_kg_service(self) -> Optional[RTLKgService]:
+        if not self._is_rtl_repo():
+            return None
+        if self.rtl_kg_service is None:
+            self.rtl_kg_service = RTLKgService(
+                repo_path=self.repo_path,
+                checkpoint_manager=self.checkpoint_manager,
+                repo_data=self.repo_data,
+                config=self.rtl_kg_config,
+                logger=self.logger,
+            )
+        return self.rtl_kg_service
 
     def _should_preserve_rtl_blueprint(self) -> bool:
         rtl_metadata = self.repo_data.get("rtl_metadata", {}) if hasattr(self, "repo_data") else {}
@@ -349,6 +368,12 @@ class ImplBuilder:
             raise Exception("Failed to generate repository skeleton")
         
         self.logger.info(f"Successfully built skeleton with {len(skeleton.path_to_node)} nodes")
+        skeleton.write_to_workspace(str(self.repo_path))
+
+        rtl_kg_service = self._get_rtl_kg_service()
+        if rtl_kg_service and rtl_kg_service.is_enabled():
+            self.logger.info("Syncing RTL knowledge graph after skeleton materialization")
+            rtl_kg_service.sync_plan_snapshot(stage="post_skeleton")
         
         with open(self.global_rpg_path, 'w') as f:
             json.dump(updated_rpg.to_dict(), f, indent=4)
@@ -367,6 +392,8 @@ class ImplBuilder:
             repo_skeleton=skeleton,
             llm_config=self.llm_cfg,
             repo_rpg=rpg,
+            repo_data=self.repo_data,
+            kg_service=self._get_rtl_kg_service(),
             config_path=str(self.graph_cfg),
             logger=self.logger
         )
@@ -380,6 +407,12 @@ class ImplBuilder:
             raise Exception("Failed to generate repository graph")
         
         self.logger.info(f"Successfully built graph with {len(final_rpg.nodes)} nodes and {len(final_rpg.edges)} edges")
+        final_skeleton.write_to_workspace(str(self.repo_path))
+
+        rtl_kg_service = self._get_rtl_kg_service()
+        if rtl_kg_service and rtl_kg_service.is_enabled():
+            self.logger.info("Refreshing RTL knowledge graph after interface graph build")
+            rtl_kg_service.refresh_repo_files(stage="post_graph")
         
         with open(self.global_rpg_path, 'w') as f:
             json.dump(final_rpg.to_dict(), f, indent=4)
@@ -392,6 +425,7 @@ class ImplBuilder:
             rpg=rpg,
             llm_cfg=self.llm_cfg,
             graph_data=graph_data,
+            repo_data=self.repo_data,
             logger=self.logger
         )
         

@@ -939,6 +939,7 @@ class InterfaceEnv(ReviewEnv):
         repo_skeleton: RepoSkeleton = None,
         repo_rpg: RPG = None,
         rtl_context: Optional[Dict[str, Any]] = None,
+        kg_service: Optional[Any] = None,
         tgt_file_path: str = "",
         tgt_subgraph_name: str = "", 
         logger: logging.Logger = None
@@ -953,6 +954,7 @@ class InterfaceEnv(ReviewEnv):
         self.repo_rpg = repo_rpg
         self.repo_skeleton = repo_skeleton
         self.rtl_context = rtl_context
+        self.kg_service = kg_service
         self.tgt_file_path = tgt_file_path
         self.tgt_subgraph_name = tgt_subgraph_name
         
@@ -1520,6 +1522,7 @@ class InterfaceAgent(AgentwithReview):
         repo_skeleton: RepoSkeleton = None,
         repo_rpg: RPG = None,
         rtl_context: Optional[Dict[str, Any]] = None,
+        kg_service: Optional[Any] = None,
         **kwargs
     ):
         if register_tools is None:
@@ -1544,6 +1547,7 @@ class InterfaceAgent(AgentwithReview):
         self.repo_skeleton = repo_skeleton
         self.repo_rpg = repo_rpg
         self.rtl_context = rtl_context
+        self.kg_service = kg_service
         
         # Create custom environment
         self._env = InterfaceEnv(
@@ -1557,6 +1561,7 @@ class InterfaceAgent(AgentwithReview):
             repo_skeleton=repo_skeleton,
             repo_rpg=repo_rpg,
             rtl_context=rtl_context,
+            kg_service=kg_service,
             logger=logger
         )
 
@@ -1766,6 +1771,13 @@ class InterfaceAgent(AgentwithReview):
             unit_targets_str = "\n".join(unit_targets) if unit_targets else "- No RTL units found."
             top_facts_section = ""
             top_module_rules = ""
+            kg_guidance = (
+                "A read-only RTL KG query tool is available. Use it when you need to confirm module "
+                "definitions, instances, package imports, signal drivers, or connection structure before "
+                "finalizing the contract or skeleton.\n\n"
+                if self.kg_service and getattr(self.kg_service, "is_enabled", lambda: False)()
+                else ""
+            )
             if top_facts:
                 top_facts_section = f"{_format_top_module_facts(top_facts)}\n\n"
                 top_module_rules = (
@@ -1787,6 +1799,7 @@ class InterfaceAgent(AgentwithReview):
                 "- Define minimal RTL/build skeletons only for the current file.\n"
                 "- Reuse upstream files and shared package definitions when they are already available.\n"
                 "- Prefer minimal, concrete RTL contracts over generic architecture commentary.\n\n"
+                f"{kg_guidance}"
                 f"{top_module_rules}"
                 "Skeleton expectations by unit kind:\n"
                 "- `rtl_module`: provide a SystemVerilog `module ... endmodule` skeleton with parameters, ports, and placeholders.\n"

@@ -41,6 +41,10 @@ class CheckpointFiles:
     # Property level files (PropBuilder)
     feature_selection: str = "feature_selection.json"
     feature_refactoring: str = "feature_refactoring.json"
+
+    # RTL knowledge graph files
+    rtl_kg_state: str = "rtl_kg_state.json"
+    rtl_kg_manifest: str = "rtl_kg_manifest.json"
     
     
     def to_dict(self) -> Dict[str, str]:

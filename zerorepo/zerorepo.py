@@ -12,6 +12,7 @@ from .utils.logs import setup_logger
 from .config.checkpoint_config import (
     CheckpointManager, CheckpointFiles, create_default_manager, set_checkpoint_manager
 )
+from .rtl_impl.rtl_kg import RTLKgService
 
 
 class PersistentTaskExecutor:
@@ -22,13 +23,15 @@ class PersistentTaskExecutor:
         repo_path: Path,
         checkpoint_manager: CheckpointManager,
         config: Dict[str, Any],
-        logger: logging.Logger
+        logger: logging.Logger,
+        kg_service: Optional[RTLKgService] = None,
     ):
         self.repo_path = repo_path
         self.checkpoint_manager = checkpoint_manager
         self.config = config
         self.logger = logger
         self.generator = None
+        self.kg_service = kg_service
     
     def __enter__(self):
         """Initialize the IterativeCodeGenerator"""
@@ -52,6 +55,7 @@ class PersistentTaskExecutor:
             commit_llm_config=LLMConfig.from_dict(self.config["llm"]),
             failure_llm_config=LLMConfig.from_dict(self.config["llm"])
         )
+        self.generator.kg_service = self.kg_service
         
         # Setup Docker components once
         if self.config.get("use_docker", True):
@@ -87,6 +91,11 @@ class PersistentTaskExecutor:
             
             if success:
                 self.logger.info(f"✅ Batchcompleted successfully")
+                if self.kg_service and self.kg_service.is_enabled():
+                    self.kg_service.refresh_repo_files(
+                        changed_paths=[getattr(batch, "file_path", "")],
+                        stage="post_batch",
+                    )
             else:
                 self.logger.error(f"❌ Batch failed: {error_msg}")
             
@@ -162,6 +171,7 @@ class ZeroRepo:
         self.prop_builder = None
         self.impl_builder = None
         self.code_generator = None
+        self.rtl_kg_service = None
         
         # Initialize pipeline state - will be loaded properly after method definitions
         self.pipeline_state = {}
@@ -247,9 +257,11 @@ class ZeroRepo:
                 graph_cfg=graph_cfg,
                 repo_path=self.target_repo_path,
                 ckpt_dir=self.checkpoint_dir,  # Keep for backward compatibility
+                rtl_kg_config=self.config.get("rtl_kg", {}),
                 logger=self.logger,
                 checkpoint_manager=self.checkpoint_manager  # Pass checkpoint manager
             )
+            self.rtl_kg_service = self.impl_builder.rtl_kg_service
             self.logger.info("✅ ImplBuilder initialized")
         
     
@@ -355,6 +367,7 @@ class ZeroRepo:
         self.logger.info("=== Starting Implementation Level Processing ===")
         try:
             plan_batches, skeleton, rpg, graph_data = self.impl_builder.run()
+            self.rtl_kg_service = self.impl_builder.rtl_kg_service
             return plan_batches, skeleton, rpg, graph_data
         except Exception as e:
             self.logger.error(f"Implementation level processing failed: {e}")
@@ -444,7 +457,8 @@ class ZeroRepo:
                 repo_path=self.target_repo_path,
                 checkpoint_manager=self.checkpoint_manager,
                 config=self.config,
-                logger=self.logger
+                logger=self.logger,
+                kg_service=self._get_or_create_rtl_kg_service(),
             ) as persistent_executor:
                 
                 # Execute all task batches with persistent container
@@ -485,6 +499,36 @@ class ZeroRepo:
             import traceback
             self.logger.error(traceback.format_exc())
             return False
+
+    def _get_or_create_rtl_kg_service(self) -> Optional[RTLKgService]:
+        if self.rtl_kg_service is not None:
+            return self.rtl_kg_service
+
+        rtl_kg_cfg = self.config.get("rtl_kg", {}) or {}
+        if not rtl_kg_cfg.get("enabled", False):
+            return None
+
+        repo_data = {}
+        if self.repo_data_file.exists():
+            try:
+                with open(self.repo_data_file, "r", encoding="utf-8") as f:
+                    repo_data = json.load(f)
+            except Exception as exc:
+                raise RuntimeError(f"Failed to load repo_data.json for RTL KG initialization: {exc}") from exc
+
+        rtl_metadata = repo_data.get("rtl_metadata", {}) if isinstance(repo_data, dict) else {}
+        if rtl_metadata.get("mode") != "rtl_spec2repo":
+            return None
+
+        self.rtl_kg_service = RTLKgService(
+            repo_path=self.target_repo_path,
+            checkpoint_manager=self.checkpoint_manager,
+            repo_data=repo_data,
+            config=rtl_kg_cfg,
+            logger=self.logger,
+        )
+        self.rtl_kg_service.initialize()
+        return self.rtl_kg_service
     
     def run(
         self,

@@ -30,6 +30,14 @@ The task may provide these fields to explain what must be designed now:
 9. Do not generate Python classes/functions, `dataclass`, `Protocol`, or `pass` stubs.
 10. When trace context is provided, ground the contract and skeleton in those requirement/test/property statements rather than repeating raw IDs only.
 
+## RTL Knowledge Graph Usage
+- A read-only RTL KG query tool may be available in this task.
+- The repository KG is written by the pipeline after skeleton/graph/code stages; you only query it.
+- When you need to confirm module definitions, instance relationships, package imports, signal drivers, or connection structure, query the RTL KG before guessing.
+- Use RTL KG entities and relations directly: `Module`, `Instance`, `Port`, `Signal`, `Param`, `Package`, `OF_MODULE`, `CONNECTS`, `DRIVES`, `IMPORTS`, `INCLUDES`.
+- Write only read-only Cypher. Do not attempt to create, merge, update, or delete graph data.
+- Use the KG to confirm structure, then write the `spec` and `code` for the target units listed in the task.
+
 ## Action Space
 You can materialize interface designs by calling the following tool:
 {Tool_Description}
@@ -102,10 +110,9 @@ Submit interface designs for the current file.
 
 
 DESIGN_ITF_REVIEW = """
-You are a senior engineer reviewing implementation skeletons and contracts for a repository.
+You are a senior engineer reviewing RTL/build implementation skeletons and contracts for a repository.
 
-The task will specify whether the proposed designs are Python interfaces or RTL/build contracts.
-Review the submission critically and demand narrow scope, clear dependencies, and consistency with the provided data flow.
+Review the submission critically and demand narrow scope, clear dependencies, and consistency with the provided data flow and repository structure.
 
 ## Review Dimensions
 ### 1. Feature Alignment
@@ -113,12 +120,10 @@ Review the submission critically and demand narrow scope, clear dependencies, an
 - No unrelated responsibilities should be introduced.
 
 ### 2. Structural Completeness
-- Python mode: valid stubs with clear signatures, docstrings, and `pass`.
-- RTL mode: every target unit has both a concrete contract and a file-native skeleton with meaningful boundaries, dependencies, and implementation intent.
+- Every target unit has both a concrete contract and a file-native skeleton with meaningful boundaries, dependencies, and implementation intent.
 
 ### 3. Docstring / Contract Quality
-- Python mode: docstrings must be specific and useful.
-- RTL mode: contracts must clearly describe ports/parameters/exports/commands/checkers as appropriate, and the skeleton must match the target file type.
+- Contracts must clearly describe ports/parameters/exports/commands/checkers as appropriate, and the skeleton must match the target file type.
 
 ### 4. Interface Style & Granularity
 - The proposed unit boundaries should be minimal and aligned with the file responsibilities.

@@ -318,6 +318,7 @@ class DataFlowEnv(ReviewEnv):
         repo_skeleton: RepoSkeleton=None,
         repo_rpg: RPG = None,
         rtl_context: Optional[Dict[str, Any]] = None,
+        kg_service: Optional[Any] = None,
         logger: logging.Logger = None
     ):
         super().__init__(
@@ -329,6 +330,7 @@ class DataFlowEnv(ReviewEnv):
         self.repo_rpg = repo_rpg
         self.repo_skeleton = repo_skeleton
         self.rtl_context = rtl_context
+        self.kg_service = kg_service
         # self.data_flow = []
         self.is_completed = False
         self.logger = logger or logging.getLogger(__name__)
@@ -484,6 +486,7 @@ class DataFlowAgent(AgentwithReview):
         repo_rpg: RPG = None,
         repo_skeleton: RepoSkeleton=None,
         rtl_context: Optional[Dict[str, Any]] = None,
+        kg_service: Optional[Any] = None,
         register_tools: Optional[List[Tool]] = None,
         logger: Optional[logging.Logger] = None,
         **kwargs
@@ -507,6 +510,7 @@ class DataFlowAgent(AgentwithReview):
         self.repo_rpg = repo_rpg
         self.repo_skeleton=repo_skeleton
         self.rtl_context = rtl_context
+        self.kg_service = kg_service
         
         # Create custom environment
         self._env = DataFlowEnv(
@@ -518,6 +522,7 @@ class DataFlowAgent(AgentwithReview):
             repo_skeleton=repo_skeleton,
             repo_rpg=repo_rpg,
             rtl_context=rtl_context,
+            kg_service=kg_service,
             logger=logger
         )
 
@@ -541,6 +546,12 @@ class DataFlowAgent(AgentwithReview):
             component_names = self.rtl_context.get("component_names", [])
             file_specs = json.dumps(self.rtl_context.get("file_specs", []), indent=2)
             file_graph_seed = json.dumps(self.rtl_context.get("file_graph_seed", []), indent=2)
+            kg_guidance = (
+                "A read-only RTL KG query tool is available. Use it first when you need to confirm "
+                "module definitions, instance relationships, or file connectivity before proposing edges.\n"
+                if self.kg_service and getattr(self.kg_service, "is_enabled", lambda: False)()
+                else ""
+            )
             task = (
                 "Based on the RTL repository structure and deterministic file dependency relationships, "
                 "generate file-level data flow between RTL implementation artifacts:\n"
@@ -551,6 +562,7 @@ class DataFlowAgent(AgentwithReview):
                 f"RTL File Specs:\n{file_specs}\n\n"
                 f"File Dependency Seed:\n{file_graph_seed}\n"
                 "Please use the generate_data_flow tool to create comprehensive file-level data flow definitions.\n"
+                f"{kg_guidance}"
                 "In RTL mode:\n"
                 "1. source and target must be file paths from the RTL File Paths list\n"
                 "2. use depends_on_files, owned_modules, and related req/test/prop ids as the primary grounding context\n"

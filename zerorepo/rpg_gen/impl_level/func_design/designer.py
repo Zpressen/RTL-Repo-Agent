@@ -37,6 +37,7 @@ from ..rtl_trace import (
     build_file_implementation_context_by_path,
 )
 from zerorepo.utils.logs import setup_logger
+from zerorepo.rtl_impl.rtl_kg import QueryRtlKgTool, RTLKgService
 
 class FileImplementationGraph(BaseModel):
     file_implementation_graph: List[Dict] = Field(default=[])
@@ -53,12 +54,14 @@ class FuncDesigner:
         llm_config: Optional[Union[str, Dict, LLMConfig]] = None,
         repo_rpg: Optional[RPG] = None,
         repo_data: Optional[Dict[str, Any]] = None,
+        kg_service: Optional[RTLKgService] = None,
         config_path: Optional[str] = None,
         logger: logging.Logger = None
     ):
         self.skeleton = repo_skeleton
         self.repo_rpg = repo_rpg
         self.repo_data = repo_data or {}
+        self.kg_service = kg_service
         self.llm_config = llm_config
         # Load configuration
         self.config = self._load_config(config_path)
@@ -292,7 +295,12 @@ class FuncDesigner:
             repo_rpg=self.repo_rpg,
             repo_skeleton=self.skeleton,
             rtl_context=self._build_rtl_dataflow_context(),
-            register_tools=[GenerateDataFlowTool],
+            kg_service=self.kg_service,
+            register_tools=(
+                [GenerateDataFlowTool, QueryRtlKgTool]
+                if self.kg_service and self.kg_service.is_enabled()
+                else [GenerateDataFlowTool]
+            ),
             logger=self.logger
         )
         
@@ -447,6 +455,7 @@ class FuncDesigner:
                         repo_rpg=self.repo_rpg,
                         repo_skeleton=self.skeleton,
                         register_tools=[DesignInterfacesTool],
+                        kg_service=self.kg_service,
                         file_node=file_node,
                         tgt_subgraph_name=subtree_name,
                         logger=self.logger
@@ -612,7 +621,12 @@ class FuncDesigner:
                 max_review_times=self.config.get('interfaces', {}).get('max_review_times', 0),
                 repo_rpg=self.repo_rpg,
                 repo_skeleton=self.skeleton,
-                register_tools=[DesignInterfacesTool],
+                register_tools=(
+                    [DesignInterfacesTool, QueryRtlKgTool]
+                    if self.kg_service and self.kg_service.is_enabled()
+                    else [DesignInterfacesTool]
+                ),
+                kg_service=self.kg_service,
                 file_node=file_node,
                 tgt_subgraph_name=file_path,
                 rtl_context=rtl_context,
