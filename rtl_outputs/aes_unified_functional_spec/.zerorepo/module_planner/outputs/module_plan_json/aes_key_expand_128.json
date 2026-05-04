@@ -1,0 +1,80 @@
+{
+  "schema_version": "module_plan_v1",
+  "module": "aes_key_expand_128",
+  "subtasks": [
+    {
+      "id": "B1_decl_key_storage_and_signals",
+      "target": "<block: decl_key_storage_and_signals>",
+      "description": "Declare four 32-bit registers w0, w1, w2, w3 and all internal combinational wires (rot_word, sub_word, T_word, next_w0..next_w3, rcon_out, sb0_out..sb3_out) needed by downstream blocks; match port/signal widths from the module interface.",
+      "spec_refs": [
+        "S003",
+        "S007",
+        "S016"
+      ],
+      "constraints": [
+        "Declare exactly four 32-bit registers w0, w1, w2, w3.",
+        "All wire declarations must match port widths and naming from S003."
+      ]
+    },
+    {
+      "id": "B2_inst_submodules",
+      "target": "<block: inst_submodules>",
+      "description": "Instantiate one aes_rcon (clk, kld, out→rcon_out) and four aes_sbox modules (inputs from rotated w3 bytes, outputs sb0_out..sb3_out); map ports to module-level signals exactly.",
+      "spec_refs": [
+        "S003",
+        "S011",
+        "S012",
+        "S013",
+        "S014"
+      ],
+      "constraints": [
+        "Instantiate exactly 1 aes_rcon and 4 aes_sbox; no extra instances.",
+        "Connect rcon.kld to module-level kld.",
+        "Sbox inputs must be driven by rotated bytes of w3 as per RotWord ordering."
+      ]
+    },
+    {
+      "id": "B3_seq_load_update",
+      "target": "<block: seq_load_update>",
+      "description": "Implement the synchronous register load/update process: on posedge clk, if kld=1 load w0..w3 from key[127:0] with specified byte mapping, else update them with next_w0..next_w3 from the combinational network.",
+      "spec_refs": [
+        "S003",
+        "S007",
+        "S008"
+      ],
+      "constraints": [
+        "Use only kld to select load vs update; no reset logic.",
+        "Key loading must map key[127:96]→w0, [95:64]→w1, [63:32]→w2, [31:0]→w3 exactly."
+      ]
+    },
+    {
+      "id": "B4_comb_expansion_network",
+      "target": "<block: comb_expansion_network>",
+      "description": "Compute RotWord, SubWord (using sbox outputs), T_word (SubWord XOR rcon_out), and next round key words next_w0..next_w3 using current w0..w3 and T_word per the AES-128 key expansion recurrence.",
+      "spec_refs": [
+        "S003",
+        "S005",
+        "S008",
+        "S009",
+        "S010"
+      ],
+      "constraints": [
+        "Use exact RotWord byte reordering: {w3[23:0], w3[31:24]}.",
+        "SubWord byte order: sb0_out is MSB, sb3_out is LSB of sub_word.",
+        "next_w0 = w0 ^ T_word; next_w1 = w1 ^ next_w0; next_w2 = w2 ^ next_w1; next_w3 = w3 ^ next_w2; no pipelining."
+      ]
+    },
+    {
+      "id": "B5_output_assignment",
+      "target": "<block: output_assignment>",
+      "description": "Drive output ports wo_0, wo_1, wo_2, wo_3 with the current values of the key word registers w0, w1, w2, w3 continuously.",
+      "spec_refs": [
+        "S003",
+        "S007"
+      ],
+      "constraints": [
+        "Outputs must always reflect current register values; no added latency or gating."
+      ]
+    }
+  ]
+}

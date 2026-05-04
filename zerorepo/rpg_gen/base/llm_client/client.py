@@ -102,9 +102,22 @@ class LLMConfig:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "LLMConfig":
         valid_fields = {f.name for f in cls.__dataclass_fields__.values()}
+        strip_fields = {
+            "provider",
+            "api_key",
+            "base_url",
+            "endpoint_url",
+            "deployment_name",
+            "api_version",
+            "tenant_id",
+            "token_scope",
+            "model",
+        }
         filtered = {}
         extra: Dict[str, Any] = {}
         for k, v in data.items():
+            if k in strip_fields and isinstance(v, str):
+                v = v.strip()
             if k in valid_fields:
                 filtered[k] = v
             else:

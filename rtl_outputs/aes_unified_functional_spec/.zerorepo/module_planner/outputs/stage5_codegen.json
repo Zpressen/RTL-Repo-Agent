@@ -1,0 +1,53 @@
+{
+  "schema_version": "stage5_codegen_v1",
+  "task_id": "aes_unified_functional_spec",
+  "module_order": [
+    "aes_sbox",
+    "aes_rcon",
+    "aes_key_expand_128",
+    "aes_cipher_top"
+  ],
+  "module_files": [
+    {
+      "module": "aes_sbox",
+      "workspace_file": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/fragments/aes_sbox_fragments.v",
+      "completed_subtasks": [
+        "B1_decl_sbox_table",
+        "B2_comb_lookup_output"
+      ]
+    },
+    {
+      "module": "aes_rcon",
+      "workspace_file": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/fragments/aes_rcon_fragments.v",
+      "completed_subtasks": [
+        "B1_decl_regs_and_wires",
+        "B2_comb_next_gen",
+        "B3_seq_update"
+      ]
+    },
+    {
+      "module": "aes_key_expand_128",
+      "workspace_file": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/fragments/aes_key_expand_128_fragments.v",
+      "completed_subtasks": [
+        "B1_decl_key_storage_and_signals",
+        "B2_inst_submodules",
+        "B3_seq_load_update",
+        "B4_comb_expansion_network",
+        "B5_output_assignment"
+      ]
+    },
+    {
+      "module": "aes_cipher_top",
+      "workspace_file": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/fragments/aes_cipher_top_fragments.v",
+      "completed_subtasks": [
+        "B1_decl_regs_and_wires",
+        "B2_inst_key_expand_128",
+        "B3_inst_sboxes_16x",
+        "B4_seq_fsm_and_counter",
+        "B5_helper_mixcolumns",
+        "B6_comb_round_transform",
+        "B7_seq_state_update_output"
+      ]
+    }
+  ]
+}

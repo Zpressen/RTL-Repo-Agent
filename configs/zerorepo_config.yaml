@@ -5,13 +5,13 @@
 # LLM Configuration
 # ============================================================================
 llm:
-  model: "qwen3.5-plus"
+  model: "deepseek-v4-pro"
   max_tokens: 65536
   temperature: 0.6
   reasoning_effort: "high"
   provider: "openai"
-  api_key: "sk-f77691082dbd41c4b3db7137991c041d"
-  base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+  api_key: "sk-69b2599638a24105962d6b186788d6ce"
+  base_url: "https://api.deepseek.com"
   # api_version: ""
   # tenant_id: ""
   # token_scope: ""
@@ -46,6 +46,27 @@ impl_level:
   file_design_cfg_path: "configs/file_design_config.yaml"
   # Function design configuration  
   func_design_cfg_path: "configs/func_design_config.yaml"
+
+# ============================================================================
+# RTL Knowledge Graph Configuration
+# ============================================================================
+rtl_kg:
+  # External service boundary:
+  # - Start Neo4j outside ZeroRepo (for example with /home/mokita/RTL-Agent/docker-compose.dev.yml
+  #   under the RTL-Agent conda environment).
+  # - ZeroRepo does NOT start Docker/Neo4j for you.
+  # - Once enabled, ZeroRepo connects to the running service, writes KG snapshots at fixed pipeline
+  #   stages, and exposes read-only Cypher query capability to RTL agents.
+  enabled: true
+  mode: "required"
+  rtl_agent_root: "/home/mokita/RTL-Agent/RTL-Fix-Agent/knowledge_graph"
+  batch_size: 2000
+  default_query_limit: 25
+  max_query_rows: 100
+  neo4j:
+    uri: "bolt://localhost:7687"
+    user: "neo4j"
+    password: "neo4j123456"
 
 # ============================================================================
 # Code Generation Configuration (IterativeCodeGenerator)

@@ -1,0 +1,156 @@
+{
+  "schema_version": "repo_skeleton_v1",
+  "task_id": "aes_unified_functional_spec",
+  "source_schema_version": "module_contracts_v1",
+  "stage2_status": "repo_skeleton_planned",
+  "top_module": "aes_cipher_top",
+  "global_invariants": {
+    "system_role": "AES-128 encryption system with top-level flow control, iterative key expansion, and reusable combinational S-box substitution",
+    "clocking_model": {
+      "primary_clock": "clk",
+      "reset_signal": "rst",
+      "reset_style": "Synchronous initialization across clock domain; top uses rst, submodules use kld or synchronous load; polarity unspecified, assumed active-high for consistency"
+    },
+    "hierarchy": [
+      {
+        "parent": "aes_cipher_top",
+        "child": "aes_key_expand_128"
+      },
+      {
+        "parent": "aes_cipher_top",
+        "child": "aes_sbox"
+      },
+      {
+        "parent": "aes_key_expand_128",
+        "child": "aes_rcon"
+      },
+      {
+        "parent": "aes_key_expand_128",
+        "child": "aes_sbox"
+      }
+    ],
+    "file_map": {
+      "aes_cipher_top": "rtl/aes_cipher_top.v",
+      "aes_key_expand_128": "rtl/aes_key_expand_128.v",
+      "aes_sbox": "rtl/aes_sbox.v",
+      "aes_rcon": "rtl/aes_rcon.v"
+    },
+    "cross_module_alignment": [
+      "aes_cipher_top, aes_key_expand_128, and aes_rcon share the primary clk domain",
+      "aes_sbox is a shared reusable leaf instantiated in both aes_cipher_top and aes_key_expand_128",
+      "Key expansion outputs feed round keys to the top-level cipher datapath"
+    ],
+    "global_data_conventions": [
+      "128-bit state matrix arranged in column-major order",
+      "One AES round processed per clock cycle in top module"
+    ]
+  },
+  "modules": [
+    {
+      "module": "aes_sbox",
+      "file_path": "rtl/aes_sbox.v",
+      "role": "8-bit combinational substitution lookup table",
+      "kind": "leaf_combinational",
+      "parents": [
+        "aes_cipher_top",
+        "aes_key_expand_128"
+      ],
+      "children": [],
+      "instance_hints": [],
+      "repo_notes": [
+        "Pure combinational logic; no clock or reset ports"
+      ]
+    },
+    {
+      "module": "aes_rcon",
+      "file_path": "rtl/aes_rcon.v",
+      "role": "Registered round constant generator with internal counter",
+      "kind": "leaf_stateful",
+      "parents": [
+        "aes_key_expand_128"
+      ],
+      "children": [],
+      "instance_hints": [],
+      "repo_notes": [
+        "Uses kld as synchronous reset/load control instead of global rst"
+      ]
+    },
+    {
+      "module": "aes_key_expand_128",
+      "file_path": "rtl/aes_key_expand_128.v",
+      "role": "Iterative 128-bit key expansion engine",
+      "kind": "iterative_engine",
+      "parents": [
+        "aes_cipher_top"
+      ],
+      "children": [
+        "aes_rcon",
+        "aes_sbox"
+      ],
+      "instance_hints": [
+        {
+          "module": "aes_rcon",
+          "count": 1,
+          "usage": "round constant generation"
+        },
+        {
+          "module": "aes_sbox",
+          "count": 4,
+          "usage": "SubWord byte transformation"
+        }
+      ],
+      "repo_notes": [
+        "Synchronous key loading controlled by kld signal"
+      ]
+    },
+    {
+      "module": "aes_cipher_top",
+      "file_path": "rtl/aes_cipher_top.v",
+      "role": "Top-level AES-128 cipher controller and datapath integrator",
+      "kind": "top_controller",
+      "parents": [],
+      "children": [
+        "aes_key_expand_128",
+        "aes_sbox"
+      ],
+      "instance_hints": [
+        {
+          "module": "aes_key_expand_128",
+          "count": 1,
+          "usage": "round key generation"
+        },
+        {
+          "module": "aes_sbox",
+          "count": 16,
+          "usage": "parallel SubBytes operations"
+        }
+      ],
+      "repo_notes": [
+        "Owns top-level FSM and coordinates encryption phases"
+      ]
+    }
+  ],
+  "planning_decisions": {
+    "generation_order": [
+      "aes_sbox",
+      "aes_rcon",
+      "aes_key_expand_128",
+      "aes_cipher_top"
+    ],
+    "leaf_first": true,
+    "shared_modules": [
+      "aes_sbox"
+    ],
+    "top_level_integration_notes": [
+      "Top module FSM drives one-round-per-cycle encryption using expanded keys",
+      "Shared aes_sbox must be instantiated separately in top-level and key expansion paths"
+    ]
+  },
+  "open_issues": [
+    "Reset polarity for rst signal is unspecified in the contract",
+    "Exact assertion duration and deassertion timing for the done signal is not defined",
+    "aes_key_expand_128 total cycle count and synchronization with top-level encryption phases is not explicitly stated",
+    "aes_rcon overflow behavior (rcnt > 9) specifies output remains 0 but exact recovery timing is underspecified",
+    "S-box pipeline register placement and timing impact are left to external design decisions"
+  ]
+}

@@ -89,8 +89,13 @@ typing-extensions>=4.15.0
 # Network and async
 ollama>=0.5.1
 
+# RTL debug agents
+agentscope
+vcdvcd
+tree-sitter-verilog
+
 # MCP (Model Context Protocol)
-mcp==1.12.2
+mcp>=1.13
 
 # Optional evaluation dependencies
 datasets>=3.6.0

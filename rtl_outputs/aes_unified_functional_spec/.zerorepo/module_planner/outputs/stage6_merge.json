@@ -1,0 +1,32 @@
+{
+  "schema_version": "stage6_merge_v1",
+  "task_id": "aes_unified_functional_spec",
+  "module_order": [
+    "aes_sbox",
+    "aes_rcon",
+    "aes_key_expand_128",
+    "aes_cipher_top"
+  ],
+  "module_files": [
+    {
+      "module": "aes_sbox",
+      "fragment_file": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/fragments/aes_sbox_fragments.v",
+      "merged_file": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/merged/aes_sbox.v"
+    },
+    {
+      "module": "aes_rcon",
+      "fragment_file": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/fragments/aes_rcon_fragments.v",
+      "merged_file": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/merged/aes_rcon.v"
+    },
+    {
+      "module": "aes_key_expand_128",
+      "fragment_file": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/fragments/aes_key_expand_128_fragments.v",
+      "merged_file": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/merged/aes_key_expand_128.v"
+    },
+    {
+      "module": "aes_cipher_top",
+      "fragment_file": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/fragments/aes_cipher_top_fragments.v",
+      "merged_file": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/merged/aes_cipher_top.v"
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "schema_version": "module_plan_v1",
+  "module": "aes_sbox",
+  "subtasks": [
+    {
+      "id": "B1_decl_sbox_table",
+      "target": "<block: decl_sbox_table>",
+      "description": "Declare a read-only 256-entry 8-bit lookup table with the standard AES forward S-box values. The module interface ports (a, b) must be declared exactly as specified in S003, though the port list is part of the module header.",
+      "spec_refs": [
+        "S003",
+        "S004",
+        "S007",
+        "S008"
+      ],
+      "constraints": [
+        "Table must contain exactly 256 constant 8-bit values matching the AES forward S-box, including corner cases 0x00->0x63 and 0xFF->0x16.",
+        "Port list must match S003 (input [7:0] a, output [7:0] b)."
+      ]
+    },
+    {
+      "id": "B2_comb_lookup_output",
+      "target": "<block: comb_lookup_output>",
+      "description": "Continuously drive output b from the S-box table entry selected by input a using combinational logic (e.g., assign b = sbox[a] or always_comb block).",
+      "spec_refs": [
+        "S003",
+        "S004",
+        "S008"
+      ],
+      "constraints": [
+        "Output b must be purely combinational with no register or clock.",
+        "Lookup must use the table declared in B1."
+      ]
+    }
+  ]
+}

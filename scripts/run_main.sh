@@ -8,10 +8,12 @@ set -euo pipefail
 
 # ---------- User-editable settings ----------
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+RTL_SPEC_INPUT="${1:-}"
 
 # RTL Mode: 设置为 true 来从 rtl_dataset 读取 spec
 RTL_MODE=true
-RTL_PROJECT=""  # 指定项目名称，留空则处理所有项目
+RTL_PROJECT=""  # 指定项目名称，留空则处理所有项目；命令行第一个参数优先，可传项目名或 .md 路径
+RTL_PIPELINE_MODE="${RTL_PIPELINE_MODE:-planner}" # planner | legacy
 
 # SWE Mode (传统模式)
 GENERATING_PROJECT="../eat_snake"
@@ -27,17 +29,38 @@ if [[ "${RTL_MODE}" == "true" ]]; then
     RTL_DATASET="${PROJECT_ROOT}/rtl_dataset"
     RTL_OUTPUT="${PROJECT_ROOT}/rtl_outputs"
 
+    if [[ -z "${RTL_SPEC_INPUT}" && -n "${RTL_PROJECT}" ]]; then
+        RTL_SPEC_INPUT="${RTL_PROJECT}"
+    fi
+
+    if [[ "${RTL_SPEC_INPUT}" == *.md || "${RTL_SPEC_INPUT}" == */* ]]; then
+        if [[ ! -f "${RTL_SPEC_INPUT}" ]]; then
+            echo "RTL spec file not found: ${RTL_SPEC_INPUT}" >&2
+            exit 1
+        fi
+    fi
+
     # 确定具体项目
-    if [[ -n "${RTL_PROJECT}" ]]; then
-        GENERATING_PROJECT="${RTL_OUTPUT}/${RTL_PROJECT}"
+    if [[ -n "${RTL_SPEC_INPUT}" ]]; then
+        if [[ "${RTL_SPEC_INPUT}" == *.md || "${RTL_SPEC_INPUT}" == */* ]]; then
+            SPEC_BASENAME="$(basename "${RTL_SPEC_INPUT}")"
+            PROJECT_STEM="${SPEC_BASENAME%.md}"
+            GENERATING_PROJECT="${RTL_OUTPUT}/${PROJECT_STEM}"
+        else
+            GENERATING_PROJECT="${RTL_OUTPUT}/${RTL_SPEC_INPUT}"
+        fi
     else
         # 处理所有项目时使用临时目录
         GENERATING_PROJECT="${RTL_OUTPUT}/_temp"
     fi
 
-    CHECKPOINT_DIR="${GENERATING_PROJECT}/zerorepo"
+    CHECKPOINT_DIR="${GENERATING_PROJECT}/.zerorepo"
     REPO_DIR="${GENERATING_PROJECT}"
-    PHASE="rtl"  # RTL 模式运行完整流程 (Phase 1 + Phase 2)
+    if [[ "${RTL_PIPELINE_MODE}" == "planner" ]]; then
+        PHASE="rtl_planner"
+    else
+        PHASE="rtl"
+    fi
 else
     CHECKPOINT_DIR="${GENERATING_PROJECT}/checkpoints"
     REPO_DIR="${GENERATING_PROJECT}/workspace"
@@ -75,6 +98,9 @@ fi
 if [[ "${DRY_RUN}" == "true" ]]; then
   CMD+=(--dry-run)
 fi
+if [[ -n "${RTL_SPEC_INPUT}" ]]; then
+  CMD+=(--rtl-spec "${RTL_SPEC_INPUT}")
+fi
 
 # ---------- Run ----------
 echo "=========================================="
@@ -87,6 +113,8 @@ echo " Phase:      ${PHASE}"
 echo " Log Level:  ${LOG_LEVEL}"
 echo " Log File:   ${LOG_FILE}"
 echo " LLM Config: ${LLM_CONFIG:-<none>}"
+echo " RTL Spec:   ${RTL_SPEC_INPUT:-<all .md files in rtl_dataset, sorted>}"
+echo " RTL Mode:   ${RTL_PIPELINE_MODE:-planner}"
 echo " Rebuild:    ${FORCE_REBUILD}"
 echo " Resume:     ${RESUME}"
 echo " Dry Run:    ${DRY_RUN}"

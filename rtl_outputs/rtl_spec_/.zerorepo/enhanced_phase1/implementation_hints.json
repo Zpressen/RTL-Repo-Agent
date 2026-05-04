@@ -1,27 +1,18 @@
 [
   {
     "hint_id": "HINT-001",
-    "section": "Section 0",
+    "section": "0. Meta 信息",
     "hint_type": "consistency_hint",
-    "statement": "This section should be treated as the 'hard premise' of the full text; downstream chapters must not conflict with this section.",
+    "statement": "该节应视为全文的硬前提，下游章节不得与本节冲突。",
     "target_modules": [],
     "target_tests": [],
     "target_nodes": []
   },
   {
     "hint_id": "HINT-002",
-    "section": "Section 0",
+    "section": "0. Meta 信息",
     "hint_type": "extraction_hint",
-    "statement": "If multiple style sources exist in repository code, this section's declaration should be used as the unified constraint for merging.",
-    "target_modules": [],
-    "target_tests": [],
-    "target_nodes": []
-  },
-  {
-    "hint_id": "HINT-003",
-    "section": "Section 0",
-    "hint_type": "extraction_hint",
-    "statement": "If agent infers spec from existing repository, priority should be given to extracting this section content from top module, build scripts and lint configuration.",
+    "statement": "若 agent 从现有仓库反推 spec，应优先从顶层模块、构建脚本与 lint 配置中抽取本节内容。",
     "target_modules": [
       "axi_uart_top"
     ],
@@ -32,82 +23,46 @@
     ]
   },
   {
-    "hint_id": "HINT-004",
-    "section": "Section 1",
+    "hint_id": "HINT-003",
+    "section": "1. Abstract",
     "hint_type": "consistency_hint",
-    "statement": "Capability items in the abstract must find corresponding implementation points in subsequent chapters: interfaces, REQ, CSR, TEST.",
+    "statement": "摘要中的能力项必须能在后续章节中找到对应落点：接口、REQ、CSR、TEST。",
+    "target_modules": [],
+    "target_tests": [],
+    "target_nodes": []
+  },
+  {
+    "hint_id": "HINT-004",
+    "section": "2. Goals",
+    "hint_type": "planning_hint",
+    "statement": "Goals 应尽量映射到可验证的对象：端口、寄存器、状态机、测试。",
     "target_modules": [],
     "target_tests": [],
     "target_nodes": []
   },
   {
     "hint_id": "HINT-005",
-    "section": "Section 1",
-    "hint_type": "extraction_hint",
-    "statement": "If 'important features not declared in abstract' exist in repository implementation, they should be backfilled to abstract and Goals during spec consolidation.",
+    "section": "2. Non-goals",
+    "hint_type": "codegen_hint",
+    "statement": "Non-goals 应优先用于约束 agent，防止其引入未要求的复杂机制。",
     "target_modules": [],
     "target_tests": [],
     "target_nodes": []
   },
   {
     "hint_id": "HINT-006",
-    "section": "Section 2.1",
-    "hint_type": "planning_hint",
-    "statement": "Goals should be mapped to verifiable objects: ports, registers, state machines, tests.",
+    "section": "3. Glossary",
+    "hint_type": "consistency_hint",
+    "statement": "术语表中的关键名词应尽量与代码中的信号名、状态名、寄存器字段名保持一致。",
     "target_modules": [],
     "target_tests": [],
     "target_nodes": []
   },
   {
     "hint_id": "HINT-007",
-    "section": "Section 2.1",
+    "section": "4. System Context",
     "hint_type": "extraction_hint",
-    "statement": "If agent needs to generate spec from repository, 'configurable items + implemented feature paths' should be prioritized for mapping to Goals.",
-    "target_modules": [],
-    "target_tests": [],
-    "target_nodes": []
-  },
-  {
-    "hint_id": "HINT-008",
-    "section": "Section 2.2",
-    "hint_type": "planning_hint",
-    "statement": "Non-goals should be prioritized to constrain agent, preventing introduction of unrequired complex mechanisms.",
-    "target_modules": [],
-    "target_tests": [],
-    "target_nodes": []
-  },
-  {
-    "hint_id": "HINT-009",
-    "section": "Section 2.2",
-    "hint_type": "extraction_hint",
-    "statement": "If 'unused reserved code' exists in repository, it should not be automatically elevated to Goal unless there is explicit call path or test coverage.",
-    "target_modules": [],
-    "target_tests": [],
-    "target_nodes": []
-  },
-  {
-    "hint_id": "HINT-010",
-    "section": "Section 3",
-    "hint_type": "consistency_hint",
-    "statement": "Key nouns in glossary should be consistent with signal names, state names, and register field names in code.",
-    "target_modules": [],
-    "target_tests": [],
-    "target_nodes": []
-  },
-  {
-    "hint_id": "HINT-011",
-    "section": "Section 3",
-    "hint_type": "consistency_hint",
-    "statement": "If code naming is inconsistent with spec terminology, explicit mapping relationships should be listed in spec.",
-    "target_modules": [],
-    "target_tests": [],
-    "target_nodes": []
-  },
-  {
-    "hint_id": "HINT-012",
-    "section": "Section 4",
-    "hint_type": "extraction_hint",
-    "statement": "This section should be prioritized for automatic extraction from top-level instantiation relationships, file names, and package dependencies.",
+    "statement": "本节建议优先由顶层实例化关系、文件名、包依赖关系自动抽取。",
     "target_modules": [
       "axi_uart_top"
     ],
@@ -117,19 +72,10 @@
     ]
   },
   {
-    "hint_id": "HINT-013",
-    "section": "Section 4",
-    "hint_type": "planning_hint",
-    "statement": "If module responsibilities in repository are unclear, spec consolidation should re-layer description by 'external interface + internal state ownership'.",
-    "target_modules": [],
-    "target_tests": [],
-    "target_nodes": []
-  },
-  {
-    "hint_id": "HINT-014",
-    "section": "Section 5.1",
+    "hint_id": "HINT-008",
+    "section": "5.1 Clock & Reset",
     "hint_type": "extraction_hint",
-    "statement": "When extracting spec from repository code, priority should be given to searching assignments in reset branch to extract reset values and initial states.",
+    "statement": "当从仓库代码提炼 spec 时，应优先搜索 reset 分支中的赋值，提取复位值与初始态。",
     "target_modules": [],
     "target_tests": [
       "TEST-001"
@@ -139,19 +85,10 @@
     ]
   },
   {
-    "hint_id": "HINT-015",
-    "section": "Section 5.1",
-    "hint_type": "consistency_hint",
-    "statement": "If async reset写法 exists but script/comments claim sync release, spec should retain actual behavior and record differences.",
-    "target_modules": [],
-    "target_tests": [],
-    "target_nodes": []
-  },
-  {
-    "hint_id": "HINT-016",
-    "section": "Section 5.2",
+    "hint_id": "HINT-009",
+    "section": "5.2 Top-level Port List",
     "hint_type": "extraction_hint",
-    "statement": "Port table should not retain '...' as final spec content; when generating spec from repository, port width parameterization sources should be supplemented.",
+    "statement": "从仓库自动生成 spec 时，应补充 port width 的参数化来源（如 ADDR_W, DATA_W）。",
     "target_modules": [
       "axi_uart_top"
     ],
@@ -161,10 +98,10 @@
     ]
   },
   {
-    "hint_id": "HINT-017",
-    "section": "Section 5.3",
+    "hint_id": "HINT-010",
+    "section": "5.3 Protocol Contract",
     "hint_type": "planning_hint",
-    "statement": "If AXI-Lite behavior in repository is scattered across multiple always blocks, spec should unify abstraction into 'read path', 'write path', 'response path' three contract objects.",
+    "statement": "若仓库实现中 AXI-Lite 行为分散在多个 always block，应在 spec 中统一抽象为读路径、写路径、响应路径三个契约对象。",
     "target_modules": [
       "axi_lite_regs"
     ],
@@ -174,115 +111,64 @@
     ]
   },
   {
-    "hint_id": "HINT-018",
-    "section": "Section 5.3",
-    "hint_type": "planning_hint",
-    "statement": "Internal handshakes like wr_fire/rd_fire should be abstracted as intermediate event descriptions in spec for enhanced readability.",
-    "target_modules": [
-      "axi_lite_regs"
-    ],
-    "target_tests": [],
-    "target_nodes": []
-  },
-  {
-    "hint_id": "HINT-019",
-    "section": "Section 5.4",
+    "hint_id": "HINT-011",
+    "section": "5.4 Protocol Contract",
     "hint_type": "extraction_hint",
-    "statement": "If UART model or monitor already exists in repository, spec should prioritize absorbing its frame format and sampling assumptions.",
+    "statement": "若仓库中已经存在 UART model 或 monitor，应在 spec 中优先吸收其帧格式与采样假设。",
     "target_modules": [
       "uart_tx",
       "uart_rx"
     ],
-    "target_tests": [],
+    "target_tests": [
+      "TEST-020"
+    ],
     "target_nodes": [
       "NODE-05",
       "NODE-06"
     ]
   },
   {
-    "hint_id": "HINT-020",
-    "section": "Section 5.4",
+    "hint_id": "HINT-012",
+    "section": "6. Parameters",
     "hint_type": "consistency_hint",
-    "statement": "For framing error/parity error/overrun, consistent descriptions should be given in both this section and test section.",
+    "statement": "参数定义建议由 package 或顶层参数唯一承载，不应在多个模块中重复硬编码。",
     "target_modules": [
-      "uart_rx"
+      "uart_pkg",
+      "axi_uart_top"
     ],
-    "target_tests": [
-      "TEST-022"
-    ],
-    "target_nodes": [
-      "NODE-06"
-    ]
-  },
-  {
-    "hint_id": "HINT-021",
-    "section": "Section 6",
-    "hint_type": "planning_hint",
-    "statement": "Parameter definitions should be uniquely carried by package or top-level parameters, not hard-coded repeatedly in multiple modules.",
-    "target_modules": [],
     "target_tests": [],
     "target_nodes": [
       "NODE-01"
     ]
   },
   {
-    "hint_id": "HINT-022",
-    "section": "Section 6",
-    "hint_type": "extraction_hint",
-    "statement": "If agent infers spec, both 'definition point' and 'usage point' should be listed to discover potential inconsistencies.",
+    "hint_id": "HINT-013",
+    "section": "7. Functional Requirements",
+    "hint_type": "verification_hint",
+    "statement": "建议每条 REQ 都映射到至少一个测试编号；如条件适合，再映射到一个自然语言 property。",
     "target_modules": [],
     "target_tests": [],
     "target_nodes": []
   },
   {
-    "hint_id": "HINT-023",
-    "section": "Section 7",
-    "hint_type": "planning_hint",
-    "statement": "Each REQ should map to at least one test number; if conditions are suitable, map to a natural language property.",
-    "target_modules": [],
-    "target_tests": [],
-    "target_nodes": []
-  },
-  {
-    "hint_id": "HINT-024",
-    "section": "Section 7",
-    "hint_type": "extraction_hint",
-    "statement": "If generating spec from repository automatically, priority should be given to recovering REQ granularity from test naming, error code paths, and register side effects.",
-    "target_modules": [],
-    "target_tests": [],
-    "target_nodes": []
-  },
-  {
-    "hint_id": "HINT-025",
-    "section": "Section 8",
+    "hint_id": "HINT-014",
+    "section": "8. Register Map",
     "hint_type": "consistency_hint",
-    "statement": "Both 'read/write semantics' and 'side effect semantics' should be written in spec, e.g., whether RXDATA read pops, whether IRQ_STAT is RW1C.",
+    "statement": "建议在 spec 中同时写出读写语义与副作用语义，例如 RXDATA 读取是否 pop、IRQ_STAT 是否 RW1C。",
     "target_modules": [
       "axi_lite_regs"
     ],
     "target_tests": [],
     "target_nodes": [
-      "NODE-02"
+      "NODE-02",
+      "NODE-07"
     ]
   },
   {
-    "hint_id": "HINT-026",
-    "section": "Section 8",
-    "hint_type": "extraction_hint",
-    "statement": "If side effects are scattered across multiple modules in repository, they should be unified into corresponding register items in spec.",
-    "target_modules": [
-      "axi_lite_regs"
-    ],
-    "target_tests": [],
-    "target_nodes": [
-      "NODE-02"
-    ]
-  },
-  {
-    "hint_id": "HINT-027",
-    "section": "Section 9",
+    "hint_id": "HINT-015",
+    "section": "9. Timing & Microarchitecture",
     "hint_type": "planning_hint",
-    "statement": "If TX/RX are written as a merged module in repository implementation, spec should still recommend splitting into 'transmit path / receive path' two logical responsibilities.",
+    "statement": "若仓库实现中 TX/RX 被写成一个合并模块，spec 仍建议拆分为发送路径/接收路径两个逻辑职责。",
     "target_modules": [
       "uart_tx",
       "uart_rx"
@@ -294,154 +180,33 @@
     ]
   },
   {
-    "hint_id": "HINT-028",
-    "section": "Section 9",
-    "hint_type": "consistency_hint",
-    "statement": "Boundary behaviors (e.g., framing error drop/keep byte) must be consistent between this section and test section.",
-    "target_modules": [
-      "uart_rx"
-    ],
-    "target_tests": [
-      "TEST-022"
-    ],
-    "target_nodes": [
-      "NODE-06"
-    ]
-  },
-  {
-    "hint_id": "HINT-029",
-    "section": "Section 10",
-    "hint_type": "extraction_hint",
-    "statement": "When automatically extracting spec from repository, this section can be inferred from file tree, build scripts, test entry points and top-level files.",
-    "target_modules": [],
-    "target_tests": [],
-    "target_nodes": [
-      "NODE-00"
-    ]
-  },
-  {
-    "hint_id": "HINT-030",
-    "section": "Section 10",
-    "hint_type": "extraction_hint",
-    "statement": "If redundant/deprecated files exist in repository, only files participating in build and verification should be included in blueprint.",
+    "hint_id": "HINT-016",
+    "section": "11. Verification Plan",
+    "hint_type": "verification_hint",
+    "statement": "建议测试条目与 REQ 编号做显式映射。",
     "target_modules": [],
     "target_tests": [],
     "target_nodes": []
   },
   {
-    "hint_id": "HINT-031",
-    "section": "Section 11.1",
-    "hint_type": "consistency_hint",
-    "statement": "Explicit mapping between test entries and REQ numbers is recommended.",
-    "target_modules": [],
-    "target_tests": [],
-    "target_nodes": []
-  },
-  {
-    "hint_id": "HINT-032",
-    "section": "Section 11.1",
+    "hint_id": "HINT-017",
+    "section": "11.2 Assertions",
     "hint_type": "extraction_hint",
-    "statement": "If testbench already exists in repository, driver task, monitor, and scoreboard interface signatures and core check logic should be prioritized for extraction.",
+    "statement": "若仓库代码中已存在 assert/cover/checker module，应直接映射为 Assertions 小节内容。",
     "target_modules": [],
     "target_tests": [],
     "target_nodes": []
   },
   {
-    "hint_id": "HINT-033",
-    "section": "Section 11.2",
-    "hint_type": "extraction_hint",
-    "statement": "If assert/cover/checker module already exists in repository code, it should be directly mapped to Assertions section content.",
-    "target_modules": [],
-    "target_tests": [],
-    "target_nodes": []
-  },
-  {
-    "hint_id": "HINT-034",
-    "section": "Section 11.2",
+    "hint_id": "HINT-018",
+    "section": "14. Implementation Nodes",
     "hint_type": "planning_hint",
-    "statement": "RW1C, handshake liveness, and FIFO safety are recommended priorities for property writing.",
-    "target_modules": [
-      "axi_lite_regs",
-      "fifo_sync"
-    ],
-    "target_tests": [],
-    "target_nodes": []
-  },
-  {
-    "hint_id": "HINT-035",
-    "section": "Section 11.3",
-    "hint_type": "extraction_hint",
-    "statement": "If repository has no explicit coverage, coverage items can be derived from test matrix and corner cases.",
-    "target_modules": [],
-    "target_tests": [],
-    "target_nodes": []
-  },
-  {
-    "hint_id": "HINT-036",
-    "section": "Section 11.3",
-    "hint_type": "planning_hint",
-    "statement": "Coverage items should prioritize serving verification completeness rather than pursuing tool-specific syntax.",
-    "target_modules": [],
-    "target_tests": [],
-    "target_nodes": []
-  },
-  {
-    "hint_id": "HINT-037",
-    "section": "Section 12",
-    "hint_type": "extraction_hint",
-    "statement": "If repository already has scripts, this section should directly reference real commands rather than reinventing command lines.",
-    "target_modules": [],
-    "target_tests": [],
-    "target_nodes": [
-      "NODE-00"
-    ]
-  },
-  {
-    "hint_id": "HINT-038",
-    "section": "Section 12",
-    "hint_type": "planning_hint",
-    "statement": "For multi-toolchain projects, 'reference toolchain' and 'optional toolchain' can be noted.",
-    "target_modules": [],
-    "target_tests": [],
-    "target_nodes": []
-  },
-  {
-    "hint_id": "HINT-039",
-    "section": "Section 13",
-    "hint_type": "planning_hint",
-    "statement": "Acceptance criteria should be divided into 'skeleton compilable' and 'function pass' two layers.",
-    "target_modules": [],
-    "target_tests": [],
-    "target_nodes": []
-  },
-  {
-    "hint_id": "HINT-040",
-    "section": "Section 13",
-    "hint_type": "extraction_hint",
-    "statement": "If inferring spec from repository, CI/scripts/existing test real thresholds should be prioritized.",
-    "target_modules": [],
-    "target_tests": [],
-    "target_nodes": []
-  },
-  {
-    "hint_id": "HINT-041",
-    "section": "Section 14",
-    "hint_type": "planning_hint",
-    "statement": "Node design goal is 'ensure skeleton compilable first, then gradually close behavior'; do not implement all features too early in Node-00/01.",
+    "statement": "节点设计的目标是先保证骨架可编译，再逐步闭合行为；不要在 Node-00/01 过早实现所有功能。",
     "target_modules": [],
     "target_tests": [],
     "target_nodes": [
       "NODE-00",
       "NODE-01"
     ]
-  },
-  {
-    "hint_id": "HINT-042",
-    "section": "Section 14",
-    "hint_type": "extraction_hint",
-    "statement": "If extracting Nodes from existing repository, recovery can be done by file dependency graph, module instantiation order, and test unlock order.",
-    "target_modules": [],
-    "target_tests": [],
-    "target_nodes": []
   }
 ]

@@ -10,6 +10,7 @@ This script serves as the main entry point for the ZeroRepo system, responsible 
 """
 
 import argparse
+import json
 import sys
 import logging
 import os
@@ -17,7 +18,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 
 from zerorepo.config.checkpoint_config import create_default_manager
-from zerorepo.utils.logs import setup_logger
+from zerorepo.utils.logs import redirect_standard_streams, setup_logger
 
 
 def parse_args():
@@ -108,9 +109,9 @@ Supported LLM Models:
     parser.add_argument(
         "--phase",
         type=str,
-        choices=["all", "design", "implementation", "rtl", "rtl_phase1", "rtl_phase2"],
+        choices=["all", "design", "implementation", "rtl", "rtl_phase1", "rtl_phase2", "rtl_planner"],
         default="all",
-        help="Specify execution phase: 'all'=full pipeline, 'design'=design only, 'implementation'=implementation only, 'rtl'=RTL full pipeline with resume, 'rtl_phase1'=RTL SpecFacts parsing, 'rtl_phase2'=RTL Module Contract Realization (requires Phase 1 output)"
+        help="Specify execution phase: 'all'=full pipeline, 'design'=design only, 'implementation'=implementation only, 'rtl'=RTL full pipeline with resume, 'rtl_phase1'=RTL SpecFacts parsing, 'rtl_phase2'=RTL Module Contract Realization (requires Phase 1 output), 'rtl_planner'=run the standalone RTL module planner"
     )
 
     parser.add_argument(
@@ -177,6 +178,8 @@ def setup_logging(args) -> logging.Logger:
     level_name = str(args.log_level).upper()
     level = getattr(logging, level_name, logging.INFO)
 
+    redirect_standard_streams(args.log_file)
+
     # 拿一个带名字的 logger
     logger = logging.getLogger("zerorepo-main")
 
@@ -213,8 +216,8 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
         checkpoint_dir = Path(args.checkpoint)
         repo_path = Path(args.repo)
 
-        # RTL Phase (full pipeline with resume)
-        if args.phase in ["rtl", "rtl_phase1", "rtl_phase2"]:
+        # RTL planner / phase pipeline
+        if args.phase in ["rtl", "rtl_phase1", "rtl_phase2", "rtl_planner"]:
             logger.info("🔧 Initializing RTL Spec2Repo Phase 1...")
 
             # Load config to get LLM settings
@@ -270,17 +273,134 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
                 spec_checkpoint_dir = spec_output_dir / ".zerorepo"
                 spec_checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
+                if args.phase == "rtl_planner":
+                    from zerorepo.rpg_gen.base.llm_client import LLMConfig
+                    from zerorepo.rtl_impl.module_planner import PlannerRunner, PlannerTaskInput
+
+                    planner_llm_config = None
+                    if args.llm_config:
+                        planner_llm_config = LLMConfig.from_source(args.llm_config)
+                    elif llm_config_dict:
+                        planner_llm_config = LLMConfig.from_dict(llm_config_dict)
+                    else:
+                        raise RuntimeError(
+                            "rtl_planner requires LLM configuration, but neither --llm-config "
+                            "nor config['llm'] is available."
+                        )
+
+                    planner_output_root = spec_checkpoint_dir / "module_planner" / "outputs"
+                    planner_output_root.mkdir(parents=True, exist_ok=True)
+
+                    def _discover_spec_images() -> list[str]:
+                        import re
+                        import urllib.parse
+
+                        image_paths: list[str] = []
+                        seen: set[str] = set()
+
+                        for match in re.finditer(r'!\[[^\]]*\]\(([^)]+)\)', spec.spec_content):
+                            raw_ref = match.group(1).strip()
+                            if not raw_ref:
+                                continue
+                            decoded_ref = urllib.parse.unquote(raw_ref)
+                            candidate = (spec.spec_file_path.parent / decoded_ref).resolve()
+                            if candidate.exists() and candidate.is_file():
+                                candidate_str = str(candidate)
+                                if candidate_str not in seen:
+                                    seen.add(candidate_str)
+                                    image_paths.append(candidate_str)
+
+                        figures_dir = spec.spec_file_path.parent / "figures"
+                        if figures_dir.exists():
+                            stem = spec.spec_file_path.stem.lower()
+                            for image_path in sorted(figures_dir.iterdir()):
+                                if not image_path.is_file():
+                                    continue
+                                suffix = image_path.suffix.lower()
+                                if suffix not in {".png", ".jpg", ".jpeg", ".svg", ".webp", ".bmp"}:
+                                    continue
+                                if stem in image_path.stem.lower():
+                                    image_str = str(image_path.resolve())
+                                    if image_str not in seen:
+                                        seen.add(image_str)
+                                        image_paths.append(image_str)
+
+                        return image_paths
+
+                    task_input = PlannerTaskInput(
+                        task_id=spec.project_name,
+                        spec_md_files=[str(spec.spec_file_path.resolve())],
+                        spec_images=_discover_spec_images(),
+                        project_type="light_repo_spec2rtl",
+                        notes="Standalone RTL module planning run from main.py",
+                    )
+
+                    planner_runner = PlannerRunner(
+                        output_root=planner_output_root,
+                        llm_config=planner_llm_config,
+                        logger=logger,
+                    )
+                    merge_artifact = planner_runner.run(task_input, resume=args.resume, end_stage="stage6")
+                    stage1_artifact_path = planner_output_root / "contracts.json"
+                    modules_artifact_path = planner_output_root / "modules.json"
+                    repo_skeleton_artifact_path = planner_output_root / "repo_skeleton.json"
+                    module_skeletons_artifact_path = planner_output_root / "module_skeletons.json"
+                    spec_blocks_artifact_path = planner_output_root / "spec_blocks.json"
+                    module_plans_artifact_path = planner_output_root / "module_plans.json"
+                    stage5_codegen_artifact_path = planner_output_root / "stage5_codegen.json"
+                    stage6_merge_artifact_path = planner_output_root / "stage6_merge.json"
+                    module_plan_json_dir = planner_output_root / "module_plan_json"
+                    workspace_dir = planner_output_root.parent.parent / "workspace"
+                    fragments_dir = workspace_dir / "fragments"
+                    merged_dir = workspace_dir / "merged"
+
+                    logger.info("✅ RTL module planner completed for %s", spec.project_name)
+                    logger.info("  - planner outputs root: %s", planner_output_root)
+                    logger.info("  - stage1 contracts artifact: %s", stage1_artifact_path)
+                    logger.info("  - module-organized artifact: %s", modules_artifact_path)
+                    logger.info("  - repo skeleton artifact: %s", repo_skeleton_artifact_path)
+                    logger.info("  - module skeletons artifact: %s", module_skeletons_artifact_path)
+                    logger.info("  - spec blocks artifact: %s", spec_blocks_artifact_path)
+                    logger.info("  - module plans artifact: %s", module_plans_artifact_path)
+                    logger.info("  - module plan json dir: %s", module_plan_json_dir)
+                    logger.info("  - stage5 codegen artifact: %s", stage5_codegen_artifact_path)
+                    logger.info("  - stage6 merge artifact: %s", stage6_merge_artifact_path)
+                    logger.info("  - stage5 fragments dir: %s", fragments_dir)
+                    logger.info("  - stage6 merged dir: %s", merged_dir)
+                    logger.info("  - Stage6 merged modules: %s module(s)", len(merge_artifact.module_files))
+                    continue
+
                 # Check for resume - if Phase 1 outputs exist, skip Phase 1
                 spec_facts_file = spec_checkpoint_dir / "spec_facts.json"
                 rpg_file = spec_checkpoint_dir / "rpg.json"
                 phase1_skipped = False
 
                 if args.resume and spec_facts_file.exists() and rpg_file.exists():
-                    logger.info(f"⏭️ Phase 1 skipped (resume mode, outputs exist): {spec.project_name}")
-                    phase1_skipped = True
+                    can_resume_phase1 = False
+                    try:
+                        from zerorepo.rtl_impl.phase1_spec_parsing.spec_models import SpecFacts
+
+                        with open(spec_facts_file, 'r', encoding='utf-8') as f:
+                            resume_spec_facts_dict = json.load(f)
+                        resume_spec_facts = SpecFacts.from_dict(resume_spec_facts_dict)
+                        resume_spec_facts.check_phase1_completion()
+                        can_resume_phase1 = bool(getattr(resume_spec_facts, "phase1_complete", False))
+                    except Exception as e:
+                        logger.warning(
+                            "Resume validation for Phase 1 outputs failed, forcing Phase 1 rerun: %s",
+                            e,
+                        )
+
+                    if can_resume_phase1:
+                        logger.info(f"⏭️ Phase 1 skipped (resume mode, validated outputs exist): {spec.project_name}")
+                        phase1_skipped = True
+                    else:
+                        logger.info(
+                            "🔁 Resume mode found stale/incomplete Phase 1 outputs for %s; rerunning Phase 1",
+                            spec.project_name,
+                        )
                 else:
                     # Save repo_data.json (compatible format)
-                    import json
                     repo_data = spec.to_dict()
                     repo_data_file = spec_checkpoint_dir / "repo_data.json"
                     with open(repo_data_file, 'w', encoding='utf-8') as f:
@@ -368,7 +488,6 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
                     logger.info(f"✅ Phase 1 completed for {spec.project_name}")
                 else:
                     # Load existing spec_facts and rpg for Phase 2
-                    import json
                     with open(spec_facts_file, 'r', encoding='utf-8') as f:
                         spec_facts_dict = json.load(f)
                     # Note: rpg is needed for Phase 2, load it too
@@ -386,8 +505,30 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
                     phase2_skipped = False
 
                     if args.resume and phase2_contracts_file.exists():
-                        logger.info(f"⏭️ Phase 2 skipped (resume mode, output exists): {spec.project_name}")
-                        phase2_skipped = True
+                        can_resume_phase2 = False
+                        try:
+                            with open(phase2_contracts_file, 'r', encoding='utf-8') as f:
+                                phase2_contracts_dict = json.load(f)
+                            phase2_contracts_resume = Phase2Contracts.from_dict(phase2_contracts_dict)
+                            can_resume_phase2 = bool(
+                                getattr(phase2_contracts_resume, "phase2_ready_for_impl_level", False)
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                "Resume validation for Phase 2 outputs failed, forcing Phase 2 rerun: %s",
+                                e,
+                            )
+
+                        if can_resume_phase2:
+                            logger.info(
+                                f"⏭️ Phase 2 skipped (resume mode, validated output exists): {spec.project_name}"
+                            )
+                            phase2_skipped = True
+                        else:
+                            logger.info(
+                                "🔁 Resume mode found stale/incomplete Phase 2 outputs for %s; rerunning Phase 2",
+                                spec.project_name,
+                            )
                     else:
                         # Run Phase 2
                         logger.info(f"🔧 Running Phase 2: File-Centered Prop-Level Enrichment...")
@@ -471,9 +612,26 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
                         logger=logger,
                     )
 
-                    zero_repo.run_impl_level()
+                    plan_batches, skeleton, rpg, graph_data = zero_repo.run_impl_level()
                     logger.info(
-                        "✅ RTL compatible repo_data exported and impl_level started for %s",
+                        "✅ RTL compatible repo_data exported and impl_level completed for %s",
+                        spec.project_name,
+                    )
+
+                    codegen_success = zero_repo.run_code_generation(
+                        plan_batches=plan_batches,
+                        skeleton=skeleton,
+                        rpg=rpg,
+                        graph_data=graph_data,
+                    )
+                    if not codegen_success:
+                        logger.error(
+                            "❌ RTL code generation failed for %s",
+                            spec.project_name,
+                        )
+                        return False
+                    logger.info(
+                        "✅ RTL code generation completed for %s",
                         spec.project_name,
                     )
 
@@ -484,7 +642,8 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
                 logger.info(f"  - Phase 1: spec_facts.json, rpg.json")
                 logger.info(f"  - Phase 2: phase2_contracts.json")
                 logger.info(f"  - Prop adapter: repo_data.json")
-                logger.info(f"  - Impl handoff: impl_level.run()")
+                logger.info(f"  - Impl level: skeleton.json, graph.json, tasks.json")
+                logger.info(f"  - Code generation: TaskManager + Trae executor")
                 logger.info(f"{'='*60}")
             elif args.phase == "rtl_phase1":
                 logger.info(f"\n{'='*60}")
@@ -493,6 +652,14 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
             elif args.phase == "rtl_phase2":
                 logger.info(f"\n{'='*60}")
                 logger.info(f"🎉 RTL Phase 2 completed for {len(specs)} project(s)")
+                logger.info(f"{'='*60}")
+            elif args.phase == "rtl_planner":
+                logger.info(f"\n{'='*60}")
+                logger.info(f"🎉 RTL module planner completed for {len(specs)} project(s)")
+                logger.info("  - outputs: .zerorepo/module_planner/outputs/contracts.json")
+                logger.info("  - outputs: .zerorepo/module_planner/outputs/modules.json")
+                logger.info("  - outputs: .zerorepo/module_planner/outputs/spec_blocks.json")
+                logger.info("  - outputs: .zerorepo/module_planner/outputs/module_plans.json")
                 logger.info(f"{'='*60}")
 
             return True

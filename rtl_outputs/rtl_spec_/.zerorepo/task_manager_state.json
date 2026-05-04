@@ -1,0 +1,44 @@
+{
+  "feature_selection": true,
+  "feature_refactoring": true,
+  "build_skeleton": true,
+  "build_function": true,
+  "plan_tasks": true,
+  "code_generation": false,
+  "completed_tasks": [],
+  "failed_tasks": [],
+  "current_task": {
+    "task_id": "rtl_pkg_uart_pkg.sv_20260316_135917_a5afc281",
+    "batch": {
+      "task_id": "rtl_pkg_uart_pkg.sv_20260316_135917_a5afc281",
+      "task": "## Task Requirements\nYou are working on reconstructing the repository 'axi_uart_periph' from scratch. Do NOT import, vendor, wrap, or call the original external library you are re-implementing (directly or indirectly). Treat this as a fully standalone local implementation.\n\nHard requirement: ALL required abstractions and algorithms must be implemented end-to-end from zero. Even if the target library provides high-level objects (e.g., DataFrame/Series/Index), you must implement their core data structures, behaviors, and algorithms yourself.\n\nNo placeholders: do NOT leave stubs, TODOs, or partial implementations. Do NOT use `pass`, `...`, `raise NotImplementedError`, `raise Exception('not implemented')`, or any equivalent 'not supported' fallback for required APIs. Every specified API must be fully functional, testable, and produce correct outputs.\n\nImplement uart_pkg shared typedefs, enums, and constants to establish stable package contract for downstream modules. This batch delivers all AXI-Lite CSR address definitions (REG_CTRL/STATUS/TX_DATA/RX_DATA/BAUD), control/status register field masks, FIFO parameters, parity enum, baud generator constants, and interrupt bit definitions. All subsequent RTL modules will import via 'import uart_pkg::*;' to avoid parameter duplication per HINT-012, making this the foundational build artifact that unblocks leaf module implementation.",
+      "file_path": "rtl/pkg/uart_pkg.sv",
+      "units_key": [
+        "package:uart_pkg"
+      ],
+      "unit_to_code": {
+        "package:uart_pkg": "// ============================================================================\n// UART Package - Shared Type Definitions and Constants\n// ============================================================================\n// Responsibility: Central source for typedefs, enums, and constants\n// Consumers: axi_lite_regs, baud_gen, uart_tx, uart_rx, fifo_sync, testbench\n// ============================================================================\n\npackage uart_pkg;\n\n  // --------------------------------------------------------------------------\n  // UART Frame Parameters\n  // --------------------------------------------------------------------------\n  localparam int unsigned UART_DATA_WIDTH = 8;\n  localparam int unsigned UART_STOP_BITS  = 1;\n\n  // Parity configuration enum\n  typedef enum logic [1:0] {\n    PARITY_NONE  = 2'b00,\n    PARITY_EVEN  = 2'b01,\n    PARITY_ODD   = 2'b10\n    // 2'b11 reserved\n  } parity_e;\n\n  // --------------------------------------------------------------------------\n  // FIFO Configuration (shared for TX and RX FIFOs)\n  // --------------------------------------------------------------------------\n  localparam int unsigned FIFO_DEPTH      = 16;\n  localparam int unsigned FIFO_WIDTH      = UART_DATA_WIDTH;\n  localparam int unsigned FIFO_ADDR_WIDTH = $clog2(FIFO_DEPTH);\n\n  // --------------------------------------------------------------------------\n  // Register Address Map (AXI-Lite CSR addresses)\n  // --------------------------------------------------------------------------\n  localparam logic [31:0] REG_CTRL_ADDR    = 32'h00;\n  localparam logic [31:0] REG_STATUS_ADDR  = 32'h04;\n  localparam logic [31:0] REG_TX_DATA_ADDR = 32'h08;\n  localparam logic [31:0] REG_RX_DATA_ADDR = 32'h0C;\n  localparam logic [31:0] REG_BAUD_ADDR    = 32'h10;\n\n  // --------------------------------------------------------------------------\n  // Control Register Field Definitions\n  // --------------------------------------------------------------------------\n  localparam int unsigned CTRL_TX_EN_Pos       = 0;\n  localparam int unsigned CTRL_RX_EN_Pos       = 1;\n  localparam int unsigned CTRL_PARITY_EN_Pos   = 2;\n  localparam int unsigned CTRL_PARITY_TYPE_Pos = 3;\n  localparam int unsigned CTRL_INT_EN_Pos      = 7;\n\n  localparam logic [31:0] CTRL_TX_EN_MASK       = 32'h0000_0001;\n  localparam logic [31:0] CTRL_RX_EN_MASK       = 32'h0000_0002;\n  localparam logic [31:0] CTRL_PARITY_EN_MASK   = 32'h0000_0004;\n  localparam logic [31:0] CTRL_PARITY_TYPE_MASK = 32'h0000_0008;\n  localparam logic [31:0] CTRL_INT_EN_MASK      = 32'h0000_0080;\n\n  // --------------------------------------------------------------------------\n  // Status Register Field Definitions\n  // --------------------------------------------------------------------------\n  localparam int unsigned STATUS_TX_EMPTY_Pos    = 0;\n  localparam int unsigned STATUS_TX_FULL_Pos     = 1;\n  localparam int unsigned STATUS_RX_EMPTY_Pos    = 2;\n  localparam int unsigned STATUS_RX_FULL_Pos     = 3;\n  localparam int unsigned STATUS_RX_DATA_RDY_Pos = 4;\n  localparam int unsigned STATUS_FRAMING_ERR_Pos = 5;\n  localparam int unsigned STATUS_PARITY_ERR_Pos  = 6;\n  localparam int unsigned STATUS_INT_PENDING_Pos = 7;\n\n  localparam logic [31:0] STATUS_TX_EMPTY_MASK    = 32'h0000_0001;\n  localparam logic [31:0] STATUS_TX_FULL_MASK     = 32'h0000_0002;\n  localparam logic [31:0] STATUS_RX_EMPTY_MASK    = 32'h0000_0004;\n  localparam logic [31:0] STATUS_RX_FULL_MASK     = 32'h0000_0008;\n  localparam logic [31:0] STATUS_RX_DATA_RDY_MASK = 32'h0000_0010;\n  localparam logic [31:0] STATUS_FRAMING_ERR_MASK = 32'h0000_0020;\n  localparam logic [31:0] STATUS_PARITY_ERR_MASK  = 32'h0000_0040;\n  localparam logic [31:0] STATUS_INT_PENDING_MASK = 32'h0000_0080;\n\n  // --------------------------------------------------------------------------\n  // Interrupt Status Bits\n  // --------------------------------------------------------------------------\n  localparam logic INT_TX_EMPTY    = 1'b1;\n  localparam logic INT_RX_DATA_RDY = 1'b1;\n  localparam logic INT_ERR         = 1'b1;\n\n  // --------------------------------------------------------------------------\n  // Baud Rate Generator Constants\n  // --------------------------------------------------------------------------\n  localparam int unsigned OVERSAMPLE_RATIO = 16;\n  localparam int unsigned BAUD_TICK_MAX    = 16'd1000;\n\n  // --------------------------------------------------------------------------\n  // FIFO Status Thresholds\n  // --------------------------------------------------------------------------\n  localparam int unsigned FIFO_HALF_FULL    = FIFO_DEPTH / 2;\n  localparam int unsigned FIFO_ALMOST_FULL  = FIFO_DEPTH - 2;\n  localparam int unsigned FIFO_ALMOST_EMPTY = 2;\n\nendpackage : uart_pkg"
+      },
+      "unit_to_features": {
+        "package:uart_pkg": []
+      },
+      "unit_to_spec": {
+        "package:uart_pkg": "uart_pkg contract: export all shared typedefs, enums, and constants for AXI UART peripheral. Must include: (1) UART frame params (data width, stop bits), (2) parity_e enum for PARITY_NONE/EVEN/ODD, (3) FIFO depth/width/addr_width constants, (4) AXI-Lite CSR address map (REG_CTRL/STATUS/TX_DATA/RX_DATA/BAUD), (5) Control register field positions and masks (TX_EN, RX_EN, PARITY_EN, PARITY_TYPE, INT_EN), (6) Status register field positions and masks (TX_EMPTY/FULL, RX_EMPTY/FULL, RX_DATA_RDY, FRAMING_ERR, PARITY_ERR, INT_PENDING), (7) Interrupt status bits, (8) Baud generator constants (OVERSAMPLE_RATIO, BAUD_TICK_MAX), (9) FIFO threshold constants (HALF_FULL, ALMOST_FULL, ALMOST_EMPTY). All modules import via 'import uart_pkg::*;' to avoid parameter duplication per HINT-012."
+      },
+      "unit_to_kind": {
+        "package:uart_pkg": "rtl_package"
+      },
+      "priority": 0,
+      "subtree": "rtl/pkg/uart_pkg.sv",
+      "task_type": "implementation"
+    },
+    "branch_name": "task/rtl_pkg_uart_pkg.sv_20260316_135917_a5afc281",
+    "status": "in_progress",
+    "created_at": "2026-03-16T20:49:41.352678",
+    "completed_at": null,
+    "error_message": null,
+    "commit_hash": null,
+    "initial_commit": "0dc83f5b26f58b8df33bd3aed293408cbd81eecd"
+  },
+  "last_updated": "2026-03-16T21:13:36.026870"
+}

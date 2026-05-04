@@ -1,6 +1,6 @@
 {
   "repo_name": "axi_uart_periph",
-  "repo_info": "axi_uart_periph is an AXI4-Lite configurable UART peripheral providing TX/RX, programmable baud rate, TX/RX FIFOs, status registers and interrupts for SoC low-speed serial communication and debugging.",
+  "repo_info": "axi_uart_periph 是一个基于 AXI4-Lite 可配置的 UART 外设，提供发送、接收、可编程波特率、TX/RX FIFO、状态寄存器与中断，面向 SoC 低速串口通信与调试场景。",
   "data_flow": [],
   "excluded_files": [],
   "repo_node_id": "axi_uart_periph_L0",
@@ -18,7 +18,7 @@
       }
     },
     {
-      "id": "area_top_3527bd8a",
+      "id": "area_top_683b5518",
       "name": "top",
       "node_type": "functional_area",
       "level": 1,
@@ -30,7 +30,7 @@
       }
     },
     {
-      "id": "module_axi_uart_top_99e5c4e2",
+      "id": "module_axi_uart_top_a187b0f6",
       "name": "axi_uart_top",
       "node_type": "category",
       "level": 2,
@@ -42,7 +42,7 @@
       }
     },
     {
-      "id": "area_control_aab9b527",
+      "id": "area_control_b1e37e0d",
       "name": "control",
       "node_type": "functional_area",
       "level": 1,
@@ -54,7 +54,7 @@
       }
     },
     {
-      "id": "module_axi_lite_regs_9e17cbe6",
+      "id": "module_axi_lite_regs_b3ef9537",
       "name": "axi_lite_regs",
       "node_type": "category",
       "level": 2,
@@ -62,11 +62,11 @@
         "type_name": "module",
         "path": "rtl/modules/axi_lite_regs.sv",
         "content": "",
-        "description": "AXI-Lite slave + CSR + register side effects"
+        "description": "AXI-Lite slave + CSR + reg side effects"
       }
     },
     {
-      "id": "area_datapath_e664cc58",
+      "id": "area_datapath_fc695ddb",
       "name": "datapath",
       "node_type": "functional_area",
       "level": 1,
@@ -78,7 +78,7 @@
       }
     },
     {
-      "id": "module_baud_gen_c0e4229e",
+      "id": "module_baud_gen_1a497aab",
       "name": "baud_gen",
       "node_type": "category",
       "level": 2,
@@ -86,11 +86,11 @@
         "type_name": "module",
         "path": "rtl/modules/baud_gen.sv",
         "content": "",
-        "description": "divider to baud_tick and optional oversample tick"
+        "description": "divider to baud_tick and oversample tick"
       }
     },
     {
-      "id": "module_uart_tx_f14b4079",
+      "id": "module_uart_tx_a578ae29",
       "name": "uart_tx",
       "node_type": "category",
       "level": 2,
@@ -102,7 +102,7 @@
       }
     },
     {
-      "id": "module_uart_rx_88247149",
+      "id": "module_uart_rx_6c875638",
       "name": "uart_rx",
       "node_type": "category",
       "level": 2,
@@ -114,7 +114,7 @@
       }
     },
     {
-      "id": "area_primitive_7ee7b125",
+      "id": "area_primitive_9f5799de",
       "name": "primitive",
       "node_type": "functional_area",
       "level": 1,
@@ -126,7 +126,7 @@
       }
     },
     {
-      "id": "module_fifo_sync_bca130f1",
+      "id": "module_fifo_sync_8bc68f5d",
       "name": "fifo_sync",
       "node_type": "category",
       "level": 2,
@@ -138,7 +138,7 @@
       }
     },
     {
-      "id": "area_package_eae60319",
+      "id": "area_package_9c11db51",
       "name": "package",
       "node_type": "functional_area",
       "level": 1,
@@ -150,7 +150,7 @@
       }
     },
     {
-      "id": "module_uart_pkg_1ec9dc05",
+      "id": "module_uart_pkg_e16e3605",
       "name": "uart_pkg",
       "node_type": "category",
       "level": 2,
@@ -158,38 +158,14 @@
         "type_name": "module",
         "path": "rtl/pkg/uart_pkg.sv",
         "content": "",
-        "description": "typedefs and constants"
-      }
-    },
-    {
-      "id": "area_tb_048d5d4c",
-      "name": "tb",
-      "node_type": "functional_area",
-      "level": 1,
-      "meta": {
-        "type_name": "directory",
-        "path": null,
-        "content": "",
-        "description": "RTL tb modules"
-      }
-    },
-    {
-      "id": "module_axi_uart_tb_e5fbef0a",
-      "name": "axi_uart_tb",
-      "node_type": "category",
-      "level": 2,
-      "meta": {
-        "type_name": "module",
-        "path": "tb/axi_uart_tb.sv",
-        "content": "",
-        "description": "testbench with drivers and checks"
+        "description": "package with typedefs and constants"
       }
     }
   ],
   "edges": [
     {
       "src": "axi_uart_periph_L0",
-      "dst": "area_top_3527bd8a",
+      "dst": "area_top_683b5518",
       "relation": "composes",
       "meta": {
         "type_name": null,
@@ -199,30 +175,8 @@
       }
     },
     {
-      "src": "area_top_3527bd8a",
-      "dst": "module_axi_uart_top_99e5c4e2",
-      "relation": "composes",
-      "meta": {
-        "type_name": null,
-        "path": null,
-        "content": "",
-        "description": ""
-      }
-    },
-    {
-      "src": "axi_uart_periph_L0",
-      "dst": "area_control_aab9b527",
-      "relation": "composes",
-      "meta": {
-        "type_name": null,
-        "path": null,
-        "content": "",
-        "description": ""
-      }
-    },
-    {
-      "src": "area_control_aab9b527",
-      "dst": "module_axi_lite_regs_9e17cbe6",
+      "src": "area_top_683b5518",
+      "dst": "module_axi_uart_top_a187b0f6",
       "relation": "composes",
       "meta": {
         "type_name": null,
@@ -233,7 +187,7 @@
     },
     {
       "src": "axi_uart_periph_L0",
-      "dst": "area_datapath_e664cc58",
+      "dst": "area_control_b1e37e0d",
       "relation": "composes",
       "meta": {
         "type_name": null,
@@ -243,30 +197,8 @@
       }
     },
     {
-      "src": "area_datapath_e664cc58",
-      "dst": "module_baud_gen_c0e4229e",
-      "relation": "composes",
-      "meta": {
-        "type_name": null,
-        "path": null,
-        "content": "",
-        "description": ""
-      }
-    },
-    {
-      "src": "area_datapath_e664cc58",
-      "dst": "module_uart_tx_f14b4079",
-      "relation": "composes",
-      "meta": {
-        "type_name": null,
-        "path": null,
-        "content": "",
-        "description": ""
-      }
-    },
-    {
-      "src": "area_datapath_e664cc58",
-      "dst": "module_uart_rx_88247149",
+      "src": "area_control_b1e37e0d",
+      "dst": "module_axi_lite_regs_b3ef9537",
       "relation": "composes",
       "meta": {
         "type_name": null,
@@ -277,7 +209,7 @@
     },
     {
       "src": "axi_uart_periph_L0",
-      "dst": "area_primitive_7ee7b125",
+      "dst": "area_datapath_fc695ddb",
       "relation": "composes",
       "meta": {
         "type_name": null,
@@ -287,8 +219,30 @@
       }
     },
     {
-      "src": "area_primitive_7ee7b125",
-      "dst": "module_fifo_sync_bca130f1",
+      "src": "area_datapath_fc695ddb",
+      "dst": "module_baud_gen_1a497aab",
+      "relation": "composes",
+      "meta": {
+        "type_name": null,
+        "path": null,
+        "content": "",
+        "description": ""
+      }
+    },
+    {
+      "src": "area_datapath_fc695ddb",
+      "dst": "module_uart_tx_a578ae29",
+      "relation": "composes",
+      "meta": {
+        "type_name": null,
+        "path": null,
+        "content": "",
+        "description": ""
+      }
+    },
+    {
+      "src": "area_datapath_fc695ddb",
+      "dst": "module_uart_rx_6c875638",
       "relation": "composes",
       "meta": {
         "type_name": null,
@@ -299,7 +253,7 @@
     },
     {
       "src": "axi_uart_periph_L0",
-      "dst": "area_package_eae60319",
+      "dst": "area_primitive_9f5799de",
       "relation": "composes",
       "meta": {
         "type_name": null,
@@ -309,8 +263,8 @@
       }
     },
     {
-      "src": "area_package_eae60319",
-      "dst": "module_uart_pkg_1ec9dc05",
+      "src": "area_primitive_9f5799de",
+      "dst": "module_fifo_sync_8bc68f5d",
       "relation": "composes",
       "meta": {
         "type_name": null,
@@ -321,7 +275,7 @@
     },
     {
       "src": "axi_uart_periph_L0",
-      "dst": "area_tb_048d5d4c",
+      "dst": "area_package_9c11db51",
       "relation": "composes",
       "meta": {
         "type_name": null,
@@ -331,8 +285,8 @@
       }
     },
     {
-      "src": "area_tb_048d5d4c",
-      "dst": "module_axi_uart_tb_e5fbef0a",
+      "src": "area_package_9c11db51",
+      "dst": "module_uart_pkg_e16e3605",
       "relation": "composes",
       "meta": {
         "type_name": null,

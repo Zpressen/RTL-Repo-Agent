@@ -1,0 +1,372 @@
+{
+  "schema_version": "module_skeleton_export_v1",
+  "module": "aes_cipher_top",
+  "file_path": "rtl/aes_cipher_top.v",
+  "source_refs": {
+    "module_contract_ref": "module_contracts_v1::aes_cipher_top",
+    "repo_skeleton_ref": "repo_skeleton_v1::aes_cipher_top",
+    "module_spec_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/ase_cipher/aes_cipher_top.md"
+  },
+  "planning_note": "Top-level AES-128 cipher controller and datapath integrator. The skeleton separates declaration, child instances, sequential FSM, combinational round transform, a MixColumns helper, and final state/output commit. Each registered object has a declaration owner and a defined update point.",
+  "module_frame": "module aes_cipher_top (\n    // port list placeholder\n);\n\n// <block: decl_regs_and_wires>\n// <block: inst_key_expand_128>\n// <block: inst_sboxes_16x>\n// <block: seq_fsm_and_counter>\n// <block: helper_mixcolumns>\n// <block: comb_round_transform>\n// <block: seq_state_update_output>\n\nendmodule",
+  "structural_blocks": [
+    {
+      "block_id": "B1",
+      "block_label": "decl_regs_and_wires",
+      "block_kind": "decl",
+      "required": true,
+      "purpose": "Declare all registers, wires, and parameters required by the datapath and control.",
+      "code_shape": "declaration group",
+      "depends_on": [],
+      "placeholder": "// skeleton only:\n//   registers: text_in_r, sa[0:3][0:3], dcnt, ld_r, done, text_out\n//   wires: subbyte_out[0:3][0:3], shifted_matrix[0:3][0:3], mixed_column[0:3], next_state[0:3][0:3]\n//   wires: round_key_words wo_0, wo_1, wo_2, wo_3 from key expansion\n//   wire: kld (key load enable from FSM)\n//   localparam: state encoding for IDLE, INIT_ROUND, ROUND_OP, FINAL_ROUND, DONE",
+      "must_appear": [
+        "all spec‑required registers and wire interfaces for child instances"
+      ],
+      "may_appear": [
+        "auxiliary combinational net declarations"
+      ],
+      "retrieval_focus": [
+        "interface and storage element declarations"
+      ]
+    },
+    {
+      "block_id": "B2",
+      "block_label": "inst_key_expand_128",
+      "block_kind": "inst",
+      "required": true,
+      "purpose": "Instantiate the aes_key_expand_128 module to generate round keys from the initial key.",
+      "code_shape": "single module instantiation",
+      "depends_on": [
+        "B1"
+      ],
+      "placeholder": "// skeleton only:\n// Instantiation of aes_key_expand_128.\n// Port connections: clk, kld, key, wo_0, wo_1, wo_2, wo_3.",
+      "must_appear": [
+        "explicit instance with all ports connected"
+      ],
+      "may_appear": [
+        "no extra logic inside the block"
+      ],
+      "retrieval_focus": [
+        "key‑expansion integration point"
+      ]
+    },
+    {
+      "block_id": "B3",
+      "block_label": "inst_sboxes_16x",
+      "block_kind": "inst",
+      "required": true,
+      "purpose": "Instantiate 16 parallel aes_sbox units for SubBytes transformation.",
+      "code_shape": "16 identical module instantiations",
+      "depends_on": [
+        "B1"
+      ],
+      "placeholder": "// skeleton only:\n// 16 instantiations of aes_sbox.\n// Each sa[i][j] byte drives the S‑box input a; output b drives subbyte_out[i][j].",
+      "must_appear": [
+        "all 16 sbox instances, each connected to one state matrix byte"
+      ],
+      "may_appear": [
+        "generate‑based instantiation grouping"
+      ],
+      "retrieval_focus": [
+        "SubBytes datapath building block"
+      ]
+    },
+    {
+      "block_id": "B4",
+      "block_label": "seq_fsm_and_counter",
+      "block_kind": "seq",
+      "required": true,
+      "purpose": "Implement the main FSM, round counter, load flag, and generate kld for key expansion.",
+      "code_shape": "single sequential always block (posedge clk or posedge rst)",
+      "depends_on": [
+        "B1"
+      ],
+      "placeholder": "// skeleton only:\n// Sequential FSM block on posedge clk or rst.\n//   – rst: state <= IDLE; dcnt <= 0; ld_r <= 0; text_in_r <= 0.\n//   – else: case (state)\n//       IDLE:        if (ld) state <= INIT_ROUND;\n//       INIT_ROUND:  load text_in_r, dcnt <= 0xB, assert kld, next state ROUND_OP;\n//       ROUND_OP:    decrement dcnt; if dcnt reaches terminal value go to FINAL_ROUND;\n//       FINAL_ROUND: next state DONE;\n//       DONE:        (stay or return to IDLE as per spec).",
+      "must_appear": [
+        "registered FSM state, dcnt, ld_r, text_in_r",
+        "generated kld signal tied to key expansion instantiation"
+      ],
+      "may_appear": [
+        "explicit state decode for readability"
+      ],
+      "retrieval_focus": [
+        "top‑level control sequencing"
+      ]
+    },
+    {
+      "block_id": "B5",
+      "block_label": "helper_mixcolumns",
+      "block_kind": "helper",
+      "required": true,
+      "purpose": "Combinational MixColumns transformation on a single 32‑bit column.",
+      "code_shape": "combinational function or generate‑based structure",
+      "depends_on": [
+        "B1"
+      ],
+      "placeholder": "// skeleton only:\n// Combinational MixColumns unit operating on one column (32 bits).\n// Performs matrix multiplication in GF(2^8): uses xtime and XOR to compute each output byte.",
+      "must_appear": [
+        "one column‑mixing unit reusable 4 times, or four parallel instantiations"
+      ],
+      "may_appear": [
+        "auxiliary xtime function"
+      ],
+      "retrieval_focus": [
+        "finite field arithmetic block"
+      ]
+    },
+    {
+      "block_id": "B6",
+      "block_label": "comb_round_transform",
+      "block_kind": "comb",
+      "required": true,
+      "purpose": "Combinational datapath that, given the current state matrix, round key words, and sbox outputs, computes the next state matrix for the current round (including final‑round skip).",
+      "code_shape": "combinational assignments or always @(*) block",
+      "depends_on": [
+        "B1",
+        "B3",
+        "B5"
+      ],
+      "placeholder": "// skeleton only:\n// Combinational round transform:\n//   – ShiftRows: reorder sa bytes into shifted_matrix according to row shift distances.\n//   – SubBytes: already provided by subbyte_out from sbox instantiations (B3).\n//   – MixColumns: for each column j, mixed_col[j] = mix_column(shifted_column_j) using B5.\n//     Skip MixColumns when dcnt indicates final round (dcnt == 1 or equivalent).\n//   – AddRoundKey: next_state[i][j] = (post_mixcol_byte ^ round_key_byte),\n//     with round key bytes extracted from wo_0..wo_3.",
+      "must_appear": [
+        "ShiftRows, MixColumns (with optional bypass), AddRoundKey",
+        "correct usage of subbyte_out for SubBytes (already wired from sboxes)",
+        "round‑dependent behaviour driven by dcnt"
+      ],
+      "may_appear": [
+        "explicit byte‑lane assignments"
+      ],
+      "retrieval_focus": [
+        "round transformation datapath (combinational)"
+      ]
+    },
+    {
+      "block_id": "B7",
+      "block_label": "seq_state_update_output",
+      "block_kind": "seq",
+      "required": true,
+      "purpose": "Update the state matrix registers, final text_out, and done signal on the clock edge according to current phase.",
+      "code_shape": "sequential always block (posedge clk or posedge rst)",
+      "depends_on": [
+        "B1",
+        "B4",
+        "B6"
+      ],
+      "placeholder": "// skeleton only:\n// Sequential update block on posedge clk or rst.\n//   – rst: sa <= 0; text_out <= 0; done <= 0.\n//   – else:\n//       if (state == INIT_ROUND) begin\n//         sa <= initial AddRoundKey result (text_in_r XOR initial round key);\n//       end else if (state == ROUND_OP or state == FINAL_ROUND) begin\n//         sa <= next_state (from B6);\n//       end\n//       if (state == FINAL_ROUND) begin   // or DONE after update\n//         text_out <= column‑major packing of sa;\n//         done <= 1;\n//       end else begin\n//         done <= 0;\n//       end",
+      "must_appear": [
+        "registered update of sa",
+        "generation of text_out and done in DONE state (or FINAL_ROUND transitioning to DONE)"
+      ],
+      "may_appear": [
+        "handling of load for initial round key addition"
+      ],
+      "retrieval_focus": [
+        "state matrix commit and output buffer"
+      ]
+    }
+  ],
+  "module_behavior": {
+    "control_style": "explicit_fsm",
+    "semantic_modes": [
+      {
+        "mode": "IDLE",
+        "meaning": "reset/default state, waits for ld"
+      },
+      {
+        "mode": "INIT_ROUND",
+        "meaning": "load text_in_r, assert kld, set dcnt=0xB, perform initial AddRoundKey"
+      },
+      {
+        "mode": "ROUND_OP",
+        "meaning": "execute rounds 1‑9 (SubBytes, ShiftRows, MixColumns, AddRoundKey), decrement dcnt"
+      },
+      {
+        "mode": "FINAL_ROUND",
+        "meaning": "execute round 10 (SubBytes, ShiftRows, AddRoundKey, no MixColumns)"
+      },
+      {
+        "mode": "DONE",
+        "meaning": "assert done, hold text_out"
+      }
+    ],
+    "state_model": [
+      {
+        "object": "done",
+        "storage_kind": "registered",
+        "representation": "1‑bit",
+        "notes": "asserted only in DONE state"
+      }
+    ],
+    "global_invariants": [
+      "Exactly one round per clock cycle after INIT_ROUND until DONE",
+      "text_out is stable and valid only after DONE assertion",
+      "Round key words from aes_key_expand_128 are assumed ready when consumed"
+    ],
+    "open_semantic_questions": [
+      "Exact condition for transition from ROUND_OP to FINAL_ROUND (e.g., dcnt==1 or dcnt==2) – left for generation",
+      "DONE state duration and return path to IDLE (spec not explicit)",
+      "Reset polarity for rst (assumed active‑high for consistency)"
+    ]
+  },
+  "block_behavior_overlays": [
+    {
+      "block_id": "B1",
+      "responsibilities": [
+        "Provide all shared declared objects (registers, wires) for datapath and control blocks"
+      ],
+      "timing_semantics": [
+        "purely declarative, no timing"
+      ],
+      "touched_objects": [
+        "all named registers and wires"
+      ],
+      "coupling_rules": [
+        "Each block depends on objects declared here"
+      ],
+      "forbidden_drift": [
+        "Do not create new top‑level ports or invent register widths differing from spec"
+      ]
+    },
+    {
+      "block_id": "B2",
+      "responsibilities": [
+        "Generate round keys from input key using aes_key_expand_128",
+        "Accept kld signal driven by top‑level FSM"
+      ],
+      "timing_semantics": [
+        "key expansion operates in its own clock domain (same clk); output round keys updated as per kld"
+      ],
+      "touched_objects": [
+        "round_key_words (wo_0-wo_3), kld"
+      ],
+      "coupling_rules": [
+        "kld must be asserted during INIT_ROUND or at start of encryption",
+        "round key outputs drive B6 combinational path"
+      ],
+      "forbidden_drift": [
+        "Do not alter key expansion instantiation interface beyond spec‑defined ports"
+      ]
+    },
+    {
+      "block_id": "B3",
+      "responsibilities": [
+        "Provide 16 parallel SubBytes results via sbox instances"
+      ],
+      "timing_semantics": [
+        "purely combinational; outputs follow inputs after propagation delay"
+      ],
+      "touched_objects": [
+        "subbyte_out matrix"
+      ],
+      "coupling_rules": [
+        "Each sbox input is one byte of sa; B6 reads subbyte_out and treats it as SubBytes result"
+      ],
+      "forbidden_drift": [
+        "Do not insert pipelining or sequential logic inside sbox instantiations"
+      ]
+    },
+    {
+      "block_id": "B4",
+      "responsibilities": [
+        "Control state machine, dcnt counter, ld_r, loading of text_in_r, generation of kld"
+      ],
+      "timing_semantics": [
+        "Registered on rising clk edge; synchronous reset to IDLE"
+      ],
+      "touched_objects": [
+        "state, dcnt, ld_r, text_in_r, kld"
+      ],
+      "coupling_rules": [
+        "kld output drives B2’s kld input",
+        "dcnt used by B6 to decide final‑round bypass",
+        "State decoded in B7 for update decisions"
+      ],
+      "forbidden_drift": [
+        "Do not implement datapath operations beyond loading text_in_r; round arithmetic belongs to B6"
+      ]
+    },
+    {
+      "block_id": "B5",
+      "responsibilities": [
+        "Combinational MixColumns operation for a 32‑bit column"
+      ],
+      "timing_semantics": [
+        "purely combinational; output depends only on input"
+      ],
+      "touched_objects": [
+        "mixed column output vector"
+      ],
+      "coupling_rules": [
+        "Called/used by B6 for each column"
+      ],
+      "forbidden_drift": [
+        "Do not perform register writes or state updates; keep purely combinational"
+      ]
+    },
+    {
+      "block_id": "B6",
+      "responsibilities": [
+        "Combine S‑box outputs, ShiftRows, MixColumns (using B5), AddRoundKey into next_state_matrix",
+        "Handle final‑round exclusion of MixColumns"
+      ],
+      "timing_semantics": [
+        "combinational; next_state is a function of current sa, round_key_words, and dcnt"
+      ],
+      "touched_objects": [
+        "subbyte_out, shifted_matrix, mixed columns, next_state"
+      ],
+      "coupling_rules": [
+        "Inputs from B1 (sa), B3 (subbyte_out), B5 (mix column function), B2 (round keys), B4 (dcnt)",
+        "Output consumed by B7"
+      ],
+      "forbidden_drift": [
+        "Do not register next_state inside this block; no sequential logic"
+      ]
+    },
+    {
+      "block_id": "B7",
+      "responsibilities": [
+        "Update sa registers with next_state on appropriate phases",
+        "Capture final text_out in column‑major order",
+        "Assert done signal"
+      ],
+      "timing_semantics": [
+        "Sequential on clk rising edge; synchronous reset clears sa, done, text_out"
+      ],
+      "touched_objects": [
+        "sa, text_out, done"
+      ],
+      "coupling_rules": [
+        "Uses state from B4 to determine update window",
+        "Uses next_state from B6",
+        "text_out loaded from sa upon entering DONE"
+      ],
+      "forbidden_drift": [
+        "Do not alter sa or output directly based on round counter alone; always route through state decisions"
+      ]
+    }
+  ],
+  "decision_ledger": {
+    "chosen_decisions": [
+      {
+        "topic": "Control style",
+        "decision": "Use explicit_fsm with five enumerated states as defined in the spec state diagram.",
+        "reason": "Spec provides explicit states and transitions; one‑round‑per‑cycle timing fits registered FSM."
+      }
+    ],
+    "deferred_decisions": [
+      "Exact encoding of FSM state (one‑hot vs binary) – not forced by spec.",
+      "Terminal value of dcnt that triggers FINAL_ROUND (e.g., 2 or 1) – spec says decrement until completion, needs clarification during generation.",
+      "DONE‑to‑IDLE return path (automatic or hold until ld) – not specified; will be resolved during local FSM generation.",
+      "Exact column‑major packing order for text_out mapping – spec says fill columns from MSB to LSB; detailed bit slicing left for implementation."
+    ],
+    "structural_risks": [
+      "The comb_round_transform block (B6) may become large if all four column transformations and ShiftRows are written inline, reducing clarity. Already partially mitigated by helper B5.",
+      "The state update block (B7) duplicates some combinational decisions (e.g., final round bypass) already present in B6; risk of inconsistency if not kept aligned."
+    ],
+    "behavioral_risks": [
+      "Reset polarity for `rst` is unspecified; code will assume active‑high to match global summary, but generation must verify with testbench expectations.",
+      "Timing of `kld` relative to `dcnt` decrement is critical; key expansion output must be ready before the round that consumes it. The skeleton relies on the FSM to assert kld early enough; a mis‑scheduling would cause round‑key mismatch.",
+      "DONE assertion timing (exact cycle) is not detailed; any downstream consumer relying on `done` must be aware it becomes true after the final round update, possibly in the same cycle as `text_out`."
+    ]
+  }
+}

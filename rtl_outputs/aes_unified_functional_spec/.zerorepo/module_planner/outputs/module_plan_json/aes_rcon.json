@@ -1,0 +1,57 @@
+{
+  "schema_version": "module_plan_v1",
+  "module": "aes_rcon",
+  "subtasks": [
+    {
+      "id": "B1_decl_regs_and_wires",
+      "target": "<block: decl_regs_and_wires>",
+      "description": "Declare the 4-bit rcnt register, 32-bit out register, and optional combinational wires next_rcnt (4-bit) and next_out (32-bit) for connecting B2 and B3.",
+      "spec_refs": [
+        "S003",
+        "S004",
+        "S014"
+      ],
+      "constraints": [
+        "rcnt must be declared as reg [3:0]",
+        "out must be declared as reg [31:0] matching the output port width"
+      ]
+    },
+    {
+      "id": "B2_comb_next_gen",
+      "target": "<block: comb_next_gen>",
+      "description": "Combinational logic to compute next_rcnt (counter increment/reset) and next_out (round constant or zero) based on kld and rcnt. Must implement the GF(2^8) multiplication sequence or equivalent lookup table to produce RC values in the MSByte.",
+      "spec_refs": [
+        "S003",
+        "S005",
+        "S006",
+        "S007",
+        "S008",
+        "S011",
+        "S012",
+        "S013",
+        "S014"
+      ],
+      "constraints": [
+        "next_out[23:0] must always be 0",
+        "next_rcnt must be 4 bits wide",
+        "GF(2^8) reduction polynomial is x^8+x^4+x^3+x+1"
+      ]
+    },
+    {
+      "id": "B3_seq_update",
+      "target": "<block: seq_update>",
+      "description": "Sequential always block that on posedge clk assigns next_rcnt to rcnt and next_out to out, implementing synchronous register update with load/reset via kld.",
+      "spec_refs": [
+        "S003",
+        "S004",
+        "S010",
+        "S012",
+        "S014"
+      ],
+      "constraints": [
+        "Update rcnt and out on the rising edge of clk only",
+        "Assign rcnt <= next_rcnt; out <= next_out;"
+      ]
+    }
+  ]
+}
