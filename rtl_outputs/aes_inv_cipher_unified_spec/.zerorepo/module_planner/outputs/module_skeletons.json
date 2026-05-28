@@ -5,56 +5,54 @@
     "modules": "module_contracts_v1",
     "repo_skeleton": "repo_skeleton_v1"
   },
-  "stage3_status": "module_skeletons_in_progress",
+  "stage3_status": "module_skeletons_planned",
   "top_module": "aes_inv_cipher_top",
   "module_order": [
-    "aes_rcon",
-    "aes_sbox",
     "aes_inv_sbox",
+    "aes_sbox",
+    "aes_rcon",
     "aes_key_expand_128",
     "aes_inv_cipher_top"
   ],
   "completed_modules": [
-    "aes_rcon",
+    "aes_inv_sbox",
     "aes_sbox",
-    "aes_inv_sbox"
+    "aes_rcon",
+    "aes_key_expand_128",
+    "aes_inv_cipher_top"
   ],
   "global_summary": [
-    "AES-128 Inverse Cipher decryption system with top-level round control and reusable key expansion/substitution helpers",
-    "primary clock: clk, reset: rst, top-level active-high reset; key expansion uses kld as synchronous load/reset signal",
-    "All modules operate on the primary clk domain",
-    "aes_key_expand_128 and aes_inv_cipher_top coordinate via kld and round counters",
-    "128-bit data paths are processed in column-major byte order across the state matrix",
-    "State matrix sa[0:3][0:3] is 4x4 bytes stored in column-major order",
-    "Round keys are stored in reverse order in kb[10:0] buffer",
-    "Top module instantiates key expansion once and inverse S-box 16 times in parallel",
-    "Key expansion outputs feed top-level key buffer kb[10:0]",
-    "Round counter dcnt drives state transitions and round key selection",
-    "generation order: aes_rcon, aes_sbox, aes_inv_sbox, aes_key_expand_128, aes_inv_cipher_top"
+    "AES-128 inverse cipher (decryption) with key expansion and iterative round transformations",
+    "primary clock: clk, reset: rst, Top-level active-high reset (rst). Key expansion and RCON are reset via kld signal.",
+    "All modules sharing a clock use the same clk domain",
+    "Key expansion output words (wo_0..wo_3) feed the top module's key buffer (kb)",
+    "Round constant from aes_rcon is used inside aes_key_expand_128",
+    "aes_inv_sbox instances are purely combinational, placed in top module",
+    "aes_sbox instances are purely combinational, used exclusively in key expansion",
+    "128-bit keys and data blocks",
+    "State matrix in column-major order",
+    "Reverse-order key schedule: kb[10] = initial round key, kb[0] = last round key",
+    "Round counter selects round key: kb[dcnt]",
+    "Load key into aes_key_expand_128 via kld, then buffer expanded keys in reverse order",
+    "Perform initial AddRoundKey on data load, then iterate 10 rounds",
+    "Final round skips InvMixColumns; result latched into text_out",
+    "generation order: aes_inv_sbox, aes_sbox, aes_rcon, aes_key_expand_128, aes_inv_cipher_top"
   ],
   "module_records": [
     {
-      "module": "aes_rcon",
-      "doc_file": "module_skeleton_docs/aes_rcon.md",
-      "export_file": "module_skeleton_json/aes_rcon.json",
+      "module": "aes_inv_sbox",
+      "doc_file": "module_skeleton_docs/aes_inv_sbox.md",
+      "export_file": "module_skeleton_json/aes_inv_sbox.json",
       "export_schema_version": "module_skeleton_export_v1",
       "source_refs": {
-        "module_contract_ref": "module_contracts_v1::aes_rcon",
-        "repo_skeleton_ref": "repo_skeleton_v1::aes_rcon",
-        "module_spec_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher/aes_rcon.md"
+        "module_contract_ref": "module_contracts_v1::aes_inv_sbox",
+        "repo_skeleton_ref": "repo_skeleton_v1::aes_inv_sbox",
+        "module_spec_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher/aes_inv_sbox.md"
       },
-      "planning_note": "Leaf stateful module that generates AES round constants via a 4-bit synchronous counter and registered 32-bit output. Structured around counter control, GF(2^8) derived lookup, and output registration.",
+      "planning_note": "Purely combinational lookup module. Organise around a constant 256×8 inverse S‑box table and a direct output assignment block.",
       "block_ids": [
         "B1",
-        "B2",
-        "B3",
-        "B4"
-      ],
-      "subtask_ids": [
-        "ST1",
-        "ST2",
-        "ST3",
-        "ST4"
+        "B2"
       ]
     },
     {
@@ -67,41 +65,78 @@
         "repo_skeleton_ref": "repo_skeleton_v1::aes_sbox",
         "module_spec_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher/aes_sbox.md"
       },
-      "planning_note": "Pure combinational leaf module implementing the AES forward S-box via a 256×8 lookup table. No clocks, resets, or state machines required.",
+      "planning_note": "Purely combinational leaf module; a 256×8 lookup table (ROM/LUT) provides the substitution. No clock, no reset, no registered objects.",
       "block_ids": [
         "B1",
         "B2"
-      ],
-      "subtask_ids": [
-        "ST1",
-        "ST2"
       ]
     },
     {
-      "module": "aes_inv_sbox",
-      "doc_file": "module_skeleton_docs/aes_inv_sbox.md",
-      "export_file": "module_skeleton_json/aes_inv_sbox.json",
+      "module": "aes_rcon",
+      "doc_file": "module_skeleton_docs/aes_rcon.md",
+      "export_file": "module_skeleton_json/aes_rcon.json",
       "export_schema_version": "module_skeleton_export_v1",
       "source_refs": {
-        "module_contract_ref": "module_contracts_v1::aes_inv_sbox",
-        "repo_skeleton_ref": "repo_skeleton_v1::aes_inv_sbox",
-        "module_spec_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher/aes_inv_sbox.md"
+        "module_contract_ref": "module_contracts_v1::aes_rcon",
+        "repo_skeleton_ref": "repo_skeleton_v1::aes_rcon",
+        "module_spec_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher/aes_rcon.md"
       },
-      "planning_note": "Pure combinational inverse S-box lookup module. Structure focuses on port/LUT declaration and immediate combinational mapping, aligned with spec Sec 4.3 and Sec 6 constraints.",
+      "planning_note": "The module is a leaf-level, counter-driven round constant generator with a 4-bit counter, a combinational constant lookup, and a registered 32-bit output. The skeleton focuses on declaration, combinational computation, and sequential update.",
       "block_ids": [
         "B1",
-        "B2"
-      ],
-      "subtask_ids": [
-        "ST1",
-        "ST2"
+        "B2",
+        "B3"
+      ]
+    },
+    {
+      "module": "aes_key_expand_128",
+      "doc_file": "module_skeleton_docs/aes_key_expand_128.md",
+      "export_file": "module_skeleton_json/aes_key_expand_128.json",
+      "export_schema_version": "module_skeleton_export_v1",
+      "source_refs": {
+        "module_contract_ref": "module_contracts_v1::aes_key_expand_128",
+        "repo_skeleton_ref": "repo_skeleton_v1::aes_key_expand_128",
+        "module_spec_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher/aes_key_expand_128.md"
+      },
+      "planning_note": "Organize the module into register declarations, submodule instances, combinational key expansion logic, synchronous state update, and output assignments.",
+      "block_ids": [
+        "B1",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6"
+      ]
+    },
+    {
+      "module": "aes_inv_cipher_top",
+      "doc_file": "module_skeleton_docs/aes_inv_cipher_top.md",
+      "export_file": "module_skeleton_json/aes_inv_cipher_top.json",
+      "export_schema_version": "module_skeleton_export_v1",
+      "source_refs": {
+        "module_contract_ref": "module_contracts_v1::aes_inv_cipher_top",
+        "repo_skeleton_ref": "repo_skeleton_v1::aes_inv_cipher_top",
+        "module_spec_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher/aes_inv_cipher_top.md"
+      },
+      "planning_note": "Organize the module around declared state, submodule instances, a combinational round transform network, and a sequential FSM with register updates.",
+      "block_ids": [
+        "B1",
+        "B2",
+        "B3",
+        "B4"
       ]
     }
   ],
   "open_issues": [
-    "aes_key_expand_128 relies on kld for reset behavior instead of a dedicated rst pin; verify if top-level rst should be propagated or if kld-only reset is sufficient",
-    "Mathematical GF(2^8) multiplication vs ROM lookup for aes_rcon is not fully specified; default to ROM or sequential generation based on area/timing constraints",
-    "Separate ROMs for aes_sbox and aes_inv_sbox may be merged or kept distinct; current plan keeps them separate for clarity"
+    "Reset polarity (synchronous vs asynchronous) not explicitly defined for top-level rst",
+    "Timing closure details for combinational invers S‑BOX and MixColumns paths not specified",
+    "No explicit stop condition for aes_key_expand_128 after 10 rounds; may run continuously",
+    "Potential clock gating or enable logic needed for low-power operation"
   ],
-  "quality_report": null
+  "quality_report": {
+    "hard_fail_count": 0,
+    "soft_warning_count": 0,
+    "warnings": [],
+    "auto_fixes": []
+  }
 }

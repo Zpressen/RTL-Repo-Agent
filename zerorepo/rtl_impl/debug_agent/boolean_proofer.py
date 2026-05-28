@@ -164,7 +164,7 @@ def _extract_ports(contract: dict[str, Any]) -> list[ContractPort]:
         if not isinstance(p, dict):
             continue
         name = p.get("name")
-        direction = p.get("dir")
+        direction = p.get("dir") or p.get("direction")
         width = _as_int(p.get("width", 1))
         if not isinstance(name, str) or not name.strip():
             continue

@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel
 
+from zerorepo.rtl_impl.retrieval_agent import BlockSpecRetriever, BlockSpecRetrievalResult
 from zerorepo.rtl_impl.module_planner.agents import (
     Stage1Agent,
     Stage2Agent,
@@ -889,6 +890,25 @@ def make_stage4_module_plan_payload(module_name: str, top_module: bool = False) 
     }
 
 
+def make_block_spec_retrieval_payload(module_name: str, top_module: bool = False) -> dict:
+    plan_payload = make_stage4_module_plan_payload(module_name, top_module=top_module)
+    return {
+        "schema_version": "block_spec_retrieval_v1",
+        "module": module_name,
+        "selections": [
+            {
+                "id": subtask["id"],
+                "target": subtask["target"],
+                "spec_refs": list(subtask["spec_refs"]),
+                "selection_reason": [f"Use S001 for {subtask['id']}."],
+            }
+            for subtask in plan_payload["subtasks"]
+        ],
+        "fallback_used": False,
+        "fallback_reason": "",
+    }
+
+
 def make_stage5_code_payload(task_id: str, module_name: str, subtask: dict, code: str | None = None) -> dict:
     return {
         "task_id": task_id,
@@ -911,6 +931,20 @@ def make_stage6_module_code(module_name: str) -> str:
             "endmodule",
         ]
     )
+
+
+def make_merge_context_retrieval_payload(module_name: str, spec_refs: list[str] | None = None) -> dict:
+    return {
+        "schema_version": "merge_context_retrieval_v1",
+        "module": module_name,
+        "selected_spec_refs": spec_refs or ["S001"],
+        "use_kg_child_context": False,
+        "kg_child_modules": [],
+        "kg_child_context_reason": "No child context needed for this test.",
+        "code_gap_notes": [],
+        "selection_reason": ["Use selected spec blocks for merge."],
+        "fallback_used": False,
+    }
 
 
 def test_build_module_organized_artifact_groups_contracts_by_module(tmp_path):
@@ -1454,6 +1488,150 @@ def test_planner_runner_supports_stage3_execution(tmp_path):
     assert (tmp_path / "outputs" / "module_skeleton_json" / "aes_cipher_top.json").exists()
 
 
+def make_toy_block_spec_inputs():
+    module_spec = {
+        "module": "toy",
+        "source_spec_file": "toy.md",
+        "blocks": [
+            {
+                "block_id": "S001",
+                "text": "**Interface**\n\n| Signal Name | Direction | Width |\n| --- | --- | --- |\n| a | input | 8 |\n| y | output | 8 |",
+            },
+            {"block_id": "S002", "text": "**Operation**\n\nOutput y is computed from input a."},
+        ],
+    }
+    skeleton_blocks = [
+        {
+            "block_id": "B1",
+            "block_label": "decl_ports",
+            "block_kind": "decl",
+            "target": "<block: decl_ports>",
+            "raw_text": "Declare module ports.",
+        },
+        {
+            "block_id": "B2",
+            "block_label": "comb_output",
+            "block_kind": "comb",
+            "target": "<block: comb_output>",
+            "raw_text": "Drive y from a.",
+        },
+    ]
+    return module_spec, skeleton_blocks
+
+
+def test_block_spec_retriever_returns_valid_selection():
+    module_spec, skeleton_blocks = make_toy_block_spec_inputs()
+    payload = {
+        "schema_version": "block_spec_retrieval_v1",
+        "module": "toy",
+        "selections": [
+            {
+                "id": "B1_decl_ports",
+                "target": "<block: decl_ports>",
+                "spec_refs": ["S001"],
+                "selection_reason": ["Interface block is needed for declarations."],
+            },
+            {
+                "id": "B2_comb_output",
+                "target": "<block: comb_output>",
+                "spec_refs": ["S002"],
+                "selection_reason": ["Operation block defines output behavior."],
+            },
+        ],
+        "fallback_used": False,
+        "fallback_reason": "",
+    }
+    backend = QueueBackend([payload])
+    retriever = BlockSpecRetriever(PlannerLLMClient(backend=backend))
+
+    result = retriever.select_block_spec_refs(
+        module_name="toy",
+        module_spec=module_spec,
+        module_skeleton="module toy; // <block: decl_ports> // <block: comb_output>",
+        skeleton_blocks=skeleton_blocks,
+    )
+
+    assert isinstance(result, BlockSpecRetrievalResult)
+    assert result.fallback_used is False
+    assert result.selections[0].spec_refs == ["S001"]
+    assert result.selections[1].spec_refs == ["S002"]
+
+
+def test_block_spec_retriever_falls_back_on_unknown_ref():
+    module_spec, skeleton_blocks = make_toy_block_spec_inputs()
+    payload = {
+        "schema_version": "block_spec_retrieval_v1",
+        "module": "toy",
+        "selections": [
+            {"id": "B1_decl_ports", "target": "<block: decl_ports>", "spec_refs": ["S999"]},
+            {"id": "B2_comb_output", "target": "<block: comb_output>", "spec_refs": ["S002"]},
+        ],
+        "fallback_used": False,
+        "fallback_reason": "",
+    }
+    retriever = BlockSpecRetriever(PlannerLLMClient(backend=QueueBackend([payload])))
+
+    result = retriever.select_block_spec_refs(
+        module_name="toy",
+        module_spec=module_spec,
+        module_skeleton="module toy;",
+        skeleton_blocks=skeleton_blocks,
+    )
+
+    assert result.fallback_used is True
+    assert [selection.spec_refs for selection in result.selections] == [["S001", "S002"], ["S001", "S002"]]
+
+
+def test_block_spec_retriever_falls_back_when_interface_missing():
+    module_spec, skeleton_blocks = make_toy_block_spec_inputs()
+    payload = {
+        "schema_version": "block_spec_retrieval_v1",
+        "module": "toy",
+        "selections": [
+            {"id": "B1_decl_ports", "target": "<block: decl_ports>", "spec_refs": ["S002"]},
+            {"id": "B2_comb_output", "target": "<block: comb_output>", "spec_refs": ["S002"]},
+        ],
+        "fallback_used": False,
+        "fallback_reason": "",
+    }
+    retriever = BlockSpecRetriever(PlannerLLMClient(backend=QueueBackend([payload])))
+
+    result = retriever.select_block_spec_refs(
+        module_name="toy",
+        module_spec=module_spec,
+        module_skeleton="module toy;",
+        skeleton_blocks=skeleton_blocks,
+    )
+
+    assert result.fallback_used is True
+    assert result.selections[0].spec_refs == ["S001", "S002"]
+
+
+def test_block_spec_retriever_falls_back_on_selection_order_mismatch():
+    module_spec, skeleton_blocks = make_toy_block_spec_inputs()
+    payload = {
+        "schema_version": "block_spec_retrieval_v1",
+        "module": "toy",
+        "selections": [
+            {"id": "B2_comb_output", "target": "<block: comb_output>", "spec_refs": ["S002"]},
+            {"id": "B1_decl_ports", "target": "<block: decl_ports>", "spec_refs": ["S001"]},
+        ],
+        "fallback_used": False,
+        "fallback_reason": "",
+    }
+    retriever = BlockSpecRetriever(PlannerLLMClient(backend=QueueBackend([payload])))
+
+    result = retriever.select_block_spec_refs(
+        module_name="toy",
+        module_spec=module_spec,
+        module_skeleton="module toy;",
+        skeleton_blocks=skeleton_blocks,
+    )
+
+    assert result.fallback_used is True
+    assert [selection.id for selection in result.selections] == ["B1_decl_ports", "B2_comb_output"]
+
+
 def test_planner_runner_supports_stage4_spec_block_splitting(tmp_path):
     task, md_path, image_paths = make_task_input(tmp_path, image_count=1)
     top_spec, key_spec = make_module_spec_files(tmp_path)
@@ -1483,7 +1661,9 @@ def test_planner_runner_supports_stage4_spec_block_splitting(tmp_path):
             make_repo_skeleton_payload(),
             make_stage3_module_skeleton_doc("aes_key_expand_128", key_spec),
             make_stage3_module_skeleton_doc("aes_cipher_top", top_spec),
+            make_block_spec_retrieval_payload("aes_key_expand_128"),
             make_stage4_module_plan_payload("aes_key_expand_128"),
+            make_block_spec_retrieval_payload("aes_cipher_top", top_module=True),
             make_stage4_module_plan_payload("aes_cipher_top", top_module=True),
         ]
     )
@@ -1499,16 +1679,20 @@ def test_planner_runner_supports_stage4_spec_block_splitting(tmp_path):
     spec_blocks_target = output_root / "spec_blocks.json"
     module_plans_target = output_root / "module_plans.json"
     key_plan_target = output_root / "module_plan_json" / "aes_key_expand_128.json"
+    key_retrieval_target = output_root / "block_spec_retrieval_json" / "aes_key_expand_128.json"
     assert spec_blocks_target.exists()
     assert module_plans_target.exists()
     assert key_plan_target.exists()
+    assert key_retrieval_target.exists()
     spec_payload = json.loads(spec_blocks_target.read_text(encoding="utf-8"))
     plan_payload = json.loads(key_plan_target.read_text(encoding="utf-8"))
+    retrieval_payload = json.loads(key_retrieval_target.read_text(encoding="utf-8"))
     assert spec_payload["modules"][0]["blocks"][1]["block_id"] == "S002"
     assert plan_payload["subtasks"][0]["target"] == "<block: decl_state_and_keys>"
+    assert retrieval_payload["schema_version"] == "block_spec_retrieval_v1"
     assert "MODULE_SKELETON_DOC v1" in backend.calls[9]["user_prompt"]
     assert "KEYEXP UNIQUE SPEC MARKER" in backend.calls[9]["user_prompt"]
-    assert len(backend.calls) == 11
+    assert len(backend.calls) == 13
 
 
 def test_stage4_module_plan_requires_interface_refs_for_first_decl_block(tmp_path):
@@ -1634,6 +1818,26 @@ def test_stage4_module_plan_requires_interface_refs_for_first_decl_block(tmp_pat
             },
         ],
     }
+    retrieval_payload = {
+        "schema_version": "block_spec_retrieval_v1",
+        "module": "toy",
+        "selections": [
+            {
+                "id": "B1_decl_table",
+                "target": "<block: decl_table>",
+                "spec_refs": ["S001", "S002"],
+                "selection_reason": ["Declaration needs interface and table behavior."],
+            },
+            {
+                "id": "B2_comb_output",
+                "target": "<block: comb_output>",
+                "spec_refs": ["S002"],
+                "selection_reason": ["Operation block defines output behavior."],
+            },
+        ],
+        "fallback_used": False,
+        "fallback_reason": "",
+    }
     fixed_plan = {
         "schema_version": "module_plan_v1",
         "module": "toy",
@@ -1654,14 +1858,15 @@ def test_stage4_module_plan_requires_interface_refs_for_first_decl_block(tmp_pat
             },
         ],
     }
-    backend = QueueBackend([bad_plan, fixed_plan])
+    backend = QueueBackend([retrieval_payload, bad_plan, fixed_plan])
     agent = Stage4ModulePlanAgent(PlannerLLMClient(backend=backend), output_root=output_root)
 
     artifact = agent.run_incremental(task, {"stage3": stage3, "spec_blocks": spec_blocks})
 
     assert isinstance(artifact, Stage4ModulePlansArtifact)
-    assert len(backend.calls) == 2
-    assert "first declaration subtask must include interface spec_refs" in backend.calls[1]["user_prompt"]
+    assert len(backend.calls) == 3
+    assert '"spec_refs": [\n        "S001",\n        "S002"\n      ]' in backend.calls[1]["user_prompt"]
+    assert "spec_refs must exactly match block retrieval output ['S001', 'S002']" in backend.calls[2]["user_prompt"]
 
 
 def test_stage5_agent_uses_spec_blocks_module_order_and_selected_refs(tmp_path):
@@ -2103,7 +2308,12 @@ def test_stage6_merge_agent_writes_raw_merged_module_and_prompt_context(tmp_path
             }
         ],
     }
-    backend = QueueBackend([f"```verilog\n{make_stage6_module_code('mod_a')}\n```"])
+    backend = QueueBackend(
+        [
+            make_merge_context_retrieval_payload("mod_a", ["S001", "S002"]),
+            f"```verilog\n{make_stage6_module_code('mod_a')}\n```",
+        ]
+    )
     agent = Stage6MergeAgent(PlannerLLMClient(backend=backend), output_root=output_root)
 
     record = agent.run_module(
@@ -2116,7 +2326,7 @@ def test_stage6_merge_agent_writes_raw_merged_module_and_prompt_context(tmp_path
     assert record.merged_file.endswith("workspace/merged/mod_a.v")
     assert Path(record.merged_file).read_text(encoding="utf-8") == make_stage6_module_code("mod_a") + "\n"
     assert "```" not in Path(record.merged_file).read_text(encoding="utf-8")
-    prompt = backend.calls[0]["user_prompt"]
+    prompt = backend.calls[1]["user_prompt"]
     assert "MODULE_SPEC_MARKER" in prompt
     assert "MORE_SPEC_MARKER" in prompt
     assert "SKELETON_POSITION_MARKER" in prompt
@@ -2144,6 +2354,7 @@ def test_stage6_merge_agent_retries_invalid_raw_verilog(tmp_path):
     }
     backend = QueueBackend(
         [
+            make_merge_context_retrieval_payload("mod_a"),
             "```verilog\nmodule wrong_name(input a, output y);\n// TODO\n// STAGE5_SUBTASK_BEGIN B1\n",
             make_stage6_module_code("mod_a"),
         ]
@@ -2157,8 +2368,8 @@ def test_stage6_merge_agent_retries_invalid_raw_verilog(tmp_path):
         {"module": "mod_a", "workspace_file": str(fragment_file), "completed_subtasks": ["B1_logic"]},
     )
 
-    assert len(backend.calls) == 2
-    assert "previous output was invalid" in backend.calls[1]["user_prompt"]
+    assert len(backend.calls) == 3
+    assert "previous output was invalid" in backend.calls[2]["user_prompt"]
     assert "module mod_a" in Path(record.merged_file).read_text(encoding="utf-8")
 
 
@@ -2200,7 +2411,9 @@ def test_planner_runner_supports_stage5_subtask_codegen_workspace(tmp_path):
             make_repo_skeleton_payload(),
             make_stage3_module_skeleton_doc("aes_key_expand_128", key_spec),
             make_stage3_module_skeleton_doc("aes_cipher_top", top_spec),
+            make_block_spec_retrieval_payload("aes_key_expand_128"),
             key_plan,
+            make_block_spec_retrieval_payload("aes_cipher_top", top_module=True),
             top_plan,
             *stage5_responses,
         ]
@@ -2261,11 +2474,15 @@ def test_planner_runner_supports_stage6_per_module_merge(tmp_path):
             make_repo_skeleton_payload(),
             make_stage3_module_skeleton_doc("aes_key_expand_128", key_spec),
             make_stage3_module_skeleton_doc("aes_cipher_top", top_spec),
+            make_block_spec_retrieval_payload("aes_key_expand_128"),
             key_plan,
+            make_block_spec_retrieval_payload("aes_cipher_top", top_module=True),
             top_plan,
             *key_stage5_responses,
+            make_merge_context_retrieval_payload("aes_key_expand_128"),
             make_stage6_module_code("aes_key_expand_128"),
             *top_stage5_responses,
+            make_merge_context_retrieval_payload("aes_cipher_top"),
             make_stage6_module_code("aes_cipher_top"),
         ]
     )

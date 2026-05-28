@@ -1,0 +1,31 @@
+{
+  "schema_version": "merge_context_retrieval_v1",
+  "module": "aes_rcon",
+  "selected_spec_refs": [
+    "S003",
+    "S004",
+    "S011",
+    "S012",
+    "S013",
+    "S014"
+  ],
+  "use_kg_child_context": false,
+  "kg_child_modules": [],
+  "kg_child_context_reason": "Module aes_rcon is a leaf module with no child instances, so child context is unnecessary.",
+  "code_gap_notes": [
+    "Port declarations are missing; fragment uses clk, kld, out but module header is a placeholder. S003 defines port names, widths, and directions.",
+    "The fragments contain mismatched signal names: B2 uses 'next_out' (32-bit) but B3 references 'next_rc_byte' (8-bit). S014 and S011 clarify output format (MSB changes, lower 24 bits zero) to reconcile the combinational logic.",
+    "Reset behavior is ambiguous: fragments use only clock edge with no explicit reset. S004 and S012 specify that counter resets when kld=1, and output is set accordingly.",
+    "Corner cases for kld=1 and rcnt>9 are described in S012 and S013 but are only partially implemented in B2; verification of exact behavior needed.",
+    "The RC_TABLE parameter in B1 concatenates constants; S011 provides the expected output sequence to validate the table ordering and format."
+  ],
+  "selection_reason": [
+    "S003 defines the module interface: ports clk (input), kld (input), out (output [31:0]), which are mandatory to build the final module header.",
+    "S004 describes the rcnt register: 4-bit width, increments on clock edge, resets to 0 when kld is asserted. This guides the correct sequential update logic.",
+    "S011 defines the round constant sequence as 32-bit values, showing MSB round constant and lower 24 bits zero, which is essential to verify the output format and resolve the next_rc_byte vs next_out mismatch.",
+    "S012 specifies the key load corner case: when kld=1, output must be 0x01000000 and counter resets, ensuring the combinational logic and register update correctly handle kld.",
+    "S013 specifies the maximum count corner case: when rcnt>9, output should be 0x00000000, needed to implement the overflow condition correctly.",
+    "S014 provides constraints: rcnt is 4 bits, output format (MSB changes, lower 24 bits always zero), and output is registered, which confirm the design of the output register and combinational logic."
+  ],
+  "fallback_used": false
+}

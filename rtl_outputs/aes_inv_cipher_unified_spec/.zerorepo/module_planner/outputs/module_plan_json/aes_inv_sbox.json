@@ -1,0 +1,31 @@
+{
+  "schema_version": "module_plan_v1",
+  "module": "aes_inv_sbox",
+  "subtasks": [
+    {
+      "id": "B1_decl_inv_sbox_table",
+      "target": "<block: decl_inv_sbox_table>",
+      "description": "Declare a constant 256-entry inverse S-box lookup table (ROM) with the complete standard AES inverse S-box values, where each entry is 8-bit wide and address corresponds to the input byte.",
+      "spec_refs": [
+        "S003",
+        "S006"
+      ],
+      "constraints": [
+        "All 256 entries must exactly match the standard AES inverse S-box mapping values."
+      ]
+    },
+    {
+      "id": "B2_comb_output_assignment",
+      "target": "<block: comb_output_assignment>",
+      "description": "Implement a purely combinational continuous assignment that drives output b with the table entry inv_sbox_table[a].",
+      "spec_refs": [
+        "S003",
+        "S010"
+      ],
+      "constraints": [
+        "Must be purely combinational; no clock, reset, or sequential elements.",
+        "Output b must update combinatorially after any change on input a."
+      ]
+    }
+  ]
+}

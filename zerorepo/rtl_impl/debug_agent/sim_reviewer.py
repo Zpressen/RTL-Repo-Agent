@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import glob
 import os
 import re
 import shutil
@@ -25,7 +26,14 @@ def _verilator_has_fatal(stdout: str, stderr: str) -> bool:
 
 def check_syntax(rtl_path: str) -> Tuple[bool, str]:
     _require_executable("verilator")
-    cmd = f"verilator --lint-only --sv --timing -Wall -Wno-fatal --assert {rtl_path}"
+    rtl_dir = os.path.dirname(os.path.abspath(rtl_path))
+    # Collect all .sv and .v files in the directory so Verilator can resolve
+    # sub-module instantiations (e.g. from support.sv in debug workdirs).
+    src_files = sorted(glob.glob(os.path.join(rtl_dir, "*.sv")) + glob.glob(os.path.join(rtl_dir, "*.v")))
+    if not src_files:
+        src_files = [rtl_path]
+    srcs = " ".join(src_files)
+    cmd = f"verilator --lint-only --sv --timing -Wall -Wno-fatal --assert {srcs}"
     is_pass, sim_output = run_bash_command(cmd, timeout=60)
     sim_output_obj = CommandResult.model_validate_json(sim_output)
     stdout = sim_output_obj.stdout or ""
@@ -95,7 +103,7 @@ def sim_review(
     cmd = (
         "verilator -cc --exe --binary --sv --timing --trace --assert --coverage-line -fno-table "
         f"{realbench_warning_flags} -j 4 -fno-table --top tb -Wall -Wno-fatal "
-        f"--Mdir obj_dir -o {sim_bin} {srcs}; "
+        f"-y {output_path_per_run} --Mdir obj_dir -o {sim_bin} {srcs}; "
         f"{sim_bin}"
     )
     cmd_ok, sim_output = run_bash_command(cmd, timeout=120, cwd=output_path_per_run)

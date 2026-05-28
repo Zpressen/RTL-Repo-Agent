@@ -60,7 +60,7 @@ def _extract_ports(contract: dict[str, Any]) -> list[ContractPort]:
         if not isinstance(p, dict):
             continue
         name = p.get("name")
-        direction = p.get("dir")
+        direction = p.get("dir") or p.get("direction")
         width = _as_int(p.get("width", 1))
         if not isinstance(name, str) or not name.strip():
             continue
@@ -513,7 +513,7 @@ class Asserter:
         sim_bin = str((proof_root / "sim_output.bin").resolve())
         cmd = (
             "verilator --binary -j 0 --sv --timing --trace --assert -Wall -Wno-fatal "
-            f"--Mdir obj_dir -o {sim_bin} tb.sv rtl.sv asserter.sv{golden_sv_arg} && "
+            f"-y .. --Mdir obj_dir -o {sim_bin} tb.sv rtl.sv asserter.sv{golden_sv_arg} && "
             f"{sim_bin}"
         )
         cmd_ok, out_json = await asyncio.to_thread(

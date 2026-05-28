@@ -63,10 +63,12 @@ def build_debug_contract_json(
 
     ports = []
     for port in _get(interface, "ports", []) or []:
+        direction = _get(port, "direction", "") or _get(port, "dir", "")
         ports.append(
             {
                 "name": _get(port, "name", ""),
-                "direction": _get(port, "direction", ""),
+                "dir": direction,
+                "direction": direction,
                 "width": _get(port, "width", ""),
                 "role": _get(port, "role", ""),
                 "active": _get(port, "active", ""),
@@ -74,16 +76,20 @@ def build_debug_contract_json(
             }
         )
 
+    raw_timing = _to_plain(timing)
+    normalized_clocking = _normalize_clocking(interface=interface, timing=timing)
+    normalized_timing = _normalize_output_timing(
+        ports=ports,
+        timing=raw_timing,
+        is_sequential=bool(normalized_clocking["is_sequential"]),
+    )
+
     payload = {
         "module_name": module_name,
         "io": ports,
-        "clocking": {
-            "clock": _get(interface, "clock", ""),
-            "reset": _get(interface, "reset", ""),
-            "reset_polarity": _get(interface, "reset_polarity", ""),
-            "timing_contract": _to_plain(timing),
-        },
-        "timing": _to_plain(timing),
+        "clocking": {**normalized_clocking, "timing_contract": raw_timing},
+        "timing": normalized_timing,
+        "raw_timing_contract": raw_timing,
         "control": _to_plain(control),
         "datapath": _to_plain(datapath),
         "planning_facts": _to_plain(planning),
@@ -115,6 +121,89 @@ def _to_plain(obj: Any) -> Any:
     if hasattr(obj, "dict"):
         return obj.dict()
     return obj
+
+
+def _normalize_clocking(*, interface: Any, timing: Any) -> dict[str, Any]:
+    raw_clocking = _get(timing, "clocking", {}) or {}
+    clock_name = _get(raw_clocking, "clock", "") or _get(interface, "clock", "") or None
+    registered_objects = _get(timing, "registered_objects", []) or []
+    has_clock = isinstance(clock_name, str) and clock_name.strip().lower() not in {"", "none"}
+    is_sequential = bool(has_clock and registered_objects)
+
+    reset_behavior = _get(timing, "reset_behavior", {}) or {}
+    reset_name = _get(reset_behavior, "signal", "") or _get(interface, "reset", "") or None
+    reset_active = _normalize_active(_get(reset_behavior, "active", ""))
+    if reset_active is None:
+        reset_active = _normalize_active(_get(interface, "reset_polarity", ""))
+
+    reset_type = _get(reset_behavior, "type", "") or _get(reset_behavior, "reset_type", "")
+    reset_type_norm = str(reset_type).strip().lower() if reset_type is not None else ""
+    if reset_type_norm not in {"synchronous", "asynchronous"}:
+        reset_type_norm = None
+
+    return {
+        "is_sequential": is_sequential,
+        "clock": {
+            "name": clock_name,
+            "edge": _normalize_edge(_get(raw_clocking, "update_edge", "")),
+        },
+        "reset": {
+            "name": reset_name,
+            "active": reset_active,
+            "type": reset_type_norm,
+        },
+    }
+
+
+def _normalize_output_timing(
+    *, ports: list[dict[str, Any]], timing: Any, is_sequential: bool
+) -> dict[str, dict[str, Any]]:
+    raw_timing = timing if isinstance(timing, dict) else {}
+    registered = raw_timing.get("registered_objects") or []
+    registered_by_name = {
+        str(item.get("name")).strip(): item
+        for item in registered
+        if isinstance(item, dict) and str(item.get("name") or "").strip()
+    }
+    clock_value = str((raw_timing.get("clocking") or {}).get("clock", "")).strip().lower()
+    explicitly_combinational = not is_sequential and clock_value == "none"
+
+    out: dict[str, dict[str, Any]] = {}
+    for port in ports:
+        if port.get("dir") != "output":
+            continue
+        name = str(port.get("name") or "").strip()
+        if not name:
+            continue
+        latency = None
+        direct = raw_timing.get(name)
+        registered_item = registered_by_name.get(name)
+        if isinstance(direct, dict) and "latency_cycles" in direct:
+            latency = direct.get("latency_cycles")
+        elif isinstance(registered_item, dict) and "latency_cycles" in registered_item:
+            latency = registered_item.get("latency_cycles")
+        elif explicitly_combinational:
+            latency = 0
+        out[name] = {"latency_cycles": latency}
+    return out
+
+
+def _normalize_edge(value: Any) -> str | None:
+    text = str(value or "").lower()
+    if "rising" in text or "posedge" in text:
+        return "posedge"
+    if "falling" in text or "negedge" in text:
+        return "negedge"
+    return None
+
+
+def _normalize_active(value: Any) -> str | None:
+    text = str(value or "").strip().lower().replace("_", "-")
+    if text in {"high", "active-high", "active high"}:
+        return "high"
+    if text in {"low", "active-low", "active low"}:
+        return "low"
+    return None
 
 
 def _summarize_spec(spec_text: str) -> list[str]:

@@ -1,0 +1,22 @@
+{
+  "schema_version": "merge_context_retrieval_v1",
+  "module": "aes_sbox",
+  "selected_spec_refs": [
+    "S003",
+    "S007",
+    "S008"
+  ],
+  "use_kg_child_context": false,
+  "kg_child_modules": [],
+  "kg_child_context_reason": "Module is a leaf with no children; no submodule instantiation or interface wiring is required. The generated fragment is self-contained.",
+  "code_gap_notes": [
+    "Fragment provides complete 256-entry S-box LUT and a combinational assign. No missing logic elements. The merge agent should verify that the lookup table matches standard AES S-box values, especially corner cases (0x00→0x63, 0xFF→0x16) as per S007.",
+    "The module is purely combinational, consistent with no clock or reset connections. No additional behavioral constraints beyond the LUT are needed."
+  ],
+  "selection_reason": [
+    "S003: Defines the module interface (8-bit input a, 8-bit output b), which is necessary to confirm port widths and directions during merge.",
+    "S007: Specifies the required S-box outputs for corner case inputs (0x00→0x63, 0xFF→0x16), ensuring that the generated lookup table is correct.",
+    "S008: States that the implementation is combinational with no clock, which governs the merging of the fragment into the skeleton without adding sequential logic."
+  ],
+  "fallback_used": false
+}

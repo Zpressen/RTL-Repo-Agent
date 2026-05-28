@@ -19,6 +19,13 @@ from agentscope.model import ChatModelBase, OpenAIChatModel
 from .config import OpenAIConfig
 
 
+def _tool_result_text(formatter: TruncatedFormatterBase, output: Any) -> str:
+    converted = formatter.convert_tool_result_to_string(output)  # type: ignore[arg-type]
+    if isinstance(converted, tuple):
+        return str(converted[0])
+    return str(converted)
+
+
 class Llama4ChatFormatter(TruncatedFormatterBase):
     """Formatter for Llama-4 models that converts tool results to user messages.
     
@@ -76,12 +83,10 @@ class Llama4ChatFormatter(TruncatedFormatterBase):
                     )
 
                 elif typ == "tool_result":
+                    tool_output = _tool_result_text(self, block.get("output"))
                     # Collect tool results to convert to user message format
                     tool_name = block.get("name", "tool")
                     tool_id = block.get("id", "")
-                    tool_output = self.convert_tool_result_to_string(
-                        block.get("output"),  # type: ignore[arg-type]
-                    )
                     tool_results.append({
                         "name": tool_name,
                         "id": tool_id,
@@ -198,13 +203,12 @@ class DeepSeekReasoningChatFormatter(TruncatedFormatterBase):
                     )
 
                 elif typ == "tool_result":
+                    tool_output = _tool_result_text(self, block.get("output"))
                     messages.append(
                         {
                             "role": "tool",
                             "tool_call_id": block.get("id"),
-                            "content": self.convert_tool_result_to_string(
-                                block.get("output"),  # type: ignore[arg-type]
-                            ),
+                            "content": tool_output,
                             "name": block.get("name"),
                         },
                     )

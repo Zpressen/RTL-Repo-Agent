@@ -1,0 +1,13 @@
+{
+  "schema_version": "merge_child_context_v1",
+  "module": "aes_key_expand_128",
+  "kg_enabled": true,
+  "retrieval_requested": false,
+  "retrieval_reason": "Fragments already instantiate child modules (aes_rcon, four aes_sbox) with explicit port mappings that match the child interfaces defined in S012 and S014. No additional child RTL context is needed for assembly.",
+  "available_child_modules": [
+    "aes_rcon",
+    "aes_sbox"
+  ],
+  "requested_child_modules": [],
+  "children": []
+}

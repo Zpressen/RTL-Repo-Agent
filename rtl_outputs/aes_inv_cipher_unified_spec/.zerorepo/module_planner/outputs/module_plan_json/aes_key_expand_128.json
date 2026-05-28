@@ -1,0 +1,80 @@
+{
+  "schema_version": "module_plan_v1",
+  "module": "aes_key_expand_128",
+  "subtasks": [
+    {
+      "id": "B1_decl_regs_wires",
+      "target": "<block: decl_regs_wires>",
+      "description": "Declare the four 32-bit round key registers (rk0, rk1, rk2, rk3) and all intermediate wires: rot_word, sbox_byte0..3, rcon_out, T_word, rk0_next..rk3_next.",
+      "spec_refs": [
+        "S003",
+        "S016"
+      ],
+      "constraints": [
+        "Interface signals must exactly match the port list in S003.",
+        "Declare exactly four 32-bit registers (rk0..rk3) and the required intermediate wires as per S016."
+      ]
+    },
+    {
+      "id": "B2_inst_submodules",
+      "target": "<block: inst_submodules>",
+      "description": "Instantiate one aes_rcon and four aes_sbox submodules, connecting their ports to the declared wires according to the interfaces specified in S012 and S014.",
+      "spec_refs": [
+        "S012",
+        "S014"
+      ],
+      "constraints": [
+        "Use exact port mappings as defined in aes_rcon interface (S012) and aes_sbox interface (S014); do not add extra instances."
+      ]
+    },
+    {
+      "id": "B3_comb_rotword_subword_rcon",
+      "target": "<block: comb_rotword_subword_rcon>",
+      "description": "Compute rot_word as a one-byte left-rotate of rk3, assemble sub_word from the four sbox_byte outputs, and XOR with rcon_out to produce T_word.",
+      "spec_refs": [
+        "S005",
+        "S009"
+      ],
+      "constraints": [
+        "RotWord: rot_word = {rk3[23:0], rk3[31:24]} exactly per S005.",
+        "SubWord byte ordering must be {sbox_byte0, sbox_byte1, sbox_byte2, sbox_byte3} as specified in S009."
+      ]
+    },
+    {
+      "id": "B4_comb_key_next",
+      "target": "<block: comb_key_next>",
+      "description": "Compute next round key words using the AES expansion recurrence: rk0_next = rk0 ^ T_word; rk1_next = rk1 ^ rk0_next; rk2_next = rk2 ^ rk1_next; rk3_next = rk3 ^ rk2_next.",
+      "spec_refs": [
+        "S005"
+      ],
+      "constraints": [
+        "The recurrence must exactly follow the algorithm in S005: rk0_next = rk0 ^ T_word; rk1_next = rk1 ^ rk0_next; rk2_next = rk2 ^ rk1_next; rk3_next = rk3 ^ rk2_next."
+      ]
+    },
+    {
+      "id": "B5_seq_reg_update",
+      "target": "<block: seq_reg_update>",
+      "description": "On rising clock edge, load rk0..rk3 with the input key when kld=1 (per key loading in S007), or update with computed next-key words when kld=0 (per expansion operation in S008).",
+      "spec_refs": [
+        "S007",
+        "S008"
+      ],
+      "constraints": [
+        "Synchronous update only; no asynchronous reset.",
+        "Key loading must divide input key as key[127:96]→rk0, key[95:64]→rk1, key[63:32]→rk2, key[31:0]→rk3 exactly as in S007.",
+        "Expansion update must occur on the cycle immediately following kld deassertion."
+      ]
+    },
+    {
+      "id": "B6_output_assign",
+      "target": "<block: output_assign>",
+      "description": "Assign the output ports wo_0, wo_1, wo_2, wo_3 directly from the current register values rk0, rk1, rk2, rk3 respectively.",
+      "spec_refs": [
+        "S003"
+      ],
+      "constraints": [
+        "Outputs must continuously reflect the current rk registers as per interface S003."
+      ]
+    }
+  ]
+}

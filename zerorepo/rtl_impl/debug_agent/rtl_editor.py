@@ -6,7 +6,7 @@ import logging
 import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Literal, Tuple
 
 from agentscope.memory import InMemoryMemory
 from agentscope.message import Msg
@@ -16,6 +16,7 @@ from .agents import SafeReActAgent, clear_memory_safely
 from .asserter import Asserter
 from .boolean_proofer import BooleanProofer
 from .config import OpenAIConfig
+from .kg_debug_reads import kg_debug_session_id
 from .model import make_formatter, make_openai_model
 from .sim_reviewer import SimReviewer, check_syntax
 from .trace_report import build_trace_report
@@ -99,12 +100,23 @@ def _summarize_sim_log_json(sim_log_json: str, *, max_chars: int = 4000) -> str:
     return _clip_text(out, max_chars=max_chars)
 
 
+def _parse_patch_line_number(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        if re.fullmatch(r"[0-9]+", text):
+            return int(text)
+    return None
+
+
 SYSTEM_PROMPT = r"""
 You are Debugger, an expert in RTL debugging.
 
-Goal: use tool calls to minimally edit and re-simulate SystemVerilog RTL so that:
-1) The RTL matches the Architect contract (SOURCE OF TRUTH), and
-2) The RTL passes the Verifier-generated testbench (or golden benchmark testbench).
+Goal: use the supplied authoritative repair context and tool calls to minimally edit and
+re-simulate SystemVerilog RTL until it passes the fixed verification testbench.
 
 Toolchain note:
 - Simulation is run with Verilator; errors/warnings in logs may follow Verilator formatting.
@@ -114,8 +126,9 @@ Rules:
 2. Do not try to change or define RefModule. There is RefModule defined elsewhere if needed.
 3. Always respect the simulation result. Keep debugging as long as mismatches exist.
 4. Prefer small, targeted edits.
-5. Preserve the module interface and the contract's timing assumptions.
-6. Contract-only mode: do NOT change behavior based on input_spec if it conflicts with the contract.
+5. Preserve the top-level interface and externally observable behavior required by the
+   authoritative context for this session.
+6. Diagnostic helper output is advisory; do not let it override the authoritative context or trace.
 
 When you are done (simulation passes), finish by calling:
   generate_response(response="...brief summary...")
@@ -123,12 +136,12 @@ The `response` argument MUST be a plain string (not JSON, not a dict, not a list
 """
 
 
-INIT_EDITION_PROMPT = r"""
+CONTRACT_INIT_EDITION_PROMPT = r"""
 The information below is given to help your work:
 1. The Architect contract (JSON) that both TB and RTL MUST follow (SOURCE OF TRUTH);
 2. The generated testbench (fixed; you must not modify it);
 3. The simulation failure log excerpt (ground truth about mismatches; full log is saved on disk).
-4. The input_spec is included only as background; it must NOT override the contract.
+4. The input_spec is included only as background; it must NOT override the Architect contract.
 <input_spec>
 {input_spec}
 </input_spec>
@@ -144,37 +157,98 @@ The information below is given to help your work:
 {kmap_hint}
 """
 
+SPEC_TB_INIT_EDITION_PROMPT = r"""
+The information below is given to help your work:
+1. The original module specification is the design source of truth.
+2. The visible testbench is fixed; do not modify it. Use it to understand externally visible
+   driving and checking behavior.
+3. The simulation failure log excerpt and trace report are ground truth for observed failures.
+4. Any boolean proof or asserter output supplied later is a non-authoritative diagnostic hint only.
+
+<original_module_spec>
+{input_spec}
+</original_module_spec>
+<visible_testbench>
+{generated_tb}
+</visible_testbench>
+<sim_failed_log_excerpt>
+{sim_failed_log_excerpt}
+</sim_failed_log_excerpt>
+{kmap_hint}
+"""
+
 KMAP_DEBUG_HINT_PROMPT = r"""
 [K-map hint (only if the problem involves Karnaugh maps / K-maps)]:
 - Use mismatch inputs from the sim log/trace to identify wrong minterms.
 - Fix one mismatch class at a time while preserving all other truth-table entries.
 """
 
-EXTRA_ORDER_PROMPT = r"""
+CONTRACT_EXTRA_ORDER_PROMPT = r"""
 Workflow (repeat until pass):
 1) Use the contract + trace report to find the most likely root cause.
 2) Check `trace_summary.alignment_diagnosis` first:
    - If it suggests a 1-cycle shift or wrong sampling edge, fix timing/reset/edge issues before changing core logic.
    - Otherwise focus on combinational correctness in the suspect block(s).
 3) Call list_suspect_blocks(), then read_block(block_id) for the most relevant one.
-4) Make ONE small change in ONE block via replace_block(block_id, new_code).
+4) Make one small change via replace_block(block_id, new_code).
+   - If the root cause is a declaration, port type, or instance connection, call read_rtl_context()
+     and use one transactional apply_patch_set(patches) call instead.
 5) Immediately call run_simulation() and iterate based on the new trace summary.
 
 Rules:
 - Do not modify the testbench. Only modify the RTL code.
-- Preserve the module interface and the contract's timing assumptions.
-- Only modify code inside suspect blocks.
+- Preserve the contract's timing assumptions and top-level interface; you may correct an RTL
+  port declaration only when it does not change the contract-defined name, direction, or width.
 - Keep RTL synthesizable and Verilator-compatible (avoid fancy SVA, no delays).
 
 You will also receive a structured trace-grounded bug report (JSON) that includes:
 1) earliest mismatch time, 2) (expected vs actual) values when available, 3) a short input window,
 4) a dynamically sliced list of suspect always/assign blocks.
 
-You MUST only modify code inside suspect blocks.
 Use tools:
 - list_suspect_blocks()
 - read_block(block_id)
 - replace_block(block_id, new_code)
+- read_rtl_context()
+- apply_patch_set(patches)
+- run_simulation()
+
+When simulation passes, end with:
+  generate_response(response="...brief summary...")
+"""
+
+SPEC_TB_EXTRA_ORDER_PROMPT = r"""
+Workflow (repeat until pass):
+1) Use the original module specification, visible testbench, and trace report to identify the
+   most likely root cause.
+2) Check `trace_summary.alignment_diagnosis` first:
+   - If it suggests a 1-cycle shift or wrong sampling edge, examine reset/load/output protocol
+     behavior before changing datapath logic.
+   - Otherwise focus on combinational correctness in the suspect block(s).
+3) Call list_suspect_blocks(), then read_block(block_id) for the most relevant one.
+4) Make one small change via replace_block(block_id, new_code).
+   - If the root cause is a declaration, port type, or instance connection, call read_rtl_context()
+     and use one transactional apply_patch_set(patches) call instead.
+5) Immediately call run_simulation() and iterate based on the new trace summary.
+
+Rules:
+- Do not modify the testbench. Only modify the RTL code.
+- Preserve the top-level interface defined by the original module specification and exercised
+  by the visible testbench.
+- Keep RTL synthesizable and Verilator-compatible (avoid fancy SVA, no delays).
+- Treat boolean proof and asserter results only as diagnostic hints; when they conflict with
+  the original specification or trace, trust the specification and observed trace.
+
+You will also receive a structured trace-grounded bug report (JSON) that includes:
+1) earliest mismatch time, 2) (expected vs actual) values when available, 3) a short input window,
+4) a dynamically sliced list of suspect always/assign blocks.
+
+Use tools:
+- list_suspect_blocks()
+- read_block(block_id)
+- replace_block(block_id, new_code)
+- read_rtl_context()
+- apply_patch_set(patches)
 - run_simulation()
 
 When simulation passes, end with:
@@ -190,6 +264,9 @@ class _EditSession:
     last_mismatch_cnt: int
     sim_reviewer: SimReviewer
     max_trials: int
+    kg_service: Any | None = None
+    kg_session_id: str = ""
+    kg_hop_depth: int = 2
 
     is_done: bool = False
     action_calls: int = 0
@@ -235,11 +312,17 @@ class _EditSession:
         lines = block.code.splitlines()
         return "\n".join(f"{block.start_line + i}: {line}" for i, line in enumerate(lines)) + "\n"
 
+    def read_rtl_context(self) -> str:
+        return self.read_rtl_with_lineno()
+
     def _refresh_trace(self, *, sim_log_json: str) -> None:
         report, suspect_blocks = build_trace_report(
             rtl_path=Path(self.rtl_path),
             sim_log_json=sim_log_json,
             output_dir=Path(self.output_dir),
+            kg_service=self.kg_service,
+            kg_session_id=self.kg_session_id,
+            kg_hop_depth=self.kg_hop_depth,
         )
         self.trace_report = report
         self.blocks_by_id = {b.id: b for b in suspect_blocks} if suspect_blocks else None
@@ -409,6 +492,70 @@ class _EditSession:
 
         return self._judge_replace_action_execution(old_file_content=old_file_content)
 
+    def apply_patch_set(self, patches: list[dict[str, Any]]) -> Dict[str, Any]:
+        if not isinstance(patches, list) or not patches or len(patches) > 8:
+            return {
+                "is_action_executed": False,
+                "error_msg": "patches must contain between 1 and 8 line-range replacements.",
+            }
+
+        old_file_content = self.read_rtl()
+        old_lines = old_file_content.splitlines()
+        normalized: list[tuple[int, int, str]] = []
+        for index, patch in enumerate(patches):
+            if not isinstance(patch, dict):
+                return {
+                    "is_action_executed": False,
+                    "error_msg": f"Invalid patch at index {index}: expected an object.",
+                }
+            # Tool-call compatibility: older prompts / other agents sometimes use
+            # line_start/line_end instead of start_line/end_line.
+            start_line = _parse_patch_line_number(
+                patch.get("start_line") if "start_line" in patch else patch.get("line_start")
+            )
+            end_line = _parse_patch_line_number(
+                patch.get("end_line") if "end_line" in patch else patch.get("line_end")
+            )
+            # Tool-call compatibility: some agents use new_line instead of new_code.
+            new_code = patch.get("new_code") if "new_code" in patch else patch.get("new_line")
+            if start_line is None or end_line is None or not isinstance(new_code, str):
+                return {
+                    "is_action_executed": False,
+                    "error_msg": (
+                        f"Invalid patch at index {index}: require integer or decimal-string "
+                        "start_line/end_line and string new_code."
+                    ),
+                }
+            if start_line < 1 or end_line < start_line or end_line > len(old_lines):
+                return {
+                    "is_action_executed": False,
+                    "error_msg": f"Invalid patch range at index {index}: {start_line}-{end_line}.",
+                }
+            normalized.append((start_line - 1, end_line - 1, new_code))
+
+        normalized.sort(key=lambda item: item[0])
+        for previous, current in zip(normalized, normalized[1:]):
+            if current[0] <= previous[1]:
+                return {
+                    "is_action_executed": False,
+                    "error_msg": "Patch ranges must not overlap.",
+                }
+
+        self.action_calls += 1
+        if self.action_calls > self.max_trials:
+            return {
+                "is_action_executed": False,
+                "error_msg": "Reached maximum debug trials; refusing further edits.",
+            }
+
+        new_lines = list(old_lines)
+        for start, end, new_code in reversed(normalized):
+            replacement = new_code.rstrip("\n").splitlines()
+            new_lines[start : end + 1] = replacement
+        self.write_rtl("\n".join(new_lines) + ("\n" if old_file_content.endswith("\n") else ""))
+
+        return self._judge_replace_action_execution(old_file_content=old_file_content)
+
 
 class RTLEditor:
     def __init__(
@@ -419,18 +566,62 @@ class RTLEditor:
         max_trials: int = 30,
         enable_asserter: bool = True,
         enable_boolean_proofer: bool = True,
+        kg_service: Any | None = None,
+        kg_hop_depth: int = 2,
     ) -> None:
         self._cfg = cfg
         self.sim_reviewer = sim_reviewer
         self.max_trials = int(max_trials)
         self.enable_asserter = bool(enable_asserter)
         self.enable_boolean_proofer = bool(enable_boolean_proofer)
+        self.kg_service = kg_service
+        self.kg_hop_depth = int(kg_hop_depth)
         self._session: _EditSession | None = None
 
         toolkit = Toolkit()
         toolkit.register_tool_function(self._tool_list_suspect_blocks)
         toolkit.register_tool_function(self._tool_read_block)
         toolkit.register_tool_function(self._tool_replace_block)
+        toolkit.register_tool_function(self._tool_read_rtl_context)
+        toolkit.register_tool_function(
+            self._tool_apply_patch_set,
+            json_schema={
+                "type": "function",
+                "function": {
+                    "name": "_tool_apply_patch_set",
+                    "description": "Apply up to eight non-overlapping RTL line replacements as one validated transaction.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "patches": {
+                                "type": "array",
+                                "minItems": 1,
+                                "maxItems": 8,
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "start_line": {
+                                            "type": "string",
+                                            "description": "First line number to replace (1-based, integer or decimal-string). Alias: line_start.",
+                                        },
+                                        "end_line": {
+                                            "type": "string",
+                                            "description": "Last line number to replace (1-based, integer or decimal-string). Alias: line_end.",
+                                        },
+                                        "new_code": {
+                                            "type": "string",
+                                            "description": "The replacement code to insert in place of lines start_line..end_line. Alias: new_line.",
+                                        },
+                                    },
+                                    "required": ["start_line", "end_line", "new_code"],
+                                },
+                            }
+                        },
+                        "required": ["patches"],
+                    },
+                },
+            },
+        )
         toolkit.register_tool_function(self._tool_run_simulation)
 
         self._agent = SafeReActAgent(
@@ -468,8 +659,11 @@ class RTLEditor:
         # Keep trace_report.json in sync even when the model triggers standalone re-simulations.
         try:
             if (not result.get("is_sim_pass")) and int(result.get("sim_mismatch_cnt") or 0) > 0:
-                sim_output = result.get("sim_output")
-                if isinstance(sim_output, str) and sim_output.strip():
+                sim_output_path = result.get("sim_output_path")
+                sim_output = ""
+                if isinstance(sim_output_path, str) and sim_output_path.strip():
+                    sim_output = await asyncio.to_thread(Path(sim_output_path).read_text, encoding="utf-8")
+                if sim_output.strip():
                     await asyncio.to_thread(self._session._refresh_trace, sim_log_json=sim_output)
             if self._session.trace_report:
                 result["trace_summary"] = self._session.trace_summary()
@@ -489,6 +683,21 @@ class RTLEditor:
             result.setdefault("trace_summary", self._session.trace_summary())
         return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=4)}])
 
+    async def _tool_read_rtl_context(self) -> ToolResponse:
+        """Read the complete RTL file with line numbers for declaration or wiring diagnosis."""
+        if self._session is None:
+            return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
+        return ToolResponse(content=[{"type": "text", "text": self._session.read_rtl_context()}])
+
+    async def _tool_apply_patch_set(self, patches: list[dict[str, Any]]) -> ToolResponse:
+        """Apply up to eight non-overlapping RTL line replacements as one validated transaction."""
+        if self._session is None:
+            return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
+        result = await asyncio.to_thread(self._session.apply_patch_set, patches)
+        if self._session.trace_report:
+            result.setdefault("trace_summary", self._session.trace_summary())
+        return ToolResponse(content=[{"type": "text", "text": json.dumps(result, indent=4)}])
+
     async def chat(
         self,
         *,
@@ -497,14 +706,25 @@ class RTLEditor:
         sim_failed_log: str,
         sim_mismatch_cnt: int,
         contract_json: str,
+        behavior_source: Literal["contract", "spec_tb"] = "contract",
         max_trials: int | None = None,
     ) -> Tuple[bool, str, int]:
         self.reset()
+        if behavior_source not in {"contract", "spec_tb"}:
+            raise ValueError(f"Unsupported behavior_source: {behavior_source!r}")
         tb_path = f"{output_dir_per_run}/tb.sv"
         rtl_path = f"{output_dir_per_run}/rtl.sv"
         session_max_trials = int(max_trials) if max_trials is not None else int(self.max_trials)
         if session_max_trials < 0:
             session_max_trials = 0
+        kg_module_name = Path(rtl_path).stem
+        try:
+            contract_obj = json.loads(contract_json)
+            if isinstance(contract_obj, dict) and isinstance(contract_obj.get("module_name"), str):
+                kg_module_name = str(contract_obj["module_name"]).strip() or kg_module_name
+        except Exception:  # noqa: BLE001
+            pass
+        kg_session_id = kg_debug_session_id(kg_module_name)
 
         self._session = _EditSession(
             tb_path=tb_path,
@@ -513,6 +733,9 @@ class RTLEditor:
             last_mismatch_cnt=sim_mismatch_cnt,
             sim_reviewer=self.sim_reviewer,
             max_trials=session_max_trials,
+            kg_service=self.kg_service,
+            kg_session_id=kg_session_id,
+            kg_hop_depth=self.kg_hop_depth,
         )
 
         with open(tb_path, "r", encoding="utf-8") as f:
@@ -525,22 +748,44 @@ class RTLEditor:
             pass
         sim_failed_log_excerpt = _summarize_sim_log_json(sim_failed_log)
 
-        needs_kmap_hint = any(
-            k in f"{spec}\n{contract_json}".lower()
-            for k in ["kmap", "k-map", "karnaugh"]
-        )
-        init = INIT_EDITION_PROMPT.format(
-            input_spec=spec,
-            contract_json=contract_json,
-            generated_tb=_clip_text(generated_tb, max_chars=8000),
-            sim_failed_log_excerpt=sim_failed_log_excerpt,
-            kmap_hint=(KMAP_DEBUG_HINT_PROMPT if needs_kmap_hint else ""),
-        )
+        kmap_source = f"{spec}\n{contract_json}" if behavior_source == "contract" else spec
+        needs_kmap_hint = any(k in kmap_source.lower() for k in ["kmap", "k-map", "karnaugh"])
+        if behavior_source == "spec_tb":
+            init = SPEC_TB_INIT_EDITION_PROMPT.format(
+                input_spec=spec,
+                generated_tb=generated_tb,
+                sim_failed_log_excerpt=sim_failed_log_excerpt,
+                kmap_hint=(KMAP_DEBUG_HINT_PROMPT if needs_kmap_hint else ""),
+            )
+            order_prompt = SPEC_TB_EXTRA_ORDER_PROMPT
+            continue_prompt = (
+                "Continue debugging. Preserve the original specification's top-level interface and observed "
+                "testbench behavior. If mismatches remain, use read_block(block_id) and "
+                "replace_block(block_id, new_code), or read_rtl_context() and one "
+                "apply_patch_set(patches) transaction for declaration or wiring fixes, then run_simulation()."
+            )
+        else:
+            init = CONTRACT_INIT_EDITION_PROMPT.format(
+                input_spec=spec,
+                contract_json=contract_json,
+                generated_tb=_clip_text(generated_tb, max_chars=8000),
+                sim_failed_log_excerpt=sim_failed_log_excerpt,
+                kmap_hint=(KMAP_DEBUG_HINT_PROMPT if needs_kmap_hint else ""),
+            )
+            order_prompt = CONTRACT_EXTRA_ORDER_PROMPT
+            continue_prompt = (
+                "Continue debugging. Preserve the contract-defined module interface. If mismatches remain, "
+                "use read_block(block_id) and replace_block(block_id, new_code), or read_rtl_context() and one "
+                "apply_patch_set(patches) transaction for declaration or wiring fixes, then run_simulation()."
+            )
         # Build a trace-grounded report to guide minimal patching.
         report, suspect_blocks = build_trace_report(
             rtl_path=Path(rtl_path),
             sim_log_json=sim_failed_log,
             output_dir=Path(output_dir_per_run),
+            kg_service=self.kg_service,
+            kg_session_id=kg_session_id,
+            kg_hop_depth=self.kg_hop_depth,
         )
         (Path(output_dir_per_run) / "trace_report.json").write_text(
             json.dumps(report, indent=2, ensure_ascii=False) + "\n",
@@ -551,8 +796,8 @@ class RTLEditor:
         ft0 = report.get("fail_time")
         self._session.last_fail_time = int(ft0) if isinstance(ft0, int) else None
 
-        # Best-effort: boolean (combinational) equivalence hint from the contract summary.
-        # This is NOT a source of truth; treat it only as parallel guidance.
+        # Best-effort: boolean (combinational) equivalence hint from diagnostic metadata.
+        # This is never a source of truth in spec_tb mode.
         boolean_hint = ""
         if self.enable_boolean_proofer:
             try:
@@ -571,7 +816,7 @@ class RTLEditor:
                 boolean_hint = ""
 
         # Best-effort: assertion-based (sequential/timing) hint in a separate sim sandbox.
-        # This is NOT a source of truth; treat it only as parallel guidance.
+        # This is never a source of truth in spec_tb mode.
         asserter_hint = ""
         if self.enable_asserter:
             try:
@@ -600,9 +845,10 @@ class RTLEditor:
 
         first_prompt = (
             f"{init}\n\n<trace_report_json>\n{json.dumps(report, indent=2, ensure_ascii=False)}\n</trace_report_json>\n\n"
-            f"{boolean_hint}\n{asserter_hint}\n{EXTRA_ORDER_PROMPT}\n\n"
+            f"{boolean_hint}\n{asserter_hint}\n{order_prompt}\n\n"
             "Start by calling list_suspect_blocks(), then read_block(block_id) for the most relevant one, "
-            "then apply one replace_block(block_id, new_code), then run_simulation()."
+            "then use replace_block(block_id, new_code), or read_rtl_context() and apply_patch_set(patches) "
+            "when declaration or wiring edits are required; finally call run_simulation()."
         )
         try:
             (Path(output_dir_per_run) / "debugger_prompt.txt").write_text(first_prompt + "\n", encoding="utf-8")
@@ -616,7 +862,7 @@ class RTLEditor:
             await self._agent(
                 Msg(
                     "user",
-                    "Continue debugging. Preserve the contract and module interface. If mismatches remain, pick 1 suspect block and call read_block(block_id), then call replace_block(block_id, new_code) once, then run_simulation().",
+                    continue_prompt,
                     role="user",
                 )
             )

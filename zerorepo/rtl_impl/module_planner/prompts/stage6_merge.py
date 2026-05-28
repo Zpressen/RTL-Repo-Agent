@@ -1,12 +1,14 @@
-SYSTEM_ROLE = """You are an RTL Merge Agent specialized in conservative Verilog RTL integration.
+SYSTEM_ROLE = """You are an RTL Merge Agent specialized in parser-friendly RTL integration.
 
 Your task is to merge module-level RTL fragments into one complete, legal, synthesizable Verilog module.
 
-Use conservative Verilog-style RTL by default, not SystemVerilog.
+Use Verilog-compatible RTL by default when it is functionally equivalent, but do not reject SystemVerilog features that the task explicitly requires.
 
-Hard language/style constraints:
-- Do not use SystemVerilog-only constructs.
-- Do not use logic, always_comb, always_ff, enum, typedef, struct, interface, package, or multidimensional array initialization.
+Hard parser-friendly style constraints:
+- Do not use unpacked arrays of any dimension, including declarations like `reg [7:0] a [0:3]` or `wire [7:0] a [0:3][0:3]`.
+- Do not use multidimensional signals or indexed matrix-style references such as `state[i][j]`.
+- Do not use generate-for loops for datapaths, child module instances, or repeated assigns; explicitly unroll repeated logic and instances.
+- For byte/state matrices, use scalar names such as `sa_00`, `sa_01`, ..., not unpacked arrays.
 - Do not use always @(*) or always @* in the final code.
 - Use explicit sensitivity lists for combinational always blocks.
 - If a combinational block depends only on signal a, use always @(a).
@@ -21,7 +23,8 @@ PROMPT_TEMPLATE = """
 You will receive:
 1. the full specification of the current module,
 2. the planned module skeleton,
-3. generated code fragments for different skeleton blocks.
+3. optional KG child module context for already generated downstream modules,
+4. generated code fragments for different skeleton blocks.
 
 Your task is to produce one complete, legal, synthesizable Verilog module.
 
@@ -34,12 +37,15 @@ The generated fragments may contain errors. You may rewrite, move, shorten, expa
 
 Do not simply concatenate fragments.
 
-# HARD VERILOG STYLE CONSTRAINTS
+# HARD PARSER-FRIENDLY STYLE CONSTRAINTS
 
-The final code must use conservative Verilog style.
+The final code should use Verilog-compatible style where it is functionally equivalent. SystemVerilog syntax is allowed when the task explicitly requires it, but avoid the parser-hostile forms below.
 
-- Do not use SystemVerilog-only constructs.
-- Do not use logic, always_comb, always_ff, enum, typedef, struct, interface, package, or multidimensional array initialization.
+- Do not use unpacked arrays of any dimension, including declarations like `reg [7:0] a [0:3]` or `wire [7:0] a [0:3][0:3]`.
+- Do not use multidimensional signals or indexed matrix-style references such as `state[i][j]`.
+- Do not use generate-for loops for datapaths, child module instances, or repeated assigns; explicitly unroll repeated logic and instances.
+- If a design naturally uses a matrix, flatten it into scalar Verilog signals with stable names such as `sa_00`, `sa_01`, ..., and instantiate child modules explicitly.
+- Avoid complex function expressions that combine ternary operators with concatenation; split such logic into simpler wires or explicit combinational code.
 - Do not use always @(*) or always @* in the final code.
 - For combinational always blocks, use explicit sensitivity lists.
 - Derive the sensitivity list from the RHS/input signals read inside the block.
@@ -52,6 +58,9 @@ The final code must use conservative Verilog style.
 - Do not change the module name.
 - Do not change port names, directions, or widths.
 - Do not add extra ports.
+- If KG child module context is provided, treat child port names, directions, widths, parameters, and verified status as authoritative for instantiation wiring.
+- Prefer instantiating verified child modules instead of reimplementing their internal logic in the parent module.
+- Connect every required child instance port exactly once unless the specification explicitly says a port may be unused.
 - Do not add clock, reset, FSM state, counter, pipeline register, or extra latency unless required by the specification.
 - Ensure every used internal signal is declared.
 - Ensure every output is driven.
@@ -78,7 +87,7 @@ Before outputting code, verify:
 - The final code does not contain always @(*).
 - The final code does not contain always @*.
 - Every combinational always block has an explicit sensitivity list.
-- The final code does not contain SystemVerilog-only constructs.
+- The final code does not contain unpacked array declarations, multidimensional array references, or generate-for loops.
 - The final code has exactly one module declaration and one endmodule.
 
 Output the final Verilog module code only.
@@ -93,6 +102,7 @@ Do not output internal reasoning.
 
 {module_skeleton}
 
+{kg_child_context_section}
 # GENERATED FRAGMENTS
 
 {generated_fragments}
@@ -104,9 +114,16 @@ def build_prompt(
     module_spec: str,
     module_skeleton: str,
     generated_fragments: str,
+    kg_child_context: str = "",
 ) -> str:
+    kg_child_context_section = (
+        f"# KG CHILD MODULE CONTEXT\n\n{kg_child_context}\n\n"
+        if kg_child_context
+        else ""
+    )
     return PROMPT_TEMPLATE.format(
         module_spec=module_spec or "None",
         module_skeleton=module_skeleton or "None",
+        kg_child_context_section=kg_child_context_section,
         generated_fragments=generated_fragments or "None",
     )

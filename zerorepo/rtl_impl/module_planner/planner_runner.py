@@ -10,10 +10,12 @@ from zerorepo.rtl_impl.debug_agent.adapters import (
     debug_openai_config_from_planner_config,
 )
 from zerorepo.rtl_impl.debug_agent.debug_runner import (
+    ModuleDebugResult,
     ModuleDebugRunner,
     RtlDebugConfig,
     module_debug_result_to_dict,
 )
+from zerorepo.rtl_impl.kg_agent import ModuleResultWriter
 from zerorepo.rtl_impl.debug_agent.sim_reviewer import check_syntax
 
 from .agents import (
@@ -48,6 +50,7 @@ from .schemas import (
     Stage6MergeArtifact,
 )
 from .utils import PlannerLLMClient, get_planner_logger
+from .utils import resolve_module_spec_text
 
 
 class PlannerRunner:
@@ -62,6 +65,7 @@ class PlannerRunner:
     MODULE_SKELETON_DOCS_DIRNAME = "module_skeleton_docs"
     MODULE_SKELETON_JSON_DIRNAME = "module_skeleton_json"
     MODULE_PLAN_JSON_DIRNAME = "module_plan_json"
+    BLOCK_SPEC_RETRIEVAL_JSON_DIRNAME = "block_spec_retrieval_json"
 
     def __init__(
         self,
@@ -72,12 +76,16 @@ class PlannerRunner:
         artifact_sink: Optional[PlanningArtifactSink] = None,
         logger=None,
         debug_config: Optional[RtlDebugConfig] = None,
+        kg_service: Optional[Any] = None,
+        checkpoint_dir: Optional[str | Path] = None,
     ):
         self.output_root = Path(output_root)
         self.logger = logger or get_planner_logger("rtl_module_planner.runner")
         self.context_provider = context_provider or NullPlanningContextProvider()
         self.artifact_sink = artifact_sink or NullPlanningArtifactSink()
         self.llm_client = PlannerLLMClient(llm_config=llm_config, backend=llm_backend)
+        self.kg_service = kg_service
+        self.checkpoint_dir = Path(checkpoint_dir) if checkpoint_dir is not None else self._default_checkpoint_dir()
         self.stage1 = Stage1Agent(self.llm_client, self.context_provider, self.artifact_sink, self.logger)
         self.stage2 = Stage2Agent(self.llm_client, self.context_provider, self.artifact_sink, self.logger)
         self.stage3 = Stage3Agent(
@@ -113,6 +121,7 @@ class PlannerRunner:
             self.artifact_sink,
             self.logger,
             output_root=self.output_root,
+            kg_service=self.kg_service,
         )
         if debug_config is None:
             debug_config = RtlDebugConfig.from_env()
@@ -130,6 +139,18 @@ class PlannerRunner:
             config=debug_config,
             workspace_root=self.stage6.workspace_root,
             logger=self.logger,
+            kg_service=self.kg_service,
+            initial_result_recorder=self._record_initial_kg_module_result,
+        )
+        self.kg_result_writer = (
+            ModuleResultWriter(
+                kg_service=self.kg_service,
+                workspace_root=self.stage6.workspace_root,
+                checkpoint_dir=self.checkpoint_dir,
+                logger=self.logger,
+            )
+            if self.kg_service is not None and self.kg_service.is_enabled()
+            else None
         )
 
     def run(
@@ -471,6 +492,8 @@ class PlannerRunner:
         module_name = payload.get("module")
         if module_name:
             self._write_json_payload(payload["plan_payload"], self.output_root / payload["plan_file"])
+            if "retrieval_file" in payload and "retrieval_payload" in payload:
+                self._write_json_payload(payload["retrieval_payload"], self.output_root / payload["retrieval_file"])
             self.logger.info("[rtl_module_planner] Wrote stage4 module plan sidecar for %s", module_name)
         return self._write_module_plans_payload(payload["manifest"])
 
@@ -572,18 +595,36 @@ class PlannerRunner:
             stage6_records.append(stage6_record)
             self.logger.info("[rtl_module_planner] Debug checking module %s after stage6", module_name)
             module_spec_text = build_module_spec_text(module_name=module_name, spec_blocks=spec_blocks)
-            debug_result = self.debug_runner.run_module(
-                module_name=module_name,
-                merged_file=stage6_record.merged_file,
-                task=task,
-                spec_text=module_spec_text,
-                contract_json=build_debug_contract_json(
+            debug_spec_source_path = ""
+            debug_spec_text = module_spec_text
+            try:
+                debug_spec_source_path, debug_spec_text = resolve_module_spec_text(module_name, task.spec_md_files)
+            except FileNotFoundError:
+                debug_spec_source_path = ""
+            try:
+                debug_result = self.debug_runner.run_module(
                     module_name=module_name,
-                    stage1_contracts=codegen_stage_inputs.get("stage1"),
-                    spec_text=module_spec_text,
-                ),
-            )
+                    merged_file=stage6_record.merged_file,
+                    task=task,
+                    spec_text=debug_spec_text,
+                    contract_json=build_debug_contract_json(
+                        module_name=module_name,
+                        stage1_contracts=codegen_stage_inputs.get("stage1"),
+                        spec_text=debug_spec_text,
+                    ),
+                    spec_source_path=debug_spec_source_path,
+                )
+            except Exception as exc:
+                debug_result = ModuleDebugResult(
+                    module=module_name,
+                    status="error",
+                    final_rtl_path=stage6_record.merged_file,
+                    reason=f"{type(exc).__name__}: {exc}",
+                )
+                self._record_kg_module_result(module_name, stage6_record.merged_file, debug_result)
+                raise
             debug_records.append(debug_result)
+            self._record_kg_module_result(module_name, stage6_record.merged_file, debug_result)
             self.logger.info(
                 "[rtl_module_planner] Debug result for %s: %s%s",
                 module_name,
@@ -616,6 +657,49 @@ class PlannerRunner:
         self._write_stage6_merge_payload(model_dump(stage6_artifact))
         self.artifact_sink.record_stage_output(self.stage6.stage_name, stage6_artifact, task)
         return stage6_artifact
+
+    def _record_kg_module_result(
+        self,
+        module_name: str,
+        merged_file: str,
+        debug_result: Any,
+        stage: str = "post_module_debug",
+    ) -> None:
+        if self.kg_result_writer is None:
+            return
+        try:
+            status = self.kg_result_writer.record_module_result(
+                module_name=module_name,
+                merged_file=merged_file,
+                debug_result=debug_result,
+                stage=stage,
+            )
+            self.logger.info(
+                "[rtl_module_planner] Wrote RTL KG module result for %s at %s: %s passed=%s",
+                module_name,
+                stage,
+                status.status,
+                status.passed,
+            )
+        except Exception as exc:  # noqa: BLE001 - KG must not block RTL generation/debug.
+            self.logger.warning(
+                "[rtl_module_planner] RTL KG module result write failed for %s: %s",
+                module_name,
+                exc,
+            )
+
+    def _record_initial_kg_module_result(
+        self,
+        module_name: str,
+        merged_file: str | Path,
+        debug_result: Any,
+    ) -> None:
+        self._record_kg_module_result(
+            module_name=module_name,
+            merged_file=str(merged_file),
+            debug_result=debug_result,
+            stage="post_initial_sim",
+        )
 
     def _reuse_stage5_fragment_if_valid(
         self,
@@ -682,6 +766,18 @@ class PlannerRunner:
         self.stage6._ensure_toolchain_path()
         syntax_ok, syntax_output = check_syntax(str(merged_file))
         if not syntax_ok:
+            if not self._syntax_output_mentions_file(syntax_output, merged_file):
+                self.logger.info(
+                    "[rtl_module_planner] Existing stage6 merge for %s passed local checks; "
+                    "ignoring syntax failure from another merged RTL file: %s",
+                    module_name,
+                    self.stage6._summarize_syntax_output(syntax_output),
+                )
+                return ModuleMergeRecord(
+                    module=module_name,
+                    fragment_file=str(fragment_file),
+                    merged_file=str(merged_file),
+                )
             self.logger.info(
                 "[rtl_module_planner] Existing stage6 merge for %s fails Verilator syntax; regenerating: %s",
                 module_name,
@@ -693,6 +789,10 @@ class PlannerRunner:
             fragment_file=str(fragment_file),
             merged_file=str(merged_file),
         )
+
+    def _syntax_output_mentions_file(self, syntax_output: str, path: Path) -> bool:
+        text = str(syntax_output or "")
+        return str(path) in text or path.name in text
 
     def _compact_stage1_payload(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         return self._drop_text_grounding(payload)
@@ -713,3 +813,8 @@ class PlannerRunner:
         if compact.get("module_order") == []:
             compact.pop("module_order", None)
         return compact
+
+    def _default_checkpoint_dir(self) -> Path:
+        if self.output_root.name == "outputs" and self.output_root.parent.name == "module_planner":
+            return self.output_root.parent.parent
+        return self.output_root.parent

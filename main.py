@@ -290,6 +290,29 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
 
                     planner_output_root = spec_checkpoint_dir / "module_planner" / "outputs"
                     planner_output_root.mkdir(parents=True, exist_ok=True)
+                    workspace_dir = planner_output_root.parent.parent / "workspace"
+                    merged_dir = workspace_dir / "merged"
+                    merged_dir.mkdir(parents=True, exist_ok=True)
+
+                    kg_service = None
+                    rtl_kg_cfg = config.get("rtl_kg", {}) or {}
+                    if rtl_kg_cfg.get("enabled", False):
+                        try:
+                            from zerorepo.config.checkpoint_config import CheckpointManager
+                            from zerorepo.rtl_impl.rtl_kg import RTLKgService
+
+                            kg_service = RTLKgService(
+                                repo_path=merged_dir,
+                                checkpoint_manager=CheckpointManager(spec_checkpoint_dir),
+                                repo_data={},
+                                config=rtl_kg_cfg,
+                                logger=logger,
+                            )
+                            kg_service.initialize()
+                            logger.info("RTL KG enabled for module planner at repo path: %s", merged_dir)
+                        except Exception as exc:
+                            kg_service = None
+                            logger.warning("RTL KG initialization failed; continuing without KG writes: %s", exc)
 
                     def _discover_spec_images() -> list[str]:
                         import re
@@ -339,6 +362,8 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
                         output_root=planner_output_root,
                         llm_config=planner_llm_config,
                         logger=logger,
+                        kg_service=kg_service,
+                        checkpoint_dir=spec_checkpoint_dir,
                     )
                     merge_artifact = planner_runner.run(task_input, resume=args.resume, end_stage="stage6")
                     stage1_artifact_path = planner_output_root / "contracts.json"
@@ -350,9 +375,7 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
                     stage5_codegen_artifact_path = planner_output_root / "stage5_codegen.json"
                     stage6_merge_artifact_path = planner_output_root / "stage6_merge.json"
                     module_plan_json_dir = planner_output_root / "module_plan_json"
-                    workspace_dir = planner_output_root.parent.parent / "workspace"
                     fragments_dir = workspace_dir / "fragments"
-                    merged_dir = workspace_dir / "merged"
 
                     logger.info("✅ RTL module planner completed for %s", spec.project_name)
                     logger.info("  - planner outputs root: %s", planner_output_root)

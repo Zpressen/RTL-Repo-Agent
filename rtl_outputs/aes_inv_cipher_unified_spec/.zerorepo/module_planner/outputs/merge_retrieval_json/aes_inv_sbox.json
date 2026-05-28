@@ -1,0 +1,23 @@
+{
+  "schema_version": "merge_context_retrieval_v1",
+  "module": "aes_inv_sbox",
+  "selected_spec_refs": [
+    "S003",
+    "S006",
+    "S010"
+  ],
+  "use_kg_child_context": false,
+  "kg_child_modules": [],
+  "kg_child_context_reason": "Module is a leaf, combinational IP with no child instances; no child-module interface or wiring context is needed.",
+  "code_gap_notes": [
+    "Generated fragments provide the complete lookup table and combinational assignment; no structural gaps exist.",
+    "Merge agent must ensure the final module contains no sequential logic or clock/reset ports, as required by S010.",
+    "The exact port list (a input, b output, both 8-bit) must match S003."
+  ],
+  "selection_reason": [
+    "S003 defines the module interface: input a [7:0], output b [7:0], which is essential for correct port declaration.",
+    "S006 describes the ROM lookup-table implementation method, confirming that the table is the intended implementation.",
+    "S010 specifies the constraints: pure combinational logic, no clock or reset, output immediate; this ensures the merge does not introduce sequential elements."
+  ],
+  "fallback_used": false
+}

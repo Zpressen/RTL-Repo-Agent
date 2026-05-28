@@ -1,0 +1,58 @@
+{
+  "schema_version": "rtl_kg_module_statuses_v1",
+  "repo_uid": "merged@ca58b9db9777",
+  "modules": {
+    "aes_inv_sbox": {
+      "module": "aes_inv_sbox",
+      "status": "pass",
+      "passed": true,
+      "mismatch_count": 0,
+      "debug_trials": 0,
+      "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_inv_cipher_unified_spec/.zerorepo/workspace/debug/aes_inv_sbox/rtl.sv",
+      "trace_report_path": "",
+      "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_inv_cipher_unified_spec/.zerorepo/workspace/debug/aes_inv_sbox/initial_sim_output.json",
+      "reason": "",
+      "stage": "post_module_debug",
+      "timestamp": "2026-05-12T10:59:52.334607+00:00"
+    },
+    "aes_sbox": {
+      "module": "aes_sbox",
+      "status": "pass",
+      "passed": true,
+      "mismatch_count": 0,
+      "debug_trials": 0,
+      "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_inv_cipher_unified_spec/.zerorepo/workspace/debug/aes_sbox/rtl.sv",
+      "trace_report_path": "",
+      "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_inv_cipher_unified_spec/.zerorepo/workspace/debug/aes_sbox/initial_sim_output.json",
+      "reason": "",
+      "stage": "post_module_debug",
+      "timestamp": "2026-05-12T11:00:01.429597+00:00"
+    },
+    "aes_rcon": {
+      "module": "aes_rcon",
+      "status": "pass",
+      "passed": true,
+      "mismatch_count": 0,
+      "debug_trials": 0,
+      "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_inv_cipher_unified_spec/.zerorepo/workspace/debug/aes_rcon/rtl.sv",
+      "trace_report_path": "",
+      "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_inv_cipher_unified_spec/.zerorepo/workspace/debug/aes_rcon/initial_sim_output.json",
+      "reason": "",
+      "stage": "post_module_debug",
+      "timestamp": "2026-05-12T11:00:08.869203+00:00"
+    },
+    "aes_key_expand_128": {
+      "module": "aes_key_expand_128",
+      "status": "pass",
+      "passed": true,
+      "mismatch_count": 0,
+      "debug_trials": 0,
+      "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_inv_cipher_unified_spec/.zerorepo/workspace/debug/aes_key_expand_128/rtl.sv",
+      "trace_report_path": "",
+      "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_inv_cipher_unified_spec/.zerorepo/workspace/debug/aes_key_expand_128/initial_sim_output.json",
+      "reason": "",
+      "stage": "post_module_debug",
+      "timestamp": "2026-05-12T11:00:16.890796+00:00"
+    }
+  }
+}

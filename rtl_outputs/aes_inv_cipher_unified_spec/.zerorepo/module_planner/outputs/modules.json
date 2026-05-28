@@ -7,19 +7,19 @@
     "aes_inv_cipher_top",
     "aes_key_expand_128",
     "aes_inv_sbox",
-    "aes_rcon",
-    "aes_sbox"
+    "aes_sbox",
+    "aes_rcon"
   ],
   "repository_structure": {
-    "system": "AES Inverse Cipher Design",
+    "system": "aes_inv_cipher",
     "top_module": "aes_inv_cipher_top",
     "files": [],
     "modules": [
       "aes_inv_cipher_top",
       "aes_key_expand_128",
       "aes_inv_sbox",
-      "aes_rcon",
-      "aes_sbox"
+      "aes_sbox",
+      "aes_rcon"
     ],
     "file_map": {},
     "hierarchy": [
@@ -59,7 +59,7 @@
             "name": "clk",
             "direction": "input",
             "width": "1",
-            "role": "",
+            "role": "clock",
             "active": "",
             "meaning": "Clock signal"
           },
@@ -67,7 +67,7 @@
             "name": "rst",
             "direction": "input",
             "width": "1",
-            "role": "",
+            "role": "reset",
             "active": "",
             "meaning": "Reset signal"
           },
@@ -131,31 +131,64 @@
       },
       "timing_contract": {
         "module": "aes_inv_cipher_top",
-        "module_kind": "",
-        "input_sampling": [],
-        "output_timing": [
-          {
-            "signal": "text_out",
-            "signals": [],
-            "rule": "Synchronized with the clock rising edge. Holds the output until the next load."
-          }
-        ],
-        "reset_behavior": {
-          "signal": "rst",
-          "active": "",
-          "effect": "Clears the round counter, completion signal, and run control signal."
+        "clocking": {
+          "clock": "clk",
+          "update_edge": "rising clock edge",
+          "statement": "Register updates on clock rising edge"
         },
-        "signal_semantics": [
+        "reset_behavior": {},
+        "registered_objects": [
           {
-            "signal": "registers",
-            "semantic_type": ""
+            "name": "dcnt",
+            "timing_role": "round counter",
+            "timing": "increments each clock cycle during operation"
+          },
+          {
+            "name": "text_in_r",
+            "timing_role": "input buffer",
+            "timing": "updated on rising clock edge during data load"
+          },
+          {
+            "name": "sa[0:3][0:3]",
+            "timing_role": "state matrix",
+            "timing": "updated on rising clock edge, holds intermediate results"
+          },
+          {
+            "name": "kcnt",
+            "timing_role": "key buffer counter",
+            "timing": "updated on rising clock edge"
+          },
+          {
+            "name": "kb[10:0]",
+            "timing_role": "key schedule buffer",
+            "timing": "updated on rising clock edge, holds round keys"
+          },
+          {
+            "name": "text_out",
+            "timing_role": "output register",
+            "timing": "updated on rising clock edge, holds final plaintext until next load"
           }
         ],
-        "parent_child_alignment": [],
-        "valid_windows": [
-          "Round counter increments each cycle during the run state."
+        "phase_timing": [
+          {
+            "phase": "Done",
+            "timing": "final plaintext result is output and held until the next load"
+          }
         ],
-        "image_grounding": []
+        "timing_rules": [
+          "Register updates on clock rising edge",
+          "Output timing is synchronized with the clock rising edge",
+          "Round counter (dcnt) increments each clock cycle during operation",
+          "Key buffer output updated every clock cycle during key retrieval",
+          "aes_inv_sbox instances are pure combinational logic",
+          "Key schedule must be loaded before data processing",
+          "Completion signal (done) is cleared on reset or new load"
+        ],
+        "underspecified": [
+          "Reset polarity and timing (synchronous vs asynchronous) not explicitly stated",
+          "Exact cycle counts for each state not specified",
+          "Timing of state transitions relative to clock edge not specified"
+        ]
       },
       "control_contract": {
         "module": "aes_inv_cipher_top",
@@ -171,6 +204,11 @@
         ],
         "transitions": [
           {
+            "from_state": "IDLE",
+            "to_state": "KeyLoad",
+            "condition": "kld=1 or ld=1"
+          },
+          {
             "from_state": "KeyExpansion",
             "to_state": "KeyStored",
             "condition": "kcnt == 0"
@@ -178,32 +216,35 @@
           {
             "from_state": "KeyStored",
             "to_state": "InitialRound",
-            "condition": "ld is asserted"
-          },
-          {
-            "from_state": "InitialRound",
-            "to_state": "StandardRound",
-            "condition": "dcnt is incremented"
+            "condition": "ld = 1"
           },
           {
             "from_state": "FinalRound",
             "to_state": "Done",
-            "condition": "dcnt reaches 11"
+            "condition": "dcnt == 11"
           },
           {
             "from_state": "Done",
             "to_state": "IDLE",
-            "condition": "transitions back to Idle state"
+            "condition": "unconditional (next clock cycle)"
           }
         ],
         "control_signals": [
           {
-            "name": "go",
-            "meaning": "Run control signal, controls start and stop of decryption process"
+            "name": "kld",
+            "meaning": "Key load enable input"
           },
           {
-            "name": "ld_r",
-            "meaning": "Load operation flag register"
+            "name": "ld",
+            "meaning": "Data load enable input"
+          },
+          {
+            "name": "done",
+            "meaning": "Decryption complete output"
+          },
+          {
+            "name": "go",
+            "meaning": "Internal run control signal, set on data load, cleared on completion"
           }
         ],
         "bypass_conditions": [],
@@ -211,11 +252,11 @@
         "counter_rules": [
           {
             "counter": "dcnt",
-            "rule": "Reset state: Counter reset to 0. Load state: Counter set to 1. Run state: Increment each cycle. Finish state: Count reaches 11 and not in load state."
+            "rule": "Counter reset to 0 on reset; set to 1 on data load; increments each clock cycle during operation; when reaching 11 and not in load state, indicates finish."
           },
           {
             "counter": "kcnt",
-            "rule": "Initial value is set to 10, reaches 0 when the storage is complete."
+            "rule": "kcnt is initially 10, decrements to 0 during key expansion to track storage progress."
           }
         ],
         "image_grounding": []
@@ -223,50 +264,53 @@
       "datapath_contract": {
         "module": "aes_inv_cipher_top",
         "input_data": [
-          "text_in (128-bit ciphertext)",
-          "key (128-bit initial key)"
+          "text_in",
+          "key"
         ],
         "main_flow": [
-          "Input data mapping to state matrix",
-          "InvShiftRows (cyclic right shift)",
-          "InvSubBytes (parallel inverse S-box lookup)",
-          "AddRoundKey (XOR with round key)",
-          "InvMixColumns (GF(2^8) matrix multiplication, except final round)",
-          "Output mapping to text_out"
+          "InvShiftRows",
+          "InvSubBytes",
+          "AddRoundKey",
+          "InvMixColumns"
         ],
         "intermediate_objects": [
           {
             "name": "text_in_r",
-            "role": "Temporary storage register for input ciphertext during decryption process"
+            "role": "temporary storage register for input ciphertext before mapping to state matrix"
           },
           {
-            "name": "sa[0:3][0:3]",
-            "role": "4×4 state matrix registers for storing and processing intermediate decryption results"
-          },
-          {
-            "name": "kb[10:0]",
-            "role": "Key schedule buffer storing the round keys in reverse order"
+            "name": "sa",
+            "role": "4×4 state matrix registers storing intermediate decryption results, column-major order"
           },
           {
             "name": "sa_ark",
-            "role": "Result of AddRoundKey XOR operation, used for subsequent InvMixColumns"
+            "role": "result of AddRoundKey operation, before InvMixColumns"
           },
           {
             "name": "sa_next",
-            "role": "Output of InvMixColumns used as input for the next round"
+            "role": "result of InvMixColumns, used as input for the next round state matrix"
+          },
+          {
+            "name": "kb",
+            "role": "key schedule buffer storing round keys in reverse order"
+          },
+          {
+            "name": "text_out",
+            "role": "output register holding the final plaintext result"
           }
         ],
         "path_annotations": [],
         "registered_paths": [
-          "State matrix registers update on clock rising edge",
-          "Key buffer registers update synchronously",
-          "Output register text_out updates on clock rising edge"
+          "Input data loading: text_in is buffered in text_in_r on clock rising edge, then mapped to state matrix sa while performing initial AddRoundKey.",
+          "Round transformation loop: current state matrix sa goes through InvShiftRows, InvSubBytes, AddRoundKey (producing sa_ark), InvMixColumns (producing sa_next); sa_next is registered into sa on clock rising edge.",
+          "Key buffer update: received expanded keys (wk3, wk2, wk1, wk0) are stored in kb[10:0] on clock rising edge; selected round key is output to AddRoundKey based on dcnt.",
+          "Final output generation: sa_ark result of the last round is mapped to text_out register in column-major order on clock rising edge."
         ],
         "combinational_paths": [
-          "InvShiftRows wire reordering",
-          "16 parallel InvSubBytes S-box lookups",
-          "AddRoundKey byte-wise XOR",
-          "InvMixColumns GF(2^8) polynomial multiplications"
+          "InvShiftRows: combinational cyclic right shift on state matrix rows.",
+          "InvSubBytes: 16 parallel inverse S-box instances, each combinational from state byte to substituted byte.",
+          "AddRoundKey: bitwise XOR of state matrix bytes and round key bytes (combinational).",
+          "InvMixColumns: combinational GF(2^8) matrix multiplication on each column using pre-computed functions pmul_e/b/d/9."
         ],
         "special_paths": [],
         "image_grounding": []
@@ -277,37 +321,37 @@
           {
             "name": "text_in_r",
             "width": "128",
-            "role": "Temporary storage register for input ciphertext during decryption process"
+            "role": "Data buffer for input ciphertext"
           },
           {
             "name": "sa[0:3][0:3]",
             "width": "8",
-            "role": "4×4 state matrix registers for storing and processing intermediate decryption results, arranged in column-major order"
+            "role": "4x4 state matrix registers, column-major order"
           },
           {
             "name": "dcnt",
             "width": "4",
-            "role": "Round counter register for tracking decryption progress"
+            "role": "Round counter"
           },
           {
             "name": "kb[10:0]",
             "width": "128",
-            "role": "Key schedule buffer storing the round keys in reverse order"
+            "role": "Key schedule buffer storing round keys in reverse order"
           },
           {
             "name": "kcnt",
             "width": "4",
-            "role": "Key buffer counter for key schedule loading"
+            "role": "Key buffer counter"
           },
           {
             "name": "ld_r",
             "width": "1",
-            "role": "Load operation flag register"
+            "role": "Load operation flag"
           },
           {
             "name": "text_out",
             "width": "128",
-            "role": "Output register storing the final plaintext result"
+            "role": "Output buffer for final plaintext"
           }
         ],
         "state_names": [
@@ -324,20 +368,21 @@
           {
             "module": "aes_key_expand_128",
             "count": 1,
-            "usage": "Generate the round keys"
+            "usage": "Generate round keys"
           },
           {
             "module": "aes_inv_sbox",
             "count": 16,
-            "usage": "Inverse byte substitution (parallel instances)"
+            "usage": "Nonlinear inverse byte substitution"
           }
         ],
         "local_mappings": [
-          "text_in[127:120] maps to state matrix in column-major order (sa33 to sa03)",
-          "InvShiftRows: Row 1 cyclic right shift by 3 bytes, Row 2 by 2 bytes, Row 3 by 1 byte",
-          "AddRoundKey XOR result assigned to sa_ark signal",
-          "InvMixColumns generates sa_next signal for next round",
-          "Final output maps sa_ark to text_out in column-major order (sa00 to sa30)"
+          "text_in[127:120] -> sa[0][0], text_in[119:112] -> sa[1][0], … (column-major order)",
+          "sa[0][0] -> text_out[127:120], sa[1][0] -> text_out[119:112], … (column-major order)",
+          "kb[10] holds initial round key, kb[0] holds last round key",
+          "dcnt selects current round key from kb[dcnt] for AddRoundKey",
+          "kcnt decrements from 10 to 0 during key buffer loading",
+          "ld_r=1: initial data load with AddRoundKey; ld_r=0: round transformations"
         ],
         "image_grounding": []
       },
@@ -372,7 +417,7 @@
             "name": "clk",
             "direction": "input",
             "width": "1",
-            "role": "",
+            "role": "clock",
             "active": "",
             "meaning": "Clock signal"
           },
@@ -436,68 +481,71 @@
       },
       "timing_contract": {
         "module": "aes_key_expand_128",
-        "module_kind": "",
-        "input_sampling": [
-          {
-            "signal": "kld",
-            "signals": [],
-            "rule": "kld signal rising edge must synchronize with clk."
-          },
-          {
-            "signal": "key",
-            "signals": [],
-            "rule": "Ensure initial key remains stable when kld is active."
-          }
-        ],
-        "output_timing": [
-          {
-            "signal": "wo_0, wo_1, wo_2, wo_3",
-            "signals": [],
-            "rule": "Immediately output to wo_0 to wo_3 ports after loading."
-          }
-        ],
-        "reset_behavior": {
-          "signal": "",
-          "active": "",
-          "effect": ""
+        "clocking": {
+          "clock": "clk",
+          "update_edge": "rising clock edge",
+          "statement": "Synchronous loading at clock rising edge"
         },
-        "signal_semantics": [
+        "reset_behavior": {},
+        "registered_objects": [
           {
-            "signal": "key_registers",
-            "semantic_type": ""
+            "name": "round_key_word_registers",
+            "timing_role": "round key storage",
+            "timing": "updated on rising clock edge"
           }
         ],
-        "parent_child_alignment": [],
-        "valid_windows": [],
+        "phase_timing": [],
+        "timing_rules": [
+          "Key loading occurs synchronously at the clock rising edge when kld is active",
+          "All registers update on clk rising edge",
+          "Combinational logic path between registers must meet timing requirements"
+        ],
+        "underspecified": [
+          "Cycle count to generate one new round key not explicitly stated",
+          "Timing relationship between kld deassertion and first round key output not specified"
+        ]
+      },
+      "control_contract": {
+        "module": "aes_key_expand_128",
+        "abstract_states": [],
+        "transitions": [],
+        "control_signals": [
+          {
+            "name": "kld",
+            "meaning": "Key load enable, controls key loading and expansion start"
+          }
+        ],
+        "bypass_conditions": [],
+        "exception_conditions": [],
+        "counter_rules": [],
         "image_grounding": []
       },
-      "control_contract": null,
       "datapath_contract": {
         "module": "aes_key_expand_128",
         "input_data": [
-          "key (128-bit initial key)"
+          "key"
         ],
         "main_flow": [
-          "Split key into four 32-bit words",
-          "RotWord and SubWord transformation",
-          "XOR with Rcon",
-          "Iterative XOR chain to generate new round words",
-          "Output to wo_0 to wo_3"
+          "RotWord",
+          "SubWord",
+          "RconXOR",
+          "XOR_previous_words"
         ],
         "intermediate_objects": [
           {
-            "name": "key_registers",
-            "role": "Four 32-bit registers holding current round key words"
+            "name": "round_key_registers",
+            "role": "four 32-bit registers holding the current round key words (output on wo_0..wo_3)"
           }
         ],
         "path_annotations": [],
         "registered_paths": [
-          "All key registers update simultaneously on clock rising edge",
-          "Output ports wo_0-wo_3 are registered immediately after loading"
+          "Key loading: when kld=1, input key[127:0] is split into four 32-bit words and loaded into round_key_registers on clock rising edge; outputs wo_0..wo_3 immediately.",
+          "Key expansion: each clock cycle when kld=0, the last word is transformed through RotWord, SubWord, RconXOR, then new round key words are computed by XOR with previous words and stored in registers on rising edge."
         ],
         "combinational_paths": [
-          "S-box byte substitution",
-          "Word rotation and XOR logic"
+          "RotWord: combinational cyclic left shift of a 32-bit word.",
+          "SubWord: four parallel S-box lookups on each byte of the rotated word, combinational.",
+          "RconXOR: XOR of SubWord result with the round constant from aes_rcon, combinational."
         ],
         "special_paths": [],
         "image_grounding": []
@@ -506,9 +554,24 @@
         "module": "aes_key_expand_128",
         "registers": [
           {
-            "name": "key_registers[0:3]",
+            "name": "rk0",
             "width": "32",
-            "role": "Four 32-bit registers holding current round key words"
+            "role": "Round key word 0 register"
+          },
+          {
+            "name": "rk1",
+            "width": "32",
+            "role": "Round key word 1 register"
+          },
+          {
+            "name": "rk2",
+            "width": "32",
+            "role": "Round key word 2 register"
+          },
+          {
+            "name": "rk3",
+            "width": "32",
+            "role": "Round key word 3 register"
           }
         ],
         "state_names": [],
@@ -516,20 +579,17 @@
           {
             "module": "aes_rcon",
             "count": 1,
-            "usage": "Round constant generation"
+            "usage": "Generate round constant for key expansion"
           },
           {
             "module": "aes_sbox",
             "count": 4,
-            "usage": "S-box byte substitution"
+            "usage": "Byte substitution for SubWord transformation"
           }
         ],
         "local_mappings": [
-          "key[127:96] loads into first register",
-          "key[95:64] loads into second register",
-          "key[63:32] loads into third register",
-          "key[31:0] loads into fourth register",
-          "W[i] = W[i-4]⊕T(W[i-1]) when i mod 4 = 0, otherwise W[i-4]⊕W[i-1]"
+          "key[127:96] -> rk0, key[95:64] -> rk1, key[63:32] -> rk2, key[31:0] -> rk3 (when kld=1)",
+          "Next rk0 = rk0 XOR (SubWord(RotWord(rk3)) XOR rcon_out); Next rk1 = rk1 XOR rk0_next; Next rk2 = rk2 XOR rk1_next; Next rk3 = rk3 XOR rk2_next"
         ],
         "image_grounding": []
       },
@@ -596,56 +656,42 @@
       },
       "timing_contract": {
         "module": "aes_inv_sbox",
-        "module_kind": "combinational",
-        "input_sampling": [
-          {
-            "signal": "a",
-            "signals": [],
-            "rule": "Input must remain stable until output is sampled."
-          }
-        ],
-        "output_timing": [
-          {
-            "signal": "b",
-            "signals": [],
-            "rule": "Output responds immediately to input changes."
-          }
-        ],
-        "reset_behavior": {
-          "signal": "",
-          "active": "",
-          "effect": ""
+        "clocking": {
+          "combinational": true,
+          "statement": "Pure combinational logic, no clock or reset required"
         },
-        "signal_semantics": [
-          {
-            "signal": "",
-            "semantic_type": ""
-          }
+        "reset_behavior": {},
+        "registered_objects": [],
+        "phase_timing": [],
+        "timing_rules": [
+          "Output responds immediately to input changes",
+          "Input must remain stable until output is sampled"
         ],
-        "parent_child_alignment": [],
-        "valid_windows": [],
+        "underspecified": []
+      },
+      "control_contract": {
+        "module": "aes_inv_sbox",
+        "abstract_states": [],
+        "transitions": [],
+        "control_signals": [],
+        "bypass_conditions": [],
+        "exception_conditions": [],
+        "counter_rules": [],
         "image_grounding": []
       },
-      "control_contract": null,
       "datapath_contract": {
         "module": "aes_inv_sbox",
         "input_data": [
-          "a (8-bit input byte)"
+          "a"
         ],
         "main_flow": [
-          "ROM lookup table mapping",
-          "Output substituted byte b"
+          "lookup_table_substitution"
         ],
-        "intermediate_objects": [
-          {
-            "name": "ROM_lookup_table",
-            "role": "256 x 8-bit mapping table storing pre-calculated inverse transformation results"
-          }
-        ],
+        "intermediate_objects": [],
         "path_annotations": [],
         "registered_paths": [],
         "combinational_paths": [
-          "Pure combinational logic implementation with immediate output response"
+          "Input byte a directly addresses a ROM/lookup table, output b is the substituted byte; pure combinational."
         ],
         "special_paths": [],
         "image_grounding": []
@@ -656,7 +702,7 @@
         "state_names": [],
         "submodule_facts": [],
         "local_mappings": [
-          "ROM lookup table mapping (256x8-bit) for inverse S-box transformation"
+          "Input byte a directly addresses a 256x8 ROM to produce substituted byte b"
         ],
         "image_grounding": []
       },
@@ -669,154 +715,6 @@
         {
           "parent": "aes_inv_cipher_top",
           "child": "aes_inv_sbox",
-          "image_grounding": []
-        }
-      ],
-      "outgoing_instantiation_relations": [],
-      "incoming_instantiation_relations": []
-    },
-    {
-      "module": "aes_rcon",
-      "is_top_module": false,
-      "interface_contract": {
-        "module": "aes_rcon",
-        "ports": [
-          {
-            "name": "clk",
-            "direction": "input",
-            "width": "1",
-            "role": "",
-            "active": "",
-            "meaning": "System clock"
-          },
-          {
-            "name": "kld",
-            "direction": "input",
-            "width": "1",
-            "role": "",
-            "active": "",
-            "meaning": "Key load signal (active high)"
-          },
-          {
-            "name": "out",
-            "direction": "output",
-            "width": "32",
-            "role": "",
-            "active": "",
-            "meaning": "Round constant value"
-          }
-        ],
-        "params": [],
-        "clock": "clk",
-        "reset": "",
-        "reset_polarity": "",
-        "handshakes": [],
-        "parameter_constraints": [],
-        "bus_roles": [],
-        "image_grounding": []
-      },
-      "timing_contract": {
-        "module": "aes_rcon",
-        "module_kind": "",
-        "input_sampling": [],
-        "output_timing": [
-          {
-            "signal": "out",
-            "signals": [],
-            "rule": "Output is registered, changes on clock edge. Generates corresponding round constant one time unit after the clock's rising edge."
-          }
-        ],
-        "reset_behavior": {
-          "signal": "kld",
-          "active": "high",
-          "effect": "Counter resets to 0 and output is set to 32'h01_00_00_00."
-        },
-        "signal_semantics": [
-          {
-            "signal": "rcnt",
-            "semantic_type": ""
-          }
-        ],
-        "parent_child_alignment": [],
-        "valid_windows": [],
-        "image_grounding": []
-      },
-      "control_contract": {
-        "module": "aes_rcon",
-        "abstract_states": [],
-        "transitions": [],
-        "control_signals": [
-          {
-            "name": "kld",
-            "meaning": "Key load signal (active high)"
-          }
-        ],
-        "bypass_conditions": [],
-        "exception_conditions": [
-          {
-            "condition": "When rcnt > 9, output should be 0x00000000 and counter continues to increment but output remains 0"
-          }
-        ],
-        "counter_rules": [
-          {
-            "counter": "rcnt",
-            "rule": "Counts from 0 to 9, increments each clock cycle when kld is deasserted, resets to 0 when kld is asserted."
-          }
-        ],
-        "image_grounding": []
-      },
-      "datapath_contract": {
-        "module": "aes_rcon",
-        "input_data": [
-          "clk",
-          "kld"
-        ],
-        "main_flow": [
-          "Counter rcnt increments each clock cycle when kld deasserted",
-          "Generate round constant based on rcnt value",
-          "Output to out port"
-        ],
-        "intermediate_objects": [
-          {
-            "name": "rcnt",
-            "role": "4-bit round counter tracking key expansion sequence"
-          }
-        ],
-        "path_annotations": [],
-        "registered_paths": [
-          "rcnt counter updates on clock edge",
-          "out output is registered and changes on clock edge"
-        ],
-        "combinational_paths": [],
-        "special_paths": [],
-        "image_grounding": []
-      },
-      "planning_facts": {
-        "module": "aes_rcon",
-        "registers": [
-          {
-            "name": "rcnt",
-            "width": "4",
-            "role": "Round counter for key expansion process"
-          }
-        ],
-        "state_names": [],
-        "submodule_facts": [],
-        "local_mappings": [
-          "RC[1] = 01, RC[i] = x·RC[i-1] in GF(2^8)",
-          "Output MSB holds round constant, lower 24 bits are 0x000000"
-        ],
-        "image_grounding": []
-      },
-      "parent_modules": [
-        "aes_key_expand_128"
-      ],
-      "child_modules": [],
-      "outgoing_hierarchy_relations": [],
-      "incoming_hierarchy_relations": [
-        {
-          "parent": "aes_key_expand_128",
-          "child": "aes_rcon",
           "image_grounding": []
         }
       ],
@@ -857,45 +755,42 @@
       },
       "timing_contract": {
         "module": "aes_sbox",
-        "module_kind": "combinational",
-        "input_sampling": [],
-        "output_timing": [
-          {
-            "signal": "b",
-            "signals": [],
-            "rule": "Output updates immediately after input changes."
-          }
-        ],
-        "reset_behavior": {
-          "signal": "",
-          "active": "",
-          "effect": ""
+        "clocking": {
+          "combinational": true,
+          "statement": "Combinational logic implementation, no clock required"
         },
-        "signal_semantics": [
-          {
-            "signal": "",
-            "semantic_type": ""
-          }
+        "reset_behavior": {},
+        "registered_objects": [],
+        "phase_timing": [],
+        "timing_rules": [
+          "Output updates immediately after input changes",
+          "Input must meet setup and hold times when used as a combinational element"
         ],
-        "parent_child_alignment": [],
-        "valid_windows": [],
+        "underspecified": []
+      },
+      "control_contract": {
+        "module": "aes_sbox",
+        "abstract_states": [],
+        "transitions": [],
+        "control_signals": [],
+        "bypass_conditions": [],
+        "exception_conditions": [],
+        "counter_rules": [],
         "image_grounding": []
       },
-      "control_contract": null,
       "datapath_contract": {
         "module": "aes_sbox",
         "input_data": [
-          "a (8-bit input byte)"
+          "a"
         ],
         "main_flow": [
-          "Lookup table mapping or mathematical GF(2^8) inverse + affine transform",
-          "Output substituted byte b"
+          "lookup_table_substitution"
         ],
         "intermediate_objects": [],
         "path_annotations": [],
         "registered_paths": [],
         "combinational_paths": [
-          "Pure combinational logic implementation, no clock required"
+          "Input byte a addresses a ROM/lookup table, output b is the substituted byte; pure combinational."
         ],
         "special_paths": [],
         "image_grounding": []
@@ -906,7 +801,7 @@
         "state_names": [],
         "submodule_facts": [],
         "local_mappings": [
-          "Lookup table mapping or mathematical GF(2^8) inverse + affine transform"
+          "Input byte a addresses a 256x8 look-up table to produce substituted byte b"
         ],
         "image_grounding": []
       },
@@ -919,6 +814,165 @@
         {
           "parent": "aes_key_expand_128",
           "child": "aes_sbox",
+          "image_grounding": []
+        }
+      ],
+      "outgoing_instantiation_relations": [],
+      "incoming_instantiation_relations": []
+    },
+    {
+      "module": "aes_rcon",
+      "is_top_module": false,
+      "interface_contract": {
+        "module": "aes_rcon",
+        "ports": [
+          {
+            "name": "clk",
+            "direction": "input",
+            "width": "1",
+            "role": "clock",
+            "active": "",
+            "meaning": "System clock"
+          },
+          {
+            "name": "kld",
+            "direction": "input",
+            "width": "1",
+            "role": "",
+            "active": "high",
+            "meaning": "Key load signal"
+          },
+          {
+            "name": "out",
+            "direction": "output",
+            "width": "32",
+            "role": "",
+            "active": "",
+            "meaning": "Round constant value"
+          }
+        ],
+        "params": [],
+        "clock": "clk",
+        "reset": "",
+        "reset_polarity": "",
+        "handshakes": [],
+        "parameter_constraints": [],
+        "bus_roles": [],
+        "image_grounding": []
+      },
+      "timing_contract": {
+        "module": "aes_rcon",
+        "clocking": {
+          "clock": "clk",
+          "update_edge": "rising clock edge",
+          "statement": "One time unit after the clock's rising edge, rcnt and out update"
+        },
+        "reset_behavior": {
+          "signal": "kld",
+          "active": "high",
+          "effect": "resets rcnt to 0 and forces out to 0x01000000 on the rising clock edge"
+        },
+        "registered_objects": [
+          {
+            "name": "rcnt",
+            "timing_role": "round counter",
+            "timing": "increments every clock cycle when kld=0, resets to 0 when kld=1"
+          },
+          {
+            "name": "out",
+            "timing_role": "output register",
+            "timing": "updated every clock cycle based on rcnt value"
+          }
+        ],
+        "phase_timing": [],
+        "timing_rules": [
+          "rcnt increments on every rising clock edge when kld is low",
+          "out updates on rising clock edge based on rcnt and kld",
+          "When kld is high, out is set to 0x01000000",
+          "When rcnt > 9, out is set to 0x00000000",
+          "Lower 24 bits of out are always 0x000000"
+        ],
+        "underspecified": [
+          "Propagation delay 'one time unit' is not defined in real timing constraints"
+        ]
+      },
+      "control_contract": {
+        "module": "aes_rcon",
+        "abstract_states": [],
+        "transitions": [],
+        "control_signals": [
+          {
+            "name": "kld",
+            "meaning": "Key load signal (active high), resets counter and forces output"
+          }
+        ],
+        "bypass_conditions": [],
+        "exception_conditions": [],
+        "counter_rules": [
+          {
+            "counter": "rcnt",
+            "rule": "Upon reset (kld=1), rcnt cleared to 0; when kld=0, rcnt increments every clock cycle; if rcnt>9, output is forced to 0x00000000."
+          }
+        ],
+        "image_grounding": []
+      },
+      "datapath_contract": {
+        "module": "aes_rcon",
+        "input_data": [],
+        "main_flow": [
+          "counter_update",
+          "constant_generation"
+        ],
+        "intermediate_objects": [
+          {
+            "name": "rcnt",
+            "role": "round counter register, counts 0-9, resets on kld, increments otherwise"
+          },
+          {
+            "name": "out",
+            "role": "32-bit output register holding the round constant, updated on clock edge"
+          }
+        ],
+        "path_annotations": [],
+        "registered_paths": [
+          "Counter update: rcnt increments on clock rising edge when kld=0, resets to 0 when kld=1 (active high), registered.",
+          "Output generation: out register is updated on clock rising edge based on rcnt value; out = 0x01000000 when kld=1; out = corresponding round constant for rcnt=0..9; out = 0x00000000 when rcnt>9."
+        ],
+        "combinational_paths": [],
+        "special_paths": [],
+        "image_grounding": []
+      },
+      "planning_facts": {
+        "module": "aes_rcon",
+        "registers": [
+          {
+            "name": "rcnt",
+            "width": "4",
+            "role": "Round counter register"
+          },
+          {
+            "name": "out_reg",
+            "width": "32",
+            "role": "Registered round constant output"
+          }
+        ],
+        "state_names": [],
+        "submodule_facts": [],
+        "local_mappings": [
+          "When kld=1: rcnt ← 0, out_reg ← 0x01000000",
+          "When kld=0: rcnt ← rcnt+1, out_reg ← {RC[rcnt], 24'h000000} where RC[0]=0x01, RC[1]=0x02, RC[2]=0x04, …, RC[9]=0x1B; if rcnt>9, out_reg ← 0x00000000"
+        ],
+        "image_grounding": []
+      },
+      "parent_modules": [
+        "aes_key_expand_128"
+      ],
+      "child_modules": [],
+      "outgoing_hierarchy_relations": [],
+      "incoming_hierarchy_relations": [
+        {
+          "parent": "aes_key_expand_128",
+          "child": "aes_rcon",
           "image_grounding": []
         }
       ],

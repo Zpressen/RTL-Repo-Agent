@@ -1,0 +1,40 @@
+{
+  "schema_version": "merge_context_retrieval_v1",
+  "module": "aes_inv_cipher_top",
+  "selected_spec_refs": [
+    "S003",
+    "S004",
+    "S008",
+    "S009",
+    "S010",
+    "S011",
+    "S012",
+    "S013",
+    "S015",
+    "S017"
+  ],
+  "use_kg_child_context": false,
+  "kg_child_modules": [],
+  "kg_child_context_reason": "Child module interfaces are sufficiently defined in spec blocks S015 (key expansion) and S017 (inverse S-box). Pulling full child source would add no benefit over spec‑provided port descriptions; the fragments already instantiate them correctly.",
+  "code_gap_notes": [
+    "InvShiftRows wiring (shift_out) appears to have multiple drivers and does not implement the correct cyclic right shifts per row as described in S011.",
+    "FSM transition from IDLE on ld alone (without prior key load) may violate intended key‑first flow; the state diagram in S008 must be reconciled.",
+    "Round counter (dcnt) width and done condition (dcnt==11) conflict with 4‑bit counter used in fragments; S009 clarifies proper terminal count.",
+    "InvMixColumns bypass logic and final_round flag need precise state dependence (S008, S011).",
+    "Key buffer loading order and reverse key retrieval mapping (kb[kcnt], kb[dcnt]) must match S012.",
+    "Output byte‑ordering in final capture (text_out, output_map) must follow column‑major ordering from S013."
+  ],
+  "selection_reason": [
+    "S003: mandatory module interface block; needed to verify port widths, directions, and external connectivity.",
+    "S004: defines all internal registers; essential to check register declarations against generated signals.",
+    "S008: state transition diagram; required to resolve FSM state ordering, transitions, and when rounds begin/end.",
+    "S009: round counter and done behaviour; the counter width, increment rules, and done assertion must match spec, resolving fragment discrepancies.",
+    "S010: initial data loading and state selection logic; needed to understand ld_r/ld handling and initial AddRoundKey.",
+    "S011: round transformation details; correct InvShiftRows pattern, InvMixColumns operation, and final‑round bypass must follow this block.",
+    "S012: key expansion buffer control and key retrieval; ensures kb loading sequence and dcnt‑based selection match the spec.",
+    "S013: final output mapping and timing; defines how text_out is populated in column‑major order, preventing byte‑order errors.",
+    "S015: key expansion module interface; verifies port names and widths for the u_ke instantiation.",
+    "S017: inverse S‑box module interface; verifies port names and widths for the 16 us00‑us33 instantiations."
+  ],
+  "fallback_used": false
+}

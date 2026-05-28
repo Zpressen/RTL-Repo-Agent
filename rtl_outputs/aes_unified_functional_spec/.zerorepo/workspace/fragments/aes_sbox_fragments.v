@@ -1,5 +1,5 @@
-// STAGE5_SUBTASK_BEGIN B1_decl_sbox_table: Declare a read-only 256-entry 8-bit lookup table with the standard AES forward S-box values. The module interface ports 
-localparam [7:0] sbox [0:255] = '{
+// STAGE5_SUBTASK_BEGIN B1_lookup_table_substitution: Implement the 8-bit forward AES S-box substitution using a lookup table (256x8 entries). For every input byte a, output 
+localparam [7:0] sbox_lut [0:255] = '{
     8'h63, 8'h7c, 8'h77, 8'h7b, 8'hf2, 8'h6b, 8'h6f, 8'hc5,
     8'h30, 8'h01, 8'h67, 8'h2b, 8'hfe, 8'hd7, 8'hab, 8'h76,
     8'hca, 8'h82, 8'hc9, 8'h7d, 8'hfa, 8'h59, 8'h47, 8'hf0,
@@ -25,7 +25,7 @@ localparam [7:0] sbox [0:255] = '{
     8'he7, 8'hc8, 8'h37, 8'h6d, 8'h8d, 8'hd5, 8'h4e, 8'ha9,
     8'h6c, 8'h56, 8'hf4, 8'hea, 8'h65, 8'h7a, 8'hae, 8'h08,
     8'hba, 8'h78, 8'h25, 8'h2e, 8'h1c, 8'ha6, 8'hb4, 8'hc6,
-    8'he8, 8'hdd, 8'h74, 8'h1f, 8'h4b, 8'hbd, 8'h8b, 8'h8a,
+    8'he8, 8'hdd, 8'h74, 8'h1f, 8'h4b, 8'hbd, 8'h8b, 8'haa,
     8'h70, 8'h3e, 8'hb5, 8'h66, 8'h48, 8'h03, 8'hf6, 8'h0e,
     8'h61, 8'h35, 8'h57, 8'hb9, 8'h86, 8'hc1, 8'h1d, 8'h9e,
     8'he1, 8'hf8, 8'h98, 8'h11, 8'h69, 8'hd9, 8'h8e, 8'h94,
@@ -33,8 +33,5 @@ localparam [7:0] sbox [0:255] = '{
     8'h8c, 8'ha1, 8'h89, 8'h0d, 8'hbf, 8'he6, 8'h42, 8'h68,
     8'h41, 8'h99, 8'h2d, 8'h0f, 8'hb0, 8'h54, 8'hbb, 8'h16
 };
-// STAGE5_SUBTASK_END B1_decl_sbox_table
-
-// STAGE5_SUBTASK_BEGIN B2_comb_lookup_output: Continuously drive output b from the S-box table entry selected by input a using combinational logic (e.g., assign b = s
-assign b = sbox[a];
-// STAGE5_SUBTASK_END B2_comb_lookup_output
+assign b = sbox_lut[a];
+// STAGE5_SUBTASK_END B1_lookup_table_substitution

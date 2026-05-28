@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
 
 from .bash_tools import CommandResult
+from .kg_debug_reads import DebugReadsMaterializer, kg_debug_session_id, kg_dynamic_slice
 from .trace_slicer import RtlBlock, build_driver_map, dynamic_slice, parse_rtl_blocks
 
 try:  # optional dependency
@@ -145,10 +146,76 @@ def _extract_dut_instance_name(tb_text: str, *, module_name: str) -> str | None:
     return None
 
 
+def _vcd_signal_names(vcd: Any) -> list[str]:
+    signals: list[str] = []
+    seen: set[str] = set()
+    get_signals = getattr(vcd, "get_signals", None)
+    method_signals = get_signals() if callable(get_signals) else []
+    for source in (
+        getattr(vcd, "signals", []),
+        getattr(vcd, "_signals", []),
+        getattr(vcd, "references_to_ids", {}),
+        method_signals,
+    ):
+        items = source.keys() if isinstance(source, dict) else source
+        try:
+            for signal in items:
+                if isinstance(signal, str) and signal not in seen:
+                    seen.add(signal)
+                    signals.append(signal)
+        except TypeError:
+            continue
+    return signals
+
+
+def _vcd_time_values(vcd: Any, signal: str) -> list[tuple[int, str]] | None:
+    def time_values(value: Any) -> list[tuple[int, str]] | None:
+        tv = value.get("tv") if isinstance(value, dict) else getattr(value, "tv", None)
+        return tv if isinstance(tv, list) else None
+
+    value = None
+    try:
+        value = vcd[signal]  # type: ignore[index]
+    except (KeyError, TypeError, AttributeError):
+        pass
+    tv = time_values(value)
+    if tv is not None:
+        return tv
+
+    private_signals = getattr(vcd, "_signals", None)
+    if isinstance(private_signals, dict):
+        tv = time_values(private_signals.get(signal))
+        if tv is not None:
+            return tv
+
+    data_sources: list[Any] = [getattr(vcd, "data", None), getattr(vcd, "_data", None)]
+    get_data = getattr(vcd, "get_data", None)
+    if callable(get_data):
+        data_sources.append(get_data())
+
+    references_to_ids = getattr(vcd, "references_to_ids", {})
+    for data in data_sources:
+        if isinstance(data, dict):
+            value = data.get(signal)
+            if value is None:
+                identifier = references_to_ids.get(signal) if isinstance(references_to_ids, dict) else None
+                if identifier is not None:
+                    value = data.get(identifier)
+            tv = time_values(value)
+            if tv is not None:
+                return tv
+            for entry in data.values():
+                if isinstance(entry, dict) and signal in (entry.get("references") or []):
+                    tv = time_values(entry)
+                    if tv is not None:
+                        return tv
+    return None
+
+
 def _vcd_find_signal(vcd: Any, leaf: str, *, prefer_substrings: list[str] | None = None) -> str | None:
     leaf = leaf.strip()
     candidates: list[str] = []
-    for s in getattr(vcd, "signals", []):
+    for s in _vcd_signal_names(vcd):
         last = s.split(".")[-1]
         if last == leaf or last.startswith(f"{leaf}["):
             candidates.append(s)
@@ -209,29 +276,30 @@ def _wildcard_match(expected: str | None, actual: str | None) -> bool:
 def _build_window_times(vcd: Any, *, t_star: int, k_edges: int = 10) -> list[int]:
     clk_sig = _vcd_find_signal(vcd, "clk")
     if clk_sig:
-        tv = vcd[clk_sig].tv  # type: ignore[index]
-        edges: list[int] = []
-        prev = None
-        for tt, vv in tv:
-            if prev is not None and vv != prev:
-                edges.append(tt)
-            prev = vv
-        edges = [t for t in edges if t <= t_star]
-        if edges:
-            keep = edges[-min(len(edges), k_edges) :]
-            if t_star not in keep:
-                keep.append(t_star)
-            return keep
+        tv = _vcd_time_values(vcd, clk_sig)
+        if tv is not None:
+            edges: list[int] = []
+            prev = None
+            for tt, vv in tv:
+                if prev is not None and vv != prev:
+                    edges.append(tt)
+                prev = vv
+            edges = [t for t in edges if t <= t_star]
+            if edges:
+                keep = edges[-min(len(edges), k_edges) :]
+                if t_star not in keep:
+                    keep.append(t_star)
+                return keep
 
     # Fallback: pick latest change times in the window from all signals.
     times = {t_star}
-    for s in getattr(vcd, "signals", [])[:200]:
-        try:
-            for tt, _vv in vcd[s].tv:  # type: ignore[index]
-                if tt <= t_star:
-                    times.add(tt)
-        except Exception:  # noqa: BLE001
+    for s in _vcd_signal_names(vcd)[:200]:
+        tv = _vcd_time_values(vcd, s)
+        if tv is None:
             continue
+        for tt, _vv in tv:
+            if tt <= t_star:
+                times.add(tt)
     return sorted(times)[-min(len(times), k_edges + 2) :]
 
 
@@ -241,6 +309,9 @@ def build_trace_report(
     sim_log_json: str,
     output_dir: Path,
     max_depth: int = 3,
+    kg_service: Any | None = None,
+    kg_session_id: str = "",
+    kg_hop_depth: int = 2,
     window_cycles: int = 10,
     diag_edges: int = 200,
 ) -> tuple[dict[str, Any], list[RtlBlock]]:
@@ -284,11 +355,92 @@ def build_trace_report(
     if not fail_signal_names:
         fail_signal_names = ports["outputs"]
 
-    suspect_blocks = dynamic_slice(
+    local_suspect_blocks = dynamic_slice(
         fail_signals=fail_signal_names,
         drivers=drivers,
         max_depth=max_depth,
     )
+
+    kg_debug_reads_note: dict[str, Any] = {
+        "enabled": bool(kg_service is not None),
+        "session_id": kg_session_id,
+        "materialized_edges": 0,
+        "related_modules": [],
+        "hop_depth": int(kg_hop_depth),
+        "slice_source": "local",
+        "fallback_reason": "",
+        "module_rows_count": 0,
+        "matched_blocks_count": 0,
+        "matched_symbols_count": 0,
+        "skipped_modules": [],
+    }
+    kg_slice_rows_summary: list[dict[str, Any]] = []
+    suspect_blocks = local_suspect_blocks
+
+    if kg_service is not None:
+        session_id = kg_session_id or kg_debug_session_id(module_name)
+        kg_debug_reads_note["session_id"] = session_id
+        try:
+            materializer = DebugReadsMaterializer(kg_service)
+            materialized = materializer.materialize(
+                module_name=module_name,
+                session_id=session_id,
+                hop_depth=kg_hop_depth,
+                current_rtl_path=rtl_path,
+                current_blocks=blocks,
+            )
+            kg_debug_reads_note.update(
+                {
+                    "materialized_edges": int(materialized.materialized_edges),
+                    "related_modules": list(materialized.related_modules),
+                    "hop_depth": int(materialized.hop_depth),
+                    "module_rows_count": int(materialized.module_rows_count),
+                    "matched_blocks_count": int(materialized.matched_blocks_count),
+                    "matched_symbols_count": int(materialized.matched_symbols_count),
+                    "skipped_modules": list(materialized.skipped_modules),
+                }
+            )
+            kg_slice = kg_dynamic_slice(
+                kg_service=kg_service,
+                module_name=module_name,
+                fail_signals=fail_signal_names,
+                session_id=session_id,
+                max_depth=max_depth,
+            )
+            uid_to_local_key = {uid: key for key, uid in materialized.current_uid_by_key.items()}
+            local_by_key = {
+                (block.kind, int(block.start_line), int(block.end_line)): block
+                for block in blocks
+            }
+            kg_selected: list[RtlBlock] = []
+            for uid in kg_slice.block_uids:
+                key = uid_to_local_key.get(uid)
+                block = local_by_key.get(key) if key else None
+                if block is not None and block not in kg_selected:
+                    kg_selected.append(block)
+            kg_slice_rows_summary = [
+                {
+                    "uid": row.get("uid"),
+                    "kind": row.get("kind"),
+                    "path": row.get("path"),
+                    "sl": row.get("sl"),
+                    "el": row.get("el"),
+                    "writes_count": len(row.get("writes") or []),
+                    "reads_count": len(row.get("reads") or []),
+                }
+                for row in kg_slice.rows[:50]
+                if isinstance(row, dict)
+            ]
+            if kg_selected:
+                suspect_blocks = kg_selected
+                kg_debug_reads_note["slice_source"] = "kg"
+            else:
+                kg_debug_reads_note["fallback_reason"] = materialized.fallback_reason or (
+                    "KG slicing returned no editable blocks for the current debug RTL."
+                )
+        except Exception as exc:  # noqa: BLE001
+            kg_debug_reads_note["fallback_reason"] = f"{type(exc).__name__}: {exc}"
+
     if not suspect_blocks and blocks:
         suspect_blocks = blocks
 
@@ -318,18 +470,20 @@ def build_trace_report(
         edges_in_order: list[tuple[int, str]] = []
         clk_full = _vcd_find_signal(vcd, "clk")
         if clk_full:
-            prev = None
-            for tt, vv in vcd[clk_full].tv:  # type: ignore[index]
-                if prev is not None and vv != prev:
-                    if prev != "1" and vv == "1":
-                        edge_at_time[tt] = "posedge"
-                    elif prev == "1" and vv != "1":
-                        edge_at_time[tt] = "negedge"
-                    else:
-                        edge_at_time[tt] = "edge"
-                    edge_idx_at_time[tt] = len(edges_in_order)
-                    edges_in_order.append((tt, edge_at_time[tt]))
-                prev = vv
+            tv = _vcd_time_values(vcd, clk_full)
+            if tv is not None:
+                prev = None
+                for tt, vv in tv:
+                    if prev is not None and vv != prev:
+                        if prev != "1" and vv == "1":
+                            edge_at_time[tt] = "posedge"
+                        elif prev == "1" and vv != "1":
+                            edge_at_time[tt] = "negedge"
+                        else:
+                            edge_at_time[tt] = "edge"
+                        edge_idx_at_time[tt] = len(edges_in_order)
+                        edges_in_order.append((tt, edge_at_time[tt]))
+                    prev = vv
 
         key_signals: list[str] = []
         # include top-level inputs
@@ -362,10 +516,10 @@ def build_trace_report(
             if not full:
                 return None
             inclusive = (leaf == "clk") or (t == 0)
-            try:
-                return _vcd_value_at(vcd[full].tv, t, inclusive=inclusive)  # type: ignore[index]
-            except Exception:  # noqa: BLE001
+            tv = _vcd_time_values(vcd, full)
+            if tv is None:
                 return None
+            return _vcd_value_at(tv, t, inclusive=inclusive)
 
         # fail output expected/actual at t*
         for sig in fail_signal_names:
@@ -505,6 +659,8 @@ def build_trace_report(
             "timing_hints": timing_hints,
             "ports": ports,
             "rtl_blocks": len(blocks),
+            "kg_debug_reads": kg_debug_reads_note,
+            "kg_slice_rows": kg_slice_rows_summary,
         },
     }
 

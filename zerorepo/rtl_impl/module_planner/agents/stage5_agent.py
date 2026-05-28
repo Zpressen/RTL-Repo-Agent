@@ -217,6 +217,16 @@ class Stage5Agent(BaseStageAgent):
             errors.append("code must not contain Markdown fences")
         if "STAGE5_SUBTASK_BEGIN" in artifact.code or "STAGE5_SUBTASK_END" in artifact.code:
             errors.append("code must not include stage5 subtask marker comments")
+        code_without_comments = _strip_verilog_comments(artifact.code)
+        if re.search(
+            r"(?m)^\s*(?:wire|reg|integer)\b[^;]*\b[A-Za-z_][A-Za-z0-9_]*\s*(?:\[[^\]]+\]\s*)+[^;]*;",
+            code_without_comments,
+        ):
+            errors.append("code must not use unpacked array declarations; flatten arrays into scalar signals")
+        if re.search(r"\b[A-Za-z_][A-Za-z0-9_]*\s*\[[^\]]+\]\s*\[[^\]]+\]", code_without_comments):
+            errors.append("code must not use multidimensional signal references; flatten arrays into scalar signals")
+        if re.search(r"\b(?:generate|endgenerate|genvar)\b", code_without_comments):
+            errors.append("code must not use generate/genvar; explicitly unroll repeated logic and instances")
         return errors
 
     def _validate_inputs(
@@ -378,6 +388,11 @@ def _first_nonempty_line(text: str) -> str:
         if stripped:
             return stripped
     return ""
+
+
+def _strip_verilog_comments(text: str) -> str:
+    without_block = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    return re.sub(r"//.*", "", without_block)
 
 
 def _extract_module_frame_section(text: str) -> str:

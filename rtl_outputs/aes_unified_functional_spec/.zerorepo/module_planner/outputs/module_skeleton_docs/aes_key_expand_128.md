@@ -7,260 +7,288 @@
   - module_contract_ref: module_contracts_v1::aes_key_expand_128
   - repo_skeleton_ref: repo_skeleton_v1::aes_key_expand_128
   - spec_ref: aes_key_expand_128.md
-- planning_note: Organize the module around key word registers, child instantiations (aes_rcon, aes_sbox×4), a combinational expansion network, and a sequential load/update block driven by kld flag.
+- planning_note: Organize the module around key word registers, child instances, combinational round-key calculation, and a synchronous update block controlled by the kld flag.
 
 ## 1. Module Frame
 ```verilog
 module aes_key_expand_128 (
-    // port list: clk, kld, key[127:0], wo_0[31:0], wo_1[31:0], wo_2[31:0], wo_3[31:0]
+    // clk, kld, key[127:0], wo_0[31:0], wo_1[31:0], wo_2[31:0], wo_3[31:0]
 );
 
-// <block: decl_key_storage_and_signals>
-// <block: inst_submodules>
-// <block: comb_expansion_network>
-// <block: seq_load_update>
-// <block: output_assignment>
+// <block: decl_round_key_registers>
+// <block: inst_aes_rcon>
+// <block: inst_aes_sbox_x4>
+// <block: comb_new_round_words>
+// <block: seq_register_update>
+// <block: comb_output_assignment>
 
 endmodule
 ```
 
 ## 2. Structural Skeleton
+
 ### Block
 - block_id: B1
-- block_label: decl_key_storage_and_signals
+- block_label: decl_round_key_registers
 - block_kind: decl
 - required: true
-- purpose: Declare the four 32-bit key word registers and all internal wires (intermediate transformation results, rcon output, sbox outputs).
+- purpose: Declare storage for the four 32-bit round-key words (r0, r1, r2, r3).
 - code_shape: declaration group
 - depends_on: []
 - placeholder:
 ```verilog
-// skeleton only: declaration cluster
-// - four 32-bit registers: w0, w1, w2, w3
-// - wires for combinational network intermediates: rot_word, sub_word[31:0], T_word, next_w0..3
-// - wires for rcon output: rcon_out[31:0]
-// - wires for sbox outputs: sb0_out[7:0], sb1_out[7:0], sb2_out[7:0], sb3_out[7:0]
+// skeleton only: declaration of four 32-bit round-key registers (r0-r3)
 ```
 - must_appear:
-  - the four key word registers (spec‑required)
+  - four 32-bit key-word registers per spec
 - may_appear:
-  - auxiliary combinational intermediate wires
+  - no other objects unless required by child instantiation wiring
 - retrieval_focus:
-  - state element declarations
-  - interface for downstream blocks
+  - central storage for current round key
+  - used by output block and by expansion logic
 
 ### Block
 - block_id: B2
-- block_label: inst_submodules
+- block_label: inst_aes_rcon
 - block_kind: inst
 - required: true
-- purpose: Instantiate one aes_rcon and four aes_sbox modules.
-- code_shape: instance group
-- depends_on: [B1]
+- purpose: Instantiate the round constant generator (aes_rcon) that produces a 32-bit round constant updated each cycle.
+- code_shape: module instantiation
+- depends_on: []
 - placeholder:
 ```verilog
-// skeleton only: submodule instances
-// aes_rcon u_rcon (.clk, .kld, .out(rcon_out));
-// aes_sbox u_sbox0 (.a( <rot byte1> ), .b(sb0_out));
-// aes_sbox u_sbox1 (.a( <rot byte2> ), .b(sb1_out));
-// aes_sbox u_sbox2 (.a( <rot byte3> ), .b(sb2_out));
-// aes_sbox u_sbox3 (.a( <rot byte4> ), .b(sb3_out));
+// skeleton only: aes_rcon instance
+//   .clk(clk), .kld(kld), .out(rcon_out)
 ```
 - must_appear:
-  - 1× aes_rcon
-  - 4× aes_sbox
+  - one instance of aes_rcon
 - may_appear:
-  - connection details deferred
+  - internal connecting signals
 - retrieval_focus:
-  - library/child hierarchy
-  - signal routing anchors
+  - delivers rcon_out to the combinational expansion block
 
 ### Block
 - block_id: B3
-- block_label: seq_load_update
-- block_kind: seq
+- block_label: inst_aes_sbox_x4
+- block_kind: inst
 - required: true
-- purpose: Synchronous load of initial key when kld=1; otherwise update the four registers with the next expanded round key words computed by the combinational network.
-- code_shape: always @(posedge clk)
-- depends_on: [B1, B4]
+- purpose: Instantiate four S-box modules for parallel byte substitution in SubWord.
+- code_shape: block of four module instantiation statements
+- depends_on: []
 - placeholder:
 ```verilog
-// skeleton only: sequential load/update process
-// always @(posedge clk) begin
-//   if (kld) begin
-//     // load w0..w3 from key[127:96], [95:64], [63:32], [31:0]
-//   end else begin
-//     // update w0..w3 with next_w0..next_w3 from combinational network
-//   end
-// end
+// skeleton only: four aes_sbox instances
+//   .a(sbox_in_byte[0:3]), .b(sbox_out_byte[0:3])
 ```
 - must_appear:
-  - kld‑controlled register load/update logic
+  - exactly four aes_sbox instances
 - may_appear:
-  - no reset logic unless spec eventually requires it
+  - wiring of byte-level input/output signals
 - retrieval_focus:
-  - the sole state‑update arc
-  - timing‑critical synchronous path
+  - S-box outputs feed into the combinational expansion block
 
 ### Block
 - block_id: B4
-- block_label: comb_expansion_network
+- block_label: comb_new_round_words
 - block_kind: comb
 - required: true
-- purpose: Compute SubWord(RotWord(w3)) using sbox instances, XOR with rcon_out to form T_word, then compute next_w0, next_w1, next_w2, next_w3 from current w0..w3 and T_word.
-- code_shape: combinational assign / wire networks
-- depends_on: [B1, B2]
+- purpose: Compute RotWord on r3, feed S-box inputs, form T = SubWord(RotWord) XOR rcon_out, then calculate next-round words (nxt_r0..nxt_r3) according to the spec’s XOR sequence.
+- code_shape: combinational always block or continuous assignments
+- depends_on: [B1, B2, B3]
 - placeholder:
 ```verilog
-// skeleton only: combinational key‑expansion network
-// assign rot_word = { w3[23:0], w3[31:24] };
-// assign sub_word = { sb0_out, sb1_out, sb2_out, sb3_out };
-// assign T_word = sub_word ^ rcon_out;
-// assign next_w0 = w0 ^ T_word;
-// assign next_w1 = w1 ^ next_w0;   // (derived from w1 ^ w0 ^ T_word)
-// assign next_w2 = w2 ^ next_w1;   // (derived from w2 ^ w1 ^ next_w0)
-// assign next_w3 = w3 ^ next_w2;   // (derived from w3 ^ w2 ^ next_w1)
+// skeleton only: combinational network for round-word generation
+//   apply RotWord to current r3
+//   route each byte to an aes_sbox input
+//   collect SubWord result
+//   compute T = SubWord XOR rcon_out
+//   generate nxt_r0..nxt_r3 using the spec-described XOR rules:
+//       nxt_r0 = current_r0 XOR T
+//       nxt_r1 = current_r1 XOR nxt_r0 XOR T (or equivalent per spec)
+//       nxt_r2 = current_r2 XOR nxt_r0 XOR nxt_r1 XOR T (per spec)
+//       nxt_r3 = current_r3 XOR nxt_r0 XOR nxt_r1 XOR nxt_r2 XOR T (per spec)
 ```
 - must_appear:
-  - RotWord, SubWord, T_word computation
-  - next‑round word equations as per AES‑128 spec
+  - RotWord transformation on r3
+  - S-box input mapping for four bytes
+  - rcon_out incorporation
+  - equations for all four next-round words
 - may_appear:
-  - algebraic simplification if allowed later
+  - intermediate signal names
 - retrieval_focus:
-  - combinational datapath core
-  - anchor for SubWord/RotWord and XOR tree
+  - new‑round datapath; must be consistent with the spec’s multi‑XOR wording
 
 ### Block
 - block_id: B5
-- block_label: output_assignment
+- block_label: seq_register_update
+- block_kind: seq
+- required: true
+- purpose: On every clock rising edge, if kld is active load key words from the input port; otherwise update the four registers with the computed next-round words.
+- code_shape: sequential always block
+- depends_on: [B1, B4]
+- placeholder:
+```verilog
+// skeleton only: synchronous load / update of r0–r3
+//   if (kld) begin
+//       r0 <= key[127:96];
+//       r1 <= key[ 95:64];
+//       r2 <= key[ 63:32];
+//       r3 <= key[ 31: 0];
+//   end else begin
+//       r0 <= nxt_r0;
+//       r1 <= nxt_r1;
+//       r2 <= nxt_r2;
+//       r3 <= nxt_r3;
+//   end
+```
+- must_appear:
+  - kld‑gated synchronous load from key
+  - synchronous update from B4’s outputs when kld is inactive
+- may_appear:
+  - reset handling if later determined, but spec is silent
+- retrieval_focus:
+  - the single register‐update rule; registers change only on clk rising edge
+
+### Block
+- block_id: B6
+- block_label: comb_output_assignment
 - block_kind: comb
 - required: true
-- purpose: Drive the module’s 32‑bit output ports directly from the internal register set.
-- code_shape: continuous assignment group
+- purpose: Continuously drive wo_0..wo_3 with the current register values.
+- code_shape: combinational assignment block
 - depends_on: [B1]
 - placeholder:
 ```verilog
-// skeleton only: output assignments
-// assign wo_0 = w0;
-// assign wo_1 = w1;
-// assign wo_2 = w2;
-// assign wo_3 = w3;
+// skeleton only: assign wo_0 = r0; wo_1 = r1; wo_2 = r2; wo_3 = r3;
 ```
 - must_appear:
-  - wo_0..wo_3 tied to the four key word registers
+  - output ports tied directly to r0–r3
 - may_appear:
-  - (no additional logic)
+  - nothing else
 - retrieval_focus:
-  - output interface binding
+  - ensures outputs immediately follow loading or expansion
 
 ## 3. Behavioral Overlay
+
 ### Module-Level Behavioral Summary
 - control_style: flag_driven
 - semantic_modes:
-  - KEY_LOAD: kld=1 → synchronous load of input key into registers; outputs follow immediately.
-  - EXPANSION: kld=0 → each clock cycle the combinational network computes the next round key and the registers update; outputs reflect the newly expanded round key.
+  - LOAD: kld active → synchronously load key words from the key bus into r0–r3; outputs reflect the loaded first round key.
+  - EXPAND: kld inactive → every clock cycle compute a new round key using the expansion formula and update r0–r3; outputs advance to the next round key.
 - state_model:
-  - object: w0, w1, w2, w3
-    storage_kind: registered (32‑bit each)
-    representation: implementation‑open (flattened into four separate registers)
-    notes: directly drive output ports; updated on rising clk
+  - object: r0–r3 (four 32‑bit registers)
+    storage_kind: registered
+    representation: implementation‑open
+    notes: four registers hold the current 128‑bit round key; all update simultaneously
 - global_invariants:
-  - wo_0…wo_3 always equal current register values
-  - expansion begins immediately after kld de‑assertion, producing one full round key per cycle
-  - all S‑box lookups and rcon constant are purely combinational or self‑contained in submodules
+  - wo_0..wo_3 always equal the current r0..r3 (no buffering delay)
+  - the expansion sequence does not stop automatically; the external controller re‑asserts kld to restart the sequence
 - open_semantic_questions:
-  - No explicit reset signal; behaviour at power‑up or after unspecified reset is undefined.
-  - The spec does not define a “done” indicator or a limit on the number of expansion rounds; the module may keep expanding indefinitely.
+  - reset behaviour is not specified; the skeleton defers any reset handling to later local generation
+  - total number of expansion cycles is not enforced inside the module
 
 ### Block Behavioral Overlay
 - block_id: B1
 - responsibilities:
-  - provide the storage objects (w0..w3) and all necessary combinational wires for the rest of the design
+  - provide the four 32‑bit storage elements that hold the working round key
 - timing_semantics:
-  - purely declarative; does not itself enforce timing
+  - registers are updated on every rising clock edge; no combinatorial read glitches
 - touched_objects:
-  - w0, w1, w2, w3
-  - all internal combinational wires
+  - r0, r1, r2, r3
 - coupling_rules:
-  - blocks B3, B4, B5 must reference exactly these declarations
+  - B5 is the sole updater of these registers
+  - B4 reads r3 and all registers for next‑word calculation
+  - B6 reads all registers
 - forbidden_drift:
-  - do not add extra registers, counters, or state machines not mentioned in the spec
+  - do not introduce extra shadow registers or non‑synchronous load paths
 
 - block_id: B2
 - responsibilities:
-  - incorporate the aes_rcon and four aes_sbox instances, making their outputs available to the combinational network
+  - supply a 32‑bit round constant (rcon_out) that increments each cycle when kld is low
 - timing_semantics:
-  - rcon is clocked and synchronous, sboxes are combinational
+  - rcon_out is updated by aes_rcon internally; its value must be valid before the expansion computation latches
 - touched_objects:
-  - rcon_out, sb0_out…sb3_out
+  - rcon_out (internal wire)
 - coupling_rules:
-  - rcon’s kld must be connected to the module’s kld signal (reset of round constant)
-  - sbox inputs must be driven by the rotated bytes from w3
+  - B4 is the only consumer of rcon_out
 - forbidden_drift:
-  - do not instantiate extra rcon or sbox beyond 1× rcon and 4× sbox
+  - do not replicate rcon logic inside this module; always delegate to aes_rcon instance
 
 - block_id: B3
 - responsibilities:
-  - implement the only synchronous update path; load initial key or capture expanded round key words
+  - map the rotated word bytes into four S‑box lookups and collect the SubWord result
 - timing_semantics:
-  - posedge clk, kld sampled to select load vs. update
+  - S‑box outputs are combinationally derived from their inputs; no internal register
 - touched_objects:
-  - w0..w3
-  - input key, kld
-  - next_w0..next_w3 from B4
+  - sbox inputs/outputs (internal wires)
 - coupling_rules:
-  - must use the exact combinational network outputs provided by B4
+  - B4 drives the S‑box inputs and reads the outputs
 - forbidden_drift:
-  - do not insert a reset or an extra state machine; kld alone controls the mode
+  - do not bypass or merge the four S‑box instantiations; exactly four discrete aes_sbox instances must appear
 
 - block_id: B4
 - responsibilities:
-  - deliver the next round key words to B3 through pure combinational logic
+  - perform RotWord on the current r3
+  - feed the rotated bytes to the S‑box instances
+  - XOR the SubWord result with rcon_out to form T
+  - compute next‑round words nxt_r0..nxt_r3 according to the spec’s explicit XOR chain
 - timing_semantics:
-  - all outputs must settle within one clock period; no sequential elements
+  - purely combinational; must settle within one clock cycle to meet timing constraints
 - touched_objects:
-  - current w0..w3 (read)
-  - rcon_out, sbox outputs
-  - T_word, rot_word, sub_word
-  - next_w0…next_w3
+  - r3 (read only), rcon_out, sbox inputs/outputs, nxt_r0..nxt_r3
 - coupling_rules:
-  - must respect the exact byte‑order and XOR scheme from the AES key expansion spec
+  - depends on B1 (r3), B2 (rcon_out), B3 (sbox outputs)
+  - provides new values to B5
 - forbidden_drift:
-  - do not add pipelining registers or change the round key generation algorithm
+  - do not reorder the XOR sequence arbitrarily; follow the spec’s wording (first word XOR, second word XOR with first and transformation, etc.) unless the specification is later clarified
 
 - block_id: B5
 - responsibilities:
-  - continuously drive the output ports from the current register values
+  - on kld asserted → load r0–r3 from key bus slices
+  - on kld de‑asserted → load r0–r3 from B4’s nxt_r0..nxt_r3
 - timing_semantics:
-  - purely combinational, no added latency
+  - synchronous on rising clock edge; no intermediate buffering
 - touched_objects:
-  - wo_0…wo_3, w0…w3
+  - r0..r3 (modify)
+  - key bus, nxt_r0..nxt_r3 (read)
 - coupling_rules:
-  - no other block should directly assign wo_*
+  - must not duplicate loading logic; all register writes pass through this block
+  - the loading slice mappings are dictated by the spec: key[127:96]→r0, key[95:64]→r1, etc.
 - forbidden_drift:
-  - do not gate the outputs or add output registers
+  - do not introduce asynchronous set or partial updates
+
+- block_id: B6
+- responsibilities:
+  - provide continuous output drive of wo_0..wo_3 from r0..r3
+- timing_semantics:
+  - purely combinational; no register between internal registers and output ports
+- touched_objects:
+  - r0..r3 (read only)
+  - wo_0..wo_3 (drive)
+- coupling_rules:
+  - must reflect r0..r3 immediately after any register update
+- forbidden_drift:
+  - do not insert latches, additional enable gates, or any combinatorial delay that would desynchronize the outputs from the internal state
 
 ## 4. Decision Ledger
-### Chosen Decision
-- topic: block organisation for key‑expansion datapath
-- decision: Separate combinational expansion network (B4) from sequential register update (B3) to clarify timing boundaries and reuse the pure‑combinational core for verification.
-- reason: The spec describes distinct combinatorial transformations (RotWord, SubWord, XOR) and a synchronous load/update; reflecting this in blocks simplifies later code generation and retrieval.
 
 ### Chosen Decision
-- topic: control style
-- decision: Use a flag‑driven control (kld) with no explicit FSM.
-- reason: The module’s only operational distinction is load vs. expand; no state transitions beyond this are required by the spec.
+- topic: skeletal decomposition strategy
+- decision: Separate the module into six blocks: declaration, two child instance blocks, combinational expansion network, sequential register update, and output assignment.
+- reason: This matches the spec’s clear separation of storage, sub‑modules, expansion arithmetic, and the kld‑controlled load/update mechanism. It keeps retrieval and later code generation predictable.
 
 ### Deferred Decision
 - items:
-  - Whether to include a round‑count limiter or a “done” flag – the spec is silent on this, so it is left for later elaboration when the consuming environment (aes_cipher_top) is fully defined.
-  - Exact power‑on/reset state of registers; if a reset signal is later required, it will be added as an optional port.
+  - exact logical form of the multi‑XOR equations for nxt_r1–nxt_r3 (as spec wording may be simplified or re‑interpreted during code generation)
+  - optional reset handling (not required by current spec)
+  - internal naming of S‑box byte wires
 
 ### Structural Risk
 - items:
-  - The combinational expansion network (B4) may grow complex, but the separation into its own block prevents it from interleaving with sequential logic.
-  - If the rcon submodule’s internal behaviour differs from the described round‑constant update, the inter‑block coupling will need adjustment.
+  - B4 (comb_new_round_words) may become a large combinational blob if all round‑word equations and routing are placed there without internal structure; careful partitioning may be needed during fragment generation.
+  - The dependency path from r3 through RotWord → S‑boxes → XOR chain and back to register inputs may create timing pressure; floorplanning awareness is required but not yet captured.
 
 ### Behavioral Risk
 - items:
-  - If aes_cipher_top expects precisely 11 round keys and then stops advancing, the absence of an explicit round counter in aes_key_expand_128 may lead to over‑expansion if not externally gated. This must be clarified during top‑level integration.
+  - The spec’s description of the second/third/fourth word XOR sequences contains possible redundancy (apparent repeated XOR of the transformation result) that could lead to behavioral divergence from standard AES‑128. Later clarification or correction may be needed before RTL generation.
+  - Absence of an explicit expansion‑end signal means the external integrator must know the correct round count; this module will continue expanding indefinitely if kld stays low.

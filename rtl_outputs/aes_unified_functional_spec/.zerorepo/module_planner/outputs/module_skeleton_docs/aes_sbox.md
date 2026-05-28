@@ -4,19 +4,19 @@
 - module_name: aes_sbox
 - file_path: rtl/aes_sbox.v
 - source_refs:
-  - module_contract_ref: module_contracts_v1::aes_sbox
+  - module_contract_ref: modules::aes_sbox
   - repo_skeleton_ref: repo_skeleton_v1::aes_sbox
   - spec_ref: aes_sbox.md
-- planning_note: Pure combinational byte substitution via a 256-entry lookup table; no clock, reset, or registered objects.
+- planning_note: This is a purely combinational leaf module; its internal structure is a single lookup‑table block. No clock, no reset, no registered objects.
 
 ## 1. Module Frame
 ```verilog
 module aes_sbox (
-    // port list placeholder: input [7:0] a, output [7:0] b
+    input  [7:0] a,
+    output [7:0] b
 );
 
-// <block: decl_sbox_table>
-// <block: comb_lookup_output>
+// <block: lookup_table_substitution>
 
 endmodule
 ```
@@ -24,101 +24,70 @@ endmodule
 ## 2. Structural Skeleton
 ### Block
 - block_id: B1
-- block_label: decl_sbox_table
-- block_kind: decl
+- block_label: lookup_table_substitution
+- block_kind: comb
 - required: true
-- purpose: Declare the fixed 256-entry 8-bit substitution table (ROM/LUT) holding the AES S-box values.
-- code_shape: declaration group (e.g., localparam array, case construct, inferred ROM)
+- purpose: Implement the 8‑bit forward S‑box substitution using a lookup table.
+- code_shape: combinational lookup (ROM or case‑like selection)
 - depends_on: []
 - placeholder:
 ```verilog
-// skeleton only: S-box table declaration (256 x 8 entries)
+// skeleton only: forward S‑box substitution table
+//   input  a : 8‑bit address
+//   output b : 8‑bit byte from S‑box table
+//   corner‑case coverage:
+//     0x00 → 0x63
+//     0xFF → 0x16
+//   table content from AES specification
 ```
 - must_appear:
-  - exactly 256 constant 8-bit values matching the AES forward S-box
+  - correct S‑box substitution values for all 256 input bytes
 - may_appear:
-  - compiler directives for ROM/LUT inference guidance
+  - implementation‑flexible mapping (ROM, packaged case, or LUT cascade)
 - retrieval_focus:
-  - S-box table structure and content source
-
-### Block
-- block_id: B2
-- block_label: comb_lookup_output
-- block_kind: comb
-- required: true
-- purpose: Continuously drive output byte b from the table entry selected by input byte a.
-- code_shape: combinational assignment or always_comb case block
-- depends_on: [B1]
-- placeholder:
-```verilog
-// skeleton only: combinational output b = sbox_table[a]
-```
-- must_appear:
-  - output b driven purely as a combinational function of a
-- may_appear:
-  - nothing else
-- retrieval_focus:
-  - lookup logic and output net
+  - the lookup table contents and corner‑case validation
 
 ## 3. Behavioral Overlay
 ### Module-Level Behavioral Summary
 - control_style: purely_combinational
 - semantic_modes:
-  - SBOX_LOOKUP: forward byte substitution only
-- state_model: none (no internal state)
+  - NORMAL: Input a directly selects output b through the lookup table.
+- state_model: []
 - global_invariants:
-  - b is a deterministic, purely combinational function of a
-  - no side effects, no internal memory, no retained state
-- open_semantic_questions: none
+  - Output b updates immediately after input a changes.
+  - 0x00 always maps to 0x63; 0xFF always maps to 0x16.
+- open_semantic_questions:
+  - None – substitution is fully specified.
 
 ### Block Behavioral Overlay
 - block_id: B1
 - responsibilities:
-  - provide the hardwired 256-entry 8-bit substitution array
-  - serve as a read-only constant ROM/LUT resource
+  - Convert the 8‑bit input byte a into the 8‑bit output byte b by applying the forward S‑box substitution.
+  - Guarantee corner cases 0x00→0x63 and 0xFF→0x16.
 - timing_semantics:
-  - static; no timing dependency on a or any other signal
-- touched_objects:
-  - internal sbox_table (array, localparam, or memory)
+  - Output appears after combinational propagation delay; no clock or pipelining.
+- touched_objects: []
 - coupling_rules:
-  - only B2 may read the table; all external paths see content only through B2
-  - table contents are immutable and defined at elaboration time
+  - Downstream logic may sample b combinatorially; external setup/hold must be respected.
 - forbidden_drift:
-  - do not add writability, clocking, or reset sensitivity
-  - do not alter the standard AES forward S-box values
-
-### Block Behavioral Overlay
-- block_id: B2
-- responsibilities:
-  - decode input a as an index into the S-box table
-  - drive output b with the selected byte
-  - implement continuous, unregistered lookup
-- timing_semantics:
-  - propagation delay only; b tracks a without clocked sampling
-  - setup/hold considerations are external to the module
-- touched_objects:
-  - input a, output b, sbox_table (from B1)
-- coupling_rules:
-  - depends on B1 for table content; must not replicate or bypass it
-  - output b is directly exposed at the module port; no internal buffering
-- forbidden_drift:
-  - do not introduce pipelining or registered stages
-  - do not speculate on additional control or qualification of the output
+  - Do not add any internal state, clock, reset, or sequential element.
+  - Do not alter the S‑box mapping from the AES forward table.
 
 ## 4. Decision Ledger
 ### Chosen Decision
-- topic: internal organisation
-- decision: Separate the table declaration (B1) from the lookup logic (B2) to allow clear retrieval and possible future substitution of implementation style.
-- reason: The spec allows ROM/LUT implementation flexibility; splitting the concerns avoids mixing storage and logic, and supports local retrieval for later code generation.
+- topic: Implementation method for substitution
+- decision: Use a lookup table (256×8 stored values) as the sole substitution mechanism, consistent with the spec’s preferred actual realization.
+- reason: Simplest and matches spec guidance; no mathematical inverse or affine logic needed explicitly.
 
 ### Deferred Decision
 - items:
-  - Physical implementation style of the S-box table (e.g., localparam array, case statement, block RAM, distributed LUT) will be resolved during synthesis or technology mapping, as explicitly noted in the design constraints.
+  - Exact implementation form (ROM, inferred LUT RAM, combinatorial case) remains open for a specific target technology.
+  - No external pipelining helpers are defined inside this module; external modules may add registers as needed.
 
 ### Structural Risk
 - items:
-  - If a single large table is inferred as distributed memory, it may consume significant LUT resources; this is a synthesis concern, not a skeleton structural risk.
+  - None – the single‑block combinational structure is unambiguous and appropriate for a leaf S‑box.
 
 ### Behavioral Risk
 - items:
-  - None; the combinational behaviour is unambiguous and fully specified.
+  - None – corner cases are explicitly specified and embedded in the lookup table.

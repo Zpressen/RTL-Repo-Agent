@@ -7,7 +7,7 @@ import shutil
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from shutil import which
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 
 from .bash_tools import CommandResult
 from .config import OpenAIConfig, load_openai_config
@@ -66,11 +66,15 @@ class ModuleDebugRunner:
         config: RtlDebugConfig | None = None,
         workspace_root: str | Path,
         logger: Any | None = None,
+        kg_service: Any | None = None,
+        initial_result_recorder: Callable[[str, str | Path, ModuleDebugResult], Any] | None = None,
     ) -> None:
         self.config = config or RtlDebugConfig.from_env()
         self.workspace_root = Path(workspace_root)
         self.debug_root = self.workspace_root / "debug"
         self.logger = logger
+        self.kg_service = kg_service
+        self.initial_result_recorder = initial_result_recorder
 
     def run_module(
         self,
@@ -80,6 +84,7 @@ class ModuleDebugRunner:
         task: Any,
         spec_text: str,
         contract_json: str,
+        spec_source_path: str | None = None,
     ) -> ModuleDebugResult:
         del task
         if not self.config.enabled:
@@ -102,29 +107,27 @@ class ModuleDebugRunner:
                 oracle_dir=oracle_dir,
                 workdir=workdir,
                 contract_json=contract_json,
+                spec_source_path=spec_source_path,
             )
             sim_reviewer = SimReviewer(str(workdir), str(workdir / "support.sv"))
             is_pass, mismatch_count, sim_output = sim_reviewer.review()
             self._write_text(workdir / "initial_sim_output.json", sim_output)
+            initial_result = self._initial_debug_result(
+                module_name=module_name,
+                is_pass=is_pass,
+                mismatch_count=mismatch_count,
+                sim_output=sim_output,
+                workdir=workdir,
+            )
+            self._record_initial_result(
+                module_name=module_name,
+                merged_file=merged_file,
+                result=initial_result,
+            )
             if is_pass:
-                return ModuleDebugResult(
-                    module=module_name,
-                    status="pass",
-                    mismatch_count=0,
-                    workdir=str(workdir),
-                    final_rtl_path=str(workdir / "rtl.sv"),
-                    sim_output_path=str(workdir / "initial_sim_output.json"),
-                )
+                return initial_result
             if mismatch_count <= 0:
-                return ModuleDebugResult(
-                    module=module_name,
-                    status="fail",
-                    mismatch_count=0,
-                    workdir=str(workdir),
-                    final_rtl_path=str(workdir / "rtl.sv"),
-                    sim_output_path=str(workdir / "initial_sim_output.json"),
-                    reason=self._summarize_command_result(sim_output),
-                )
+                return initial_result
 
             final_pass, _rtl_code, used_trials = self._run_editor(
                 sim_reviewer=sim_reviewer,
@@ -133,6 +136,7 @@ class ModuleDebugRunner:
                 sim_output=sim_output,
                 mismatch_count=mismatch_count,
                 contract_json=contract_json,
+                behavior_source="spec_tb",
             )
             final_rtl = workdir / "rtl.sv"
             trace_report = workdir / "trace_report.json"
@@ -180,6 +184,7 @@ class ModuleDebugRunner:
         oracle_dir: Path,
         workdir: Path,
         contract_json: str,
+        spec_source_path: str | None,
     ) -> None:
         if not merged_file.is_file():
             raise FileNotFoundError(f"Merged RTL not found: {merged_file}")
@@ -187,6 +192,8 @@ class ModuleDebugRunner:
             shutil.rmtree(workdir)
         workdir.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(merged_file, workdir / "rtl.sv")
+        stage1_contract_path = workdir / "stage1_contract.json"
+        self._write_text(stage1_contract_path, contract_json.rstrip() + "\n")
         self._write_text(workdir / "contract.json", contract_json.rstrip() + "\n")
 
         tb_path = self._select_testbench(oracle_dir, module_name)
@@ -199,8 +206,61 @@ class ModuleDebugRunner:
             "merged_file": str(merged_file),
             "testbench": str(tb_path),
             "support_file": str(workdir / "support.sv"),
+            "stage1_contract_path": str(stage1_contract_path),
+            "spec_source_path": spec_source_path or "",
+            "debug_behavior_source": "original_spec_and_visible_tb",
+            "diagnostic_metadata_source": "stage1",
+            "tb_visibility": "tb_only",
         }
         self._write_text(workdir / "debug_input_manifest.json", json.dumps(manifest, indent=2) + "\n")
+
+    def _initial_debug_result(
+        self,
+        *,
+        module_name: str,
+        is_pass: bool,
+        mismatch_count: int,
+        sim_output: str,
+        workdir: Path,
+    ) -> ModuleDebugResult:
+        if is_pass:
+            return ModuleDebugResult(
+                module=module_name,
+                status="pass",
+                mismatch_count=0,
+                workdir=str(workdir),
+                final_rtl_path=str(workdir / "rtl.sv"),
+                sim_output_path=str(workdir / "initial_sim_output.json"),
+            )
+        reason = "" if mismatch_count > 0 else self._summarize_command_result(sim_output)
+        return ModuleDebugResult(
+            module=module_name,
+            status="fail",
+            mismatch_count=max(0, int(mismatch_count)),
+            workdir=str(workdir),
+            final_rtl_path=str(workdir / "rtl.sv"),
+            sim_output_path=str(workdir / "initial_sim_output.json"),
+            reason=reason,
+        )
+
+    def _record_initial_result(
+        self,
+        *,
+        module_name: str,
+        merged_file: str | Path,
+        result: ModuleDebugResult,
+    ) -> None:
+        if self.initial_result_recorder is None:
+            return
+        try:
+            self.initial_result_recorder(module_name, merged_file, result)
+        except Exception as exc:  # noqa: BLE001
+            if self.logger is not None:
+                self.logger.warning(
+                    "[rtl_module_planner] Initial simulation KG record failed for %s: %s",
+                    module_name,
+                    exc,
+                )
 
     def _ensure_toolchain_path(self) -> None:
         if which("verilator"):
@@ -248,6 +308,7 @@ class ModuleDebugRunner:
         sim_output: str,
         mismatch_count: int,
         contract_json: str,
+        behavior_source: Literal["contract", "spec_tb"] = "contract",
     ) -> tuple[bool, str, int]:
         try:
             from .rtl_editor import RTLEditor
@@ -266,6 +327,7 @@ class ModuleDebugRunner:
             max_trials=int(self.config.max_trials),
             enable_asserter=bool(self.config.enable_asserter),
             enable_boolean_proofer=bool(self.config.enable_boolean_proofer),
+            kg_service=self.kg_service,
         )
         return self._run_async(
             editor.chat(
@@ -274,6 +336,7 @@ class ModuleDebugRunner:
                 sim_failed_log=sim_output,
                 sim_mismatch_cnt=int(mismatch_count),
                 contract_json=contract_json,
+                behavior_source=behavior_source,
                 max_trials=int(self.config.max_trials),
             )
         )

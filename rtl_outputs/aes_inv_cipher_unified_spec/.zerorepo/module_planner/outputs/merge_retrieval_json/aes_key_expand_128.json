@@ -1,0 +1,33 @@
+{
+  "schema_version": "merge_context_retrieval_v1",
+  "module": "aes_key_expand_128",
+  "selected_spec_refs": [
+    "S003",
+    "S005",
+    "S007",
+    "S008",
+    "S009",
+    "S010",
+    "S012",
+    "S016"
+  ],
+  "use_kg_child_context": false,
+  "kg_child_modules": [],
+  "kg_child_context_reason": "The generated fragments already instantiate aes_rcon and aes_sbox submodules correctly based on interface spec blocks S012 and S014. The child module interfaces are simple and fully specified in those blocks; additional KG context would not add value for merging.",
+  "code_gap_notes": [
+    "rcon_out wire declared as [7:0] must be 32-bit to match aes_rcon output (S012), causing type mismatch in the T_word XOR expression.",
+    "SubWord byte ordering is incorrect: fragments map S-box output of rot_word low byte (rk3[31:24]) to the highest sub_word byte, and high byte (rk3[23:16]) to the lowest, contradicting S009 which requires the first byte (rot_word MSB) to occupy the highest 8 bits.",
+    "T_word computation assumes rcon_out is an 8‑bit scalar, but it should be a 32‑bit value, requiring a full 32‑bit XOR if rcon_out is widened."
+  ],
+  "selection_reason": [
+    "S003: mandatory current module interface block — defines port names, directions, and widths.",
+    "S005: provides mathematical derivation of T and the word recurrence, necessary to verify the combinatorial key‑next logic.",
+    "S007: specifies exact mapping of input key bits to internal registers during loading, confirming the sequential load logic.",
+    "S008: defines expansion behavior when kld is inactive, essential for the register update path.",
+    "S009: defines SubWord byte ordering and S‑box output placement — critical to correct the byte‑ordering bug in the fragments.",
+    "S010: describes round constant size and the fact that only the high byte is non‑zero; needed to fix the rcon_out width and the XOR in T_word.",
+    "S012: submodule interface for aes_rcon; corrects the rcon_out width mismatch and confirms the port list.",
+    "S016: resource constraint block — confirms four 32‑bit registers and four S‑box instances, helping validate completeness."
+  ],
+  "fallback_used": false
+}

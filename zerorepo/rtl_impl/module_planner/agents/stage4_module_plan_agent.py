@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
+
+from zerorepo.rtl_impl.retrieval_agent import BlockSpecRetriever
+from zerorepo.rtl_impl.retrieval_agent.utils import interface_block_refs
 
 from ..prompts import stage4_module_plan
 from ..schemas import (
     ModulePlanArtifact,
     ModulePlanRecord,
     ModuleSpecBlocks,
+    ModuleSkeletonExport,
     PlannerTaskInput,
     Stage3ModuleSkeletonArtifact,
     Stage4ModulePlansArtifact,
@@ -23,6 +28,7 @@ class Stage4ModulePlanAgent(BaseStageAgent):
     system_role = stage4_module_plan.SYSTEM_ROLE
     allow_best_effort_quality_fallback = False
     plans_dirname = "module_plan_json"
+    retrieval_dirname = "block_spec_retrieval_json"
 
     def __init__(
         self,
@@ -31,9 +37,14 @@ class Stage4ModulePlanAgent(BaseStageAgent):
         artifact_sink=None,
         logger=None,
         output_root: str | Path | None = None,
+        block_spec_retriever: BlockSpecRetriever | None = None,
     ):
         super().__init__(llm_client, context_provider, artifact_sink, logger)
         self.output_root = Path(output_root) if output_root is not None else None
+        self.block_spec_retriever = block_spec_retriever or BlockSpecRetriever(
+            llm_client=self.llm_client,
+            logger=self.logger,
+        )
 
     def run(self, task_input: Any, partial_artifacts: Dict[str, Any]) -> Stage4ModulePlansArtifact:
         return self.run_incremental(task_input, partial_artifacts)
@@ -62,6 +73,18 @@ class Stage4ModulePlanAgent(BaseStageAgent):
             skeleton_blocks = _extract_skeleton_blocks(skeleton_markdown)
             spec_block_ids = {item.block_id for item in module_spec_by_name[module_name].blocks}
             interface_spec_ids = _find_interface_spec_block_ids(module_spec_by_name[module_name])
+            skeleton_context = self._read_skeleton_export_context(record_by_module[module_name])
+            retrieval_result = self.block_spec_retriever.select_block_spec_refs(
+                module_name=module_name,
+                module_spec=module_spec_by_name[module_name],
+                module_skeleton=skeleton_markdown,
+                skeleton_blocks=skeleton_blocks,
+                skeleton_context=skeleton_context,
+            )
+            expected_spec_refs_by_id = {
+                selection.id: list(selection.spec_refs)
+                for selection in retrieval_result.selections
+            }
             prompt = stage4_module_plan.build_prompt(
                 module_name=module_name,
                 module_skeleton=skeleton_markdown,
@@ -71,6 +94,7 @@ class Stage4ModulePlanAgent(BaseStageAgent):
                         {
                             "id": block.subtask_id,
                             "target": block.target,
+                            "spec_refs": expected_spec_refs_by_id[block.subtask_id],
                         }
                         for block in skeleton_blocks
                     ]
@@ -81,6 +105,8 @@ class Stage4ModulePlanAgent(BaseStageAgent):
                         "module": module_name,
                         "skeleton_doc_file": str(skeleton_path),
                         "module_interface_spec_refs": interface_spec_ids,
+                        "block_spec_retrieval_file": self._retrieval_relative_path(module_name),
+                        "block_spec_retrieval_fallback_used": retrieval_result.fallback_used,
                     }
                 ),
             )
@@ -97,17 +123,19 @@ class Stage4ModulePlanAgent(BaseStageAgent):
                 task,
                 partial_artifacts,
                 output_model=ModulePlanArtifact,
-                quality_validator=lambda artifact, expected_module=module_name, expected_blocks=skeleton_blocks, valid_spec_ids=spec_block_ids, required_interface_ids=interface_spec_ids: (
+                quality_validator=lambda artifact, expected_module=module_name, expected_blocks=skeleton_blocks, valid_spec_ids=spec_block_ids, required_interface_ids=interface_spec_ids, expected_refs=expected_spec_refs_by_id: (
                     self._validate_module_plan(
                         artifact,
                         expected_module=expected_module,
                         expected_blocks=expected_blocks,
                         valid_spec_ids=valid_spec_ids,
                         interface_spec_ids=required_interface_ids,
+                        expected_spec_refs_by_id=expected_refs,
                     )
                 ),
             )
             plan_file = self._plan_relative_path(module_name)
+            retrieval_file = self._retrieval_relative_path(module_name)
             records.append(ModulePlanRecord(module=module_name, plan_file=plan_file))
             if persist_callback is not None:
                 persist_callback(
@@ -115,6 +143,8 @@ class Stage4ModulePlanAgent(BaseStageAgent):
                         "module": module_name,
                         "plan_file": plan_file,
                         "plan_payload": model_dump(module_plan),
+                        "retrieval_file": retrieval_file,
+                        "retrieval_payload": model_dump(retrieval_result),
                         "manifest": {
                             "schema_version": "module_plans_v1",
                             "task_id": task.task_id,
@@ -171,9 +201,11 @@ class Stage4ModulePlanAgent(BaseStageAgent):
         expected_blocks: List["_SkeletonBlock"],
         valid_spec_ids: set[str],
         interface_spec_ids: List[str] | None = None,
+        expected_spec_refs_by_id: Dict[str, List[str]] | None = None,
     ) -> List[str]:
         errors: List[str] = []
         interface_ids = list(interface_spec_ids or [])
+        expected_refs = expected_spec_refs_by_id or {}
         if artifact.schema_version != "module_plan_v1":
             errors.append("schema_version must remain module_plan_v1")
         if artifact.module != expected_module:
@@ -209,6 +241,10 @@ class Stage4ModulePlanAgent(BaseStageAgent):
                 errors.append(f"{subtask.id}: unknown spec_refs {unknown_refs}")
             if not subtask.spec_refs:
                 errors.append(f"{subtask.id}: spec_refs must not be empty")
+            if subtask.id in expected_refs and subtask.spec_refs != expected_refs[subtask.id]:
+                errors.append(
+                    f"{subtask.id}: spec_refs must exactly match block retrieval output {expected_refs[subtask.id]}"
+                )
             if len(subtask.constraints) > 3:
                 errors.append(f"{subtask.id}: constraints must contain at most 3 items")
         return errors
@@ -235,8 +271,32 @@ class Stage4ModulePlanAgent(BaseStageAgent):
             return path
         return (self.output_root / path).resolve()
 
+    def _read_skeleton_export_context(self, record: Any) -> Any | None:
+        export_file = getattr(record, "export_file", None)
+        if not export_file:
+            return None
+        export_path = self._resolve_output_path(str(export_file))
+        if not export_path.exists():
+            self.logger.warning("[%s] Module skeleton export is missing: %s", self.stage_name, export_path)
+            return None
+        try:
+            with open(export_path, "r", encoding="utf-8") as f:
+                payload = json.load(f)
+            return validate_model(ModuleSkeletonExport, payload)
+        except Exception as exc:  # noqa: BLE001 - structured context is optional for retrieval.
+            self.logger.warning(
+                "[%s] Ignoring invalid module skeleton export at %s: %s",
+                self.stage_name,
+                export_path,
+                exc,
+            )
+            return None
+
     def _plan_relative_path(self, module_name: str) -> str:
         return f"{self.plans_dirname}/{module_name}.json"
+
+    def _retrieval_relative_path(self, module_name: str) -> str:
+        return f"{self.retrieval_dirname}/{module_name}.json"
 
 
 class _SkeletonBlock:
@@ -284,37 +344,4 @@ def _extract_skeleton_blocks(skeleton_markdown: str) -> List[_SkeletonBlock]:
 
 
 def _find_interface_spec_block_ids(module_spec: ModuleSpecBlocks) -> List[str]:
-    primary_matches = [block.block_id for block in module_spec.blocks if _is_primary_interface_spec_block(block.text)]
-    if primary_matches:
-        return primary_matches
-    fallback_matches = [block.block_id for block in module_spec.blocks if _is_interface_like_spec_block(block.text)]
-    return fallback_matches[:1]
-
-
-def _is_primary_interface_spec_block(text: str) -> bool:
-    if not _is_interface_like_spec_block(text):
-        return False
-    heading = _first_nonempty_line(text).lower()
-    if "interface" not in heading:
-        return False
-    prefix = heading.split("interface", 1)[0]
-    return not re.search(r"\d+\.\d+", prefix)
-
-
-def _is_interface_like_spec_block(text: str) -> bool:
-    normalized = text.lower()
-    if "interface" not in normalized:
-        return False
-    has_table_headers = "direction" in normalized and "width" in normalized and (
-        "signal" in normalized or "port" in normalized
-    )
-    has_port_rows = bool(re.search(r"\|\s*[a-zA-Z_][\w]*\s*\|\s*(?:input|output|inout)\b", normalized))
-    return has_table_headers or has_port_rows
-
-
-def _first_nonempty_line(text: str) -> str:
-    for line in text.splitlines():
-        stripped = line.strip().strip("*").strip()
-        if stripped:
-            return stripped
-    return ""
+    return interface_block_refs(module_spec)

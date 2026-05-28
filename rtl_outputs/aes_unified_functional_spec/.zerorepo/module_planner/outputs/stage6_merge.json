@@ -28,5 +28,51 @@
       "fragment_file": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/fragments/aes_cipher_top_fragments.v",
       "merged_file": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/merged/aes_cipher_top.v"
     }
+  ],
+  "debug_files": [
+    {
+      "module": "aes_sbox",
+      "status": "pass",
+      "mismatch_count": 0,
+      "debug_trials": 0,
+      "workdir": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_sbox",
+      "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_sbox/rtl.sv",
+      "trace_report_path": "",
+      "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_sbox/initial_sim_output.json",
+      "reason": ""
+    },
+    {
+      "module": "aes_rcon",
+      "status": "pass",
+      "mismatch_count": 0,
+      "debug_trials": 0,
+      "workdir": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_rcon",
+      "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_rcon/rtl.sv",
+      "trace_report_path": "",
+      "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_rcon/initial_sim_output.json",
+      "reason": ""
+    },
+    {
+      "module": "aes_key_expand_128",
+      "status": "pass",
+      "mismatch_count": 0,
+      "debug_trials": 0,
+      "workdir": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_key_expand_128",
+      "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_key_expand_128/rtl.sv",
+      "trace_report_path": "",
+      "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_key_expand_128/initial_sim_output.json",
+      "reason": ""
+    },
+    {
+      "module": "aes_cipher_top",
+      "status": "fixed",
+      "mismatch_count": 0,
+      "debug_trials": 5,
+      "workdir": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_cipher_top",
+      "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_cipher_top/rtl.sv",
+      "trace_report_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_cipher_top/trace_report.json",
+      "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_cipher_top/debug_sim_output.json",
+      "reason": ""
+    }
   ]
 }

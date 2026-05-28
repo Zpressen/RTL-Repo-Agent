@@ -6,17 +6,17 @@
 - source_refs:
   - module_contract_ref: module_contracts_v1::aes_inv_sbox
   - repo_skeleton_ref: repo_skeleton_v1::aes_inv_sbox
-  - spec_ref: aes_inv_sbox Design Specification
-- planning_note: Pure combinational inverse S-box lookup module. Structure focuses on port/LUT declaration and immediate combinational mapping, aligned with spec Sec 4.3 and Sec 6 constraints.
+  - spec_ref: aes_inv_sbox Design Specification (inside unified spec)
+- planning_note: Purely combinational lookup module. Organise around a constant 256×8 inverse S‑box table and a direct output assignment block.
 
 ## 1. Module Frame
 ```verilog
 module aes_inv_sbox (
-    // port declaration placeholder: a, b
+    // port list: a (input [7:0]), b (output [7:0])
 );
 
-// <block: decl_interface_and_lut>
-// <block: comb_inv_sbox_mapping>
+// <block: decl_inv_sbox_table>
+// <block: comb_output_assignment>
 
 endmodule
 ```
@@ -24,136 +24,99 @@ endmodule
 ## 2. Structural Skeleton
 ### Block
 - block_id: B1
-- block_label: decl_interface_and_lut
+- block_label: decl_inv_sbox_table
 - block_kind: decl
 - required: true
-- purpose: Declare module ports and the 256x8-bit constant lookup table for inverse S-box values.
-- code_shape: declaration group (ports, parameter/localparam constant array)
+- purpose: Declare the 256‑entry inverse S‑box constant table (ROM).
+- code_shape: declaration group (256×8‑bit constant array)
 - depends_on: []
 - placeholder:
 ```verilog
-// skeleton only: port declarations for a (input 8), b (output 8)
-// skeleton only: constant array declaration for 256-entry inverse S-box LUT
+// skeleton: constant inv_sbox_table[0:255] with predefined inverse S‑box values
 ```
 - must_appear:
-  - ports: a (input 8), b (output 8)
-  - 256x8 constant table per spec Sec 4.3
+  - the complete inverse S‑box mapping (all 256 entries)
 - may_appear:
-  - helper macros or generation pragmas for LUT population
+  - nothing else
 - retrieval_focus:
-  - interface specification
-  - LUT constant values from spec or external reference
+  - table content and addressing
 
 ### Block
 - block_id: B2
-- block_label: comb_inv_sbox_mapping
+- block_label: comb_output_assignment
 - block_kind: comb
 - required: true
-- purpose: Map input byte `a` to output byte `b` using the declared LUT.
-- code_shape: combinational assignment or continuous logic
+- purpose: Drive output b from the inverse S‑box table using input a as address.
+- code_shape: combinational assignment (continuous, no clocking)
 - depends_on: [B1]
 - placeholder:
 ```verilog
-// skeleton only: combinational mapping from a to b via LUT
-// skeleton only: ensure immediate response per timing contract
+// skeleton: b driven by inv_sbox_table[a] without any sequential elements
 ```
 - must_appear:
-  - mapping logic referencing declared LUT
-  - direct assignment of b based on a
+  - connection from input a to table address
+  - connection from table output to output b
 - may_appear:
-  - array indexing or exhaustive enumeration implementation
+  - internal combinational wires (optional)
 - retrieval_focus:
-  - combinational path constraints
-  - spec corner cases (0x00->0x52, 0x63->0x00, 0xFF->0x7D)
+  - address-to-output mapping, combinational path
 
 ## 3. Behavioral Overlay
 ### Module-Level Behavioral Summary
 - control_style: purely_combinational
 - semantic_modes:
-  - LUT_LOOKUP: direct byte-to-byte substitution
+  - SINGLE_MODE: continuous byte substitution
 - state_model:
-  - object: none
-  - storage_kind: none
-  - representation: stateless
-  - notes: module is purely combinational per spec Sec 6; no clock/reset required
+  - object: N/A
+    storage_kind: N/A
+    representation: purely combinational
+    notes: No clocked registers or state elements; behaviour is entirely memoryless
 - global_invariants:
-  - b is always the inverse S-box transformation of a
-  - S-box(Inv_S-box(x)) == x for all 8-bit x (spec Sec 5.2)
+  - Output b always equals inv_sbox_table[a]
+  - No internal state, no clock, no reset
 - open_semantic_questions:
-  - exact LUT population source (hardcoded vs. generated) left to implementation choice per spec Sec 4.3
+  - none
 
 ### Block Behavioral Overlay
 - block_id: B1
 - responsibilities:
-  - expose ports `a` and `b`
-  - define the 256-entry constant array matching inverse S-box mathematical definition
+  - Provide fixed inverse S‑box mapping values as a constant (ROM) for all 256 inputs.
 - timing_semantics:
-  - static declarations, no timing behavior
+  - Not applicable (static values)
 - touched_objects:
-  - a, b, INV_SBOX_LUT
+  - inv_sbox_table (internal constant)
 - coupling_rules:
-  - B2 reads INV_SBOX_LUT declared here
+  - B2 reads this table; any generated table must match the standard AES inverse S‑box exactly.
 - forbidden_drift:
-  - do not add clock/reset ports or sequential storage
-  - do not alter port widths from spec
+  - Do not alter table values; must be the correct inverse S‑box mapping.
 
 - block_id: B2
 - responsibilities:
-  - perform immediate combinational lookup
-  - guarantee output stability when input is stable
+  - Continuously compute output b = inv_sbox_table[a] without any clocked logic.
 - timing_semantics:
-  - output responds immediately to input changes (spec Sec 6)
+  - Propagation delay only; b updates combinatorially after a changes.
 - touched_objects:
-  - a, b, INV_SBOX_LUT
+  - a (input), b (output), inv_sbox_table
 - coupling_rules:
-  - must read from B1's LUT without introducing pipeline registers
+  - Depends on B1 for table content; must not assume any pipelining or registered stages.
 - forbidden_drift:
-  - do not introduce registered paths or multi-cycle latency
-  - ensure all 256 entries are covered to avoid inferred latches
+  - Do not add clock, reset, enable, or any sequential elements; do not add logic that modifies the output beyond direct table lookup.
 
-## 4. Subtask Plan
-### Subtask
-- subtask_id: ST1
-- implements_blocks: [B1]
-- generation_goal: Declare ports and populate the 256x8-bit inverse S-box constant table.
-- required_spec_sections:
-  - 3. Interface
-  - 4.3 Implementation Method (ROM structure)
-- optional_spec_sections:
-  - 4.2 Mathematical Derivation (for table generation if needed)
-- output_contract: Provides `a`, `b` ports and `INV_SBOX_LUT` constant array.
-- merge_contract: Exposes declared constants for B2 to reference.
-
-### Subtask
-- subtask_id: ST2
-- implements_blocks: [B2]
-- generation_goal: Implement combinational lookup logic mapping `a` to `b`.
-- required_spec_sections:
-  - 4.3 Implementation Method
-  - 5. Corner Cases
-  - 6. Constraints
-- optional_spec_sections:
-  - 4.4 Transformation Example
-- output_contract: Combinational assignment of `b` from `INV_SBOX_LUT[a]`.
-- merge_contract: Completes module functionality; verifies against spec corner cases and immediate response constraint.
-
-## 5. Decision Ledger
+## 4. Decision Ledger
 ### Chosen Decision
-- topic: implementation structure
-- decision: Split into declaration block (B1) and combinational lookup block (B2).
-- reason: Aligns with spec's explicit separation of interface/LUT definition and immediate combinational response. Keeps retrieval focused on constants vs. logic.
+- topic: module organization
+- decision: Split into a declaration block for the constant table and a combinational assignment block for the output.
+- reason: Clear separation of data and access logic aids retrieval, verification, and matches the intended ROM‑based implementation.
 
 ### Deferred Decision
 - items:
-  - exact Verilog construct for LUT population (packed array initialization vs. exhaustive enumeration)
-  - whether to hardcode all 256 values inline or use a generation-time macro
+  - exact RTL representation of the 256×8 table (e.g., initialised `reg` array vs. localparam constant vs. synthesis‑directed ROM)
+  - final mapping to target device resources (ROM block vs. distributed LUT)
 
 ### Structural Risk
 - items:
-  - large constant arrays may require careful formatting to avoid tool parsing limits
-  - single combinational path may have high fan-in if implemented as a massive enumeration; structure allows alternative array indexing to mitigate
+  - none (simple combinational leaf module)
 
 ### Behavioral Risk
 - items:
-  - incomplete LUT coverage could infer latches; B2 must explicitly cover all 256 values or use complete array indexing
-  - timing closure on critical path when instantiated 16 times in parallel in top module; skeleton assumes combinational delay is acceptable per spec Sec 6
+  - none (behaviour is exhaustively specified by the lookup table)

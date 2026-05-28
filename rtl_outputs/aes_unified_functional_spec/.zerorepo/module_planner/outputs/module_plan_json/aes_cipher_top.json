@@ -3,106 +3,85 @@
   "module": "aes_cipher_top",
   "subtasks": [
     {
-      "id": "B1_decl_regs_and_wires",
-      "target": "<block: decl_regs_and_wires>",
-      "description": "Declare all registers, wires, and parameters required by datapath and control, and fill the module port list according to S003. Include all named objects from B1 skeleton: text_in_r, sa[0:3][0:3], dcnt, ld_r, done, text_out, subbyte_out, shifted_matrix, mixed_column, next_state, round key words, kld, and FSM state parameters.",
+      "id": "B1_decl_all",
+      "target": "<block: decl_all>",
+      "description": "Declare all registers (text_in_r 128-bit, sa 4×4 8-bit, dcnt 4-bit, ld_r 1-bit, text_out 128-bit) and internal combinational signals (sbox bus, round key bus, MixColumns partial products, FSM state wires) as specified in S004.",
       "spec_refs": [
         "S003",
         "S004"
       ],
       "constraints": [
-        "Port list must exactly match S003: clk, rst, ld, done, key, text_in, text_out with correct directions and widths.",
-        "Register widths must match S004: text_in_r 128, sa 4x4x8, dcnt 4, ld_r 1, text_out 128, done 1."
+        "Register widths and array dimensions must match S004."
       ]
     },
     {
-      "id": "B2_inst_key_expand_128",
-      "target": "<block: inst_key_expand_128>",
-      "description": "Instantiate aes_key_expand_128 module, connecting all ports as per S014. Use top-level key input, kld from control FSM, and provide wo_0..wo_3 outputs.",
+      "id": "B2_inst_all",
+      "target": "<block: inst_all>",
+      "description": "Instantiate 16 aes_sbox modules, each mapping one state matrix byte, and 1 aes_key_expand_128 module. Connect sbox outputs and round key words (wo_0..3) as combinational buses to the round datapath.",
       "spec_refs": [
-        "S003",
-        "S014"
+        "S014",
+        "S016",
+        "S018"
       ],
       "constraints": [
-        "Port connections must adhere to S014 interface: clk, kld, key in, wo_0..wo_3 out (32-bit each).",
-        "kld must be driven by the FSM signal generated in B4, and key directly from module input."
+        "Exactly 16 sbox instances per S018.",
+        "Key expand and sbox port interfaces must match S014 and S016."
       ]
     },
     {
-      "id": "B3_inst_sboxes_16x",
-      "target": "<block: inst_sboxes_16x>",
-      "description": "Instantiate 16 parallel aes_sbox units for SubBytes transformation. Each sbox instance gets input a from one byte of the state matrix sa[i][j] and drives output b to subbyte_out[i][j].",
+      "id": "B3_mixcolumns_helper",
+      "target": "<block: mixcolumns_helper>",
+      "description": "Implement combinational MixColumns transformation using GF(2^8) multiply-by-2 and XOR, as detailed in S006. May replicate for four columns; output transformed bytes.",
       "spec_refs": [
-        "S003",
-        "S010",
-        "S016"
-      ],
-      "constraints": [
-        "All 16 bytes of the 4x4 state matrix must be mapped to sbox instances using S016 interface (a input, b output).",
-        "SubBytes must be purely combinational; no sequential logic inserted."
-      ]
-    },
-    {
-      "id": "B4_seq_fsm_and_counter",
-      "target": "<block: seq_fsm_and_counter>",
-      "description": "Implement sequential FSM with states IDLE, INIT_ROUND, ROUND_OP, FINAL_ROUND, DONE as per S008. Include round counter, load flag, text_in_r buffer, and generate kld for key expansion.",
-      "spec_refs": [
-        "S003",
-        "S008",
-        "S011"
-      ],
-      "constraints": [
-        "Sequential FSM: reset to IDLE, on ld transition to INIT_ROUND, then to ROUND_OP, then FINAL_ROUND when dcnt==1, then DONE.",
-        "In INIT_ROUND: load text_in_r, set dcnt=0xB, assert kld=1 before next state.",
-        "In ROUND_OP: decrement dcnt each cycle; kld must be asserted early enough for key expansion readiness."
-      ]
-    },
-    {
-      "id": "B5_helper_mixcolumns",
-      "target": "<block: helper_mixcolumns>",
-      "description": "Combinational MixColumns transformation for a single 32-bit column, performing GF(2^8) matrix multiplication as specified in S006.",
-      "spec_refs": [
-        "S003",
         "S006",
         "S010"
       ],
       "constraints": [
-        "Must implement exact GF(2^8) operations (xtime, XOR) as defined by MixColumns matrix in S006.",
-        "Output must be purely combinational; no registers or state inside the block."
+        "All operations must be purely combinational.",
+        "Multiply-by-3 realized as multiply-by-2 XOR original byte, per S006."
       ]
     },
     {
-      "id": "B6_comb_round_transform",
-      "target": "<block: comb_round_transform>",
-      "description": "Combinational round datapath: perform ShiftRows, use subbyte_out as SubBytes result, apply MixColumns via B5 (skipping when dcnt indicates final round), and AddRoundKey with round key words wo_0..wo_3 to produce next_state matrix.",
+      "id": "B4_round_datapath",
+      "target": "<block: round_datapath>",
+      "description": "Assemble round datapath: route sbox outputs through SubBytes, apply hardwired ShiftRows, conditionally apply MixColumns (via B3) based on control flag, and XOR with round key (AddRoundKey). Follow transformation order in S006 and S010; final round bypass skips MixColumns (S012).",
       "spec_refs": [
-        "S003",
         "S006",
+        "S009",
         "S010",
-        "S012",
-        "S014"
+        "S012"
       ],
       "constraints": [
-        "Implement ShiftRows per S006 (row shifts 0,1,2,3) on subbyte_out, then MixColumns per B5, bypassing MixColumns when dcnt==1 (final round).",
-        "AddRoundKey: XOR each state byte with corresponding byte from round key words wo_0..wo_3 (S014).",
-        "Block must be purely combinational; no sequential elements."
+        "Datapath ordering: SubBytes → ShiftRows → MixColumns (if enabled) → AddRoundKey.",
+        "Do not embed FSM or dcnt logic; accept a single bypass flag."
       ]
     },
     {
-      "id": "B7_seq_state_update_output",
-      "target": "<block: seq_state_update_output>",
-      "description": "Sequential block that updates the state matrix sa, final text_out, and done signal on clock edges. Implements initial AddRoundKey during INIT_ROUND, round updates in ROUND_OP/FINAL_ROUND, and output/commit in DONE state.",
+      "id": "B5_fsm_sequencer",
+      "target": "<block: fsm_sequencer>",
+      "description": "Implement FSM with states IDLE, INIT_ROUND, ROUND_OP, FINAL_ROUND, DONE as per S008. Generate next-state logic (IDLE→INIT_ROUND on ld=1, decrement dcnt initialised 0xB) and control outputs: kld, MixColumns bypass flag, done, per S011.",
       "spec_refs": [
-        "S003",
+        "S008",
+        "S011"
+      ],
+      "constraints": [
+        "State transitions must match the diagram in S008.",
+        "dcnt initial value must be 0xB (11) and decrement behavior per S011."
+      ]
+    },
+    {
+      "id": "B6_register_commit",
+      "target": "<block: register_commit>",
+      "description": "On rising clk edge (and asynchronous rst), update sa, text_in_r, dcnt, ld_r, text_out according to FSM state and round datapath. Assert done in DONE state. Clear all registers to 0 on reset per S004.",
+      "spec_refs": [
         "S004",
         "S008",
         "S009",
         "S012"
       ],
       "constraints": [
-        "Update sa: in INIT_ROUND, sa <= text_in_r XOR initial round key; in ROUND_OP/FINAL_ROUND, sa <= next_state.",
-        "In DONE state: text_out <= column-major packing of sa; done <= 1.",
-        "Registered outputs (sa, text_out, done) must reset to 0 and remain stable after DONE until new load/reset."
+        "Register updates must follow data loading (S009) and output generation (S012) sequences.",
+        "Reset must clear all registers to 0."
       ]
     }
   ]

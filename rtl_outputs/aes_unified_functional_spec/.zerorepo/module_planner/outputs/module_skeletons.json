@@ -42,10 +42,9 @@
         "repo_skeleton_ref": "repo_skeleton_v1::aes_sbox",
         "module_spec_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/ase_cipher/aes_sbox.md"
       },
-      "planning_note": "Pure combinational byte substitution via a 256-entry lookup table; no clock, reset, or registered objects.",
+      "planning_note": "This is a purely combinational leaf module; its internal structure is a single lookup‑table block. No clock, no reset, no registered objects.",
       "block_ids": [
-        "B1",
-        "B2"
+        "B1"
       ]
     },
     {
@@ -58,7 +57,7 @@
         "repo_skeleton_ref": "repo_skeleton_v1::aes_rcon",
         "module_spec_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/ase_cipher/aes_rcon.md"
       },
-      "planning_note": "Leaf-level counter-driven round constant generator. Structure revolves around a registered counter, combinational next-state logic (including GF multiplication), and a synchronous register update block. No submodules.",
+      "planning_note": "Organize around the 4‑bit round counter `rcnt`, a combinational constant‑lookup function, and a registered output `out`. Keep block separation strict to support later local retrieval and merge.",
       "block_ids": [
         "B1",
         "B2",
@@ -75,13 +74,14 @@
         "repo_skeleton_ref": "repo_skeleton_v1::aes_key_expand_128",
         "module_spec_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/ase_cipher/aes_key_expand_128.md"
       },
-      "planning_note": "Organize the module around key word registers, child instantiations (aes_rcon, aes_sbox×4), a combinational expansion network, and a sequential load/update block driven by kld flag.",
+      "planning_note": "Organize the module around key word registers, child instances, combinational round-key calculation, and a synchronous update block controlled by the kld flag.",
       "block_ids": [
         "B1",
         "B2",
         "B3",
         "B4",
-        "B5"
+        "B5",
+        "B6"
       ]
     },
     {
@@ -94,15 +94,14 @@
         "repo_skeleton_ref": "repo_skeleton_v1::aes_cipher_top",
         "module_spec_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/ase_cipher/aes_cipher_top.md"
       },
-      "planning_note": "Top-level AES-128 cipher controller and datapath integrator. The skeleton separates declaration, child instances, sequential FSM, combinational round transform, a MixColumns helper, and final state/output commit. Each registered object has a declaration owner and a defined update point.",
+      "planning_note": "Organize the module into a declaration block, an instantiation block for submodules, a MixColumns helper, a round datapath (SubBytes, ShiftRows, MixColumns bypass, AddRoundKey), a sequential FSM and counter manager, and a register-commit block that controls synchronous updates.",
       "block_ids": [
         "B1",
         "B2",
         "B3",
         "B4",
         "B5",
-        "B6",
-        "B7"
+        "B6"
       ]
     }
   ],

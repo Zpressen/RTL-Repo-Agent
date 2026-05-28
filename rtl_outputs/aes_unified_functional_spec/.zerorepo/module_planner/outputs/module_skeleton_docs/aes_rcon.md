@@ -7,18 +7,18 @@
   - module_contract_ref: module_contracts_v1::aes_rcon
   - repo_skeleton_ref: repo_skeleton_v1::aes_rcon
   - spec_ref: aes_rcon.md
-- planning_note: Leaf-level counter-driven round constant generator. Structure revolves around a registered counter, combinational next-state logic (including GF multiplication), and a synchronous register update block. No submodules.
+- planning_note: Organize around the 4‑bit round counter `rcnt`, a combinational constant‑lookup function, and a registered output `out`. Keep block separation strict to support later local retrieval and merge.
 
 ## 1. Module Frame
 ```verilog
 module aes_rcon (
-    // input  clk,
-    // input  kld,
-    // output [31:0] out
+    input clk,
+    input kld,
+    output [31:0] out
 );
 
-// <block: decl_regs_and_wires>
-// <block: comb_next_gen>
+// <block: decl_registers>
+// <block: comb_rcon_lookup>
 // <block: seq_update>
 
 endmodule
@@ -27,166 +27,150 @@ endmodule
 ## 2. Structural Skeleton
 ### Block
 - block_id: B1
-- block_label: decl_regs_and_wires
+- block_label: decl_registers
 - block_kind: decl
 - required: true
-- purpose: Declare registered objects (rcnt, out) and any intermediate next-state wires used by combinational and sequential blocks.
+- purpose: Declare the internal 4‑bit counter `rcnt`, the output register `out`, and any wires needed for the next‑round‑constant value.
 - code_shape: declaration group
 - depends_on: []
 - placeholder:
 ```verilog
-// skeleton only: declaration of rcnt register, out register, and possibly next_rcnt / next_out wires
+// skeleton only: register declarations + wire next_rcon
 ```
 - must_appear:
-  - rcnt (4-bit round counter, registered)
-  - out (32-bit constant output, registered)
+  - `rcnt` (4‑bit register)
+  - `out` (32‑bit register)
 - may_appear:
-  - next_rcnt, next_out (combinational pre‑values, optional but recommended for structural clarity)
+  - wire `next_rcon` (32‑bit combinational result)
 - retrieval_focus:
   - interface
-  - storage width / alignment constraints
+  - state/register description
 
 ### Block
 - block_id: B2
-- block_label: comb_next_gen
+- block_label: comb_rcon_lookup
 - block_kind: comb
 - required: true
-- purpose: Pure combinational logic that computes next_rcnt and next_out from current kld and rcnt. Does not contain sequential elements.
-- code_shape: assign‑like or always_comb block skeleton
+- purpose: Combinational mapping from `rcnt` to a 32‑bit round constant. Produces `next_rcon` where the most‑significant byte is the AES round constant byte and the lower 24 bits are zero. For `rcnt` values 0‑9 the byte follows the sequence (0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1B, 0x1B? Wait ‑ spec says 0x1B for RC[9]); for `rcnt > 9` the whole 32‑bit word is zero.
+- code_shape: combinational `always_comb` or `assign` / case construct
 - depends_on: [B1]
 - placeholder:
 ```verilog
-// skeleton only: combinational next-state and output logic
-//   - next_rcnt = (kld) ? 0 : rcnt + 1
-//   - next_out = (kld) ? 32'h01_00_00_00
-//                : (rcnt > 9) ? 32'h0
-//                : gf_mult_by_02_sequence(rcnt, ...)   // or lookup table approximation
+// combinational: use rcnt to select a pre‑computed 8‑bit constant, form {8'h??, 24'b0}
+// explicit coverage for rcnt = 0..9, default zero for rcnt > 9
 ```
 - must_appear:
-  - derivation for next_rcnt (counter increment / reset)
-  - derivation for next_out (initial constant, overflow‑zero, or GF‑multiplied constant)
+  - explicit mapping for `rcnt = 0` through `rcnt = 9`
 - may_appear:
-  - helper encoding for the recursive GF(2⁸) multiplication, if not flattened
+  - default zero case
 - retrieval_focus:
-  - constraint: lower 24 bits of out must be zero in all cases
-  - combinational path detail for later implementation choice
+  - datapath constant generation
+  - combinational helper
 
 ### Block
 - block_id: B3
 - block_label: seq_update
 - block_kind: seq
 - required: true
-- purpose: Sequential always block triggered by posedge clk. Updates rcnt and out using next_rcnt and next_out from B2. Synchronous load/reset through kld is expressed inside this block.
-- code_shape: sequential always block skeleton
-- depends_on: [B2, B1]
+- purpose: Clock‑synchronous update of `rcnt` and `out`. On a rising edge of `clk`:
+  * if `kld` is high, `rcnt` is set to 0 and `out` receives `next_rcon(0)` (which is 0x01_000000).
+  * otherwise `rcnt` increments (wraps as a 4‑bit modulo‑16 counter) and `out` receives `next_rcon(rcnt)`.
+- code_shape: sequential `always_ff` block
+- depends_on: [B1, B2]
 - placeholder:
 ```verilog
-// skeleton only: sequential register update on posedge clk
-//   - rcnt <= next_rcnt
-//   - out  <= next_out
+// sequential: posedge clk, rcnt <= (kld) ? 0 : rcnt + 1; out <= next_rcon
 ```
 - must_appear:
-  - rcnt register assignment
-  - out register assignment
+  - `kld`‑driven reset/load of `rcnt`
+  - `out` register update using `next_rcon`
 - may_appear:
-  - any necessary clock‑domain clarifications
+  - explicit handling of `rcnt` wrap (inherent in 4‑bit addition)
 - retrieval_focus:
-  - update edge (rising)
-  - synchronous behaviour of kld
+  - state update
+  - registered output timing
 
 ## 3. Behavioral Overlay
 ### Module-Level Behavioral Summary
 - control_style: counter_driven
 - semantic_modes:
-  - KEY_LOAD: kld=1 → rcnt=0, out=0x01000000 on next rising edge
-  - NORMAL_COUNT: kld=0, rcnt≤9 → rcnt increments, out issues round constant for current rcnt
-  - OVERFLOW_ZERO: kld=0, rcnt>9 → out=0x00000000, rcnt continues to increment
+  - KEY_EXPANSION: generation of round‑constant sequence for rcnt 0‑9 and zero‑padding beyond.
 - state_model:
   - object: rcnt
     storage_kind: registered
-    representation: 4‑bit counter (count range 0–9 used; above 9 allowed but output forced zero)
-    notes: resets to 0 when kld synchronous; increments without explicit limit except width wraparound
-  - object: out
-    storage_kind: registered
-    representation: 32‑bit bus, only MSByte changes per round constant; lower 24 bits are permanently zero
-    notes: updates synchronously with rcnt; initial value 32’h01_00_00_00
+    representation: 4‑bit up‑counter (counter_driven)
+    notes: value directly drives the combinational lookup; values 0‑9 produce valid constants, values 10‑15 yield output zero.
 - global_invariants:
-  - out changes only on the rising edge of clk
-  - when kld is asserted, out assumes 0x01000000 after the next clock edge
-  - for rcnt values 0–9, out reflects the AES round constant sequence (01,02,04,…) in the most significant byte
-  - for rcnt>9, out = 32’h0
-  - counter (rcnt) is never stalled; it increments or resets every cycle
+  - The lower 24 bits of `out` are always zero.
+  - `out` changes only at the clock rising edge.
 - open_semantic_questions:
-  - post‑overflow wrap‑around behaviour (rcnt rolls from 15 back to 0) is not explicitly defined; specification only addresses rcnt up to 9 and overflow >9 without describing re‑entry into the 0–9 range
+  - Behaviour when `rcnt` wraps from 15 back to 0, if it ever occurs outside a key‑expansion sequence, is not defined in the spec; the lookup table would again produce valid constants.
 
 ### Block Behavioral Overlay
 - block_id: B1
 - responsibilities:
-  - provide shared, typed declarations for rcnt and out, as well as any intermediate wires needed by B2 and B3
-- timing_semantics:
-  - all declared objects are synchronous; no combinatorial propagation assumptions are made at this block level
+  - Provide the declarations of `rcnt`, `out`, and the `next_rcon` wire that connects B2 to B3.
+  - No logic or timing behaviour.
+- timing_semantics: N/A
 - touched_objects:
-  - rcnt (register)
-  - out (register)
-  - (if present) next_rcnt, next_out (wires)
+  - `rcnt` (register)
+  - `out` (register)
+  - `next_rcon` (wire)
 - coupling_rules:
-  - B2 and B3 depend on these declarations; their behaviour must be consistent with widths and types defined here
+  - Both B2 and B3 depend on these declared objects.
 - forbidden_drift:
-  - do not add extra storage (e.g. an internal state machine register) not described in the spec
+  - Do not declare extra state, counters, or signals not explicitly required by the spec.
 
 ### Block Behavioral Overlay
 - block_id: B2
 - responsibilities:
-  - derive next_rcnt from current rcnt and kld
-  - derive next_out from current rcnt, kld, and the recursive GF(2⁸) multiplication sequence
-- timing_semantics:
-  - purely combinational; must compute stable next values before the next rising clock edge
+  - Compute `next_rcon` as a pure combinational function of `rcnt`.
+  - For `rcnt = 0` → 8’h01, `rcnt = 1` → 8’h02, …, `rcnt = 9` → 8’h1B; pad with 24’h0.
+  - For `rcnt > 9` → output 32’h0.
+  - No clock or reset logic inside this block.
+- timing_semantics: combinational path from `rcnt` to `next_rcon`; must settle within one clock period.
 - touched_objects:
-  - next_rcnt (if declared in B1)
-  - next_out (if declared in B1)
-  - reads rcnt and kld (external inputs, registered elsewhere)
+  - `next_rcon` (drive)
 - coupling_rules:
-  - next_rcnt must equal 0 when kld=1, else rcnt+1 (4‑bit)
-  - next_out must equal 0x01000000 when kld=1, else 0x00000000 when rcnt>9, else { RC[rcnt] , 24’h0 }
-  - the RC constant for a given rcnt must match the spec‑derived sequence (01,02,04,08,10,20,40,80,1B,36)
+  - Provides `next_rcon` to B3; must reflect the current `rcnt` value exactly.
 - forbidden_drift:
-  - do not invent asynchronous paths or bypass the registered output update
-  - do not allow any non‑zero value in the lower 24 bits of next_out
+  - Do not introduce registers, pipeline stages, or dynamic GF(2⁸) multiplication circuitry unless the spec later mandates it.
+  - Do not output any value for `rcnt = 10` other than zero, despite the derivation example showing 0x36.
 
 ### Block Behavioral Overlay
 - block_id: B3
 - responsibilities:
-  - on rising edge of clk, assign next_rcnt to rcnt and next_out to out
-  - this block is the sole writer of rcnt and out
-- timing_semantics:
-  - synchronous update on clk posedge; no other edge‑sensitive behaviour
+  - Sequential update of `rcnt` and `out` on `posedge clk`.
+  - If `kld` is high, `rcnt <= 0` and `out <= next_rcon(0)`.
+  - Otherwise, `rcnt <= rcnt + 1` (4‑bit wrap) and `out <= next_rcon`.
+- timing_semantics: Registered output; changes occur after the clock edge following the combinational evaluation.
 - touched_objects:
-  - rcnt (register write)
-  - out (register write)
-  - reads next_rcnt, next_out (from B2, via B1)
+  - `rcnt` (read and write)
+  - `out` (write)
 - coupling_rules:
-  - must use the same next values produced by B2
-  - must not alter rcnt or out under any other condition
+  - Reads `next_rcon` from B2; the sequencing ensures that the `out` register captures the constant corresponding to the newly updated `rcnt` (or reset value).
 - forbidden_drift:
-  - do not introduce asynchrony, glitching, or additional reset logic not described in the spec
+  - Do not alter the reset action to use an external asynchronous reset; only `kld` synchronous reset/load is allowed.
+  - Do not conditionally stall the counter unless a future spec adds a stall signal.
 
 ## 4. Decision Ledger
 ### Chosen Decision
-- topic: structural decomposition
-- decision: Organize the module into declaration (B1), combinational next‑state generation (B2), and sequential update (B3). This separates concerns and allows each block to be retrieved and reasoned about independently.
-- reason: Fits the spec’s clear separation between the counter, the constant computation, and the synchronous output. Supports later substitution of GF multiplier vs. lookup table without touching the other blocks.
+- topic: Round constant generation method
+- decision: Use a precomputed hardwired combinational look‑up table (mux/case) instead of dynamic GF(2⁸) multiplication.
+- reason: Only ten constants are needed; a table is simpler, smaller, and avoids custom finite‑field arithmetic.
+
+- topic: Internal code organisation
+- decision: Partition into three blocks: declarations (B1), combinational constant table (B2), sequential update (B3).
+- reason: Clear separation of concerns improves local retrieval, fragment generation, and later merging with the key‑expansion parent.
 
 ### Deferred Decision
 - items:
-  - Whether the constant‑generation path in B2 uses a hardcoded lookup table (rcnt → MSByte) or an explicit GF(2⁸) multiply‑by‑02 circuit. The spec allows either; this choice is deferred to local generation.
-  - Exact naming and structure of intermediate wires (e.g., next_rcnt, next_out) – the skeleton only requires that they exist and are connected consistently.
+  - None within the module; all choices are forced by the spec or deliberately settled.
 
 ### Structural Risk
 - items:
-  - rcnt is a 4‑bit counter; after reset (kld) it restarts at 0. If rcnt is allowed to count past 15 and wraps back to 0 while kld=0, it will re‑enter the valid 0‑9 range and could re‑issue round constants unintentionally. The spec does not define protection against this, but a downstream instantiation (aes_key_expand_128) is expected to manage kld before overflow occurs.
-  - The module has no global asynchronous reset; all reset/initialization behaviour relies solely on kld. Systems that need a full hardware reset may need external handling.
+  - No structural risks; the decomposition matches the spec’s simple register/counter/lookup structure.
 
 ### Behavioral Risk
 - items:
-  - The spec states “kld rising edge must synchronize with clk for key loading”. This implies that kld should be treated as a synchronous signal; any path where kld could be metastable or violate setup/hold is outside the scope of this module and may need external synchronisation.
-  - The GF(2⁸) reduction rule for constants > 0x80 (1B, 36) must be accurately implemented. A deviation from the specified polynomial m(x) = x⁸+x⁴+x³+x+1 would break key expansion entirely. The skeleton does not resolve the implementation, so any local generation must verify correctness against the documented sequence.
+  - The derivation section lists RC[10] = 0x36, but the implemented valid range (`rcnt` 0‑9) and the corner‑case rule (`rcnt > 9` ⇒ 0) exclude this value. If the key‑expansion module expects a tenth round constant 0x36, the parent integration will need adjustment (e.g., an extra constant or a wider counter). This should be flagged during integration of `aes_key_expand_128`.

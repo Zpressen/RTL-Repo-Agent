@@ -3,54 +3,46 @@
   "module": "aes_rcon",
   "subtasks": [
     {
-      "id": "B1_decl_regs_and_wires",
-      "target": "<block: decl_regs_and_wires>",
-      "description": "Declare the 4-bit rcnt register, 32-bit out register, and optional combinational wires next_rcnt (4-bit) and next_out (32-bit) for connecting B2 and B3.",
+      "id": "B1_decl_registers",
+      "target": "<block: decl_registers>",
+      "description": "Declare a 4-bit register rcnt, a 32-bit register out, and a 32-bit wire next_rcon that connects the combinational lookup to the sequential block.",
       "spec_refs": [
         "S003",
         "S004",
         "S014"
       ],
       "constraints": [
-        "rcnt must be declared as reg [3:0]",
-        "out must be declared as reg [31:0] matching the output port width"
+        "rcnt must be a 4-bit register.",
+        "out must be a 32-bit register.",
+        "next_rcon must be a 32-bit wire."
       ]
     },
     {
-      "id": "B2_comb_next_gen",
-      "target": "<block: comb_next_gen>",
-      "description": "Combinational logic to compute next_rcnt (counter increment/reset) and next_out (round constant or zero) based on kld and rcnt. Must implement the GF(2^8) multiplication sequence or equivalent lookup table to produce RC values in the MSByte.",
+      "id": "B2_comb_rcon_lookup",
+      "target": "<block: comb_rcon_lookup>",
+      "description": "Combinational lookup from rcnt to 32-bit next_rcon using a precomputed table. For rcnt 0-9 output the round constant with lower 24 bits zero; for rcnt>9 output 32'h00000000.",
       "spec_refs": [
-        "S003",
-        "S005",
-        "S006",
-        "S007",
-        "S008",
         "S011",
-        "S012",
-        "S013",
-        "S014"
+        "S013"
       ],
       "constraints": [
-        "next_out[23:0] must always be 0",
-        "next_rcnt must be 4 bits wide",
-        "GF(2^8) reduction polynomial is x^8+x^4+x^3+x+1"
+        "Must exactly match the constants in S011: 0x01000000 for rcnt=0, 0x02000000 for 1, ..., 0x1B000000 for rcnt=9.",
+        "rcnt>9 must produce 32'h00000000."
       ]
     },
     {
       "id": "B3_seq_update",
       "target": "<block: seq_update>",
-      "description": "Sequential always block that on posedge clk assigns next_rcnt to rcnt and next_out to out, implementing synchronous register update with load/reset via kld.",
+      "description": "Sequential update on posedge clk: if kld==1 set rcnt=0 and out=next_rcon (which corresponds to rcnt=0, i.e., 0x01000000); otherwise rcnt increments (4-bit wrap) and out samples next_rcon.",
       "spec_refs": [
-        "S003",
         "S004",
         "S010",
-        "S012",
-        "S014"
+        "S012"
       ],
       "constraints": [
-        "Update rcnt and out on the rising edge of clk only",
-        "Assign rcnt <= next_rcnt; out <= next_out;"
+        "Use synchronous reset/load only via kld; no asynchronous reset.",
+        "rcnt must wrap modulo 16.",
+        "out must be registered and change only on clock edge."
       ]
     }
   ]

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -8,14 +9,20 @@ from typing import Any, Callable, Dict, List, Optional
 
 from zerorepo.rtl_impl.debug_agent.sim_reviewer import check_syntax
 from zerorepo.rtl_impl.debug_agent.utils import add_lineno
+from zerorepo.rtl_impl.kg_agent import KGRetriever
+from zerorepo.rtl_impl.retrieval_agent import MergeContextRetrievalResult, MergeContextRetriever
+from zerorepo.rtl_impl.retrieval_agent.utils import interface_block_refs
 
 from ..prompts import stage6_merge
 from ..schemas import (
     ModuleCodegenRecord,
     ModuleMergeRecord,
+    ModulePlanArtifact,
     ModuleSpecBlocks,
     PlannerTaskInput,
+    Stage2RepoSkeletonArtifact,
     Stage3ModuleSkeletonArtifact,
+    Stage4ModulePlansArtifact,
     Stage4SpecBlocksArtifact,
     Stage5CodegenArtifact,
     Stage6MergeArtifact,
@@ -29,7 +36,11 @@ class Stage6MergeAgent(BaseStageAgent):
     system_role = stage6_merge.SYSTEM_ROLE
     allow_best_effort_quality_fallback = False
     workspace_dirname = "workspace"
+    merge_retrieval_dirname = "merge_retrieval_json"
+    merge_child_context_dirname = "merge_child_context_json"
     max_quality_attempts = 5
+    child_full_code_max_lines = 200
+    child_full_code_max_chars = 12000
 
     def __init__(
         self,
@@ -39,10 +50,18 @@ class Stage6MergeAgent(BaseStageAgent):
         logger=None,
         output_root: str | Path | None = None,
         workspace_root: str | Path | None = None,
+        kg_service: Any | None = None,
     ):
         super().__init__(llm_client, context_provider, artifact_sink, logger)
         self.output_root = Path(output_root) if output_root is not None else None
         self.workspace_root = Path(workspace_root) if workspace_root is not None else self._default_workspace_root()
+        self.merge_context_retriever = MergeContextRetriever(llm_client=self.llm_client, logger=self.logger)
+        self.kg_service = kg_service
+        self.kg_retriever = (
+            KGRetriever(kg_service)
+            if kg_service is not None and getattr(kg_service, "is_enabled", lambda: False)()
+            else None
+        )
 
     def run(
         self,
@@ -104,15 +123,65 @@ class Stage6MergeAgent(BaseStageAgent):
         if module_name not in spec_by_module:
             raise ValueError(f"Stage6 missing spec blocks for `{module_name}`")
 
-        module_spec = self._format_module_spec(spec_by_module[module_name])
         module_skeleton, module_skeleton_file = self._read_module_skeleton_context(skeleton_by_module.get(module_name))
         fragment_file = Path(record.workspace_file)
         if not fragment_file.exists():
             raise FileNotFoundError(f"Stage6 fragment file does not exist: {fragment_file}")
         generated_fragments = fragment_file.read_text(encoding="utf-8").replace("\r\n", "\n")
+        dependency_context = self._build_dependency_context(module_name, partial_artifacts)
+        retrieval_result = self._read_merge_retrieval_if_valid(
+            module_name=module_name,
+            module_spec=spec_by_module[module_name],
+            fragment_file=fragment_file,
+        )
+        if retrieval_result is None:
+            retrieval_result = self.merge_context_retriever.select_spec_refs(
+                module_name=module_name,
+                module_spec=spec_by_module[module_name],
+                module_skeleton=module_skeleton,
+                generated_fragments=generated_fragments,
+                module_plan=self._read_module_plan_context(module_name, partial_artifacts),
+                dependency_context=dependency_context,
+            )
+            self._write_json(self._merge_retrieval_file(module_name), model_dump(retrieval_result))
+        else:
+            self.logger.info(
+                "[%s] Resume reused merge retrieval for %s from %s",
+                self.stage_name,
+                module_name,
+                self._merge_retrieval_file(module_name),
+            )
+
+        kg_child_context = self._read_merge_child_context_if_valid(
+            module_name=module_name,
+            retrieval_file=self._merge_retrieval_file(module_name),
+        )
+        if kg_child_context is None:
+            kg_child_context = self._build_kg_child_context_from_retrieval_decision(
+                module_name,
+                dependency_context,
+                retrieval_result,
+            )
+            self._write_json(self._merge_child_context_file(module_name), kg_child_context)
+        else:
+            self.logger.info(
+                "[%s] Resume reused merge child context for %s from %s",
+                self.stage_name,
+                module_name,
+                self._merge_child_context_file(module_name),
+            )
+        module_spec = self._format_module_spec_by_refs(
+            spec_by_module[module_name],
+            retrieval_result.selected_spec_refs,
+        )
         prompt = stage6_merge.build_prompt(
             module_spec=module_spec,
             module_skeleton=module_skeleton,
+            kg_child_context=(
+                self._format_kg_child_context_for_prompt(kg_child_context)
+                if kg_child_context.get("retrieval_requested")
+                else ""
+            ),
             generated_fragments=generated_fragments,
         )
         stage_context = {
@@ -122,6 +191,14 @@ class Stage6MergeAgent(BaseStageAgent):
             "merged_file": str(self._merged_file(module_name)),
             "module_skeleton_file": module_skeleton_file,
             "module_spec_block_count": len(spec_by_module[module_name].blocks),
+            "retrieval_selected_spec_refs": list(retrieval_result.selected_spec_refs),
+            "retrieval_selected_spec_block_count": len(retrieval_result.selected_spec_refs),
+            "retrieval_fallback_used": retrieval_result.fallback_used,
+            "retrieval_use_kg_child_context": retrieval_result.use_kg_child_context,
+            "retrieval_kg_child_modules": list(retrieval_result.kg_child_modules),
+            "kg_child_context_child_count": len(kg_child_context.get("children", [])),
+            "kg_child_context_enabled": bool(kg_child_context.get("kg_enabled")),
+            "kg_child_context_requested": bool(kg_child_context.get("retrieval_requested")),
             "generated_fragments_chars": len(generated_fragments),
         }
 
@@ -238,6 +315,10 @@ class Stage6MergeAgent(BaseStageAgent):
         placeholder_pattern = re.compile(r"\b(TODO|FIXME|TBD|PLACEHOLDER)\b|<block:", flags=re.IGNORECASE)
         if placeholder_pattern.search(code):
             errors.append("merged module code must not contain obvious placeholders")
+        if re.search(r"(?m)^\s*(?:wire|reg|integer)\b[^;]*\b[A-Za-z_][A-Za-z0-9_]*\s*(?:\[[^\]]+\]\s*)+[^;]*;", code):
+            errors.append("merged module code must not use unpacked array declarations; flatten arrays into scalar signals")
+        if re.search(r"\b(?:generate|endgenerate|genvar)\b", code):
+            errors.append("merged module code must not use generate/genvar; explicitly unroll repeated logic and instances")
         return errors
 
     def _build_raw_retry_prompt(self, original_prompt: str, errors: List[str]) -> str:
@@ -311,6 +392,11 @@ class Stage6MergeAgent(BaseStageAgent):
     def _format_module_spec(self, module_spec: ModuleSpecBlocks) -> str:
         return "\n\n".join(f"[{block.block_id}]\n{block.text}" for block in module_spec.blocks)
 
+    def _format_module_spec_by_refs(self, module_spec: ModuleSpecBlocks, spec_refs: List[str]) -> str:
+        block_by_id = {block.block_id: block for block in module_spec.blocks}
+        selected_blocks = [block_by_id[block_id] for block_id in spec_refs if block_id in block_by_id]
+        return "\n\n".join(f"[{block.block_id}]\n{block.text}" for block in selected_blocks)
+
     def _read_module_skeleton_context(self, record: Any | None) -> tuple[str, str | None]:
         if record is None:
             return "", None
@@ -333,6 +419,13 @@ class Stage6MergeAgent(BaseStageAgent):
         tmp_path.write_text(text, encoding="utf-8")
         tmp_path.replace(path)
 
+    def _write_json(self, path: Path, payload: Dict[str, Any]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = path.with_name(f"{path.name}.tmp")
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2, ensure_ascii=False)
+        tmp_path.replace(path)
+
     def _resolve_output_path(self, relative_or_absolute: str) -> Path:
         path = Path(relative_or_absolute)
         if path.is_absolute() or self.output_root is None:
@@ -345,6 +438,386 @@ class Stage6MergeAgent(BaseStageAgent):
         if self.output_root.name == "outputs" and self.output_root.parent.name == "module_planner":
             return (self.output_root.parent.parent / self.workspace_dirname).resolve()
         return (self.output_root.parent / self.workspace_dirname).resolve()
+
+    def _merge_retrieval_file(self, module_name: str) -> Path:
+        root = self.output_root if self.output_root is not None else Path(".")
+        return (root / self.merge_retrieval_dirname / f"{module_name}.json").resolve()
+
+    def _merge_child_context_file(self, module_name: str) -> Path:
+        root = self.output_root if self.output_root is not None else Path(".")
+        return (root / self.merge_child_context_dirname / f"{module_name}.json").resolve()
+
+    def _read_merge_retrieval_if_valid(
+        self,
+        *,
+        module_name: str,
+        module_spec: ModuleSpecBlocks,
+        fragment_file: Path,
+    ) -> MergeContextRetrievalResult | None:
+        path = self._merge_retrieval_file(module_name)
+        if not path.exists():
+            return None
+        if fragment_file.exists() and path.stat().st_mtime < fragment_file.stat().st_mtime:
+            self.logger.info(
+                "[%s] Existing merge retrieval for %s is older than fragments; regenerating",
+                self.stage_name,
+                module_name,
+            )
+            return None
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                payload = json.load(f)
+            result = validate_model(MergeContextRetrievalResult, payload)
+            self._validate_cached_merge_retrieval(result, module_name=module_name, module_spec=module_spec)
+            return result
+        except Exception as exc:  # noqa: BLE001 - invalid cache should not block regeneration.
+            self.logger.info(
+                "[%s] Existing merge retrieval for %s is invalid; regenerating: %s",
+                self.stage_name,
+                module_name,
+                exc,
+            )
+            return None
+
+    def _validate_cached_merge_retrieval(
+        self,
+        result: MergeContextRetrievalResult,
+        *,
+        module_name: str,
+        module_spec: ModuleSpecBlocks,
+    ) -> None:
+        if result.schema_version != "merge_context_retrieval_v1":
+            raise ValueError("schema_version must remain merge_context_retrieval_v1")
+        if result.module != module_name:
+            raise ValueError(f"module must equal {module_name}, got {result.module}")
+        if not result.selected_spec_refs:
+            raise ValueError("selected_spec_refs must not be empty")
+        valid_refs = {block.block_id for block in module_spec.blocks}
+        unknown = [ref for ref in result.selected_spec_refs if ref not in valid_refs]
+        if unknown:
+            raise ValueError(f"unknown selected_spec_refs: {unknown}")
+        interface_refs = interface_block_refs(module_spec)
+        if interface_refs and not any(ref in result.selected_spec_refs for ref in interface_refs):
+            raise ValueError(f"selected_spec_refs must include an interface block: {interface_refs}")
+
+    def _read_merge_child_context_if_valid(
+        self,
+        *,
+        module_name: str,
+        retrieval_file: Path,
+    ) -> Dict[str, Any] | None:
+        path = self._merge_child_context_file(module_name)
+        if not path.exists():
+            return None
+        if retrieval_file.exists() and path.stat().st_mtime < retrieval_file.stat().st_mtime:
+            self.logger.info(
+                "[%s] Existing merge child context for %s is older than retrieval; regenerating",
+                self.stage_name,
+                module_name,
+            )
+            return None
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                payload = json.load(f)
+            if payload.get("schema_version") != "merge_child_context_v1":
+                raise ValueError("schema_version must remain merge_child_context_v1")
+            if payload.get("module") != module_name:
+                raise ValueError(f"module must equal {module_name}, got {payload.get('module')}")
+            return payload
+        except Exception as exc:  # noqa: BLE001 - invalid cache should not block regeneration.
+            self.logger.info(
+                "[%s] Existing merge child context for %s is invalid; regenerating: %s",
+                self.stage_name,
+                module_name,
+                exc,
+            )
+            return None
+
+    def _read_module_plan_context(
+        self,
+        module_name: str,
+        partial_artifacts: Dict[str, Any],
+    ) -> ModulePlanArtifact | None:
+        stage4 = self._get_stage4_artifact(partial_artifacts)
+        if stage4 is None:
+            return None
+        plan_records = {item.module: item for item in stage4.module_plan_files}
+        record = plan_records.get(module_name)
+        if record is None:
+            return None
+        path = self._resolve_output_path(record.plan_file)
+        if not path.exists():
+            self.logger.warning("[%s] Module plan sidecar is missing: %s", self.stage_name, path)
+            return None
+        with open(path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        plan = validate_model(ModulePlanArtifact, payload)
+        if plan.module != module_name:
+            raise ValueError(f"Stage6 expected module plan for `{module_name}`, got `{plan.module}`")
+        return plan
+
+    def _build_dependency_context(self, module_name: str, partial_artifacts: Dict[str, Any]) -> Dict[str, Any]:
+        repo_skeleton = self._get_repo_skeleton_artifact(partial_artifacts)
+        if repo_skeleton is None:
+            return {}
+        module_by_name = {item.module: item for item in repo_skeleton.modules}
+        module_record = module_by_name.get(module_name)
+        if module_record is None:
+            return {}
+        child_modules = list(module_record.children)
+        return {
+            "module": module_name,
+            "children": child_modules,
+            "instance_hints": [model_dump(item) for item in module_record.instance_hints],
+            "global_hierarchy": [model_dump(edge) for edge in repo_skeleton.global_invariants.hierarchy],
+            "cross_module_alignment": list(repo_skeleton.global_invariants.cross_module_alignment),
+            "child_module_summaries": [
+                {
+                    "module": child,
+                    "file_path": module_by_name[child].file_path,
+                    "role": module_by_name[child].role,
+                    "kind": module_by_name[child].kind,
+                }
+                for child in child_modules
+                if child in module_by_name
+            ],
+        }
+
+    def _build_kg_child_context(self, module_name: str, dependency_context: Dict[str, Any]) -> Dict[str, Any]:
+        child_modules = self._child_modules_from_dependency_context(module_name, dependency_context)
+        return self._build_kg_child_context_for_modules(
+            module_name=module_name,
+            child_modules=child_modules,
+            retrieval_requested=True,
+            retrieval_reason="Direct KG child context build requested.",
+        )
+
+    def _build_kg_child_context_from_retrieval_decision(
+        self,
+        module_name: str,
+        dependency_context: Dict[str, Any],
+        retrieval_result: Any,
+    ) -> Dict[str, Any]:
+        all_child_modules = self._child_modules_from_dependency_context(module_name, dependency_context)
+        selected_modules = [
+            child
+            for child in list(getattr(retrieval_result, "kg_child_modules", []) or [])
+            if child in all_child_modules
+        ]
+        if getattr(retrieval_result, "use_kg_child_context", False) and not selected_modules:
+            selected_modules = all_child_modules
+        if not getattr(retrieval_result, "use_kg_child_context", False):
+            return {
+                "schema_version": "merge_child_context_v1",
+                "module": module_name,
+                "kg_enabled": self.kg_retriever is not None,
+                "retrieval_requested": False,
+                "retrieval_reason": str(getattr(retrieval_result, "kg_child_context_reason", "") or ""),
+                "available_child_modules": all_child_modules,
+                "requested_child_modules": [],
+                "children": [],
+            }
+        return self._build_kg_child_context_for_modules(
+            module_name=module_name,
+            child_modules=selected_modules,
+            retrieval_requested=True,
+            retrieval_reason=str(getattr(retrieval_result, "kg_child_context_reason", "") or ""),
+        )
+
+    def _build_kg_child_context_for_modules(
+        self,
+        *,
+        module_name: str,
+        child_modules: List[str],
+        retrieval_requested: bool,
+        retrieval_reason: str,
+    ) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {
+            "schema_version": "merge_child_context_v1",
+            "module": module_name,
+            "kg_enabled": self.kg_retriever is not None,
+            "retrieval_requested": retrieval_requested,
+            "retrieval_reason": retrieval_reason,
+            "requested_child_modules": list(child_modules),
+            "children": [],
+        }
+        if not child_modules:
+            return payload
+        if self.kg_retriever is None:
+            payload["reason"] = "RTL KG is not enabled; child module context unavailable."
+            return payload
+
+        for child_module in child_modules:
+            try:
+                interface = self.kg_retriever.get_module_interface(child_module)
+                child_context = self._child_context_from_interface(interface)
+                self._attach_child_code_context(child_context)
+                payload["children"].append(child_context)
+            except Exception as exc:  # noqa: BLE001 - KG context should not block merge.
+                if self.logger is not None:
+                    self.logger.warning(
+                        "[%s] KG child context lookup failed for %s -> %s: %s",
+                        self.stage_name,
+                        module_name,
+                        child_module,
+                        exc,
+                    )
+                payload["children"].append(
+                    {
+                        "module": child_module,
+                        "child_status": "candidate",
+                        "ports": [],
+                        "parameters": [],
+                        "file_path": "",
+                        "final_rtl_path": "",
+                        "simulation_status": "",
+                        "simulation_passed": False,
+                        "code_mode": "unavailable",
+                        "full_code_included": False,
+                        "lookup_error": str(exc),
+                    }
+                )
+        return payload
+
+    def _child_modules_from_dependency_context(
+        self,
+        module_name: str,
+        dependency_context: Dict[str, Any],
+    ) -> List[str]:
+        child_modules: List[str] = []
+        for child in dependency_context.get("children", []) or []:
+            child_name = str(child).strip()
+            if child_name and child_name != module_name and child_name not in child_modules:
+                child_modules.append(child_name)
+        for hint in dependency_context.get("instance_hints", []) or []:
+            if not isinstance(hint, dict):
+                continue
+            child_name = str(hint.get("module") or "").strip()
+            if child_name and child_name != module_name and child_name not in child_modules:
+                child_modules.append(child_name)
+        return child_modules
+
+    def _child_context_from_interface(self, interface: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "module": str(interface.get("module") or ""),
+            "child_status": str(interface.get("child_status") or "candidate"),
+            "ports": list(interface.get("ports") or []),
+            "parameters": list(interface.get("parameters") or []),
+            "file_path": str(interface.get("file_path") or ""),
+            "module_path": str(interface.get("module_path") or ""),
+            "final_rtl_path": str(interface.get("final_rtl_path") or ""),
+            "simulation_status": str(interface.get("simulation_status") or ""),
+            "simulation_passed": bool(interface.get("simulation_passed")),
+            "module_start_line": interface.get("module_start_line"),
+            "module_end_line": interface.get("module_end_line"),
+        }
+
+    def _attach_child_code_context(self, child_context: Dict[str, Any]) -> None:
+        child_context["code_mode"] = "interface_only"
+        child_context["full_code_included"] = False
+        child_context["source_file_read"] = ""
+        child_context["functional_summary"] = (
+            "Use this child module by instantiation. Do not duplicate verified child internals in the parent module."
+        )
+        source_path = self._resolve_child_rtl_path(child_context)
+        if source_path is None or not source_path.exists() or not source_path.is_file():
+            child_context["interface_code"] = self._synthesize_interface_code(child_context)
+            return
+
+        text = source_path.read_text(encoding="utf-8", errors="ignore").replace("\r\n", "\n")
+        module_code = self._extract_module_code(text, str(child_context.get("module") or ""))
+        child_context["source_file_read"] = str(source_path)
+        child_context["interface_code"] = self._extract_interface_code(module_code, child_context)
+        is_verified = child_context.get("child_status") == "verified"
+        small_enough = (
+            len(module_code.splitlines()) <= self.child_full_code_max_lines
+            and len(module_code) <= self.child_full_code_max_chars
+        )
+        if is_verified and small_enough:
+            child_context["code_mode"] = "full"
+            child_context["full_code_included"] = True
+            child_context["full_code"] = module_code.strip()
+
+    def _resolve_child_rtl_path(self, child_context: Dict[str, Any]) -> Path | None:
+        for key in ("final_rtl_path", "file_path", "module_path"):
+            raw_path = str(child_context.get(key) or "").strip()
+            if not raw_path:
+                continue
+            path = Path(raw_path)
+            if path.is_absolute():
+                return path
+            repo_path_value = getattr(self.kg_service, "repo_path", "") if self.kg_service is not None else ""
+            repo_path = Path(repo_path_value) if repo_path_value else None
+            if repo_path is not None:
+                return (repo_path / raw_path).resolve()
+        return None
+
+    def _extract_module_code(self, text: str, module_name: str) -> str:
+        if not module_name:
+            return text
+        pattern = re.compile(
+            rf"(?ms)^\s*module\s+{re.escape(module_name)}\b.*?^\s*endmodule\b"
+        )
+        match = pattern.search(text)
+        return match.group(0) if match else text
+
+    def _extract_interface_code(self, module_code: str, child_context: Dict[str, Any]) -> str:
+        lines = module_code.splitlines()
+        interface_lines: List[str] = []
+        in_header = False
+        for line in lines:
+            stripped = line.strip()
+            if not in_header and re.match(r"^module\b", stripped):
+                in_header = True
+            if in_header:
+                interface_lines.append(line)
+                if stripped.endswith(");") or (stripped.endswith(";") and "(" not in stripped):
+                    in_header = False
+                continue
+            if re.match(r"^(input|output|inout|parameter|localparam)\b", stripped):
+                interface_lines.append(line)
+                continue
+            if re.match(r"^(assign|always|initial|function|task|endmodule)\b", stripped):
+                break
+        text = "\n".join(interface_lines).strip()
+        return text or self._synthesize_interface_code(child_context)
+
+    def _synthesize_interface_code(self, child_context: Dict[str, Any]) -> str:
+        module_name = str(child_context.get("module") or "")
+        ports = child_context.get("ports", []) or []
+        parameters = child_context.get("parameters", []) or []
+        lines = [f"module {module_name}("]
+        port_names = [str(port.get("name") or "") for port in ports if isinstance(port, dict) and port.get("name")]
+        for index, port_name in enumerate(port_names):
+            suffix = "," if index < len(port_names) - 1 else ""
+            lines.append(f"    {port_name}{suffix}")
+        lines.append(");")
+        for param in parameters:
+            if not isinstance(param, dict):
+                continue
+            name = str(param.get("name") or "")
+            value = str(param.get("value") or "")
+            if name:
+                assignment = f" = {value}" if value else ""
+                lines.append(f"parameter {name}{assignment};")
+        for port in ports:
+            if not isinstance(port, dict):
+                continue
+            name = str(port.get("name") or "")
+            direction = str(port.get("direction") or "")
+            width = str(port.get("width") or "")
+            if name:
+                width_text = f" {width}" if width else ""
+                lines.append(f"{direction or 'wire'}{width_text} {name};")
+        lines.append("endmodule")
+        return "\n".join(lines)
+
+    def _format_kg_child_context_for_prompt(self, kg_child_context: Dict[str, Any]) -> str:
+        prompt_payload = json.loads(json.dumps(kg_child_context, ensure_ascii=False))
+        for child in prompt_payload.get("children", []) or []:
+            if isinstance(child, dict):
+                child.pop("raw_query", None)
+        return json.dumps(prompt_payload, indent=2, ensure_ascii=False)
 
     def _get_stage3_artifact(self, partial_artifacts: Dict[str, Any]) -> Stage3ModuleSkeletonArtifact | None:
         candidate = partial_artifacts.get("stage3")
@@ -369,6 +842,22 @@ class Stage6MergeAgent(BaseStageAgent):
         if isinstance(candidate, Stage5CodegenArtifact):
             return candidate
         return validate_model(Stage5CodegenArtifact, candidate)
+
+    def _get_stage4_artifact(self, partial_artifacts: Dict[str, Any]) -> Stage4ModulePlansArtifact | None:
+        candidate = partial_artifacts.get("stage4") or partial_artifacts.get("module_plans")
+        if candidate is None:
+            return None
+        if isinstance(candidate, Stage4ModulePlansArtifact):
+            return candidate
+        return validate_model(Stage4ModulePlansArtifact, candidate)
+
+    def _get_repo_skeleton_artifact(self, partial_artifacts: Dict[str, Any]) -> Stage2RepoSkeletonArtifact | None:
+        candidate = partial_artifacts.get("stage2")
+        if candidate is None:
+            return None
+        if isinstance(candidate, Stage2RepoSkeletonArtifact):
+            return candidate
+        return validate_model(Stage2RepoSkeletonArtifact, candidate)
 
 
 def _extract_module_frame_section(text: str) -> str:

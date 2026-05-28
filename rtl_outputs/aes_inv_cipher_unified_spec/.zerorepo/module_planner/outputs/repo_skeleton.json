@@ -5,11 +5,11 @@
   "stage2_status": "repo_skeleton_planned",
   "top_module": "aes_inv_cipher_top",
   "global_invariants": {
-    "system_role": "AES-128 Inverse Cipher decryption system with top-level round control and reusable key expansion/substitution helpers",
+    "system_role": "AES-128 inverse cipher (decryption) with key expansion and iterative round transformations",
     "clocking_model": {
       "primary_clock": "clk",
       "reset_signal": "rst",
-      "reset_style": "top-level active-high reset; key expansion uses kld as synchronous load/reset signal"
+      "reset_style": "Top-level active-high reset (rst). Key expansion and RCON are reset via kld signal."
     },
     "hierarchy": [
       {
@@ -33,52 +33,28 @@
       "aes_inv_cipher_top": "rtl/aes_inv_cipher_top.v",
       "aes_key_expand_128": "rtl/aes_key_expand_128.v",
       "aes_inv_sbox": "rtl/aes_inv_sbox.v",
-      "aes_rcon": "rtl/aes_rcon.v",
-      "aes_sbox": "rtl/aes_sbox.v"
+      "aes_sbox": "rtl/aes_sbox.v",
+      "aes_rcon": "rtl/aes_rcon.v"
     },
     "cross_module_alignment": [
-      "All modules operate on the primary clk domain",
-      "aes_key_expand_128 and aes_inv_cipher_top coordinate via kld and round counters",
-      "128-bit data paths are processed in column-major byte order across the state matrix"
+      "All modules sharing a clock use the same clk domain",
+      "Key expansion output words (wo_0..wo_3) feed the top module's key buffer (kb)",
+      "Round constant from aes_rcon is used inside aes_key_expand_128",
+      "aes_inv_sbox instances are purely combinational, placed in top module",
+      "aes_sbox instances are purely combinational, used exclusively in key expansion"
     ],
     "global_data_conventions": [
-      "State matrix sa[0:3][0:3] is 4x4 bytes stored in column-major order",
-      "Round keys are stored in reverse order in kb[10:0] buffer"
+      "128-bit keys and data blocks",
+      "State matrix in column-major order",
+      "Reverse-order key schedule: kb[10] = initial round key, kb[0] = last round key",
+      "Round counter selects round key: kb[dcnt]"
     ]
   },
   "modules": [
     {
-      "module": "aes_rcon",
-      "file_path": "rtl/aes_rcon.v",
-      "role": "Round constant generator for key expansion",
-      "kind": "leaf_stateful",
-      "parents": [
-        "aes_key_expand_128"
-      ],
-      "children": [],
-      "instance_hints": [],
-      "repo_notes": [
-        "Uses kld as synchronous reset/load signal"
-      ]
-    },
-    {
-      "module": "aes_sbox",
-      "file_path": "rtl/aes_sbox.v",
-      "role": "Forward S-box byte substitution lookup",
-      "kind": "leaf_combinational",
-      "parents": [
-        "aes_key_expand_128"
-      ],
-      "children": [],
-      "instance_hints": [],
-      "repo_notes": [
-        "Pure combinational ROM lookup"
-      ]
-    },
-    {
       "module": "aes_inv_sbox",
       "file_path": "rtl/aes_inv_sbox.v",
-      "role": "Inverse S-box byte substitution lookup",
+      "role": "Inverse S-BOX lookup (combinational)",
       "kind": "leaf_combinational",
       "parents": [
         "aes_inv_cipher_top"
@@ -86,14 +62,46 @@
       "children": [],
       "instance_hints": [],
       "repo_notes": [
-        "Pure combinational ROM lookup, instantiated 16 times in parallel in top"
+        "Pure combinational ROM-based 256x8 lookup",
+        "No clock or reset"
+      ]
+    },
+    {
+      "module": "aes_sbox",
+      "file_path": "rtl/aes_sbox.v",
+      "role": "S-BOX lookup (combinational)",
+      "kind": "leaf_combinational",
+      "parents": [
+        "aes_key_expand_128"
+      ],
+      "children": [],
+      "instance_hints": [],
+      "repo_notes": [
+        "Pure combinational ROM-based 256x8 lookup",
+        "Used only for SubWord in key expansion"
+      ]
+    },
+    {
+      "module": "aes_rcon",
+      "file_path": "rtl/aes_rcon.v",
+      "role": "Round constant generator",
+      "kind": "leaf_stateful",
+      "parents": [
+        "aes_key_expand_128"
+      ],
+      "children": [],
+      "instance_hints": [],
+      "repo_notes": [
+        "Clock-driven counter; output registered",
+        "Reset by kld (active high)",
+        "Waits for kld deassertion to increment"
       ]
     },
     {
       "module": "aes_key_expand_128",
       "file_path": "rtl/aes_key_expand_128.v",
-      "role": "AES-128 key schedule generator",
-      "kind": "leaf_stateful",
+      "role": "128-bit AES key expansion engine",
+      "kind": "iterative_engine",
       "parents": [
         "aes_inv_cipher_top"
       ],
@@ -105,23 +113,23 @@
         {
           "module": "aes_rcon",
           "count": 1,
-          "usage": "Round constant generation"
+          "usage": "Generate round constant for key expansion"
         },
         {
           "module": "aes_sbox",
           "count": 4,
-          "usage": "SubWord substitution"
+          "usage": "Byte substitution for SubWord transformation"
         }
       ],
       "repo_notes": [
-        "Synchronous key register updates on clk",
-        "Uses kld for load/reset"
+        "Uses four 32-bit registers; updates every clock when kld=0",
+        "Requires kld=1 to load initial key"
       ]
     },
     {
       "module": "aes_inv_cipher_top",
       "file_path": "rtl/aes_inv_cipher_top.v",
-      "role": "Top-level AES inverse cipher controller and datapath",
+      "role": "Top-level AES-128 inverse cipher controller",
       "kind": "top_controller",
       "parents": [],
       "children": [
@@ -132,39 +140,40 @@
         {
           "module": "aes_key_expand_128",
           "count": 1,
-          "usage": "Round key generation"
+          "usage": "Generate round keys"
         },
         {
           "module": "aes_inv_sbox",
           "count": 16,
-          "usage": "Parallel InvSubBytes"
+          "usage": "Nonlinear inverse byte substitution"
         }
       ],
       "repo_notes": [
-        "Manages IDLE -> KeyLoad -> KeyExpansion -> Round execution FSM",
-        "Coordinates kld and ld signals"
+        "Owns the decryption FSM (IDLE→KeyLoad→KeyExpansion→KeyStored→...→Done)",
+        "Manages round counter, key buffer, state matrix, and output"
       ]
     }
   ],
   "planning_decisions": {
     "generation_order": [
-      "aes_rcon",
-      "aes_sbox",
       "aes_inv_sbox",
+      "aes_sbox",
+      "aes_rcon",
       "aes_key_expand_128",
       "aes_inv_cipher_top"
     ],
     "leaf_first": true,
     "shared_modules": [],
     "top_level_integration_notes": [
-      "Top module instantiates key expansion once and inverse S-box 16 times in parallel",
-      "Key expansion outputs feed top-level key buffer kb[10:0]",
-      "Round counter dcnt drives state transitions and round key selection"
+      "Load key into aes_key_expand_128 via kld, then buffer expanded keys in reverse order",
+      "Perform initial AddRoundKey on data load, then iterate 10 rounds",
+      "Final round skips InvMixColumns; result latched into text_out"
     ]
   },
   "open_issues": [
-    "aes_key_expand_128 relies on kld for reset behavior instead of a dedicated rst pin; verify if top-level rst should be propagated or if kld-only reset is sufficient",
-    "Mathematical GF(2^8) multiplication vs ROM lookup for aes_rcon is not fully specified; default to ROM or sequential generation based on area/timing constraints",
-    "Separate ROMs for aes_sbox and aes_inv_sbox may be merged or kept distinct; current plan keeps them separate for clarity"
+    "Reset polarity (synchronous vs asynchronous) not explicitly defined for top-level rst",
+    "Timing closure details for combinational invers S‑BOX and MixColumns paths not specified",
+    "No explicit stop condition for aes_key_expand_128 after 10 rounds; may run continuously",
+    "Potential clock gating or enable logic needed for low-power operation"
   ]
 }

@@ -8,8 +8,13 @@ You are NOT redesigning the skeleton.
 You are NOT creating a detailed architecture document.
 You only need to map each skeleton block to:
 1. a concise generation description,
-2. the relevant spec block IDs,
+2. the already-selected spec block IDs provided in REQUIRED_SUBTASKS,
 3. a few essential constraints if necessary.
+
+The generated plan will be consumed by a parser-friendly RTL fragment generator.
+When constraints are relevant, guide generation toward parser-friendly Verilog:
+flatten matrix-like data into scalar signals, avoid unpacked arrays, avoid
+multidimensional references, and avoid generate/genvar constructs.
 
 Output must be valid JSON.
 """.strip()
@@ -38,7 +43,7 @@ Use this schema:
 Rules:
 1. Create exactly one subtask for each skeleton block.
 2. Keep each description short and implementation-oriented.
-3. Use only spec block IDs that appear in the provided module spec.
+3. Copy spec_refs exactly from REQUIRED_SUBTASKS. Do not add, remove, reorder, or reinterpret them.
 4. Do not invent extra blocks.
 5. Do not list read/write objects.
 6. Do not output timing tables, signal tables, verification plans, or local checks.
@@ -46,11 +51,13 @@ Rules:
 8. If a block has no special constraint, use an empty list.
 9. The plan should be easy for a code generation agent to consume block by block.
 10. The `target` field must exactly match one placeholder from the provided MODULE_SKELETON text.
-11. Interface/port spec blocks are module-level required context. If a spec block describes the module interface, ports, signal direction, or signal width, preserve it in relevant `spec_refs`.
-12. The first declaration (`decl`) subtask must include the module interface spec block and must mention port/interface declaration fidelity in its description or constraints.
-13. Do not duplicate the module interface spec block across every subtask. Use it where the module boundary is established; downstream code generation receives module interface context separately.
-14. Do not select only algorithm/constraint blocks for the first declaration subtask when port widths, directions, or module boundaries are needed by the downstream code generation agent.
-15. Return JSON only, with no Markdown fence and no prose before or after it.
+11. Block-level retrieval has already selected spec_refs. Use MODULE_SPEC_BLOCKS only to write accurate descriptions and constraints.
+12. If the first declaration (`decl`) subtask includes interface spec_refs, mention port/interface declaration fidelity in its description or constraints.
+13. Do not duplicate, drop, or second-guess any retrieved spec_refs.
+14. Do not choose spec_refs yourself.
+15. If a block description naturally suggests arrays, matrix state, or repeated instances, add a short constraint requiring flattened scalar Verilog and explicit unrolling.
+16. Do not ask stage5 to use unpacked arrays, multidimensional references, generate, endgenerate, or genvar.
+17. Return JSON only, with no Markdown fence and no prose before or after it.
 """.strip()
 
 
@@ -66,9 +73,9 @@ def build_prompt(
 {SCHEMA_AND_RULES}
 
 Mandatory target rules:
-1. Use the following REQUIRED_SUBTASKS list as the source of truth for every `id` and `target`.
-2. Copy each `id` and `target` value exactly as written in REQUIRED_SUBTASKS.
-3. Do not infer `target` from `id`.
+1. Use the following REQUIRED_SUBTASKS list as the source of truth for every `id`, `target`, and `spec_refs`.
+2. Copy each `id`, `target`, and `spec_refs` value exactly as written in REQUIRED_SUBTASKS.
+3. Do not infer `target` or `spec_refs` from other inputs.
 4. Do not add Markdown, comments, slashes, or code prefixes to `target`.
 5. A target like `<block: B1_decl_core_objects>` must stay exactly `<block: B1_decl_core_objects>`.
 6. A target like `<block: decl_core_objects>` must stay exactly `<block: decl_core_objects>`.
