@@ -20,7 +20,8 @@ def build_module_organized_artifact(stage1_artifact: Stage1ContractsArtifact) ->
             *(item.module for item in stage1_artifact.planning_facts if item.module),
         ]
     )
-    module_order = _ordered_unique([top_module, *declared_modules, *contract_modules])
+    spec_modules = [str(item).strip() for item in stage1_artifact.spec_index.keys() if str(item).strip()]
+    module_order = _ordered_unique([top_module, *declared_modules, *spec_modules, *contract_modules])
 
     interface_by_module = {item.module: item for item in stage1_artifact.interface_contracts if item.module}
     timing_by_module = {item.module: item for item in stage1_artifact.timing_contracts if item.module}

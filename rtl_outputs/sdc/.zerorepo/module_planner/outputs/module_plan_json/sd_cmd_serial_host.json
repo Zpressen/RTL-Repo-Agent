@@ -1,0 +1,101 @@
+{
+  "schema_version": "module_plan_v1",
+  "module": "sd_cmd_serial_host",
+  "subtasks": [
+    {
+      "id": "B1_decl_core_objects",
+      "target": "<block: decl_core_objects>",
+      "description": "Declare all Verilog ports, parameters, localparams (including INIT_DELAY, NCR, SEND_SIZE, SIZE, CONTENT_SIZE, Read_Delay, EIGHT_PAD, and FSM state constants), and internal registers/wires as detailed in S002, S003, S006. Generate flattened scalar declarations without unpacked arrays or multidimensional references.",
+      "spec_refs": [
+        "S002",
+        "S003",
+        "S006"
+      ],
+      "constraints": [
+        "Port declarations must exactly match widths and directions in S002 and S003.",
+        "Internal registers and wires must be listed as scalar signals with bit-width annotations per S006; do not use unpacked arrays or generate constructs."
+      ]
+    },
+    {
+      "id": "B2_inst_crc7",
+      "target": "<block: inst_crc7>",
+      "description": "Instantiate exactly one sd_crc_7 submodule with ports BITVAL, Enable, CLK, RST, CRC connected as described in S016. Connect BITVAL to the appropriate single-bit CRC input signal, Enable to CRC_Enable, CLK to SD_CLK_IN, RST to CRC_RST, and CRC to the 7-bit wire CRC_VAL.",
+      "spec_refs": [
+        "S016"
+      ],
+      "constraints": []
+    },
+    {
+      "id": "B3_sync_req",
+      "target": "<block: sync_req>",
+      "description": "Implement a two-flip-flop synchronizer for REQ_IN to Req_internal_in using intermediate register q, clocked by SD_CLK_IN, with asynchronous active-high reset (RST_IN) as per S009.",
+      "spec_refs": [
+        "S009"
+      ],
+      "constraints": [
+        "Use asynchronous reset: on posedge SD_CLK_IN or posedge RST_IN, clear q and Req_internal_in to 0."
+      ]
+    },
+    {
+      "id": "B4_sync_ack",
+      "target": "<block: sync_ack>",
+      "description": "Implement a two-flip-flop synchronizer for ACK_IN to Ack_internal_in using intermediate register q1, clocked by SD_CLK_IN, with asynchronous active-high reset (RST_IN) as per S010.",
+      "spec_refs": [
+        "S010"
+      ],
+      "constraints": [
+        "Use asynchronous reset: on posedge SD_CLK_IN or posedge RST_IN, clear q1 and Ack_internal_in to 0."
+      ]
+    },
+    {
+      "id": "B5_command_decoder",
+      "target": "<block: command_decoder>",
+      "description": "Sequential command decoder block. On synchronous reset (RST_IN high), clear all internal registers and set DECODER_ACK=1. When Req_internal_in asserted, decode SETTING_IN fields per S011, capture CMD_IN into In_Buff, set Response_Size, Delay_Cycler, CRC_Check_On, block_write, block_read, word_select, and determine Write_Read/Write_Only. When Req_internal_in deasserted, clear operation flags and set DECODER_ACK=1.",
+      "spec_refs": [
+        "S011",
+        "S005"
+      ],
+      "constraints": [
+        "Bit-field extractions must exactly match S011: Response_Size<=SETTING_IN[6:0], CRC_Check_On<=SETTING_IN[7], Delay_Cycler<=SETTING_IN[10:8], block_write<=SETTING_IN[11], block_read<=SETTING_IN[12], word_select<=SETTING_IN[14:13].",
+        "Write_Read is set when SETTING_IN[6:0]!=0, else Write_Only; mutual exclusion enforced."
+      ]
+    },
+    {
+      "id": "B6_fsm_combo",
+      "target": "<block: fsm_combo>",
+      "description": "Combinational next-state logic for the ten-state FSM. Compute next_state from current state, Cmd_Cnt, Delay_Cnt, Write_Read, Write_Only, Req_internal_in, Ack_internal_in, cmd_dat_i, Response_Size, Delay_Cycler, block_read, block_write using the transition table in S007.",
+      "spec_refs": [
+        "S007"
+      ],
+      "constraints": [
+        "Include all states: INIT, IDLE, WRITE_WR, DLY_WR, READ_WR, DLY_READ, ACK_WR, WRITE_WO, DLY_WO, ACK_WO, plus a default to INIT.",
+        "Use binary state encoding (4 bits) and a flat case statement; do not use generate or genvar constructs."
+      ]
+    },
+    {
+      "id": "B7_fsm_seq_state_update",
+      "target": "<block: fsm_seq_state_update>",
+      "description": "Sequential state register update. On posedge SD_CLK_IN with synchronous active-high reset (RST_IN), set state to INIT when reset, otherwise to next_state, per S008.",
+      "spec_refs": [
+        "S008"
+      ],
+      "constraints": [
+        "Use synchronous reset: if (RST_IN) state <= INIT else state <= next_state."
+      ]
+    },
+    {
+      "id": "B8_fsm_out",
+      "target": "<block: fsm_out>",
+      "description": "Registered output and counter control block. On posedge SD_CLK_IN with synchronous reset (RST_IN), initialize all registers as in S012. Otherwise, based on current state, update external outputs (CMD_OUT, ACK_OUT, REQ_OUT, STATUS, cmd_oe_o, cmd_out_o, st_dat_t) and internal counters/controls (Cmd_Cnt, Delay_Cnt, Crc_Buffering, CRC_RST, CRC_Enable, CRC_OUT, CRC_Valid, word_select_counter, FSM_ACK, Out_Buff), using CRC_VAL from the sd_crc_7 instance. Follow the per-state descriptions and STATUS bit assignments in S012 and S005.",
+      "spec_refs": [
+        "S012",
+        "S005"
+      ],
+      "constraints": [
+        "Flatten all data and control signals; avoid unpacked arrays. Derive Vector_Index and Bit_Nr from Cmd_Cnt as scalar expressions; use explicit bit selects for In_Buff/Out_Buff.",
+        "Ensure REQ_OUT/ACK_IN handshake sequencing per state descriptions.",
+        "In READ_WR, compute CRC validation exactly: compare CRC_IN with CRC_VAL after Response_Size+7 cycles, set CRC_Valid accordingly, and disable CRC afterwards."
+      ]
+    }
+  ]
+}

@@ -1,0 +1,5447 @@
+{
+  "schema_version": "stage1_contracts_v1",
+  "task_id": "sdc",
+  "stage1_status": "contracts_completed",
+  "completed_rounds": [
+    "structure",
+    "interface",
+    "timing",
+    "control",
+    "datapath",
+    "planning_facts"
+  ],
+  "completed_batches": [
+    "batch_0001",
+    "batch_0002",
+    "batch_0003"
+  ],
+  "completed_modules": [
+    "sd_bd",
+    "sd_clock_divider",
+    "sd_cmd_master",
+    "sd_cmd_serial_host",
+    "sd_controller_wb",
+    "sd_crc_16",
+    "sd_crc_7",
+    "sd_data_master",
+    "sd_data_serial_host",
+    "sd_defines",
+    "sd_fifo_rx_filler",
+    "sd_fifo_tx_filler",
+    "sd_rx_fifo",
+    "sd_tx_fifo",
+    "sdc_controller"
+  ],
+  "spec_index": {
+    "sd_bd": "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_bd.md",
+    "sd_clock_divider": "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_clock_divider.md",
+    "sd_cmd_master": "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_cmd_master.md",
+    "sd_cmd_serial_host": "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_cmd_serial_host.md",
+    "sd_controller_wb": "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_controller_wb.md",
+    "sd_crc_16": "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_crc_16.md",
+    "sd_crc_7": "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_crc_7.md",
+    "sd_data_master": "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_data_master.md",
+    "sd_data_serial_host": "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_data_serial_host.md",
+    "sd_defines": "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_defines.md",
+    "sd_fifo_rx_filler": "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_fifo_rx_filler.md",
+    "sd_fifo_tx_filler": "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_fifo_tx_filler.md",
+    "sd_rx_fifo": "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_rx_fifo.md",
+    "sd_tx_fifo": "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_tx_fifo.md",
+    "sdc_controller": "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sdc_controller.md"
+  },
+  "structure_relation_candidates": [
+    {
+      "parent": "sd_cmd_serial_host",
+      "child": "sd_crc_7",
+      "image_grounding": []
+    },
+    {
+      "parent": "sd_data_serial_host",
+      "child": "sd_crc_16",
+      "image_grounding": []
+    },
+    {
+      "parent": "sdc_controller",
+      "child": "sd_controller_wb",
+      "image_grounding": []
+    },
+    {
+      "parent": "sdc_controller",
+      "child": "sd_clock_divider",
+      "image_grounding": []
+    },
+    {
+      "parent": "sdc_controller",
+      "child": "sd_cmd_master",
+      "image_grounding": []
+    },
+    {
+      "parent": "sdc_controller",
+      "child": "sd_cmd_serial_host",
+      "image_grounding": []
+    },
+    {
+      "parent": "sdc_controller",
+      "child": "sd_data_master",
+      "image_grounding": []
+    },
+    {
+      "parent": "sdc_controller",
+      "child": "sd_data_serial_host",
+      "image_grounding": []
+    },
+    {
+      "parent": "sdc_controller",
+      "child": "sd_bd",
+      "image_grounding": []
+    },
+    {
+      "parent": "sdc_controller",
+      "child": "sd_fifo_tx_filler",
+      "image_grounding": []
+    },
+    {
+      "parent": "sdc_controller",
+      "child": "sd_fifo_rx_filler",
+      "image_grounding": []
+    },
+    {
+      "parent": "sd_fifo_rx_filler",
+      "child": "sd_rx_fifo",
+      "image_grounding": []
+    },
+    {
+      "parent": "sd_fifo_tx_filler",
+      "child": "sd_tx_fifo",
+      "image_grounding": []
+    }
+  ],
+  "instantiation_relation_candidates": [],
+  "top_module_candidates": [
+    "sdc_controller"
+  ],
+  "structure_contract": {
+    "system": "",
+    "top_module": "sdc_controller",
+    "files": [
+      "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_bd.md",
+      "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_clock_divider.md",
+      "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_cmd_master.md",
+      "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_cmd_serial_host.md",
+      "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_controller_wb.md",
+      "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_crc_16.md",
+      "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_crc_7.md",
+      "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_data_master.md",
+      "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_data_serial_host.md",
+      "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_defines.md",
+      "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_fifo_rx_filler.md",
+      "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_fifo_tx_filler.md",
+      "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_rx_fifo.md",
+      "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_tx_fifo.md",
+      "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sdc_controller.md"
+    ],
+    "modules": [
+      "sd_bd",
+      "sd_clock_divider",
+      "sd_cmd_master",
+      "sd_cmd_serial_host",
+      "sd_controller_wb",
+      "sd_crc_16",
+      "sd_crc_7",
+      "sd_data_master",
+      "sd_data_serial_host",
+      "sd_defines",
+      "sd_fifo_rx_filler",
+      "sd_fifo_tx_filler",
+      "sd_rx_fifo",
+      "sd_tx_fifo",
+      "sdc_controller"
+    ],
+    "file_map": {
+      "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_bd.md": [
+        "sd_bd"
+      ],
+      "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_clock_divider.md": [
+        "sd_clock_divider"
+      ],
+      "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_cmd_master.md": [
+        "sd_cmd_master"
+      ],
+      "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_cmd_serial_host.md": [
+        "sd_cmd_serial_host"
+      ],
+      "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_controller_wb.md": [
+        "sd_controller_wb"
+      ],
+      "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_crc_16.md": [
+        "sd_crc_16"
+      ],
+      "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_crc_7.md": [
+        "sd_crc_7"
+      ],
+      "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_data_master.md": [
+        "sd_data_master"
+      ],
+      "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_data_serial_host.md": [
+        "sd_data_serial_host"
+      ],
+      "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_defines.md": [
+        "sd_defines"
+      ],
+      "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_fifo_rx_filler.md": [
+        "sd_fifo_rx_filler"
+      ],
+      "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_fifo_tx_filler.md": [
+        "sd_fifo_tx_filler"
+      ],
+      "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_rx_fifo.md": [
+        "sd_rx_fifo"
+      ],
+      "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_tx_fifo.md": [
+        "sd_tx_fifo"
+      ],
+      "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sdc_controller.md": [
+        "sdc_controller"
+      ]
+    },
+    "hierarchy": [
+      {
+        "parent": "sd_cmd_serial_host",
+        "child": "sd_crc_7",
+        "image_grounding": []
+      },
+      {
+        "parent": "sd_data_serial_host",
+        "child": "sd_crc_16",
+        "image_grounding": []
+      },
+      {
+        "parent": "sdc_controller",
+        "child": "sd_controller_wb",
+        "image_grounding": []
+      },
+      {
+        "parent": "sdc_controller",
+        "child": "sd_clock_divider",
+        "image_grounding": []
+      },
+      {
+        "parent": "sdc_controller",
+        "child": "sd_cmd_master",
+        "image_grounding": []
+      },
+      {
+        "parent": "sdc_controller",
+        "child": "sd_cmd_serial_host",
+        "image_grounding": []
+      },
+      {
+        "parent": "sdc_controller",
+        "child": "sd_data_master",
+        "image_grounding": []
+      },
+      {
+        "parent": "sdc_controller",
+        "child": "sd_data_serial_host",
+        "image_grounding": []
+      },
+      {
+        "parent": "sdc_controller",
+        "child": "sd_bd",
+        "image_grounding": []
+      },
+      {
+        "parent": "sdc_controller",
+        "child": "sd_fifo_tx_filler",
+        "image_grounding": []
+      },
+      {
+        "parent": "sdc_controller",
+        "child": "sd_fifo_rx_filler",
+        "image_grounding": []
+      },
+      {
+        "parent": "sd_fifo_rx_filler",
+        "child": "sd_rx_fifo",
+        "image_grounding": []
+      },
+      {
+        "parent": "sd_fifo_tx_filler",
+        "child": "sd_tx_fifo",
+        "image_grounding": []
+      }
+    ],
+    "instantiation_graph": [],
+    "generation_order_candidate": [
+      "sd_bd",
+      "sd_clock_divider",
+      "sd_cmd_master",
+      "sd_crc_7",
+      "sd_cmd_serial_host",
+      "sd_controller_wb",
+      "sd_crc_16",
+      "sd_data_master",
+      "sd_data_serial_host",
+      "sd_defines",
+      "sd_rx_fifo",
+      "sd_fifo_rx_filler",
+      "sd_tx_fifo",
+      "sd_fifo_tx_filler",
+      "sdc_controller"
+    ],
+    "image_grounding": []
+  },
+  "interface_contracts": [
+    {
+      "module": "sd_bd",
+      "ports": [
+        {
+          "name": "clk",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "System clock"
+        },
+        {
+          "name": "rst",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Asynchronous reset, active high"
+        },
+        {
+          "name": "we_m",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Write enable signal"
+        },
+        {
+          "name": "dat_in_m",
+          "direction": "input",
+          "width": "RAM_MEM_WIDTH",
+          "role": "",
+          "active": "",
+          "meaning": "Input data for writing BD"
+        },
+        {
+          "name": "free_bd",
+          "direction": "output",
+          "width": "BD_WIDTH",
+          "role": "",
+          "active": "",
+          "meaning": "Number of free buffer descriptors"
+        },
+        {
+          "name": "re_s",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Read enable signal"
+        },
+        {
+          "name": "ack_o_s",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Read operation acknowledgment"
+        },
+        {
+          "name": "a_cmp",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "SD card operation completion"
+        },
+        {
+          "name": "dat_out_s",
+          "direction": "output",
+          "width": "RAM_MEM_WIDTH",
+          "role": "",
+          "active": "",
+          "meaning": "Output data from reading BD"
+        }
+      ],
+      "params": [],
+      "clock": "clk",
+      "reset": "rst",
+      "reset_polarity": "high",
+      "handshakes": [],
+      "parameter_constraints": [],
+      "bus_roles": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_clock_divider",
+      "ports": [
+        {
+          "name": "CLK",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "CLK in"
+        },
+        {
+          "name": "DIVIDER",
+          "direction": "input",
+          "width": "8",
+          "role": "",
+          "active": "",
+          "meaning": "Division ratio"
+        },
+        {
+          "name": "RST",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Asynchronous reset signal"
+        },
+        {
+          "name": "SD_CLK",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "CLK out"
+        }
+      ],
+      "params": [],
+      "clock": "CLK",
+      "reset": "RST",
+      "reset_polarity": "high",
+      "handshakes": [],
+      "parameter_constraints": [],
+      "bus_roles": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_cmd_master",
+      "ports": [
+        {
+          "name": "CLK_PAD_IO",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Clock input"
+        },
+        {
+          "name": "RST_PAD_I",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Asynchronous reset, active high"
+        },
+        {
+          "name": "New_CMD",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Signal indicating a new command is available"
+        },
+        {
+          "name": "data_write",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Indicates a block write command"
+        },
+        {
+          "name": "data_read",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Indicates a block read command"
+        },
+        {
+          "name": "ARG_REG",
+          "direction": "input",
+          "width": "32",
+          "role": "",
+          "active": "",
+          "meaning": "Command argument register"
+        },
+        {
+          "name": "CMD_SET_REG",
+          "direction": "input",
+          "width": "14",
+          "role": "",
+          "active": "",
+          "meaning": "Command settings register"
+        },
+        {
+          "name": "TIMEOUT_REG",
+          "direction": "input",
+          "width": "16",
+          "role": "",
+          "active": "",
+          "meaning": "Timeout configuration register"
+        },
+        {
+          "name": "STATUS_REG",
+          "direction": "output",
+          "width": "16",
+          "role": "",
+          "active": "",
+          "meaning": "Status register"
+        },
+        {
+          "name": "RESP_1_REG",
+          "direction": "output",
+          "width": "32",
+          "role": "",
+          "active": "",
+          "meaning": "Response register"
+        },
+        {
+          "name": "ERR_INT_REG",
+          "direction": "output",
+          "width": "5",
+          "role": "",
+          "active": "",
+          "meaning": "Error interrupt register"
+        },
+        {
+          "name": "NORMAL_INT_REG",
+          "direction": "output",
+          "width": "16",
+          "role": "",
+          "active": "",
+          "meaning": "Normal interrupt register"
+        },
+        {
+          "name": "ERR_INT_RST",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Error interrupt reset signal"
+        },
+        {
+          "name": "NORMAL_INT_RST",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Normal interrupt reset signal"
+        },
+        {
+          "name": "settings",
+          "direction": "output",
+          "width": "16",
+          "role": "",
+          "active": "",
+          "meaning": "Command settings output"
+        },
+        {
+          "name": "go_idle_o",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Signal to reset the module to idle state"
+        },
+        {
+          "name": "cmd_out",
+          "direction": "output",
+          "width": "40",
+          "role": "",
+          "active": "",
+          "meaning": "Command output to SD/MMC card"
+        },
+        {
+          "name": "req_out",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Request signal for service"
+        },
+        {
+          "name": "ack_out",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Acknowledge signal for service completion"
+        },
+        {
+          "name": "req_in",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Request input signal from serial interface"
+        },
+        {
+          "name": "ack_in",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Acknowledge input signal from serial interface"
+        },
+        {
+          "name": "cmd_in",
+          "direction": "input",
+          "width": "40",
+          "role": "",
+          "active": "",
+          "meaning": "Command input from SD/MMC card"
+        },
+        {
+          "name": "serial_status",
+          "direction": "input",
+          "width": "8",
+          "role": "",
+          "active": "",
+          "meaning": "Serial status input"
+        },
+        {
+          "name": "card_detect",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "SD card presence detection signal"
+        }
+      ],
+      "params": [],
+      "clock": "CLK_PAD_IO",
+      "reset": "RST_PAD_I",
+      "reset_polarity": "high",
+      "handshakes": [],
+      "parameter_constraints": [],
+      "bus_roles": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_cmd_serial_host",
+      "ports": [
+        {
+          "name": "SD_CLK_IN",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Clock signal for SD interface synchronization"
+        },
+        {
+          "name": "RST_IN",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Synchronous reset signal (active high)"
+        },
+        {
+          "name": "SETTING_IN",
+          "direction": "input",
+          "width": "16",
+          "role": "",
+          "active": "",
+          "meaning": "Settings for the current command"
+        },
+        {
+          "name": "CMD_IN",
+          "direction": "input",
+          "width": "40",
+          "role": "",
+          "active": "",
+          "meaning": "Command to be sent to the SD/MMC card"
+        },
+        {
+          "name": "REQ_IN",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Request signal for service initiation"
+        },
+        {
+          "name": "ACK_IN",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Acknowledgment signal for service completion"
+        },
+        {
+          "name": "cmd_dat_i",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Command data input from the SD/MMC card"
+        },
+        {
+          "name": "CMD_OUT",
+          "direction": "output",
+          "width": "40",
+          "role": "",
+          "active": "",
+          "meaning": "Command output to be sent to the SD/MMC card"
+        },
+        {
+          "name": "ACK_OUT",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Acknowledgment signal for service completion"
+        },
+        {
+          "name": "REQ_OUT",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Request signal to initiate service"
+        },
+        {
+          "name": "STATUS",
+          "direction": "output",
+          "width": "8",
+          "role": "",
+          "active": "",
+          "meaning": "Status register indicating module state and flags"
+        },
+        {
+          "name": "cmd_oe_o",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Tri-state control for CMD output enable"
+        },
+        {
+          "name": "cmd_out_o",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Command output enable signal to SD/MMC card"
+        },
+        {
+          "name": "st_dat_t",
+          "direction": "output",
+          "width": "2",
+          "role": "",
+          "active": "",
+          "meaning": "Start data transfer signal indicating transfer type"
+        }
+      ],
+      "params": [],
+      "clock": "SD_CLK_IN",
+      "reset": "RST_IN",
+      "reset_polarity": "high",
+      "handshakes": [
+        "REQ_IN to ACK_OUT",
+        "REQ_OUT to ACK_IN"
+      ],
+      "parameter_constraints": [],
+      "bus_roles": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_controller_wb",
+      "ports": [
+        {
+          "name": "wb_clk_i",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Slave WISHBONE Clock Input"
+        },
+        {
+          "name": "wb_rst_i",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Slave WISHBONE Reset Input"
+        },
+        {
+          "name": "wb_dat_i",
+          "direction": "input",
+          "width": "32",
+          "role": "",
+          "active": "",
+          "meaning": "Slave WISHBONE Data Inputs"
+        },
+        {
+          "name": "wb_dat_o",
+          "direction": "output",
+          "width": "32",
+          "role": "",
+          "active": "",
+          "meaning": "Slave WISHBONE Data Outputs"
+        },
+        {
+          "name": "wb_adr_i",
+          "direction": "input",
+          "width": "8",
+          "role": "",
+          "active": "",
+          "meaning": "Slave WISHBONE Address Input"
+        },
+        {
+          "name": "wb_sel_i",
+          "direction": "input",
+          "width": "4",
+          "role": "",
+          "active": "",
+          "meaning": "Slave WISHBONE Select Input"
+        },
+        {
+          "name": "wb_we_i",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Slave WISHBONE Write Enable"
+        },
+        {
+          "name": "wb_cyc_i",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Slave WISHBONE Cycle"
+        },
+        {
+          "name": "wb_stb_i",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Slave WISHBONE Strobe"
+        },
+        {
+          "name": "wb_ack_o",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Slave WISHBONE Acknowledge"
+        },
+        {
+          "name": "we_m_tx_bd",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Write enable TIx BD"
+        },
+        {
+          "name": "we_m_rx_bd",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Write enable Rx BD"
+        },
+        {
+          "name": "new_cmd",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "New command indication signal"
+        },
+        {
+          "name": "we_ack",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Ack on cmd access request"
+        },
+        {
+          "name": "int_ack",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Internal Delayed Acknowledge"
+        },
+        {
+          "name": "cmd_int_busy",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Cmd busy by data module"
+        },
+        {
+          "name": "int_busy",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Command Busy by data module"
+        },
+        {
+          "name": "write_req_s",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Cmd access request"
+        },
+        {
+          "name": "cmd_set_s",
+          "direction": "input",
+          "width": "16",
+          "role": "",
+          "active": "",
+          "meaning": "Command setting input from data master"
+        },
+        {
+          "name": "cmd_arg_s",
+          "direction": "input",
+          "width": "32",
+          "role": "",
+          "active": "",
+          "meaning": "Command argument input from data master"
+        },
+        {
+          "name": "argument_reg",
+          "direction": "output",
+          "width": "32",
+          "role": "",
+          "active": "",
+          "meaning": "Command Argument Reg"
+        },
+        {
+          "name": "cmd_setting_reg",
+          "direction": "output",
+          "width": "16",
+          "role": "",
+          "active": "",
+          "meaning": "Command Setting Reg"
+        },
+        {
+          "name": "status_reg",
+          "direction": "input",
+          "width": "16",
+          "role": "",
+          "active": "",
+          "meaning": "Card Status Reg"
+        },
+        {
+          "name": "cmd_resp_1",
+          "direction": "input",
+          "width": "32",
+          "role": "",
+          "active": "",
+          "meaning": "Command Response"
+        },
+        {
+          "name": "software_reset_reg",
+          "direction": "output",
+          "width": "8",
+          "role": "",
+          "active": "",
+          "meaning": "Software reset Reg"
+        },
+        {
+          "name": "time_out_reg",
+          "direction": "output",
+          "width": "16",
+          "role": "",
+          "active": "",
+          "meaning": "Timeout Reg"
+        },
+        {
+          "name": "normal_int_status_reg",
+          "direction": "input",
+          "width": "16",
+          "role": "",
+          "active": "",
+          "meaning": "Normal Interrupt Status Reg"
+        },
+        {
+          "name": "error_int_status_reg",
+          "direction": "input",
+          "width": "16",
+          "role": "",
+          "active": "",
+          "meaning": "Error Interrupt Status Reg"
+        },
+        {
+          "name": "normal_int_signal_enable_reg",
+          "direction": "output",
+          "width": "16",
+          "role": "",
+          "active": "",
+          "meaning": "Normal Interrupt Enable Reg"
+        },
+        {
+          "name": "error_int_signal_enable_reg",
+          "direction": "output",
+          "width": "16",
+          "role": "",
+          "active": "",
+          "meaning": "Error Interrupt Enable Reg"
+        },
+        {
+          "name": "clock_divider",
+          "direction": "output",
+          "width": "8",
+          "role": "",
+          "active": "",
+          "meaning": "Clock Divider Reg"
+        },
+        {
+          "name": "Bd_Status_reg",
+          "direction": "input",
+          "width": "16",
+          "role": "",
+          "active": "",
+          "meaning": "BD Status Reg"
+        },
+        {
+          "name": "Bd_isr_reg",
+          "direction": "input",
+          "width": "8",
+          "role": "",
+          "active": "",
+          "meaning": "Data Interrupt Status Reg"
+        },
+        {
+          "name": "Bd_isr_enable_reg",
+          "direction": "output",
+          "width": "8",
+          "role": "",
+          "active": "",
+          "meaning": "Data Interrupt Enable Reg"
+        },
+        {
+          "name": "Bd_isr_reset",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Reset data interrupt status"
+        },
+        {
+          "name": "normal_isr_reset",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Reset normal interrupt status"
+        },
+        {
+          "name": "error_isr_reset",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Reset error interrupt status"
+        },
+        {
+          "name": "dat_in_m_tx_bd",
+          "direction": "output",
+          "width": "RAM_MEM_WIDTH",
+          "role": "",
+          "active": "",
+          "meaning": "Data going to the Tx BD"
+        },
+        {
+          "name": "dat_in_m_rx_bd",
+          "direction": "output",
+          "width": "RAM_MEM_WIDTH",
+          "role": "",
+          "active": "",
+          "meaning": "Data going to the RX BD"
+        }
+      ],
+      "params": [],
+      "clock": "wb_clk_i",
+      "reset": "wb_rst_i",
+      "reset_polarity": "high",
+      "handshakes": [
+        "wb_stb_i to wb_ack_o",
+        "write_req_s to we_ack"
+      ],
+      "parameter_constraints": [],
+      "bus_roles": [
+        "wishbone_slave"
+      ],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_crc_16",
+      "ports": [
+        {
+          "name": "BITVAL",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Next input bit"
+        },
+        {
+          "name": "Enable",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Enables CRC updating"
+        },
+        {
+          "name": "CLK",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Current bit valid (Clock)"
+        },
+        {
+          "name": "RST",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Initializes CRC value to zero"
+        },
+        {
+          "name": "CRC",
+          "direction": "output",
+          "width": "16",
+          "role": "",
+          "active": "",
+          "meaning": "Current output CRC value"
+        }
+      ],
+      "params": [],
+      "clock": "CLK",
+      "reset": "RST",
+      "reset_polarity": "high",
+      "handshakes": [],
+      "parameter_constraints": [],
+      "bus_roles": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_crc_7",
+      "ports": [
+        {
+          "name": "BITVAL",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "The next input bit to be processed for CRC computation."
+        },
+        {
+          "name": "Enable",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "A control signal that enables the CRC update on the rising edge of the clock. When high (1), the CRC is updated; otherwise, it remains unchanged."
+        },
+        {
+          "name": "CLK",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "The clock signal that synchronizes the CRC computation."
+        },
+        {
+          "name": "RST",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "The reset signal. When asserted high (1), it initializes the CRC value to zero."
+        },
+        {
+          "name": "CRC",
+          "direction": "output",
+          "width": "7",
+          "role": "",
+          "active": "",
+          "meaning": "The current 7-bit CRC value."
+        }
+      ],
+      "params": [],
+      "clock": "CLK",
+      "reset": "RST",
+      "reset_polarity": "high",
+      "handshakes": [],
+      "parameter_constraints": [],
+      "bus_roles": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_data_master",
+      "ports": [
+        {
+          "name": "clk",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "System clock signal"
+        },
+        {
+          "name": "rst",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Reset signal (active high)"
+        },
+        {
+          "name": "dat_in_tx",
+          "direction": "input",
+          "width": "RAM_MEM_WIDTH-1:0",
+          "role": "",
+          "active": "",
+          "meaning": "Data in from Tx BD"
+        },
+        {
+          "name": "free_tx_bd",
+          "direction": "input",
+          "width": "BD_WIDTH-1:0",
+          "role": "",
+          "active": "",
+          "meaning": "Number of Free Tx BD"
+        },
+        {
+          "name": "ack_i_s_tx",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "ACK in Read request"
+        },
+        {
+          "name": "dat_in_rx",
+          "direction": "input",
+          "width": "RAM_MEM_WIDTH-1:0",
+          "role": "",
+          "active": "",
+          "meaning": "Data in from Rx BD"
+        },
+        {
+          "name": "free_rx_bd",
+          "direction": "input",
+          "width": "BD_WIDTH-1:0",
+          "role": "",
+          "active": "",
+          "meaning": "Number of Free Rx BD"
+        },
+        {
+          "name": "ack_i_s_rx",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "ACK in Read request"
+        },
+        {
+          "name": "cmd_busy",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "CMD Busy state"
+        },
+        {
+          "name": "we_ack",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Access granted"
+        },
+        {
+          "name": "cmd_tsf_err",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Error status of sent cmd"
+        },
+        {
+          "name": "card_status",
+          "direction": "input",
+          "width": "5",
+          "role": "",
+          "active": "",
+          "meaning": "Status of card after response"
+        },
+        {
+          "name": "tx_empt",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Tx Fifo empty flag"
+        },
+        {
+          "name": "tx_full",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Tx Fifo full flag"
+        },
+        {
+          "name": "rx_full",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Rx Fifo full flag"
+        },
+        {
+          "name": "busy_n",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Data Busy"
+        },
+        {
+          "name": "transm_complete",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Transmission complete"
+        },
+        {
+          "name": "crc_ok",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Crc status"
+        },
+        {
+          "name": "Dat_Int_Status_rst",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Reset Dat_Int_Status"
+        },
+        {
+          "name": "transfer_type",
+          "direction": "input",
+          "width": "2",
+          "role": "",
+          "active": "",
+          "meaning": "Indicates the type of data transfer (single block, multiple block, etc.)"
+        },
+        {
+          "name": "re_s_tx",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Read Tx BD"
+        },
+        {
+          "name": "a_cmp_tx",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Free a Tx BD"
+        },
+        {
+          "name": "re_s_rx",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Read Rx BD"
+        },
+        {
+          "name": "a_cmp_rx",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Free a Rx BD"
+        },
+        {
+          "name": "we_req",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Request access to CMD registers"
+        },
+        {
+          "name": "d_write",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Block write command"
+        },
+        {
+          "name": "d_read",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Block read command"
+        },
+        {
+          "name": "cmd_arg",
+          "direction": "output",
+          "width": "32",
+          "role": "",
+          "active": "",
+          "meaning": "Cmd argument out"
+        },
+        {
+          "name": "cmd_set",
+          "direction": "output",
+          "width": "16",
+          "role": "",
+          "active": "",
+          "meaning": "Cmd setting out"
+        },
+        {
+          "name": "start_tx_fifo",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Start the Tx Fifo Filler"
+        },
+        {
+          "name": "start_rx_fifo",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Start the Rx Fifo Filler"
+        },
+        {
+          "name": "sys_adr",
+          "direction": "output",
+          "width": "32",
+          "role": "",
+          "active": "",
+          "meaning": "Memory address for DMA"
+        },
+        {
+          "name": "ack_transfer",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Ack on transmission complete"
+        },
+        {
+          "name": "Dat_Int_Status",
+          "direction": "output",
+          "width": "8",
+          "role": "",
+          "active": "",
+          "meaning": "See Specification for register details"
+        },
+        {
+          "name": "CIDAT",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Data inhabit status bit"
+        }
+      ],
+      "params": [
+        {
+          "name": "CMD24",
+          "value": "16'h181A",
+          "meaning": ""
+        },
+        {
+          "name": "CMD17",
+          "value": "16'h111A",
+          "meaning": ""
+        },
+        {
+          "name": "CMD12",
+          "value": "16'hC1A",
+          "meaning": ""
+        },
+        {
+          "name": "ACMD13",
+          "value": "16'hD1A",
+          "meaning": ""
+        },
+        {
+          "name": "ACMD51",
+          "value": "16'h331A",
+          "meaning": ""
+        },
+        {
+          "name": "SIZE",
+          "value": "9",
+          "meaning": ""
+        },
+        {
+          "name": "IDLE",
+          "value": "9'b000000001",
+          "meaning": ""
+        },
+        {
+          "name": "GET_TX_BD",
+          "value": "9'b000000010",
+          "meaning": ""
+        },
+        {
+          "name": "GET_RX_BD",
+          "value": "9'b000000100",
+          "meaning": ""
+        },
+        {
+          "name": "SEND_CMD",
+          "value": "9'b000001000",
+          "meaning": ""
+        },
+        {
+          "name": "RECIVE_CMD",
+          "value": "9'b000010000",
+          "meaning": ""
+        },
+        {
+          "name": "DATA_TRANSFER",
+          "value": "9'b000100000",
+          "meaning": ""
+        },
+        {
+          "name": "STOP",
+          "value": "9'b001000000",
+          "meaning": ""
+        },
+        {
+          "name": "STOP_SEND",
+          "value": "9'b010000000",
+          "meaning": ""
+        },
+        {
+          "name": "RESEND_MAX_CNT",
+          "value": "3",
+          "meaning": ""
+        },
+        {
+          "name": "READ_CYCLE",
+          "value": "2 or 4",
+          "meaning": ""
+        },
+        {
+          "name": "BD_EMPTY",
+          "value": "Derived from BD_SIZE",
+          "meaning": ""
+        }
+      ],
+      "clock": "clk",
+      "reset": "rst",
+      "reset_polarity": "high",
+      "handshakes": [
+        "re_s_tx -> ack_i_s_tx",
+        "re_s_rx -> ack_i_s_rx",
+        "we_req -> we_ack",
+        "transm_complete -> ack_transfer"
+      ],
+      "parameter_constraints": [
+        "RAM_MEM_WIDTH is defined in external file and must be 16 or 32; it determines READ_CYCLE and BD_EMPTY.",
+        "BD_WIDTH is defined in external file and sets the width of the buffer descriptor.",
+        "BD_SIZE is defined in external file and sets the size of the buffer descriptor."
+      ],
+      "bus_roles": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_data_serial_host",
+      "ports": [
+        {
+          "name": "sd_clk",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Clock signal for synchronization."
+        },
+        {
+          "name": "rst",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Reset signal to initialize the module."
+        },
+        {
+          "name": "data_in",
+          "direction": "input",
+          "width": "32",
+          "role": "",
+          "active": "",
+          "meaning": "32-bit input data to transmit."
+        },
+        {
+          "name": "start_dat",
+          "direction": "input",
+          "width": "2",
+          "role": "",
+          "active": "",
+          "meaning": "start data transfer. “01” Start Read block, “10” Start Write block and “11” Stop."
+        },
+        {
+          "name": "ack_transfer",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "ACK on transm_complete."
+        },
+        {
+          "name": "DAR_dat_i",
+          "direction": "input",
+          "width": "SD_BUS_W",
+          "role": "",
+          "active": "",
+          "meaning": "SD card data input."
+        },
+        {
+          "name": "rd",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "FIFO read enable."
+        },
+        {
+          "name": "data_out",
+          "direction": "output",
+          "width": "SD_BUS_W",
+          "role": "",
+          "active": "",
+          "meaning": "FIFO data out."
+        },
+        {
+          "name": "we",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "FIFO WriteEnable."
+        },
+        {
+          "name": "DAT_oe_o",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Tri-state Output enable."
+        },
+        {
+          "name": "DAT_dat_o",
+          "direction": "output",
+          "width": "SD_BUS_W",
+          "role": "",
+          "active": "",
+          "meaning": "SD Data output."
+        },
+        {
+          "name": "busy_n",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Data line Busy Active Low."
+        },
+        {
+          "name": "transm_complete",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Transmission complete."
+        },
+        {
+          "name": "crc_ok",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "CRC checksum ok."
+        }
+      ],
+      "params": [],
+      "clock": "sd_clk",
+      "reset": "rst",
+      "reset_polarity": "high",
+      "handshakes": [
+        "transm_complete -> ack_transfer"
+      ],
+      "parameter_constraints": [
+        "SD_BUS_W is defined in sd_defines.v and sets the SD data bus width.",
+        "BIT_BLOCK is defined in sd_defines.v.",
+        "CRC_OFF is defined in sd_defines.v.",
+        "BIT_BLOCK_REC is defined in sd_defines.v.",
+        "BIT_CRC_CYCLE is defined in sd_defines.v.",
+        "LITLE_ENDIAN is defined in sd_defines.v.",
+        "BIG_ENDIAN is defined in sd_defines.v.",
+        "SD_BUS_WIDTH_1 is defined in sd_defines.v.",
+        "SD_BUS_WIDTH_4 is defined in sd_defines.v."
+      ],
+      "bus_roles": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_fifo_rx_filler",
+      "ports": [
+        {
+          "name": "clk",
+          "direction": "input",
+          "width": "1",
+          "role": "clock",
+          "active": "",
+          "meaning": "System clock"
+        },
+        {
+          "name": "rst",
+          "direction": "input",
+          "width": "1",
+          "role": "reset",
+          "active": "",
+          "meaning": "System reset"
+        },
+        {
+          "name": "m_wb_adr_o",
+          "direction": "output",
+          "width": "32",
+          "role": "",
+          "active": "",
+          "meaning": "Wishbone master address output"
+        },
+        {
+          "name": "m_wb_we_o",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Wishbone master write enable"
+        },
+        {
+          "name": "m_wb_dat_o",
+          "direction": "output",
+          "width": "32",
+          "role": "",
+          "active": "",
+          "meaning": "Wishbone master data output"
+        },
+        {
+          "name": "m_wb_cyc_o",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Wishbone master cycle output"
+        },
+        {
+          "name": "m_wb_stb_o",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Wishbone master strobe output"
+        },
+        {
+          "name": "m_wb_ack_i",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Wishbone master acknowledgment input"
+        },
+        {
+          "name": "m_wb_cti_o",
+          "direction": "output",
+          "width": "3",
+          "role": "",
+          "active": "",
+          "meaning": "Wishbone master cycle type identifier output"
+        },
+        {
+          "name": "m_wb_bte_o",
+          "direction": "output",
+          "width": "2",
+          "role": "",
+          "active": "",
+          "meaning": "Wishbone master burst type extension output"
+        },
+        {
+          "name": "en",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Enable signal for the module"
+        },
+        {
+          "name": "adr",
+          "direction": "input",
+          "width": "32",
+          "role": "",
+          "active": "",
+          "meaning": "Base address for memory write operations"
+        },
+        {
+          "name": "sd_clk",
+          "direction": "input",
+          "width": "1",
+          "role": "clock",
+          "active": "",
+          "meaning": "SD card clock"
+        },
+        {
+          "name": "dat_i",
+          "direction": "input",
+          "width": "SD_BUS_W",
+          "role": "",
+          "active": "",
+          "meaning": "Data input from SD card interface"
+        },
+        {
+          "name": "wr",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Write enable for FIFO"
+        },
+        {
+          "name": "full",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "FIFO full flag"
+        },
+        {
+          "name": "empty",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "FIFO empty flag"
+        }
+      ],
+      "params": [],
+      "clock": "clk",
+      "reset": "rst",
+      "reset_polarity": "high",
+      "handshakes": [],
+      "parameter_constraints": [],
+      "bus_roles": [
+        "wishbone_master"
+      ],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_fifo_tx_filler",
+      "ports": [
+        {
+          "name": "clk",
+          "direction": "input",
+          "width": "1",
+          "role": "clock",
+          "active": "",
+          "meaning": "System clock"
+        },
+        {
+          "name": "rst",
+          "direction": "input",
+          "width": "1",
+          "role": "reset",
+          "active": "",
+          "meaning": "System reset"
+        },
+        {
+          "name": "m_wb_adr_o",
+          "direction": "output",
+          "width": "32",
+          "role": "",
+          "active": "",
+          "meaning": "Wishbone master address output"
+        },
+        {
+          "name": "m_wb_we_o",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Wishbone master write enable"
+        },
+        {
+          "name": "m_wb_dat_i",
+          "direction": "input",
+          "width": "32",
+          "role": "",
+          "active": "",
+          "meaning": "Wishbone master data input"
+        },
+        {
+          "name": "m_wb_cyc_o",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Wishbone master cycle output"
+        },
+        {
+          "name": "m_wb_stb_o",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Wishbone master strobe output"
+        },
+        {
+          "name": "m_wb_ack_i",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Wishbone master acknowledgment input"
+        },
+        {
+          "name": "m_wb_cti_o",
+          "direction": "output",
+          "width": "3",
+          "role": "",
+          "active": "",
+          "meaning": "Wishbone master cycle type identifier output"
+        },
+        {
+          "name": "m_wb_bte_o",
+          "direction": "output",
+          "width": "2",
+          "role": "",
+          "active": "",
+          "meaning": "Wishbone master burst type extension output"
+        },
+        {
+          "name": "en",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Enable signal for the module"
+        },
+        {
+          "name": "adr",
+          "direction": "input",
+          "width": "32",
+          "role": "",
+          "active": "",
+          "meaning": "Base address for memory read operations"
+        },
+        {
+          "name": "sd_clk",
+          "direction": "input",
+          "width": "1",
+          "role": "clock",
+          "active": "",
+          "meaning": "SD card clock"
+        },
+        {
+          "name": "dat_o",
+          "direction": "output",
+          "width": "32",
+          "role": "",
+          "active": "",
+          "meaning": "Data output to SD card interface"
+        },
+        {
+          "name": "rd",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Read enable for FIFO"
+        },
+        {
+          "name": "empty",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "FIFO empty flag"
+        },
+        {
+          "name": "fe",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "FIFO full flag"
+        }
+      ],
+      "params": [],
+      "clock": "clk",
+      "reset": "rst",
+      "reset_polarity": "high",
+      "handshakes": [],
+      "parameter_constraints": [],
+      "bus_roles": [
+        "wishbone_master"
+      ],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_rx_fifo",
+      "ports": [
+        {
+          "name": "d",
+          "direction": "input",
+          "width": "4",
+          "role": "",
+          "active": "",
+          "meaning": "Input data from SD card"
+        },
+        {
+          "name": "wr",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Write enable signal (active high)"
+        },
+        {
+          "name": "wclk",
+          "direction": "input",
+          "width": "1",
+          "role": "clock",
+          "active": "",
+          "meaning": "Write clock(rising edge active)"
+        },
+        {
+          "name": "q",
+          "direction": "output",
+          "width": "32",
+          "role": "",
+          "active": "",
+          "meaning": "Output data to host"
+        },
+        {
+          "name": "rd",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Read enable signal (active high)"
+        },
+        {
+          "name": "full",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "FIFO full flag (active high)"
+        },
+        {
+          "name": "empty",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "FIFO empty flag (active high)"
+        },
+        {
+          "name": "mem_empt",
+          "direction": "output",
+          "width": "2",
+          "role": "",
+          "active": "",
+          "meaning": "Memory empty space (in words)"
+        },
+        {
+          "name": "rclk",
+          "direction": "input",
+          "width": "1",
+          "role": "clock",
+          "active": "",
+          "meaning": "Read clock (rising edge active)"
+        },
+        {
+          "name": "rst",
+          "direction": "input",
+          "width": "1",
+          "role": "reset",
+          "active": "",
+          "meaning": "Asynchronous reset (active high)"
+        }
+      ],
+      "params": [],
+      "clock": "wclk",
+      "reset": "rst",
+      "reset_polarity": "high",
+      "handshakes": [],
+      "parameter_constraints": [],
+      "bus_roles": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_tx_fifo",
+      "ports": [
+        {
+          "name": "d",
+          "direction": "input",
+          "width": "32",
+          "role": "",
+          "active": "",
+          "meaning": "Data input"
+        },
+        {
+          "name": "wr",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Write enable (active high)"
+        },
+        {
+          "name": "wclk",
+          "direction": "input",
+          "width": "1",
+          "role": "clock",
+          "active": "",
+          "meaning": "Write clock(rising edge active)"
+        },
+        {
+          "name": "q",
+          "direction": "output",
+          "width": "32",
+          "role": "",
+          "active": "",
+          "meaning": "Data output"
+        },
+        {
+          "name": "rd",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Read enable (active high)"
+        },
+        {
+          "name": "full",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "FIFO full flag (active high)"
+        },
+        {
+          "name": "empty",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "FIFO empty flag (active high)"
+        },
+        {
+          "name": "mem_empt",
+          "direction": "output",
+          "width": "6",
+          "role": "",
+          "active": "",
+          "meaning": "FIFO occupancy"
+        },
+        {
+          "name": "rclk",
+          "direction": "input",
+          "width": "1",
+          "role": "clock",
+          "active": "",
+          "meaning": "Read clock(rising edge active)"
+        },
+        {
+          "name": "rst",
+          "direction": "input",
+          "width": "1",
+          "role": "reset",
+          "active": "",
+          "meaning": "Asynchronous reset (active high)"
+        }
+      ],
+      "params": [],
+      "clock": "wclk",
+      "reset": "rst",
+      "reset_polarity": "high",
+      "handshakes": [],
+      "parameter_constraints": [],
+      "bus_roles": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sdc_controller",
+      "ports": [
+        {
+          "name": "wb_clk_i",
+          "direction": "input",
+          "width": "1",
+          "role": "clock",
+          "active": "",
+          "meaning": "Slave WISHBONE Clock Input"
+        },
+        {
+          "name": "wb_rst_i",
+          "direction": "input",
+          "width": "1",
+          "role": "reset",
+          "active": "",
+          "meaning": "Slave WISHBONE Reset Input"
+        },
+        {
+          "name": "wb_sel_i",
+          "direction": "input",
+          "width": "4",
+          "role": "",
+          "active": "",
+          "meaning": "Slave WISHBONE Select Inputs"
+        },
+        {
+          "name": "wb_dat_i",
+          "direction": "input",
+          "width": "32",
+          "role": "",
+          "active": "",
+          "meaning": "Slave WISHBONE Data Inputs"
+        },
+        {
+          "name": "wb_dat_o",
+          "direction": "output",
+          "width": "32",
+          "role": "",
+          "active": "",
+          "meaning": "Slave WISHBONE Data Output"
+        },
+        {
+          "name": "wb_adr_i",
+          "direction": "input",
+          "width": "8",
+          "role": "",
+          "active": "",
+          "meaning": "Slave WISHBONE Address Input"
+        },
+        {
+          "name": "wb_we_i",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Slave WISHBONE Write Enable"
+        },
+        {
+          "name": "wb_cyc_i",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Slave WISHBONE Cycle"
+        },
+        {
+          "name": "wb_stb_i",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Slave WISHBONE Strobe"
+        },
+        {
+          "name": "wb_ack_o",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Slave WISHBONE Acknowledgment"
+        },
+        {
+          "name": "m_wb_adr_o",
+          "direction": "output",
+          "width": "32",
+          "role": "",
+          "active": "",
+          "meaning": "Master WISHBONE Address Output"
+        },
+        {
+          "name": "m_wb_sel_o",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Master WISHBONE Select"
+        },
+        {
+          "name": "m_wb_we_o",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Master WISHBONE Write Enable"
+        },
+        {
+          "name": "m_wb_dat_o",
+          "direction": "output",
+          "width": "32",
+          "role": "",
+          "active": "",
+          "meaning": "Master WISHBONE Data Output"
+        },
+        {
+          "name": "m_wb_dat_i",
+          "direction": "input",
+          "width": "31",
+          "role": "",
+          "active": "",
+          "meaning": "Master WISHBONE Data Input"
+        },
+        {
+          "name": "m_wb_cyc_o",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Master WISHBONE Cycle"
+        },
+        {
+          "name": "m_wb_stb_o",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Master WISHBONE Strobe"
+        },
+        {
+          "name": "m_wb_ack_i",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Master WISHBONE Acknowledgment Input"
+        },
+        {
+          "name": "m_wb_cti_o",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Master WISHBONE Cti"
+        },
+        {
+          "name": "m_wb_bte_o",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Master WISHBONE Bte"
+        },
+        {
+          "name": "card_detect",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Card detect"
+        },
+        {
+          "name": "sd_cmd_dat_i",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "SDC/MMC CMD Input"
+        },
+        {
+          "name": "sd_cmd_out_o",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "SDC/MMC CMD Output"
+        },
+        {
+          "name": "sd_cmd_oe_o",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "SDC/MMC CMD Output enable"
+        },
+        {
+          "name": "sd_dat_dat_i",
+          "direction": "input",
+          "width": "4",
+          "role": "",
+          "active": "",
+          "meaning": "SDC/MMC Data Input"
+        },
+        {
+          "name": "sd_dat_out_o",
+          "direction": "output",
+          "width": "4",
+          "role": "",
+          "active": "",
+          "meaning": "SDC/MMC Data Output"
+        },
+        {
+          "name": "sd_dat_oe_o",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "SDC/MMC Data Output enable"
+        },
+        {
+          "name": "sd_clk_o_pad",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "SDC/MMC CLK Output"
+        },
+        {
+          "name": "sd_clk_i_pad",
+          "direction": "input",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "SDCLK input, connected to sd_clk_i when SDC_CLK_SEP is defined"
+        },
+        {
+          "name": "int_a",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Additional Interrupt A, Triggers when any bit in both normal_int_status_reg and normal_int_signal_enable_reg is set."
+        },
+        {
+          "name": "int_b",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Additional Interrupt B, Triggers when any bit in both error_int_status_reg and error_int_signal_enable_reg is set."
+        },
+        {
+          "name": "int_c",
+          "direction": "output",
+          "width": "1",
+          "role": "",
+          "active": "",
+          "meaning": "Additional Interrupt C, Triggers when any bit in both Bd_isr_reg and Bd_isr_enable_reg is set."
+        }
+      ],
+      "params": [],
+      "clock": "wb_clk_i",
+      "reset": "wb_rst_i",
+      "reset_polarity": "high",
+      "handshakes": [
+        "wb_stb_i -> wb_ack_o",
+        "m_wb_stb_o -> m_wb_ack_i"
+      ],
+      "parameter_constraints": [],
+      "bus_roles": [
+        "wishbone_slave",
+        "wishbone_master"
+      ],
+      "image_grounding": []
+    }
+  ],
+  "timing_contracts": [
+    {
+      "module": "sd_bd",
+      "clocking": {
+        "clock": "clk",
+        "update_edge": "not stated"
+      },
+      "reset_behavior": {
+        "signal": "rst",
+        "active": "high",
+        "type": "asynchronous"
+      },
+      "registered_objects": [
+        {
+          "name": "last_a_cmp",
+          "timing_role": "edge-detection flip-flop",
+          "timing": "holds previous value of a_cmp to detect rising edges, updated on clk"
+        },
+        {
+          "name": "free_bd",
+          "timing_role": "registered counter",
+          "timing": "updated on each operation; counts available buffer descriptors"
+        },
+        {
+          "name": "m_wr_pnt",
+          "timing_role": "registered write pointer",
+          "timing": "updated on each write operation"
+        },
+        {
+          "name": "s_rd_pnt",
+          "timing_role": "registered read pointer",
+          "timing": "updated on each read operation"
+        }
+      ],
+      "phase_timing": [],
+      "timing_rules": [
+        "free_bd increments by 1 on a rising edge of a_cmp, detected via last_a_cmp",
+        "new_bw is set high after completing a BD write and free_bd decrements by 1"
+      ],
+      "underspecified": [
+        "Clock edge (rising/falling) not explicitly stated",
+        "Exact update timing of pointers and counters relative to clk not given",
+        "ack_o_s assertion timing in 16-bit mode not detailed"
+      ]
+    },
+    {
+      "module": "sd_clock_divider",
+      "clocking": {
+        "clock": "CLK",
+        "update_edge": "rising clock edge",
+        "statement": "Type: Synchronous, Edge: Positive (rising edge)"
+      },
+      "reset_behavior": {
+        "signal": "RST",
+        "active": "high",
+        "type": "asynchronous",
+        "effect": "Immediately resets the SD_CLK to 0 regardless of the clock"
+      },
+      "registered_objects": [],
+      "phase_timing": [],
+      "timing_rules": [
+        "SD_CLK frequency = CLK / (DIVIDER + 1)"
+      ],
+      "underspecified": [
+        "Internal counter used for division not explicitly described; timing of SD_CLK transitions relative to CLK not given",
+        "Synthesis/SIM/ACTEL constraints not timing details"
+      ]
+    },
+    {
+      "module": "sd_cmd_master",
+      "clocking": {
+        "clock": "CLK_PAD_IO",
+        "update_edge": "rising clock edge",
+        "statement": "All synchronous operations and state transitions are driven by the rising edge of this clock."
+      },
+      "reset_behavior": {
+        "signal": "RST_PAD_I",
+        "active": "high",
+        "type": "asynchronous",
+        "effect": "When asserted, resets all internal registers and states to their default values."
+      },
+      "registered_objects": [
+        {
+          "name": "state",
+          "timing_role": "registered FSM state",
+          "timing": "updated on posedge CLK_PAD_IO; reset to IDLE asynchronously"
+        },
+        {
+          "name": "Watchdog_Cnt",
+          "timing_role": "counter",
+          "timing": "incremented each clock cycle in EXECUTE state; reset to 0 on reset"
+        },
+        {
+          "name": "ack_in_int",
+          "timing_role": "two-stage synchronizer",
+          "timing": "synchronized on posedge CLK_PAD_IO, reset to 0 asynchronously"
+        },
+        {
+          "name": "req_in_int",
+          "timing_role": "two-stage synchronizer",
+          "timing": "synchronized on posedge CLK_PAD_IO, reset to 0 asynchronously"
+        },
+        {
+          "name": "card_present",
+          "timing_role": "debounced detection flag",
+          "timing": "updated per clock after debounce counter reaches 15 consecutive clocks of card_detect low"
+        },
+        {
+          "name": "debounce",
+          "timing_role": "counter",
+          "timing": "incremented each clock when card_detect low, cleared when high, evaluated on posedge or reset"
+        }
+      ],
+      "phase_timing": [
+        {
+          "phase": "EXECUTE",
+          "timing": "Watchdog_Cnt increments each cycle; if Watchdog_Cnt > TIMEOUT_REG, CTE and EI set, go_idle_o=1, state returns to IDLE"
+        },
+        {
+          "phase": "SETUP",
+          "timing": "cmd_out and settings are configured and remain stable until next command"
+        }
+      ],
+      "timing_rules": [
+        "req_out is asserted in EXECUTE when ack_in_int is 1 to start command transmission; deasserted in IDLE and SETUP",
+        "settings and cmd_out are held stable during transmission (EXECUTE)",
+        "two-stage synchronizers for req_in and ack_in mitigate metastability",
+        "debounce counter requires 15 consecutive clocks of card_detect low before card_present is asserted",
+        "FSM state transitions on rising clock edge, defaults to IDLE on reset",
+        "go_idle_o asserted in EXECUTE on timeout to return to IDLE"
+      ],
+      "underspecified": [
+        "Exact cycle timing of complete signal assertion (pulse vs level) not specified",
+        "Acknowledge/request handshake protocol at cycle level not fully detailed",
+        "Output update timing (combinational vs registered) not explicitly stated for all signals",
+        "Reset release timing not stated"
+      ]
+    },
+    {
+      "module": "sd_cmd_serial_host",
+      "clocking": {
+        "clock": "SD_CLK_IN",
+        "update_edge": "rising clock edge",
+        "statement": "All synchronous operations are triggered on the rising edge of SD_CLK_IN."
+      },
+      "reset_behavior": {
+        "signal": "RST_IN",
+        "active": "high",
+        "type": "synchronous",
+        "effect": "Resets all internal registers and outputs to their default states."
+      },
+      "registered_objects": [
+        {
+          "name": "state",
+          "timing_role": "registered FSM state",
+          "timing": "updated on posedge SD_CLK_IN; reset to INIT synchronously"
+        },
+        {
+          "name": "Cmd_Cnt",
+          "timing_role": "bit counter",
+          "timing": "incremented each clock in WRITE_WR, WRITE_WO, INIT, READ_WR; reset to 0 on reset or certain state exits"
+        },
+        {
+          "name": "Delay_Cnt",
+          "timing_role": "delay counter",
+          "timing": "incremented each clock in DLY_WR, DLY_WO, DLY_READ; reset appropriately"
+        },
+        {
+          "name": "Out_Buff",
+          "timing_role": "output buffer",
+          "timing": "loaded during READ_WR state on each clock cycle; assigned to CMD_OUT in DLY_READ"
+        },
+        {
+          "name": "Req_internal_in",
+          "timing_role": "synchronized input",
+          "timing": "two-stage synchronizer on posedge SD_CLK_IN"
+        },
+        {
+          "name": "Ack_internal_in",
+          "timing_role": "synchronized input",
+          "timing": "two-stage synchronizer on posedge SD_CLK_IN"
+        },
+        {
+          "name": "Write_Read",
+          "timing_role": "operation flag",
+          "timing": "set during COMMAND_DECODER on posedge SD_CLK_IN when Req_internal_in and Response_Size > 0"
+        },
+        {
+          "name": "Write_Only",
+          "timing_role": "operation flag",
+          "timing": "set during COMMAND_DECODER on posedge SD_CLK_IN when Req_internal_in and Response_Size == 0"
+        }
+      ],
+      "phase_timing": [
+        {
+          "phase": "INIT",
+          "timing": "CMD line held high for INIT_DELAY cycles (2 for SIM, 64 for other); Cmd_Cnt increments each cycle"
+        },
+        {
+          "phase": "WRITE_WR",
+          "timing": "Transmits one bit per clock cycle until Cmd_Cnt reaches SEND_SIZE-1 (48 cycles); then transitions to DLY_WR"
+        },
+        {
+          "phase": "DLY_WR",
+          "timing": "Delays for at least NCR (2) cycles and until cmd_dat_i is low; transitions to READ_WR"
+        },
+        {
+          "phase": "READ_WR",
+          "timing": "Receives response bits; increments Cmd_Cnt each clock; when Cmd_Cnt reaches Response_Size + EIGHT_PAD, transitions to DLY_READ"
+        },
+        {
+          "phase": "DLY_READ",
+          "timing": "Waits for Ack_internal_in high; then transitions to ACK_WR"
+        },
+        {
+          "phase": "WRITE_WO",
+          "timing": "Transmits one bit per clock cycle until Cmd_Cnt reaches SEND_SIZE-1 (48 cycles); then transitions to DLY_WO"
+        },
+        {
+          "phase": "DLY_WO",
+          "timing": "Delays for Delay_Cycler cycles (set from SETTING_IN[10:8]); transitions to ACK_WO"
+        }
+      ],
+      "timing_rules": [
+        "One bit transmitted/received per clock cycle in WRITE_WR, WRITE_WO, READ_WR states",
+        "Delay counters incremented each clock cycle in their respective states",
+        "CRC computations enabled during write and read phases",
+        "Two-flip-flop synchronizers for REQ_IN and ACK_IN",
+        "CMD_OUT assigned to Out_Buff in DLY_READ state",
+        "FSM_ACK asserted in ACK_WR and ACK_WO states to signal completion"
+      ],
+      "underspecified": [
+        "Reset type is stated as synchronous, but some block descriptions (REQ_SYNC, ACK_SYNC) refer to posedge RST_IN as an asynchronous edge; actual behavior ambiguous",
+        "Exact output timing relative to clock edge (e.g., cmd_out_o, cmd_oe_o) not specified",
+        "CRC module internal update timing not described",
+        "Bit alignment and exact cycle of CRC check not detailed"
+      ]
+    },
+    {
+      "module": "sd_controller_wb",
+      "clocking": {
+        "clock": "wb_clk_i",
+        "update_edge": "rising clock edge",
+        "statement": "All WISHBONE output signals are registered at the rising edge of wb_clk_i."
+      },
+      "reset_behavior": {
+        "signal": "wb_rst_i",
+        "active": "high",
+        "type": "asynchronous",
+        "effect": "Resets all configuration registers to their default values; other variables reset to 0 except int_ack to 1."
+      },
+      "registered_objects": [
+        {
+          "name": "wb_ack_o",
+          "timing_role": "registered output",
+          "timing": "registered on wb_clk_i rising edge; asserted according to wishbone handshake condition"
+        },
+        {
+          "name": "wb_dat_o",
+          "timing_role": "registered output",
+          "timing": "updated on wb_clk_i rising edge with addressed register value"
+        },
+        {
+          "name": "int_ack",
+          "timing_role": "internal delayed ack flag",
+          "timing": "defaults high; goes low during multi-cycle BD write, returns high after completion; updated on clk edge"
+        },
+        {
+          "name": "new_cmd",
+          "timing_role": "output flag",
+          "timing": "asserted when cmd_arg is written; presumably registered"
+        },
+        {
+          "name": "config_registers",
+          "timing_role": "writable/readable registers",
+          "timing": "updated on wb_clk_i rising edge when written; read combinational or registered path"
+        }
+      ],
+      "phase_timing": [
+        {
+          "phase": "BD write (16-bit RAM width)",
+          "timing": "Two write cycles required; int_ack negated during the operation; wb_ack_o is asserted only after the second write completes"
+        }
+      ],
+      "timing_rules": [
+        "wb_ack_o is a registered output, updated on rising edge of wb_clk_i",
+        "Register read data is delivered on wb_dat_o, registered at rising edge",
+        "Writing to cmd_arg (argument_reg) triggers new_cmd assertion"
+      ],
+      "underspecified": [
+        "Register read latency (number of cycles from address valid to data valid) not specified",
+        "Timing relationship between write_req_s and we_ack not detailed",
+        "Multi-cycle BD write exact per-write cycle count not given beyond RAM width dependency",
+        "Whether register read path is combinational (assigned directly) or registered internally before output not clarified"
+      ]
+    },
+    {
+      "module": "sd_crc_16",
+      "clocking": {
+        "clock": "CLK",
+        "update_edge": "rising clock edge",
+        "statement": "On each rising edge of the clock or when the reset signal is high, the module performs the following operations"
+      },
+      "reset_behavior": {
+        "signal": "RST",
+        "active": "high",
+        "type": "asynchronous",
+        "effect": "Immediately sets CRC value to zero"
+      },
+      "registered_objects": [
+        {
+          "name": "CRC (output register)",
+          "timing_role": "registered CRC value",
+          "timing": "updated on rising edge of CLK; asynchronously reset to 0 by RST; holds CRC until next update"
+        }
+      ],
+      "phase_timing": [],
+      "timing_rules": [
+        "inv is computed combinational as BITVAL ^ CRC[15] (the MSB of the current CRC)",
+        "If Enable is high, on rising CLK edge, CRC is shifted left and updated: CRC[12] <= CRC[11] ^ inv; CRC[5] <= CRC[4] ^ inv; CRC[0] <= inv; other bits shift from previous CRC[i-1]",
+        "If Enable is low, CRC holds its value",
+        "RST assertion overrides Enable, forcing CRC to 0"
+      ],
+      "underspecified": []
+    },
+    {
+      "module": "sd_crc_7",
+      "clocking": {
+        "clock": "CLK",
+        "update_edge": "rising clock edge",
+        "statement": "The CRC value updates on the rising edge of this clock."
+      },
+      "reset_behavior": {
+        "signal": "RST",
+        "active": "high",
+        "type": "asynchronous",
+        "effect": "Immediately resets the CRC register to 0"
+      },
+      "registered_objects": [
+        {
+          "name": "CRC (output register)",
+          "timing_role": "registered CRC value",
+          "timing": "updated on rising edge of CLK; asynchronously reset to 0 by RST; remains unchanged when Enable is low"
+        }
+      ],
+      "phase_timing": [],
+      "timing_rules": [
+        "inv = BITVAL ^ CRC[6] (combinational)",
+        "On rising CLK edge: if RST high, CRC <= 0; else if Enable high, CRC[0] <= inv; CRC[3] <= CRC[2] ^ inv; for all other i, CRC[i] <= CRC[i-1]",
+        "If both RST and Enable high, RST takes precedence (CRC set to 0)",
+        "When Enable is low, CRC holds its value"
+      ],
+      "underspecified": []
+    },
+    {
+      "module": "sd_data_master",
+      "clocking": {
+        "clock": "clk",
+        "update_edge": "rising clock edge",
+        "statement": "All synchronous operations and state transitions are driven by the rising edge of this clock."
+      },
+      "reset_behavior": {
+        "signal": "rst",
+        "active": "high",
+        "type": "asynchronous",
+        "effect": "Resets all internal registers and states to their default values, FSM forced to IDLE"
+      },
+      "registered_objects": [
+        {
+          "name": "state",
+          "timing_role": "FSM state register",
+          "timing": "updated to next_state on rising edge of clk; reset to IDLE asynchronously"
+        },
+        {
+          "name": "bd_cnt",
+          "timing_role": "buffer descriptor read cycle counter",
+          "timing": "incremented on each successful read of BD words, reset in IDLE and other states"
+        },
+        {
+          "name": "send_done, rec_done, rec_failed, trans_done, trans_failed",
+          "timing_role": "completion/status flags",
+          "timing": "set in corresponding states on conditions, reset elsewhere"
+        },
+        {
+          "name": "resend_try_cnt",
+          "timing_role": "retry counter",
+          "timing": "incremented in STOP_SEND, limited to RESEND_MAX_CNT"
+        },
+        {
+          "name": "sys_adr, cmd_arg, cmd_set",
+          "timing_role": "registered command parameters",
+          "timing": "loaded during GET_TX_BD/GET_RX_BD states on ack_i_s_tx/ack_i_s_rx handshake"
+        }
+      ],
+      "phase_timing": [
+        {
+          "phase": "GET_TX_BD",
+          "timing": "Requires READ_CYCLE (2 or 4) consecutive read handshakes to fetch BD data; state self-loop until bd_cnt > READ_CYCLE - 1"
+        },
+        {
+          "phase": "GET_RX_BD",
+          "timing": "Requires READ_CYCLE read handshakes; state self-loop until bd_cnt >= READ_CYCLE - 1"
+        },
+        {
+          "phase": "SEND_CMD",
+          "timing": "Asserts we_req, then waits for we_ack; sets send_done=1 after we_ack is received"
+        },
+        {
+          "phase": "RECIVE_CMD",
+          "timing": "Waits for cmd_busy to go low (command response received); after response, checks cmd_tsf_err and card_status"
+        },
+        {
+          "phase": "DATA_TRANSFER",
+          "timing": "Waits for transmission complete (transm_complete asserted) and CRC ok"
+        },
+        {
+          "phase": "STOP_SEND",
+          "timing": "Sends CMD12 stop command, using we_req/we_ack handshake; increments resend_try_cnt"
+        }
+      ],
+      "timing_rules": [
+        "State transitions occur on rising edge of clk, as per FSM_SEQ",
+        "Reading of BD words uses a handshake: re_s_tx/rx asserted, when ack_i_s_tx/rx is received data is captured from dat_in_tx/rx",
+        "bd_cnt increments on each successful BD word read; state transition in GET_TX_BD occurs when bd_cnt > READ_CYCLE - 1",
+        "In SEND_CMD and STOP_SEND, we_req is asserted and then the module waits for we_ack; send_done is set after we_ack",
+        "In DATA_TRANSFER, the module monitors tx_empt, rx_full, and transm_complete, ack_transfer set when transm_complete is asserted",
+        "Crc_ok is checked after transm_complete in DATA_TRANSFER; failure leads to STOP"
+      ],
+      "underspecified": [
+        "Exact cycle-level timing of handshake signals (re_s_tx/rx, ack_i_s_tx/rx, we_req/we_ack) not detailed; number of cycles to respond not given",
+        "Delay between we_req assertion and we_ack reception not specified",
+        "Timing of internal flag updates relative to state transitions not fully described",
+        "Whether outputs are registered or combinational from state not clarified"
+      ]
+    },
+    {
+      "module": "sd_data_serial_host",
+      "clocking": {
+        "clock": "sd_clk",
+        "update_edge": "rising clock edge",
+        "statement": "On each rising edge of sd_clk, the current state transitions to next_state (FSM_SEQ)"
+      },
+      "reset_behavior": {
+        "signal": "rst",
+        "active": "high",
+        "type": "asynchronous? (described as independent of clock; resets all internal registers)",
+        "effect": "Sets state to IDLE, resets all control outputs to default values as per FSM_OUT reset table"
+      },
+      "registered_objects": [
+        {
+          "name": "state",
+          "timing_role": "FSM state register",
+          "timing": "updated to next_state on rising edge of sd_clk; reset to IDLE asynchronously"
+        },
+        {
+          "name": "transf_cnt",
+          "timing_role": "transfer bit counter",
+          "timing": "incremented in WRITE_DAT/READ_DAT as bits are transferred; reset in IDLE"
+        },
+        {
+          "name": "crc_c",
+          "timing_role": "CRC cycle counter",
+          "timing": "used in WRITE_CRC to count 7 cycles for CRC response token"
+        },
+        {
+          "name": "out_buff_ptr",
+          "timing_role": "output buffer pointer",
+          "timing": "toggles when 28 bits have been sent to switch between write buffers"
+        },
+        {
+          "name": "DAT_dat_o",
+          "timing_role": "output data register",
+          "timing": "updated each clock in WRITE_DAT with last_din (delayed by one cycle relative to CRC input)"
+        },
+        {
+          "name": "transm_complete",
+          "timing_role": "completion flag",
+          "timing": "set at the end of WRITE_BUSY or READ_DAT; cleared on reset"
+        }
+      ],
+      "phase_timing": [
+        {
+          "phase": "WRITE_DAT",
+          "timing": "Each clock cycle, outputs SD_BUS_W bits; after sending start bit, transmits data bits from buffers; after 512 bytes, appends 16-bit CRC per data line and stop bit"
+        },
+        {
+          "phase": "WRITE_CRC",
+          "timing": "Reads CRC response token over 7 cycles; ignores first 3 cycles, captures bits 4-6 into crc_s; reads stop bit on 7th cycle"
+        },
+        {
+          "phase": "WRITE_BUSY",
+          "timing": "Asserts transm_complete, checks CRC response to set crc_ok, polls DAT_dat_i[0] until card not busy"
+        },
+        {
+          "phase": "READ_WAIT",
+          "timing": "Waits for start bit (DAT_dat_i[0] == 0); if detected, transitions to READ_DAT; otherwise remains or times out"
+        },
+        {
+          "phase": "READ_DAT",
+          "timing": "Each clock cycle samples DAT_dat_i and stores to FIFO (data_out) and CRC input; after 512 bytes, receives 16 CRC bits and compares; sets crc_ok and transm_complete after CRC check"
+        }
+      ],
+      "timing_rules": [
+        "One bus-width data transfer per clock cycle in WRITE_DAT and READ_DAT",
+        "CRC is computed per bit/group of bits in parallel with data transfer; CRC unit clocked by sd_clk",
+        "In WRITE_DAT, DAT_dat_o is updated one cycle after the data is fed to CRC (data is buffered in last_din)",
+        "The ACK_SYNC block uses a two-flip-flop synchronizer on sd_clk rising edge; ack_transfer_int is two cycles delayed",
+        "START_SYNC block sets q_start_bit on rising edge of sd_clk based on combinational condition",
+        "FSM state updates on each rising edge of sd_clk (FSM_SEQ)",
+        "In IDLE, CRC is reset and paused",
+        "transm_complete is asserted for at least one cycle (until acknowledged) in WRITE_BUSY and READ_DAT"
+      ],
+      "underspecified": [
+        "Reset type not explicitly stated; described as independent of clock, likely asynchronous",
+        "Exact cycle count for WRITE_CRC phase not fully specified (number of cycles for response token is 7, but total duration depends on card)",
+        "Timing of busy_n deassertion relative to transm_complete not clearly defined",
+        "CRC check bypass in simulation mode not detailed"
+      ]
+    },
+    {
+      "module": "sd_fifo_rx_filler",
+      "clocking": {
+        "clocks": [
+          "clk",
+          "sd_clk"
+        ],
+        "update_edge": "not stated",
+        "statement": "System Clock (clk): Main clock for the control logic and Wishbone interface. SD Clock (sd_clk): Clock for the SD card interface, used for writing to the RX FIFO."
+      },
+      "reset_behavior": {
+        "signal": "rst",
+        "active": "high",
+        "type": "asynchronous",
+        "effect": "Resets all registers and the RX FIFO"
+      },
+      "registered_objects": [],
+      "phase_timing": [],
+      "timing_rules": [
+        "On reset, all control signals and counters reset, RX FIFO reset, Wishbone signals set inactive, offset zeroed.",
+        "When enabled and FIFO not empty and Wishbone bus free, rd asserted and Wishbone transaction initiated.",
+        "When m_wb_ack_i=1 during busy state, Wishbone signals reset, offset updated with MEM_OFFSET increment, bus marked free."
+      ],
+      "underspecified": [
+        "Clock edges (rising/falling) not explicitly stated for clk and sd_clk",
+        "Timing of rd assertion relative to clk not given",
+        "Whether Wishbone output signals are registered or combinational not detailed",
+        "Handshake timing between rd, dat_o, and FIFO read operation not described"
+      ]
+    },
+    {
+      "module": "sd_fifo_tx_filler",
+      "clocking": {
+        "clocks": [
+          "clk",
+          "sd_clk"
+        ],
+        "update_edge": "not stated",
+        "statement": "System Clock (clk): Main clock for the control logic and Wishbone interface. SD Clock (sd_clk): Clock for the SD card interface, used for reading from the TX FIFO."
+      },
+      "reset_behavior": {
+        "signal": "rst",
+        "active": "high",
+        "type": "asynchronous",
+        "effect": "Resets all registers and the TX FIFO"
+      },
+      "registered_objects": [
+        {
+          "name": "ackd",
+          "timing_role": "handshake acknowledge flag",
+          "timing": "toggles after Wishbone acknowledge and one clock later"
+        },
+        {
+          "name": "delay",
+          "timing_role": "one-cycle delay flag",
+          "timing": "set on Wishbone ack, cleared on the next clock cycle"
+        }
+      ],
+      "phase_timing": [
+        {
+          "phase": "Start Wishbone Read",
+          "timing": "If FIFO not full, no ongoing transaction, and ackd=1, Wishbone signals are asserted."
+        },
+        {
+          "phase": "Acknowledge",
+          "timing": "When m_wb_ack_i=1, data is written to FIFO (wr_tx=1), Wishbone signals deasserted, delay flag set."
+        },
+        {
+          "phase": "Next Cycle",
+          "timing": "When delay=1 (one clock after ack), address offset incremented, ackd toggled, wr_tx deasserted."
+        }
+      ],
+      "timing_rules": [
+        "Wishbone read transaction initiated if FIFO not full and bus idle.",
+        "On m_wb_ack_i=1, data captured and written to FIFO (wr_tx=1) in same cycle.",
+        "One clock cycle later, address increment, acknowledge flag toggled, FIFO write stop.",
+        "When disabled, TX FIFO reset and all Wishbone signals inactive."
+      ],
+      "underspecified": [
+        "Clock edge not explicitly stated (assumed rising from cycle-level description)",
+        "Synchronization of ackd across clk and sd_clk domains not described",
+        "FIFO read-side timing relative to sd_clk not provided",
+        "Exact pipeline of Wishbone signal registers not detailed"
+      ]
+    },
+    {
+      "module": "sd_rx_fifo",
+      "clocking": {
+        "clocks": [
+          "wclk",
+          "rclk"
+        ],
+        "update_edge": "rising clock edge",
+        "statement": "Write Clock (wclk): Used for write operations and write pointer management (rising edge active). Read Clock (rclk): Used for read operations and read pointer management (rising edge active)."
+      },
+      "reset_behavior": {
+        "signal": "rst",
+        "active": "high",
+        "type": "asynchronous",
+        "effect": "Resets read and write pointers to 0, FIFO empty, full low"
+      },
+      "registered_objects": [
+        {
+          "name": "tmp",
+          "timing_role": "nibble accumulator",
+          "timing": "updated on wclk rising edge when wr high; accumulates 4-bit data until 32-bit word formed"
+        },
+        {
+          "name": "adr_i",
+          "timing_role": "write pointer",
+          "timing": "incremented on wclk rising edge when a full 32-bit word is written to RAM"
+        },
+        {
+          "name": "adr_o",
+          "timing_role": "read pointer",
+          "timing": "incremented on rclk rising edge after a valid read (rd high and FIFO not empty)"
+        },
+        {
+          "name": "we",
+          "timing_role": "byte write enable register",
+          "timing": "tracks which bytes of tmp are valid; updated on wclk"
+        }
+      ],
+      "phase_timing": [],
+      "timing_rules": [
+        "4-bit data written on rising edge of wclk when wr is high.",
+        "Data accumulated in tmp; when a complete 32-bit word is collected, it is written to ram[adr_i] on wclk rising edge.",
+        "On a read, when rd is high and FIFO not empty, data from ram[adr_o] is presented on q output; read address adr_o incremented on subsequent rclk rising edge.",
+        "Full and empty flags are determined by comparing read and write pointers; exact update timing is not specified."
+      ],
+      "underspecified": [
+        "Whether q output is registered on rclk or purely combinational from RAM",
+        "Precise cycle of adr_o increment relative to rd assertion",
+        "Timing of full/empty flag generation and cross-clock synchronization method",
+        "Exact cycle count for accumulation of 8 nibbles"
+      ]
+    },
+    {
+      "module": "sd_tx_fifo",
+      "clocking": {
+        "clocks": [
+          "wclk",
+          "rclk"
+        ],
+        "update_edge": "rising clock edge",
+        "statement": "Write Clock (wclk): Used for write operations and write pointer management (rising edge active). Read Clock (rclk): Used for read operations and read pointer management (rising edge active)."
+      },
+      "reset_behavior": {
+        "signal": "rst",
+        "active": "high",
+        "type": "asynchronous",
+        "effect": "Resets read and write pointers to 0, FIFO empty, full low"
+      },
+      "registered_objects": [
+        {
+          "name": "adr_i",
+          "timing_role": "write pointer",
+          "timing": "incremented on wclk rising edge after a successful write"
+        },
+        {
+          "name": "adr_o",
+          "timing_role": "read pointer",
+          "timing": "incremented on rclk rising edge after a successful read"
+        }
+      ],
+      "phase_timing": [],
+      "timing_rules": [
+        "Write operation: when not full and wr high, data written to ram[adr_i] on rising edge of wclk.",
+        "Read operation: when not empty and rd high, data from ram[adr_o] is presented on q output; read address incremented on rclk rising edge.",
+        "Full/empty/mem_empt flags determined by pointer comparisons; require cross-clock domain synchronization."
+      ],
+      "underspecified": [
+        "Whether q output is registered on rclk or combinatorial",
+        "Exact timing of flag updates (combinatorial vs registered)",
+        "Cross-clock synchronization methodology for pointer comparisons",
+        "mem_empt update edge not stated"
+      ]
+    },
+    {
+      "module": "sdc_controller",
+      "clocking": {
+        "clocks": [
+          "wb_clk_i",
+          "sd_clk_i_pad",
+          "sd_clk_o"
+        ],
+        "update_edge": "not stated",
+        "statement": "Multiple clock domains: wb_clk_i is the system clock; sd_clk_o is internally generated and can be derived from wb_clk_i or sd_clock_divider output depending on defines."
+      },
+      "reset_behavior": {
+        "signal": "wb_rst_i",
+        "active": "high",
+        "type": "asynchronous",
+        "additional": "software_reset_reg[0] also resets sub-modules; sd_cmd_serial_host reset additionally controlled by go_idle_o signal from sd_cmd_master."
+      },
+      "registered_objects": [],
+      "phase_timing": [],
+      "timing_rules": [
+        "cmd_int_busy is set immediately when an internal CMD bus access is granted to prevent further bus access.",
+        "Master Wishbone interface signals (m_wb_cyc_o, m_wb_stb_o, etc.) are muxed based on start_tx_fifo and start_rx_fifo; outputs zero when both low."
+      ],
+      "underspecified": [
+        "Update edge for internal control signals not stated",
+        "Synchronization between wb_clk_i and sd_clk_o domains not detailed",
+        "Timing of resets propagated to sub-modules not described",
+        "Cycle-accurate operation of command busy and interrupt generation not specified"
+      ]
+    }
+  ],
+  "control_contracts": [
+    {
+      "module": "sd_bd",
+      "abstract_states": [],
+      "transitions": [],
+      "control_signals": [
+        {
+          "name": "we_m",
+          "meaning": "Write enable signal to initiate a buffer descriptor write"
+        },
+        {
+          "name": "re_s",
+          "meaning": "Read enable signal to initiate a buffer descriptor read"
+        },
+        {
+          "name": "ack_o_s",
+          "meaning": "Read operation acknowledgment; set high during each read in 16‑bit mode"
+        },
+        {
+          "name": "a_cmp",
+          "meaning": "SD card operation completion; a rising edge indicates completion"
+        },
+        {
+          "name": "new_bw",
+          "meaning": "Internal signal set high after completing a buffer descriptor write"
+        }
+      ],
+      "bypass_conditions": [],
+      "exception_conditions": [],
+      "counter_rules": [
+        {
+          "counter": "free_bd",
+          "rule": "increments by 1 when a rising edge of a_cmp is detected"
+        },
+        {
+          "counter": "free_bd",
+          "rule": "decrements by 1 after completing a buffer descriptor write"
+        },
+        {
+          "counter": "m_wr_pnt",
+          "rule": "increments by 1 after each write"
+        },
+        {
+          "counter": "s_rd_pnt",
+          "rule": "increments by 1 after each read"
+        }
+      ],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_cmd_master",
+      "abstract_states": [
+        "IDLE",
+        "SETUP",
+        "EXECUTE"
+      ],
+      "transitions": [
+        {
+          "from_state": "IDLE",
+          "to_state": "SETUP",
+          "condition": "New_CMD asserted"
+        },
+        {
+          "from_state": "IDLE",
+          "to_state": "IDLE",
+          "condition": "New_CMD not asserted"
+        },
+        {
+          "from_state": "SETUP",
+          "to_state": "EXECUTE",
+          "condition": "ack_in_int asserted"
+        },
+        {
+          "from_state": "EXECUTE",
+          "to_state": "IDLE",
+          "condition": "complete asserted"
+        },
+        {
+          "from_state": "default",
+          "to_state": "IDLE",
+          "condition": "any condition not explicitly listed"
+        }
+      ],
+      "control_signals": [
+        {
+          "name": "New_CMD",
+          "meaning": "Indicates a new command is available in ARG_REG"
+        },
+        {
+          "name": "ack_in_int",
+          "meaning": "Synchronized acknowledge input indicating SD/MMC card ready for command"
+        },
+        {
+          "name": "complete",
+          "meaning": "Internal signal indicating command execution finished"
+        },
+        {
+          "name": "go_idle_o",
+          "meaning": "Signal to reset the module to idle state; asserted on timeout"
+        },
+        {
+          "name": "req_out",
+          "meaning": "Request signal to initiate command transmission"
+        },
+        {
+          "name": "ack_out",
+          "meaning": "Acknowledge signal for service completion from serial interface"
+        }
+      ],
+      "bypass_conditions": [],
+      "exception_conditions": [
+        {
+          "condition": "Watchdog_Cnt > TIMEOUT_REG"
+        },
+        {
+          "condition": "CRC_check_enable is 1 and crc_valid is 0"
+        },
+        {
+          "condition": "index_check_enable is 1 and (cmd_out[37:32] != cmd_in[37:32])"
+        }
+      ],
+      "counter_rules": [
+        {
+          "counter": "Watchdog_Cnt",
+          "rule": "incremented each clock cycle in EXECUTE state; reset to 0 in SETUP; if Watchdog_Cnt > TIMEOUT_REG, timeout exception occurs"
+        },
+        {
+          "counter": "debounce",
+          "rule": "incremented each clock when card_detect is low, cleared when high; card_present asserted only when debounce == 15"
+        }
+      ],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_cmd_serial_host",
+      "abstract_states": [
+        "INIT",
+        "IDLE",
+        "WRITE_WR",
+        "DLY_WR",
+        "READ_WR",
+        "DLY_READ",
+        "ACK_WR",
+        "WRITE_WO",
+        "DLY_WO",
+        "ACK_WO"
+      ],
+      "transitions": [
+        {
+          "from_state": "INIT",
+          "to_state": "IDLE",
+          "condition": "Cmd_Cnt >= INIT_DELAY"
+        },
+        {
+          "from_state": "IDLE",
+          "to_state": "WRITE_WR",
+          "condition": "Write_Read asserted"
+        },
+        {
+          "from_state": "IDLE",
+          "to_state": "WRITE_WO",
+          "condition": "Write_Only asserted"
+        },
+        {
+          "from_state": "WRITE_WR",
+          "to_state": "DLY_WR",
+          "condition": "Cmd_Cnt >= SEND_SIZE - 1"
+        },
+        {
+          "from_state": "WRITE_WO",
+          "to_state": "DLY_WO",
+          "condition": "Cmd_Cnt >= SEND_SIZE - 1"
+        },
+        {
+          "from_state": "DLY_WR",
+          "to_state": "READ_WR",
+          "condition": "Delay_Cnt >= NCR and !cmd_dat_i"
+        },
+        {
+          "from_state": "READ_WR",
+          "to_state": "DLY_READ",
+          "condition": "Cmd_Cnt >= (Response_Size + EIGHT_PAD)"
+        },
+        {
+          "from_state": "DLY_READ",
+          "to_state": "ACK_WR",
+          "condition": "Ack_internal_in asserted"
+        },
+        {
+          "from_state": "DLY_WO",
+          "to_state": "ACK_WO",
+          "condition": "Delay_Cnt >= Delay_Cycler"
+        },
+        {
+          "from_state": "ACK_WO",
+          "to_state": "IDLE",
+          "condition": "Any"
+        },
+        {
+          "from_state": "ACK_WR",
+          "to_state": "IDLE",
+          "condition": "Any"
+        },
+        {
+          "from_state": "Default",
+          "to_state": "INIT",
+          "condition": "Any condition not listed"
+        }
+      ],
+      "control_signals": [
+        {
+          "name": "Write_Read",
+          "meaning": "Flag indicating a write operation expecting a read response"
+        },
+        {
+          "name": "Write_Only",
+          "meaning": "Flag indicating a write operation without expecting a read response"
+        },
+        {
+          "name": "Req_internal_in",
+          "meaning": "Synchronized request signal after two-flip-flop synchronization"
+        },
+        {
+          "name": "Ack_internal_in",
+          "meaning": "Synchronized acknowledge signal after two-flip-flop synchronization"
+        },
+        {
+          "name": "FSM_ACK",
+          "meaning": "Acknowledgment flag for FSM operations"
+        },
+        {
+          "name": "DECODER_ACK",
+          "meaning": "Acknowledgment flag for the command decoder completion"
+        }
+      ],
+      "bypass_conditions": [],
+      "exception_conditions": [
+        {
+          "condition": "CRC validation failure: CRC_IN != CRC_VAL and CRC_Check_On == 1"
+        }
+      ],
+      "counter_rules": [
+        {
+          "counter": "Cmd_Cnt",
+          "rule": "incremented by 1 each clock in INIT, WRITE_WR, WRITE_WO, READ_WR; reset to 0 in IDLE, DLY_READ, DLY_WO, etc."
+        },
+        {
+          "counter": "Delay_Cnt",
+          "rule": "incremented by 1 each clock in DLY_WR, DLY_WO, DLY_READ; reset to 0 in IDLE, WRITE_WR, WRITE_WO, READ_WR, ACK states"
+        }
+      ],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_controller_wb",
+      "abstract_states": [],
+      "transitions": [],
+      "control_signals": [
+        {
+          "name": "cmd_int_busy",
+          "meaning": "Indicates data_master is performing a cmd_arg or cmd_set access"
+        },
+        {
+          "name": "int_busy",
+          "meaning": "Set when wishbone accesses the cmd_arg register"
+        },
+        {
+          "name": "new_cmd",
+          "meaning": "Set when cmd_arg (argument_reg) is written"
+        },
+        {
+          "name": "we_ack",
+          "meaning": "Acknowledgment that a write_req_s from data_master has been received"
+        },
+        {
+          "name": "wb_ack_o",
+          "meaning": "Asserted when wb_cyc_i & wb_stb_i & ~wb_ack_o & int_ack"
+        },
+        {
+          "name": "int_ack",
+          "meaning": "Defaults high; negated during multi‑cycle BD write and returns high on completion"
+        },
+        {
+          "name": "we_m_rx_bd",
+          "meaning": "Write enable for RX BD; asserted during BD write and reset after completion"
+        }
+      ],
+      "bypass_conditions": [],
+      "exception_conditions": [],
+      "counter_rules": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_crc_16",
+      "abstract_states": [],
+      "transitions": [],
+      "control_signals": [],
+      "bypass_conditions": [],
+      "exception_conditions": [],
+      "counter_rules": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_crc_7",
+      "abstract_states": [],
+      "transitions": [],
+      "control_signals": [],
+      "bypass_conditions": [],
+      "exception_conditions": [],
+      "counter_rules": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_data_master",
+      "abstract_states": [
+        "IDLE",
+        "GET_TX_BD",
+        "GET_RX_BD",
+        "SEND_CMD",
+        "RECEIVE_CMD",
+        "DATA_TRANSFER",
+        "STOP",
+        "STOP_SEND"
+      ],
+      "transitions": [
+        {
+          "from_state": "IDLE",
+          "to_state": "GET_TX_BD",
+          "condition": "free_tx_bd != BD_EMPTY"
+        },
+        {
+          "from_state": "IDLE",
+          "to_state": "GET_RX_BD",
+          "condition": "free_rx_bd != BD_EMPTY"
+        },
+        {
+          "from_state": "IDLE",
+          "to_state": "IDLE",
+          "condition": "otherwise"
+        },
+        {
+          "from_state": "GET_TX_BD",
+          "to_state": "SEND_CMD",
+          "condition": "bd_cnt > READ_CYCLE - 1 and tx_full == 1"
+        },
+        {
+          "from_state": "GET_TX_BD",
+          "to_state": "GET_TX_BD",
+          "condition": "otherwise"
+        },
+        {
+          "from_state": "GET_RX_BD",
+          "to_state": "SEND_CMD",
+          "condition": "bd_cnt >= READ_CYCLE - 1"
+        },
+        {
+          "from_state": "GET_RX_BD",
+          "to_state": "GET_RX_BD",
+          "condition": "otherwise"
+        },
+        {
+          "from_state": "SEND_CMD",
+          "to_state": "RECEIVE_CMD",
+          "condition": "send_done == 1"
+        },
+        {
+          "from_state": "SEND_CMD",
+          "to_state": "SEND_CMD",
+          "condition": "otherwise"
+        },
+        {
+          "from_state": "RECEIVE_CMD",
+          "to_state": "DATA_TRANSFER",
+          "condition": "rec_done == 1"
+        },
+        {
+          "from_state": "RECEIVE_CMD",
+          "to_state": "SEND_CMD",
+          "condition": "rec_failed == 1"
+        },
+        {
+          "from_state": "RECEIVE_CMD",
+          "to_state": "RECEIVE_CMD",
+          "condition": "otherwise (neither rec_done nor rec_failed)"
+        },
+        {
+          "from_state": "DATA_TRANSFER",
+          "to_state": "IDLE",
+          "condition": "trans_done == 1"
+        },
+        {
+          "from_state": "DATA_TRANSFER",
+          "to_state": "STOP",
+          "condition": "trans_failed == 1"
+        },
+        {
+          "from_state": "DATA_TRANSFER",
+          "to_state": "DATA_TRANSFER",
+          "condition": "otherwise"
+        },
+        {
+          "from_state": "STOP",
+          "to_state": "STOP_SEND",
+          "condition": "always"
+        },
+        {
+          "from_state": "STOP_SEND",
+          "to_state": "IDLE",
+          "condition": "send_done == 1"
+        },
+        {
+          "from_state": "STOP_SEND",
+          "to_state": "STOP_SEND",
+          "condition": "otherwise"
+        }
+      ],
+      "control_signals": [
+        {
+          "name": "we_req",
+          "meaning": "Request access to CMD registers"
+        },
+        {
+          "name": "we_ack",
+          "meaning": "Access granted acknowledgment"
+        },
+        {
+          "name": "send_done",
+          "meaning": "Indicates that the command sending process is completed"
+        },
+        {
+          "name": "rec_done",
+          "meaning": "Indicates that the command receiving process is completed"
+        },
+        {
+          "name": "rec_failed",
+          "meaning": "Indicates that the command receiving process failed"
+        },
+        {
+          "name": "trans_done",
+          "meaning": "Indicates that the data transfer is completed"
+        },
+        {
+          "name": "trans_failed",
+          "meaning": "Indicates that the data transfer failed"
+        },
+        {
+          "name": "cmd_busy",
+          "meaning": "CMD line busy state"
+        },
+        {
+          "name": "crc_ok",
+          "meaning": "CRC status after transfer"
+        },
+        {
+          "name": "tx_full",
+          "meaning": "Tx FIFO full flag"
+        },
+        {
+          "name": "rx_full",
+          "meaning": "Rx FIFO full flag"
+        },
+        {
+          "name": "free_tx_bd",
+          "meaning": "Number of free transmit buffer descriptors"
+        },
+        {
+          "name": "free_rx_bd",
+          "meaning": "Number of free receive buffer descriptors"
+        },
+        {
+          "name": "BD_EMPTY",
+          "meaning": "Threshold indicating empty buffer descriptor"
+        }
+      ],
+      "bypass_conditions": [],
+      "exception_conditions": [
+        {
+          "condition": "resend_try_cnt reaches RESEND_MAX_CNT"
+        },
+        {
+          "condition": "cmd_tsf_err asserted during command reception"
+        },
+        {
+          "condition": "Data transfer failure due to CRC error (crc_ok == 0) or other error"
+        }
+      ],
+      "counter_rules": [
+        {
+          "counter": "bd_cnt",
+          "rule": "incremented by 1 on each successful BD word read (after ack_i_s_tx/ack_i_s_rx received) in GET_TX_BD and GET_RX_BD; reset to 0 in IDLE"
+        },
+        {
+          "counter": "resend_try_cnt",
+          "rule": "incremented by 1 each time STOP_SEND is entered; if reaches RESEND_MAX_CNT, error flag set"
+        }
+      ],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_data_serial_host",
+      "abstract_states": [
+        "IDLE",
+        "WRITE_DAT",
+        "WRITE_CRC",
+        "WRITE_BUSY",
+        "READ_WAIT",
+        "READ_DAT"
+      ],
+      "transitions": [
+        {
+          "from_state": "IDLE",
+          "to_state": "WRITE_DAT",
+          "condition": "start_dat asserted (write mode)"
+        },
+        {
+          "from_state": "IDLE",
+          "to_state": "READ_WAIT",
+          "condition": "cmd_mode asserted (start_dat indicates read)"
+        },
+        {
+          "from_state": "IDLE",
+          "to_state": "IDLE",
+          "condition": "otherwise"
+        },
+        {
+          "from_state": "WRITE_DAT",
+          "to_state": "WRITE_CRC",
+          "condition": "transf_cnt == SD_BUS_W"
+        },
+        {
+          "from_state": "WRITE_DAT",
+          "to_state": "WRITE_DAT",
+          "condition": "otherwise"
+        },
+        {
+          "from_state": "WRITE_CRC",
+          "to_state": "WRITE_BUSY",
+          "condition": "crc_status == OK"
+        },
+        {
+          "from_state": "WRITE_CRC",
+          "to_state": "WRITE_CRC",
+          "condition": "otherwise"
+        },
+        {
+          "from_state": "WRITE_BUSY",
+          "to_state": "IDLE",
+          "condition": "busy_int == 0"
+        },
+        {
+          "from_state": "WRITE_BUSY",
+          "to_state": "WRITE_BUSY",
+          "condition": "otherwise"
+        },
+        {
+          "from_state": "READ_WAIT",
+          "to_state": "READ_DAT",
+          "condition": "DAT_dat_i[0] == 0 (Start bit detected)"
+        },
+        {
+          "from_state": "READ_WAIT",
+          "to_state": "IDLE",
+          "condition": "DAT_dat_i[0] == 1 (No start bit detected within timeout)"
+        },
+        {
+          "from_state": "READ_WAIT",
+          "to_state": "READ_WAIT",
+          "condition": "otherwise"
+        },
+        {
+          "from_state": "READ_DAT",
+          "to_state": "IDLE",
+          "condition": "transf_cnt == SD_BUS_W"
+        },
+        {
+          "from_state": "READ_DAT",
+          "to_state": "READ_DAT",
+          "condition": "otherwise"
+        },
+        {
+          "from_state": "Default",
+          "to_state": "IDLE",
+          "condition": "Any condition not listed"
+        }
+      ],
+      "control_signals": [
+        {
+          "name": "start_dat",
+          "meaning": "Control signal to initiate data transfer; 01 = Start Read block, 10 = Start Write block, 11 = Stop"
+        },
+        {
+          "name": "ack_transfer",
+          "meaning": "External acknowledgment that transfer complete signal was received"
+        },
+        {
+          "name": "busy_int",
+          "meaning": "Internal busy signal from card (0 = not busy)"
+        },
+        {
+          "name": "crc_status",
+          "meaning": "Status register for CRC generation (OK value indicates success)"
+        },
+        {
+          "name": "transm_complete",
+          "meaning": "Transmission complete flag"
+        },
+        {
+          "name": "crc_ok",
+          "meaning": "CRC checksum ok flag"
+        }
+      ],
+      "bypass_conditions": [],
+      "exception_conditions": [
+        {
+          "condition": "CRC mismatch detected during read (crc_ok set to 0)"
+        },
+        {
+          "condition": "Start bit not detected within timeout during READ_WAIT"
+        }
+      ],
+      "counter_rules": [
+        {
+          "counter": "transf_cnt",
+          "rule": "incremented each bus-width transfer in WRITE_DAT (after sending bits) and READ_DAT (after receiving bits); reset to 0 in IDLE"
+        },
+        {
+          "counter": "crc_c",
+          "rule": "counts from 0 to 6 during WRITE_CRC to read the 7-cycle CRC response token; reset in IDLE"
+        }
+      ],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_defines",
+      "abstract_states": [],
+      "transitions": [],
+      "control_signals": [],
+      "bypass_conditions": [],
+      "exception_conditions": [],
+      "counter_rules": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_fifo_rx_filler",
+      "abstract_states": [],
+      "transitions": [],
+      "control_signals": [
+        {
+          "name": "en",
+          "meaning": "Enable signal for the module; when low, module is disabled, RX FIFO reset, Wishbone bus freed"
+        },
+        {
+          "name": "wb_free",
+          "meaning": "Internal flag indicating Wishbone bus availability (1 = free, 0 = busy)"
+        },
+        {
+          "name": "rd",
+          "meaning": "Read enable for RX FIFO; asserted to start a read from the FIFO"
+        },
+        {
+          "name": "reset_rx_fifo",
+          "meaning": "Control signal to reset the RX FIFO"
+        }
+      ],
+      "bypass_conditions": [],
+      "exception_conditions": [],
+      "counter_rules": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_fifo_tx_filler",
+      "abstract_states": [],
+      "transitions": [],
+      "control_signals": [
+        {
+          "name": "en",
+          "meaning": "Enable signal for the module; when low, module disabled, TX FIFO reset, Wishbone inactive"
+        },
+        {
+          "name": "ackd",
+          "meaning": "Acknowledge delay flag; toggles after Wishbone acknowledge and one clock later to sequence transactions"
+        },
+        {
+          "name": "delay",
+          "meaning": "One-cycle delay flag for transaction synchronization"
+        },
+        {
+          "name": "first",
+          "meaning": "First operation flag; used in the initial transaction"
+        },
+        {
+          "name": "wr_tx",
+          "meaning": "Write control for TX FIFO; asserted to write data to FIFO on Wishbone acknowledge"
+        },
+        {
+          "name": "reset_tx_fifo",
+          "meaning": "Reset control for TX FIFO"
+        }
+      ],
+      "bypass_conditions": [],
+      "exception_conditions": [],
+      "counter_rules": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_rx_fifo",
+      "abstract_states": [],
+      "transitions": [],
+      "control_signals": [],
+      "bypass_conditions": [],
+      "exception_conditions": [],
+      "counter_rules": [
+        {
+          "counter": "adr_i",
+          "rule": "Write address pointer; incremented after each successful 32‑bit word write to RAM; wraps around when reaching maximum depth"
+        },
+        {
+          "counter": "adr_o",
+          "rule": "Read address pointer; incremented after a successful read when rd is high and FIFO is not empty; wraps around appropriately"
+        }
+      ],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_tx_fifo",
+      "abstract_states": [],
+      "transitions": [],
+      "control_signals": [],
+      "bypass_conditions": [],
+      "exception_conditions": [],
+      "counter_rules": [
+        {
+          "counter": "adr_i",
+          "rule": "Write address pointer; incremented by 1 after each successful write when FIFO not full and wr is high; wraps around at maximum depth"
+        },
+        {
+          "counter": "adr_o",
+          "rule": "Read address pointer; incremented by 1 after each successful read when FIFO not empty and rd is high; wraps around at maximum depth"
+        }
+      ],
+      "image_grounding": []
+    },
+    {
+      "module": "sdc_controller",
+      "abstract_states": [],
+      "transitions": [],
+      "control_signals": [
+        {
+          "name": "start_tx_fifo",
+          "meaning": "Control signal from sd_data_master; when asserted, connects master Wishbone interface to sd_fifo_tx_filler to perform TX DMA"
+        },
+        {
+          "name": "start_rx_fifo",
+          "meaning": "Control signal from sd_data_master; when asserted, connects master Wishbone interface to sd_fifo_rx_filler to perform RX DMA"
+        },
+        {
+          "name": "cmd_int_busy",
+          "meaning": "Internal flag set immediately when an internal CMD bus access is granted; used to block concurrent CMD bus accesses"
+        },
+        {
+          "name": "int_busy",
+          "meaning": "Internal flag set when the Wishbone master accesses the cmd_arg register"
+        },
+        {
+          "name": "new_cmd",
+          "meaning": "Command trigger flag; set when the argument register (argument_reg) is written, indicating a new command"
+        },
+        {
+          "name": "we_ack",
+          "meaning": "Acknowledge signal to sd_data_master that a cmd register write request (write_req_s) has been received"
+        }
+      ],
+      "bypass_conditions": [],
+      "exception_conditions": [],
+      "counter_rules": [],
+      "image_grounding": []
+    }
+  ],
+  "datapath_contracts": [
+    {
+      "module": "sd_bd",
+      "input_data": [
+        "we_m",
+        "dat_in_m",
+        "re_s",
+        "a_cmp"
+      ],
+      "main_flow": [
+        "buffer_descriptor_write",
+        "buffer_descriptor_read",
+        "buffer_descriptor_release"
+      ],
+      "intermediate_objects": [
+        {
+          "name": "bd_mem",
+          "role": "buffer memory holding descriptors"
+        },
+        {
+          "name": "m_wr_pnt",
+          "role": "registered write pointer"
+        },
+        {
+          "name": "s_rd_pnt",
+          "role": "registered read pointer"
+        },
+        {
+          "name": "free_bd",
+          "role": "registered counter of free descriptors"
+        },
+        {
+          "name": "last_a_cmp",
+          "role": "edge-detection flip-flop for a_cmp"
+        }
+      ],
+      "path_annotations": [],
+      "registered_paths": [
+        "bd_mem is an inferred memory array updated on writes",
+        "m_wr_pnt and s_rd_pnt are registers updated on each write/read",
+        "free_bd is a counter register updated on write completion and a_cmp edges"
+      ],
+      "combinational_paths": [
+        "dat_out_s is a direct read from bd_mem[s_rd_pnt]"
+      ],
+      "special_paths": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_clock_divider",
+      "input_data": [
+        "CLK",
+        "DIVIDER"
+      ],
+      "main_flow": [
+        "clock_division"
+      ],
+      "intermediate_objects": [],
+      "path_annotations": [],
+      "registered_paths": [],
+      "combinational_paths": [],
+      "special_paths": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_cmd_master",
+      "input_data": [
+        "ARG_REG",
+        "CMD_SET_REG",
+        "TIMEOUT_REG",
+        "data_write",
+        "data_read",
+        "New_CMD",
+        "req_in",
+        "ack_in",
+        "serial_status",
+        "cmd_in"
+      ],
+      "main_flow": [
+        "command_decoding",
+        "command_serial_transmission",
+        "response_processing"
+      ],
+      "intermediate_objects": [
+        {
+          "name": "cmd_out",
+          "role": "assembled 40-bit command output from CMD_SET_REG and ARG_REG"
+        },
+        {
+          "name": "settings",
+          "role": "16-bit settings output to serial host"
+        },
+        {
+          "name": "RESP_1_REG",
+          "role": "response register capturing cmd_in[31:0]"
+        },
+        {
+          "name": "Watchdog_Cnt",
+          "role": "timeout counter"
+        }
+      ],
+      "path_annotations": [],
+      "registered_paths": [
+        "cmd_out and settings are set combinatorially in SETUP and held stable (registered behavior) during EXECUTE",
+        "RESP_1_REG is registered in EXECUTE when response_size>0 and dat_ava=1",
+        "complete flag is registered, set in EXECUTE"
+      ],
+      "combinational_paths": [
+        "cmd_out assembly in SETUP is combinational from CMD_SET_REG and ARG_REG",
+        "settings bits are derived combinatorially from CMD_SET_REG and response_size"
+      ],
+      "special_paths": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_cmd_serial_host",
+      "input_data": [
+        "CMD_IN",
+        "SETTING_IN",
+        "REQ_IN",
+        "ACK_IN",
+        "cmd_dat_i"
+      ],
+      "main_flow": [
+        "command_decode",
+        "command_transmit",
+        "response_receive"
+      ],
+      "intermediate_objects": [
+        {
+          "name": "In_Buff",
+          "role": "holds incoming command CMD_IN"
+        },
+        {
+          "name": "Out_Buff",
+          "role": "stores received response bits"
+        },
+        {
+          "name": "CRC module",
+          "role": "sd_crc_7 instance computing CRC7"
+        },
+        {
+          "name": "Cmd_Cnt",
+          "role": "bit counter for transmit/receive"
+        }
+      ],
+      "path_annotations": [],
+      "registered_paths": [
+        "In_Buff loaded in COMMAND_DECODER on Req_internal_in",
+        "Out_Buff captured in READ_WR each cycle",
+        "CMD_OUT assigned from Out_Buff in DLY_READ (registered output)"
+      ],
+      "combinational_paths": [
+        "cmd_out_o during transmission directly driven by In_Buff[Vector_Index] via Crc_Buffering",
+        "CRC_OUT generated combinational from In_Buff",
+        "st_dat_t derived combinatorially from block_read/block_write in WRITE_WO"
+      ],
+      "special_paths": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_controller_wb",
+      "input_data": [
+        "wb_dat_i",
+        "wb_adr_i",
+        "wb_we_i",
+        "wb_stb_i",
+        "wb_cyc_i",
+        "write_req_s",
+        "cmd_set_s",
+        "cmd_arg_s"
+      ],
+      "main_flow": [
+        "wishbone_register_write",
+        "wishbone_register_read",
+        "bd_multi_cycle_write"
+      ],
+      "intermediate_objects": [
+        {
+          "name": "configuration_registers",
+          "role": "addressable register file holding argument, settings, status, etc."
+        },
+        {
+          "name": "we_m_rx_bd/we_m_tx_bd",
+          "role": "write enables for BD operations"
+        },
+        {
+          "name": "int_ack",
+          "role": "delayed acknowledge for multi-cycle BD writes"
+        }
+      ],
+      "path_annotations": [],
+      "registered_paths": [
+        "wb_dat_o is a registered output, updated with the selected register value on rising edge",
+        "configuration registers are a register file, written on wb_clk_i edge",
+        "int_ack is a registered flag for delayed acknowledgement"
+      ],
+      "combinational_paths": [
+        "register read address decoding combinational based on wb_adr_i to select which register drives wb_dat_o",
+        "write enable and BD target selection combinational from wb_adr_i"
+      ],
+      "special_paths": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_crc_16",
+      "input_data": [
+        "BITVAL",
+        "Enable"
+      ],
+      "main_flow": [
+        "crc_calculation"
+      ],
+      "intermediate_objects": [
+        {
+          "name": "inv",
+          "role": "combinational XOR of BITVAL and CRC[15]"
+        }
+      ],
+      "path_annotations": [],
+      "registered_paths": [
+        "CRC is a 16-bit register updated on rising clock edge when Enable is high; asynchronously reset to 0 by RST"
+      ],
+      "combinational_paths": [
+        "inv = BITVAL ^ CRC[15]"
+      ],
+      "special_paths": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_crc_7",
+      "input_data": [
+        "BITVAL",
+        "Enable"
+      ],
+      "main_flow": [
+        "crc_calculation"
+      ],
+      "intermediate_objects": [
+        {
+          "name": "inv",
+          "role": "combinational XOR of BITVAL and CRC[6]"
+        }
+      ],
+      "path_annotations": [],
+      "registered_paths": [
+        "CRC is a 7-bit register updated on rising clock edge when Enable is high; asynchronously reset to 0 by RST"
+      ],
+      "combinational_paths": [
+        "inv = BITVAL ^ CRC[6]"
+      ],
+      "special_paths": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_data_master",
+      "input_data": [
+        "dat_in_tx",
+        "free_tx_bd",
+        "ack_i_s_tx",
+        "dat_in_rx",
+        "free_rx_bd",
+        "ack_i_s_rx",
+        "cmd_busy",
+        "we_ack",
+        "cmd_tsf_err",
+        "card_status",
+        "tx_empt",
+        "tx_full",
+        "rx_full",
+        "busy_n",
+        "transm_complete",
+        "crc_ok",
+        "transfer_type"
+      ],
+      "main_flow": [
+        "BD_availability_check",
+        "BD_fetch_Tx/Rx",
+        "command_assembly",
+        "command_send",
+        "response_evaluation",
+        "data_transfer_phase",
+        "stop_and_retry"
+      ],
+      "intermediate_objects": [
+        {
+          "name": "bd_cnt",
+          "role": "counter for number of BD words read"
+        },
+        {
+          "name": "sys_adr",
+          "role": "DMA memory address loaded from BD"
+        },
+        {
+          "name": "cmd_arg",
+          "role": "command argument loaded from BD"
+        },
+        {
+          "name": "cmd_set",
+          "role": "command setup value set to CMD24, CMD17, etc."
+        },
+        {
+          "name": "send_done",
+          "role": "flag indicating command send completed"
+        },
+        {
+          "name": "rec_done",
+          "role": "flag indicating command response received successfully"
+        },
+        {
+          "name": "trans_done",
+          "role": "flag indicating data transfer completed"
+        },
+        {
+          "name": "resend_try_cnt",
+          "role": "retry counter for failed transfers"
+        },
+        {
+          "name": "Dat_Int_Status",
+          "role": "data interrupt status register recording transfer errors/completions"
+        }
+      ],
+      "path_annotations": [],
+      "registered_paths": [
+        "bd_cnt increments on each successful BD word read (ack_i_s_tx/ack_i_s_rx) and is reset in IDLE",
+        "sys_adr and cmd_arg are loaded from dat_in_tx/dat_in_rx during GET_TX_BD and GET_RX_BD states",
+        "cmd_set is assigned a constant command code (CMD24/CMD17/ACMD13/ACMD51) in the GET_TX_BD/GET_RX_BD states",
+        "send_done is set to 1 after we_ack is received in SEND_CMD",
+        "trans_done is set to 1 when data transfer completes (crc_ok checked)",
+        "resend_try_cnt increments in STOP_SEND and is compared to RESEND_MAX_CNT",
+        "Dat_Int_Status bits are set on errors or completion"
+      ],
+      "combinational_paths": [
+        "free_tx_bd != BD_EMPTY and free_rx_bd != BD_EMPTY determine transition to GET_TX_BD or GET_RX_BD from IDLE",
+        "transfer_type decoded to select between cmd_set = CMD17, ACMD13, or ACMD51",
+        "cmd_busy low enables assertion of we_req"
+      ],
+      "special_paths": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_data_serial_host",
+      "input_data": [
+        "data_in",
+        "start_dat",
+        "DAR_dat_i",
+        "ack_transfer"
+      ],
+      "main_flow": [
+        "write_buffer_loading",
+        "serial_output_with_CRC",
+        "CRC_response_collection",
+        "busy_polling",
+        "read_start_detection",
+        "serial_input_to_FIFO",
+        "CRC_verification"
+      ],
+      "intermediate_objects": [
+        {
+          "name": "write_buf_0",
+          "role": "first buffer for data to be transmitted"
+        },
+        {
+          "name": "write_buf_1",
+          "role": "second buffer for data to be transmitted"
+        },
+        {
+          "name": "sd_data_out",
+          "role": "output data buffer selected from write_buf_0 or write_buf_1"
+        },
+        {
+          "name": "out_buff_ptr",
+          "role": "pointer to select active write buffer"
+        },
+        {
+          "name": "last_din",
+          "role": "delayed copy of current output bits, driving DAT_dat_o one cycle later"
+        },
+        {
+          "name": "transf_cnt",
+          "role": "counter tracking number of data words/bits transferred"
+        },
+        {
+          "name": "crc_in",
+          "role": "data bits fed to CRC generator"
+        },
+        {
+          "name": "crc_s",
+          "role": "CRC response token status bits"
+        },
+        {
+          "name": "q_start_bit",
+          "role": "synchronized start bit indicator for reads"
+        }
+      ],
+      "path_annotations": [],
+      "registered_paths": [
+        "write_buf_0 and write_buf_1 are loaded from FIFO via rd signal in WRITE_DAT",
+        "sd_data_out is selected from write_buf_0 or write_buf_1 based on out_buff_ptr",
+        "last_din is the output bits delayed by one cycle; DAT_dat_o is driven by last_din",
+        "crc_in receives the same bits as last_din (one cycle earlier) for CRC calculation",
+        "transf_cnt increments in WRITE_DAT and READ_DAT states",
+        "data_out latches DAR_dat_i in READ_DAT and is stored to FIFO via we signal",
+        "crc_ok is set after comparing received CRC with calculated crc_out in READ_DAT"
+      ],
+      "combinational_paths": [
+        "crc_in = BITVAL (from data being sent or received); crc_en is managed by FSM",
+        "start bit detection: DAT_dat_i[0] == 0 (through START_SYNC) sets q_start_bit low",
+        "crc_out generated by sd_crc_16 submodule"
+      ],
+      "special_paths": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_defines",
+      "input_data": [],
+      "main_flow": [],
+      "intermediate_objects": [],
+      "path_annotations": [],
+      "registered_paths": [],
+      "combinational_paths": [],
+      "special_paths": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_fifo_rx_filler",
+      "input_data": [
+        "adr",
+        "dat_i"
+      ],
+      "main_flow": [
+        "sd_data_reception_to_fifo",
+        "fifo_read_and_wishbone_transfer",
+        "offset_update"
+      ],
+      "intermediate_objects": [
+        {
+          "name": "rx_fifo",
+          "role": "instance of sd_rx_fifo; buffers incoming SD data (4-bit to 32-bit)"
+        },
+        {
+          "name": "offset",
+          "role": "address offset register for Wishbone transactions; incremented by MEM_OFFSET on each write completion"
+        }
+      ],
+      "path_annotations": [],
+      "registered_paths": [
+        "offset is incremented by MEM_OFFSET on the clock cycle when m_wb_ack_i = 1 while Wishbone bus is busy",
+        "wb_free flag is registered to track Wishbone bus availability"
+      ],
+      "combinational_paths": [
+        "m_wb_adr_o = adr + offset (combinational adder)",
+        "m_wb_dat_o = q (FIFO read data) passed directly to Wishbone data output",
+        "Wishbone control signals (m_wb_cyc_o, m_wb_stb_o, m_wb_we_o) are generated combinationally based on internal state"
+      ],
+      "special_paths": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_fifo_tx_filler",
+      "input_data": [
+        "adr",
+        "m_wb_dat_i"
+      ],
+      "main_flow": [
+        "wishbone_read_request",
+        "data_capture_and_fifo_write",
+        "sd_fifo_read_output"
+      ],
+      "intermediate_objects": [
+        {
+          "name": "tx_fifo",
+          "role": "instance of sd_tx_fifo; buffers data to be transmitted to SD card"
+        },
+        {
+          "name": "din",
+          "role": "32-bit register holding Wishbone read data; written to TX FIFO on Wishbone ack"
+        },
+        {
+          "name": "offset",
+          "role": "address offset register incremented by MEM_OFFSET after each Wishbone read completion"
+        }
+      ],
+      "path_annotations": [],
+      "registered_paths": [
+        "din register captures m_wb_dat_i when m_wb_ack_i = 1",
+        "offset register increments by MEM_OFFSET on the clock cycle following m_wb_ack_i (after delay flag is set)",
+        "wr_tx register controls the write enable to TX FIFO"
+      ],
+      "combinational_paths": [
+        "m_wb_adr_o = adr + offset (combinational)",
+        "dat_o (SD card data output) is driven by the TX FIFO's q output combinationally"
+      ],
+      "special_paths": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_rx_fifo",
+      "input_data": [
+        "d"
+      ],
+      "main_flow": [
+        "serial_to_parallel_accumulate",
+        "ram_write",
+        "ram_read",
+        "output"
+      ],
+      "intermediate_objects": [
+        {
+          "name": "tmp",
+          "role": "32-bit accumulation register; collects 4-bit nibbles on write clock"
+        },
+        {
+          "name": "ram",
+          "role": "FIFO storage array (32-bit wide, depth FIFO_RX_MEM_DEPTH)"
+        },
+        {
+          "name": "adr_i",
+          "role": "write address pointer"
+        },
+        {
+          "name": "adr_o",
+          "role": "read address pointer"
+        }
+      ],
+      "path_annotations": [],
+      "registered_paths": [
+        "tmp accumulates 4-bit nibbles on rising edge of wclk when wr is high",
+        "When a full 32-bit word is accumulated, it is written to ram[adr_i] on wclk rising edge; adr_i then increments",
+        "On a valid read (rd high and FIFO not empty), ram[adr_o] is presented on q; adr_o increments on rclk rising edge"
+      ],
+      "combinational_paths": [
+        "q = ram[adr_o] (the read data is a direct RAM output, possibly registered or combinatorial, but typical FIFO presents data combinatorially after address change)",
+        "Full, empty, and mem_empt flags are generated by pointer comparison logic; likely combinatorial with cross-clock synchronization",
+        "we byte write enables control which bytes of tmp are valid (combinational from nibble counter)"
+      ],
+      "special_paths": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_tx_fifo",
+      "input_data": [
+        "d"
+      ],
+      "main_flow": [
+        "ram_write",
+        "ram_read",
+        "output"
+      ],
+      "intermediate_objects": [
+        {
+          "name": "ram",
+          "role": "FIFO storage array (32-bit wide, depth FIFO_TX_MEM_DEPTH)"
+        },
+        {
+          "name": "adr_i",
+          "role": "write address pointer"
+        },
+        {
+          "name": "adr_o",
+          "role": "read address pointer"
+        }
+      ],
+      "path_annotations": [],
+      "registered_paths": [
+        "When not full and wr is high, data on d is written to ram[adr_i] on the rising edge of wclk; adr_i increments and wraps appropriately",
+        "When not empty and rd is high, data from ram[adr_o] is presented on q; adr_o increments on the rising edge of rclk"
+      ],
+      "combinational_paths": [
+        "q output is driven combinationally from ram[adr_o] (or may be registered; spec does not explicitly state registration)",
+        "Full, empty, and mem_empt flags are derived from pointer comparisons (likely combinational, with cross-clock domain synchronization)"
+      ],
+      "special_paths": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sdc_controller",
+      "input_data": [
+        "free_rx_bd",
+        "free_tx_bd",
+        "STATUS_REG",
+        "cmd_int_busy",
+        "cidat_w",
+        "NORMAL_INT_REG",
+        "ERR_INT_REG",
+        "Dat_Int_Status"
+      ],
+      "main_flow": [
+        "master_wishbone_mux",
+        "status_register_assembly"
+      ],
+      "intermediate_objects": [],
+      "path_annotations": [],
+      "registered_paths": [],
+      "combinational_paths": [
+        "Master Wishbone outputs (m_wb_adr_o, m_wb_dat_o, m_wb_cyc_o, m_wb_stb_o, m_wb_cti_o, m_wb_bte_o, m_wb_we_o) are muxed between sd_fifo_tx_filler and sd_fifo_rx_filler based on start_tx_fifo and start_rx_fifo control signals",
+        "Bd_status_reg = {free_rx_bd, free_tx_bd}",
+        "status_reg[0] = cmd_int_busy ? 1'b1 : STATUS_REG[0]",
+        "status_reg[1] = cidat_w",
+        "status_reg[15:2] = STATUS_REG[15:2]",
+        "normal_int_status_reg = NORMAL_INT_REG",
+        "error_int_status_reg = ERR_INT_REG",
+        "Bd_isr_reg = Dat_Int_Status"
+      ],
+      "special_paths": [],
+      "image_grounding": []
+    }
+  ],
+  "planning_facts": [
+    {
+      "module": "sd_bd",
+      "registers": [
+        {
+          "name": "free_bd",
+          "width": "",
+          "role": "free buffer descriptor counter"
+        },
+        {
+          "name": "m_wr_pnt",
+          "width": "",
+          "role": "write pointer"
+        },
+        {
+          "name": "s_rd_pnt",
+          "width": "",
+          "role": "read pointer"
+        },
+        {
+          "name": "last_a_cmp",
+          "width": "1",
+          "role": "edge-detection flip-flop for a_cmp rising edge"
+        }
+      ],
+      "state_names": [],
+      "submodule_facts": [],
+      "local_mappings": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_clock_divider",
+      "registers": [],
+      "state_names": [],
+      "submodule_facts": [],
+      "local_mappings": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_cmd_master",
+      "registers": [
+        {
+          "name": "state",
+          "width": "3",
+          "role": "FSM state register (IDLE, SETUP, EXECUTE)"
+        },
+        {
+          "name": "Watchdog_Cnt",
+          "width": "",
+          "role": "timeout counter"
+        },
+        {
+          "name": "debounce",
+          "width": "4",
+          "role": "card detect debounce counter"
+        },
+        {
+          "name": "card_present",
+          "width": "1",
+          "role": "card presence flag"
+        },
+        {
+          "name": "req_q",
+          "width": "1",
+          "role": "request synchronizer first stage"
+        },
+        {
+          "name": "req_in_int",
+          "width": "1",
+          "role": "synchronized request signal"
+        },
+        {
+          "name": "ack_q",
+          "width": "1",
+          "role": "acknowledge synchronizer first stage"
+        },
+        {
+          "name": "ack_in_int",
+          "width": "1",
+          "role": "synchronized acknowledge signal"
+        },
+        {
+          "name": "complete",
+          "width": "1",
+          "role": "command completion flag"
+        },
+        {
+          "name": "CRC_check_enable",
+          "width": "1",
+          "role": "CRC check enable flag"
+        },
+        {
+          "name": "index_check_enable",
+          "width": "1",
+          "role": "index check enable flag"
+        },
+        {
+          "name": "RESP_1_REG",
+          "width": "32",
+          "role": "response register"
+        },
+        {
+          "name": "STATUS_REG",
+          "width": "16",
+          "role": "status register"
+        },
+        {
+          "name": "NORMAL_INT_REG",
+          "width": "16",
+          "role": "normal interrupt register"
+        },
+        {
+          "name": "ERR_INT_REG",
+          "width": "5",
+          "role": "error interrupt register"
+        }
+      ],
+      "state_names": [
+        "IDLE",
+        "SETUP",
+        "EXECUTE"
+      ],
+      "submodule_facts": [],
+      "local_mappings": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_cmd_serial_host",
+      "registers": [
+        {
+          "name": "state",
+          "width": "10",
+          "role": "current state of the FSM"
+        },
+        {
+          "name": "next_state",
+          "width": "10",
+          "role": "next state of the FSM"
+        },
+        {
+          "name": "Cmd_Cnt",
+          "width": "8",
+          "role": "command bit counter"
+        },
+        {
+          "name": "Delay_Cnt",
+          "width": "3",
+          "role": "delay counter"
+        },
+        {
+          "name": "In_Buff",
+          "width": "40",
+          "role": "internal command buffer holding CMD_IN"
+        },
+        {
+          "name": "Out_Buff",
+          "width": "40",
+          "role": "internal buffer for outgoing command response data"
+        },
+        {
+          "name": "Response_Size",
+          "width": "7",
+          "role": "expected response size from SD/MMC card"
+        },
+        {
+          "name": "Delay_Cycler",
+          "width": "3",
+          "role": "delay cycle counter"
+        },
+        {
+          "name": "Write_Read",
+          "width": "1",
+          "role": "flag: write operation expecting read response"
+        },
+        {
+          "name": "Write_Only",
+          "width": "1",
+          "role": "flag: write-only operation"
+        },
+        {
+          "name": "word_select_counter",
+          "width": "5",
+          "role": "counter for word selection during CRC operations"
+        },
+        {
+          "name": "CRC_RST",
+          "width": "1",
+          "role": "reset signal for CRC computation unit"
+        },
+        {
+          "name": "CRC_IN",
+          "width": "7",
+          "role": "input data for CRC computation"
+        },
+        {
+          "name": "CRC_Enable",
+          "width": "1",
+          "role": "enable signal for CRC computation"
+        },
+        {
+          "name": "CRC_OUT",
+          "width": "1",
+          "role": "output from CRC computation (serial CRC bit)"
+        },
+        {
+          "name": "CRC_Check_On",
+          "width": "1",
+          "role": "flag: CRC checking enabled"
+        },
+        {
+          "name": "Crc_Buffering",
+          "width": "1",
+          "role": "flag: CRC data being buffered"
+        },
+        {
+          "name": "CRC_Valid",
+          "width": "1",
+          "role": "flag: received CRC validity"
+        },
+        {
+          "name": "block_write",
+          "width": "1",
+          "role": "flag: block write operation"
+        },
+        {
+          "name": "block_read",
+          "width": "1",
+          "role": "flag: block read operation"
+        },
+        {
+          "name": "word_select",
+          "width": "2",
+          "role": "word select signals for data transfer"
+        },
+        {
+          "name": "FSM_ACK",
+          "width": "1",
+          "role": "acknowledgment flag for FSM operations"
+        },
+        {
+          "name": "DECODER_ACK",
+          "width": "1",
+          "role": "acknowledgment flag for command decoder completion"
+        },
+        {
+          "name": "q",
+          "width": "1",
+          "role": "synchronizer flip-flop for REQ_IN"
+        },
+        {
+          "name": "Req_internal_in",
+          "width": "1",
+          "role": "synchronized internal request signal"
+        },
+        {
+          "name": "q1",
+          "width": "1",
+          "role": "synchronizer flip-flop for ACK_IN"
+        },
+        {
+          "name": "Ack_internal_in",
+          "width": "1",
+          "role": "synchronized internal acknowledge signal"
+        }
+      ],
+      "state_names": [
+        "INIT",
+        "IDLE",
+        "WRITE_WR",
+        "DLY_WR",
+        "READ_WR",
+        "DLY_READ",
+        "ACK_WR",
+        "WRITE_WO",
+        "DLY_WO",
+        "ACK_WO"
+      ],
+      "submodule_facts": [
+        {
+          "module": "sd_crc_7",
+          "count": 1,
+          "usage": "computes a 7-bit CRC for serial data inputs"
+        }
+      ],
+      "local_mappings": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_controller_wb",
+      "registers": [
+        {
+          "name": "argument_reg",
+          "width": "32",
+          "role": "command argument register"
+        },
+        {
+          "name": "cmd_setting_reg",
+          "width": "16",
+          "role": "command setting register"
+        },
+        {
+          "name": "software_reset_reg",
+          "width": "8",
+          "role": "software reset register"
+        },
+        {
+          "name": "time_out_reg",
+          "width": "16",
+          "role": "timeout register"
+        },
+        {
+          "name": "normal_int_signal_enable_reg",
+          "width": "16",
+          "role": "normal interrupt enable register"
+        },
+        {
+          "name": "error_int_signal_enable_reg",
+          "width": "16",
+          "role": "error interrupt enable register"
+        },
+        {
+          "name": "clock_divider",
+          "width": "8",
+          "role": "clock divider register"
+        },
+        {
+          "name": "Bd_isr_enable_reg",
+          "width": "8",
+          "role": "data interrupt enable register"
+        },
+        {
+          "name": "int_ack",
+          "width": "1",
+          "role": "internal delayed wishbone acknowledge"
+        },
+        {
+          "name": "we_m_rx_bd",
+          "width": "1",
+          "role": "write enable for RX buffer descriptor"
+        },
+        {
+          "name": "we_m_tx_bd",
+          "width": "1",
+          "role": "write enable for TX buffer descriptor"
+        },
+        {
+          "name": "cmd_int_busy",
+          "width": "1",
+          "role": "flag: data_master accessing cmd_arg/cmd_set"
+        },
+        {
+          "name": "int_busy",
+          "width": "1",
+          "role": "flag: wishbone accessing cmd_arg"
+        },
+        {
+          "name": "new_cmd",
+          "width": "1",
+          "role": "new command indication flag"
+        },
+        {
+          "name": "we_ack",
+          "width": "1",
+          "role": "acknowledgment for data_master write request"
+        }
+      ],
+      "state_names": [],
+      "submodule_facts": [],
+      "local_mappings": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_crc_16",
+      "registers": [
+        {
+          "name": "CRC",
+          "width": "16",
+          "role": "CRC output register"
+        }
+      ],
+      "state_names": [],
+      "submodule_facts": [],
+      "local_mappings": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_crc_7",
+      "registers": [
+        {
+          "name": "CRC",
+          "width": "7",
+          "role": "CRC output register"
+        }
+      ],
+      "state_names": [],
+      "submodule_facts": [],
+      "local_mappings": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_data_master",
+      "registers": [
+        {
+          "name": "send_done",
+          "width": "1",
+          "role": "Indicates if command sending is completed"
+        },
+        {
+          "name": "rec_done",
+          "width": "1",
+          "role": "Indicates if command receiving is completed"
+        },
+        {
+          "name": "rec_failed",
+          "width": "1",
+          "role": "Indicates if command receiving failed"
+        },
+        {
+          "name": "tx_cycle",
+          "width": "1",
+          "role": "Indicates if module is in Tx mode"
+        },
+        {
+          "name": "rx_cycle",
+          "width": "1",
+          "role": "Indicates if module is in Rx mode"
+        },
+        {
+          "name": "resend_try_cnt",
+          "width": "3",
+          "role": "Counter for resend attempts"
+        },
+        {
+          "name": "state",
+          "width": "9",
+          "role": "Current state of the FSM"
+        },
+        {
+          "name": "next_state",
+          "width": "9",
+          "role": "Next state of the FSM"
+        },
+        {
+          "name": "trans_done",
+          "width": "1",
+          "role": "Indicates if data transfer is completed"
+        },
+        {
+          "name": "trans_failed",
+          "width": "1",
+          "role": "Indicates if data transfer failed"
+        },
+        {
+          "name": "internal_transm_complete",
+          "width": "1",
+          "role": "Internal transmission complete signal"
+        },
+        {
+          "name": "transm_complete_q",
+          "width": "1",
+          "role": "Delayed transmission complete signal"
+        },
+        {
+          "name": "bd_cnt",
+          "width": "2 or 3",
+          "role": "Counter for BD cycle count"
+        },
+        {
+          "name": "sys_adr",
+          "width": "32",
+          "role": "System address for current transaction"
+        },
+        {
+          "name": "cmd_arg",
+          "width": "32",
+          "role": "Command argument for current transaction"
+        },
+        {
+          "name": "cmd_set",
+          "width": "16",
+          "role": "Command setup value for current transaction"
+        },
+        {
+          "name": "CIDAT",
+          "width": "1",
+          "role": "Internal CRC Interrupt Data status"
+        },
+        {
+          "name": "Dat_Int_Status",
+          "width": "8",
+          "role": "Internal status register for data interrupts"
+        }
+      ],
+      "state_names": [
+        "IDLE",
+        "GET_TX_BD",
+        "GET_RX_BD",
+        "SEND_CMD",
+        "RECIVE_CMD",
+        "DATA_TRANSFER",
+        "STOP",
+        "STOP_SEND"
+      ],
+      "submodule_facts": [],
+      "local_mappings": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_data_serial_host",
+      "registers": [
+        {
+          "name": "crc_in",
+          "width": "SD_BUS_W",
+          "role": "Input for CRC calculation"
+        },
+        {
+          "name": "crc_en",
+          "width": "1",
+          "role": "Enable signal for CRC calculation"
+        },
+        {
+          "name": "crc_rst",
+          "width": "1",
+          "role": "Reset signal for CRC calculation"
+        },
+        {
+          "name": "temp_in",
+          "width": "SD_BUS_W",
+          "role": "Temporary storage for input data"
+        },
+        {
+          "name": "transf_cnt",
+          "width": "11",
+          "role": "Transfer counter"
+        },
+        {
+          "name": "state",
+          "width": "6",
+          "role": "Current state of FSM"
+        },
+        {
+          "name": "next_state",
+          "width": "6",
+          "role": "Next state of FSM"
+        },
+        {
+          "name": "crc_status",
+          "width": "3",
+          "role": "Status register for CRC"
+        },
+        {
+          "name": "busy_int",
+          "width": "1",
+          "role": "Internal busy signal"
+        },
+        {
+          "name": "ack_transfer_int",
+          "width": "1",
+          "role": "Synchronized ack_transfer"
+        },
+        {
+          "name": "ack_q",
+          "width": "1",
+          "role": "Acknowledge synchronization register"
+        },
+        {
+          "name": "q_start_bit",
+          "width": "1",
+          "role": "Start bit indicator for read operation"
+        },
+        {
+          "name": "crc_c",
+          "width": "5",
+          "role": "CRC counter"
+        },
+        {
+          "name": "last_din",
+          "width": "4",
+          "role": "Last data input for CRC calculation"
+        },
+        {
+          "name": "crc_s",
+          "width": "3",
+          "role": "CRC status bits"
+        },
+        {
+          "name": "write_buf_0",
+          "width": "32",
+          "role": "First write buffer"
+        },
+        {
+          "name": "write_buf_1",
+          "width": "32",
+          "role": "Second write buffer"
+        },
+        {
+          "name": "sd_data_out",
+          "width": "32",
+          "role": "Output data buffer"
+        },
+        {
+          "name": "out_buff_ptr",
+          "width": "1",
+          "role": "Output buffer pointer"
+        },
+        {
+          "name": "in_buff_ptr",
+          "width": "1",
+          "role": "Input buffer pointer"
+        },
+        {
+          "name": "data_send_index",
+          "width": "3",
+          "role": "Index for data being sent"
+        }
+      ],
+      "state_names": [
+        "IDLE",
+        "WRITE_DAT",
+        "WRITE_CRC",
+        "WRITE_BUSY",
+        "READ_WAIT",
+        "READ_DAT"
+      ],
+      "submodule_facts": [
+        {
+          "module": "sd_crc_16",
+          "count": "SD_BUS_W",
+          "usage": "CRC-16 generation for data integrity"
+        }
+      ],
+      "local_mappings": [
+        "crc_in -> BITVAL",
+        "crc_en -> Enable",
+        "crc_rst -> RST",
+        "crc_out[15:0] <- CRC[15:0]"
+      ],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_defines",
+      "registers": [],
+      "state_names": [],
+      "submodule_facts": [],
+      "local_mappings": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_fifo_rx_filler",
+      "registers": [
+        {
+          "name": "offset",
+          "width": "9",
+          "role": "Address offset for Wishbone transactions"
+        },
+        {
+          "name": "wb_free",
+          "width": "1",
+          "role": "Wishbone bus availability flag"
+        },
+        {
+          "name": "reset_rx_fifo",
+          "width": "1",
+          "role": "RX FIFO reset control"
+        },
+        {
+          "name": "rd",
+          "width": "1",
+          "role": "Read enable for RX FIFO"
+        }
+      ],
+      "state_names": [],
+      "submodule_facts": [
+        {
+          "module": "sd_rx_fifo",
+          "count": 1,
+          "usage": "buffering incoming data from the SD card before it's read by the host system"
+        }
+      ],
+      "local_mappings": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_fifo_tx_filler",
+      "registers": [
+        {
+          "name": "offset",
+          "width": "9",
+          "role": "Address offset for Wishbone transactions"
+        },
+        {
+          "name": "we",
+          "width": "9",
+          "role": "Write enable counter"
+        },
+        {
+          "name": "din",
+          "width": "32",
+          "role": "Data to be written to FIFO"
+        },
+        {
+          "name": "wr_tx",
+          "width": "1",
+          "role": "Write control for FIFO"
+        },
+        {
+          "name": "reset_tx_fifo",
+          "width": "1",
+          "role": "TX FIFO reset control"
+        },
+        {
+          "name": "first",
+          "width": "1",
+          "role": "First operation flag"
+        },
+        {
+          "name": "ackd",
+          "width": "1",
+          "role": "Acknowledge delay flag"
+        },
+        {
+          "name": "delay",
+          "width": "1",
+          "role": "Delay flag for synchronization"
+        }
+      ],
+      "state_names": [],
+      "submodule_facts": [
+        {
+          "module": "sd_tx_fifo",
+          "count": 1,
+          "usage": "dual-clock domain FIFO designed to transfer data between two potentially asynchronous clock domains"
+        }
+      ],
+      "local_mappings": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_rx_fifo",
+      "registers": [
+        {
+          "name": "ram",
+          "width": "32bit*FIFO_RX_MEM_DEPTH",
+          "role": "FIFO storage array"
+        },
+        {
+          "name": "adr_i",
+          "width": "FIFO_RX_MEM_ADR_SIZE",
+          "role": "Write address"
+        },
+        {
+          "name": "adr_o",
+          "width": "FIFO_RX_MEM_ADR_SIZE",
+          "role": "Read address"
+        },
+        {
+          "name": "we",
+          "width": "8",
+          "role": "Byte-wise write enable, indicates which bytes can be written to the RAM"
+        },
+        {
+          "name": "tmp",
+          "width": "32",
+          "role": "Temporary storage for accumulation of 4-bit nibbles"
+        },
+        {
+          "name": "ft",
+          "width": "1",
+          "role": "Data written flag"
+        }
+      ],
+      "state_names": [],
+      "submodule_facts": [],
+      "local_mappings": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sd_tx_fifo",
+      "registers": [
+        {
+          "name": "ram",
+          "width": "32bit*FIFO_TX_MEM_DEPTH",
+          "role": "FIFO storage array"
+        },
+        {
+          "name": "adr_i",
+          "width": "FIFO_RX_MEM_ADR_SIZE",
+          "role": "Write address"
+        },
+        {
+          "name": "adr_o",
+          "width": "FIFO_RX_MEM_ADR_SIZE",
+          "role": "Read address"
+        }
+      ],
+      "state_names": [],
+      "submodule_facts": [],
+      "local_mappings": [],
+      "image_grounding": []
+    },
+    {
+      "module": "sdc_controller",
+      "registers": [],
+      "state_names": [],
+      "submodule_facts": [
+        {
+          "module": "sd_controller_wb",
+          "count": 1,
+          "usage": "WISHBONE interface to configuration registers, handles host access and control"
+        },
+        {
+          "module": "sd_cmd_master",
+          "count": 1,
+          "usage": "command master processing, synchronizes host commands with the physical interface"
+        },
+        {
+          "module": "sd_data_master",
+          "count": 1,
+          "usage": "data transfer master and buffer descriptor processing, manages DMA and data flow"
+        },
+        {
+          "module": "sd_cmd_serial_host",
+          "count": 1,
+          "usage": "physical SD card command pin interface, handles serial command sending/receiving"
+        },
+        {
+          "module": "sd_bd",
+          "count": 2,
+          "usage": "buffer descriptors for transmission (tx_bd) and reception (rx_bd)"
+        },
+        {
+          "module": "sd_fifo_tx_filler",
+          "count": 1,
+          "usage": "fills TX FIFO from system memory via DMA during data transmission"
+        },
+        {
+          "module": "sd_fifo_rx_filler",
+          "count": 1,
+          "usage": "drains RX FIFO to system memory via DMA during data reception"
+        }
+      ],
+      "local_mappings": [
+        "Bd_status_reg[15:8] = free_rx_bd, Bd_status_reg[7:0] = free_tx_bd",
+        "status_reg[0] = cmd_int_busy ? 1'b1 : STATUS_REG[0]",
+        "normal_int_status_reg = NORMAL_INT_REG, error_int_status_reg = ERR_INT_REG, Bd_isr_reg = Dat_Int_Status",
+        "Master Wishbone outputs (m_wb_cyc_o, m_wb_stb_o, etc.) are muxed: connected to sd_fifo_tx_filler when start_tx_fifo=1, to sd_fifo_rx_filler when start_rx_fifo=1, otherwise zero"
+      ],
+      "image_grounding": []
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "schema_version": "merge_context_retrieval_v1",
+  "module": "sd_defines",
+  "selected_spec_refs": [
+    "S001"
+  ],
+  "use_kg_child_context": false,
+  "kg_child_modules": [],
+  "kg_child_context_reason": "Module sd_defines is a header with only macro definitions, no child modules, no instantiation, and no interface ports. KG child context is not needed.",
+  "code_gap_notes": [],
+  "selection_reason": [
+    "S001 contains the complete table of configuration macros, their valid ranges, and mutual exclusivity rules needed to ensure the generated fragment defines correct values and complies with constraints."
+  ],
+  "fallback_used": false
+}

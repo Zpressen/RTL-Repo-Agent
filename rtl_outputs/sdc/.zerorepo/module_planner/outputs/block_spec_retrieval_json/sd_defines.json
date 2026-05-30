@@ -1,0 +1,18 @@
+{
+  "schema_version": "block_spec_retrieval_v1",
+  "module": "sd_defines",
+  "selections": [
+    {
+      "id": "B1_decl_macros_and_defines",
+      "target": "<block: decl_macros_and_defines>",
+      "spec_refs": [
+        "S001"
+      ],
+      "selection_reason": [
+        "S001 contains the full table of SD controller configuration macros with valid values and mutual exclusivity rules, directly matching the requirement to declare all spec-listed defines."
+      ]
+    }
+  ],
+  "fallback_used": false,
+  "fallback_reason": ""
+}

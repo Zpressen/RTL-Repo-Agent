@@ -1,0 +1,18 @@
+{
+  "schema_version": "module_plan_v1",
+  "module": "sd_defines",
+  "subtasks": [
+    {
+      "id": "B1_decl_macros_and_defines",
+      "target": "<block: decl_macros_and_defines>",
+      "description": "Generate preprocessor `define` statements for all configuration macros listed in the spec table, including mutual exclusivity comments and default selections for groups such as BIG_ENDIAN/LITTLE_ENDIAN, SIM/SYN, and SD_CLK_* options.",
+      "spec_refs": [
+        "S001"
+      ],
+      "constraints": [
+        "Ensure only one macro per exclusive group is actively defined; comment out or deactivate alternatives.",
+        "Use specified valid value ranges; for derived parameters like BD_WIDTH or ADR_SIZE, compute correct log2 expressions as comments or helper defines."
+      ]
+    }
+  ]
+}

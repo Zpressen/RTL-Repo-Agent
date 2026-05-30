@@ -1,5 +1,6 @@
 from .planner_logger import get_planner_logger
 from .md_loader import (
+    expand_markdown_inputs,
     extract_markdown_outline,
     format_documents_for_prompt,
     load_markdown,
@@ -14,7 +15,7 @@ from .skeleton_doc import parse_module_skeleton_doc
 from .spec_block_splitter import extract_module_section, resolve_module_spec_text, split_spec_blocks
 
 __all__ = [
-    "get_planner_logger",
+    "expand_markdown_inputs",
     "load_markdown",
     "load_markdown_files",
     "extract_markdown_outline",

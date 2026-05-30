@@ -1,0 +1,79 @@
+{
+  "schema_version": "module_plan_v1",
+  "module": "sdc_controller",
+  "subtasks": [
+    {
+      "id": "B1_decl_glue_signals",
+      "target": "<block: decl_glue_signals>",
+      "description": "Declare all internal wires and regs needed to interconnect sub-modules, carry status/control signals, and hold muxed master Wishbone outputs.",
+      "spec_refs": [
+        "S002",
+        "S003",
+        "S004",
+        "S006"
+      ],
+      "constraints": []
+    },
+    {
+      "id": "B2_inst_submodules",
+      "target": "<block: inst_submodules>",
+      "description": "Instantiate all child modules (sd_controller_wb, sd_clock_divider, sd_cmd_master, sd_cmd_serial_host, sd_data_master, sd_data_serial_host, tx_bd, rx_bd, sd_fifo_tx_filler, sd_fifo_rx_filler) and wire their ports to the declared glue signals.",
+      "spec_refs": [
+        "S002",
+        "S003",
+        "S004",
+        "S006"
+      ],
+      "constraints": []
+    },
+    {
+      "id": "B3_comb_status_reg_assembly",
+      "target": "<block: comb_status_reg_assembly>",
+      "description": "Assemble internal status registers (Bd_status_reg, status_reg bits, normal_int_status_reg, error_int_status_reg, Bd_isr_reg) using continuous assignments as specified in the Register Update table.",
+      "spec_refs": [
+        "S006",
+        "S007"
+      ],
+      "constraints": [
+        "All assignments must be continuous; no sequential logic shall be introduced."
+      ]
+    },
+    {
+      "id": "B4_comb_master_wb_mux",
+      "target": "<block: comb_master_wb_mux>",
+      "description": "Multiplex master Wishbone interface outputs (m_wb_adr_o, m_wb_dat_o, m_wb_cyc_o, m_wb_stb_o, m_wb_cti_o, m_wb_bte_o, m_wb_we_o) based on start_tx_fifo and start_rx_fifo; assign m_wb_sel_o to 4'b1111.",
+      "spec_refs": [
+        "S002",
+        "S006",
+        "S008"
+      ],
+      "constraints": [
+        "All muxed signals must be combinational; m_wb_sel_o is a constant 4'b1111."
+      ]
+    },
+    {
+      "id": "B5_comb_interrupt_generation",
+      "target": "<block: comb_interrupt_generation>",
+      "description": "Generate combinational interrupt outputs int_a, int_b, int_c by ANDing each interrupt status register with its enable register, then OR reducing, gated by SDC_IRQ_ENABLE.",
+      "spec_refs": [
+        "S003",
+        "S004"
+      ],
+      "constraints": [
+        "Interrupt outputs must be combinational; no registers or latching."
+      ]
+    },
+    {
+      "id": "B6_comb_clock_reset_mux",
+      "target": "<block: comb_clock_reset_mux>",
+      "description": "Select sd_clk_o source based on compile-time defines; generate internal reset (wb_rst_i OR software_reset_reg[0]) and sd_cmd_serial_host reset (internal_rst OR go_idle_o); assign sd_clk_o_pad = sd_clk_o.",
+      "spec_refs": [
+        "S008",
+        "S009"
+      ],
+      "constraints": [
+        "Use ifdef or parameter for clock selection; sd_clk_o_pad must equal sd_clk_o."
+      ]
+    }
+  ]
+}

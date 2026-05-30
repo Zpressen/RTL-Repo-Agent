@@ -230,9 +230,14 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
             from zerorepo.rtl_spec_reader import RTLSpecReader, DEFAULT_RTL_DATASET_DIR
 
             # Determine spec source
+            spec_dir_input = None
             if args.rtl_spec:
                 spec_path = Path(args.rtl_spec)
-                if spec_path.exists() and spec_path.is_file():
+                if spec_path.exists() and spec_path.is_dir() and args.phase == "rtl_planner":
+                    spec_dir_input = spec_path.resolve()
+                    dataset_dir = spec_dir_input
+                    project_name = spec_dir_input.name
+                elif spec_path.exists() and spec_path.is_file():
                     # Direct file path
                     dataset_dir = spec_path.parent
                     project_name = spec_path.stem
@@ -246,7 +251,17 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
 
             reader = RTLSpecReader(dataset_dir=dataset_dir)
 
-            if project_name:
+            if spec_dir_input is not None:
+                from zerorepo.rtl_spec_reader import RTLProjectSpec
+
+                spec = RTLProjectSpec(
+                    project_name=project_name,
+                    spec_file_path=spec_dir_input,
+                    spec_content="",
+                    output_dir=reader.output_dir / project_name,
+                )
+                specs = [spec]
+            elif project_name:
                 # Process single project
                 spec = reader.read_spec_by_name(project_name)
                 if spec is None:
@@ -321,32 +336,43 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
                         image_paths: list[str] = []
                         seen: set[str] = set()
 
-                        for match in re.finditer(r'!\[[^\]]*\]\(([^)]+)\)', spec.spec_content):
-                            raw_ref = match.group(1).strip()
-                            if not raw_ref:
-                                continue
-                            decoded_ref = urllib.parse.unquote(raw_ref)
-                            candidate = (spec.spec_file_path.parent / decoded_ref).resolve()
-                            if candidate.exists() and candidate.is_file():
-                                candidate_str = str(candidate)
-                                if candidate_str not in seen:
-                                    seen.add(candidate_str)
-                                    image_paths.append(candidate_str)
+                        if spec.spec_file_path.is_file():
+                            markdown_files = [spec.spec_file_path]
+                        else:
+                            markdown_files = sorted(spec.spec_file_path.rglob("*.md"))
 
-                        figures_dir = spec.spec_file_path.parent / "figures"
-                        if figures_dir.exists():
-                            stem = spec.spec_file_path.stem.lower()
-                            for image_path in sorted(figures_dir.iterdir()):
-                                if not image_path.is_file():
+                        for markdown_file in markdown_files:
+                            try:
+                                spec_content = markdown_file.read_text(encoding="utf-8")
+                            except OSError:
+                                continue
+
+                            for match in re.finditer(r'!\[[^\]]*\]\(([^)]+)\)', spec_content):
+                                raw_ref = match.group(1).strip()
+                                if not raw_ref:
                                     continue
-                                suffix = image_path.suffix.lower()
-                                if suffix not in {".png", ".jpg", ".jpeg", ".svg", ".webp", ".bmp"}:
-                                    continue
-                                if stem in image_path.stem.lower():
-                                    image_str = str(image_path.resolve())
-                                    if image_str not in seen:
-                                        seen.add(image_str)
-                                        image_paths.append(image_str)
+                                decoded_ref = urllib.parse.unquote(raw_ref)
+                                candidate = (markdown_file.parent / decoded_ref).resolve()
+                                if candidate.exists() and candidate.is_file():
+                                    candidate_str = str(candidate)
+                                    if candidate_str not in seen:
+                                        seen.add(candidate_str)
+                                        image_paths.append(candidate_str)
+
+                            figures_dir = markdown_file.parent / "figures"
+                            if figures_dir.exists():
+                                stem = markdown_file.stem.lower()
+                                for image_path in sorted(figures_dir.iterdir()):
+                                    if not image_path.is_file():
+                                        continue
+                                    suffix = image_path.suffix.lower()
+                                    if suffix not in {".png", ".jpg", ".jpeg", ".svg", ".webp", ".bmp"}:
+                                        continue
+                                    if stem in image_path.stem.lower():
+                                        image_str = str(image_path.resolve())
+                                        if image_str not in seen:
+                                            seen.add(image_str)
+                                            image_paths.append(image_str)
 
                         return image_paths
 

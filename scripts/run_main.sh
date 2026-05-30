@@ -34,15 +34,18 @@ if [[ "${RTL_MODE}" == "true" ]]; then
     fi
 
     if [[ "${RTL_SPEC_INPUT}" == *.md || "${RTL_SPEC_INPUT}" == */* ]]; then
-        if [[ ! -f "${RTL_SPEC_INPUT}" ]]; then
-            echo "RTL spec file not found: ${RTL_SPEC_INPUT}" >&2
+        if [[ ! -f "${RTL_SPEC_INPUT}" && ! -d "${RTL_SPEC_INPUT}" ]]; then
+            echo "RTL spec file or directory not found: ${RTL_SPEC_INPUT}" >&2
             exit 1
         fi
     fi
 
     # 确定具体项目
     if [[ -n "${RTL_SPEC_INPUT}" ]]; then
-        if [[ "${RTL_SPEC_INPUT}" == *.md || "${RTL_SPEC_INPUT}" == */* ]]; then
+        if [[ -d "${RTL_SPEC_INPUT}" ]]; then
+            PROJECT_STEM="$(basename "${RTL_SPEC_INPUT}")"
+            GENERATING_PROJECT="${RTL_OUTPUT}/${PROJECT_STEM}"
+        elif [[ "${RTL_SPEC_INPUT}" == *.md || "${RTL_SPEC_INPUT}" == */* ]]; then
             SPEC_BASENAME="$(basename "${RTL_SPEC_INPUT}")"
             PROJECT_STEM="${SPEC_BASENAME%.md}"
             GENERATING_PROJECT="${RTL_OUTPUT}/${PROJECT_STEM}"

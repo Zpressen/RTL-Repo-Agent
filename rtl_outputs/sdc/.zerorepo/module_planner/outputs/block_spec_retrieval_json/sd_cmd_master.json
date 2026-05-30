@@ -1,0 +1,92 @@
+{
+  "schema_version": "block_spec_retrieval_v1",
+  "module": "sd_cmd_master",
+  "selections": [
+    {
+      "id": "B1_main_declarations",
+      "target": "<block: B1 – main declarations>",
+      "spec_refs": [
+        "S002",
+        "S004",
+        "S005",
+        "S006",
+        "S008"
+      ],
+      "selection_reason": [
+        "S002 provides signal widths for internal output registers and other declared objects",
+        "S004 defines state encoding, register field layouts, and other defines needed for declarations",
+        "S005 defines the debounce counter width and card_present flag",
+        "S006 defines the two-stage synchronisation signals req_q, ack_q, req_in_int, ack_in_int",
+        "S008 defines internal control signals (complete, check enables, response_size, watchdog, etc.) used across the FSM"
+      ]
+    },
+    {
+      "id": "B2_comb_next_state",
+      "target": "<block: comb_next_state>",
+      "spec_refs": [
+        "S007"
+      ],
+      "selection_reason": [
+        "S007 contains the exact state transition table and conditions (New_CMD, ack_in_int, complete) required for the combinational next-state logic"
+      ]
+    },
+    {
+      "id": "B3_seq_state_register",
+      "target": "<block: seq_state_register>",
+      "spec_refs": [
+        "S007",
+        "S004"
+      ],
+      "selection_reason": [
+        "S007 describes the state register update on posedge CLK_PAD_IO or asynchronous reset, resetting to IDLE",
+        "S004 provides the binary encoding of the IDLE state (3'b001) needed for the reset value"
+      ]
+    },
+    {
+      "id": "B4_comb_cmd_settings_assembly",
+      "target": "<block: comb_cmd_settings_assembly>",
+      "spec_refs": [
+        "S008",
+        "S004"
+      ],
+      "selection_reason": [
+        "S008 specifies the exact combinational assembly of cmd_out and settings, and the response_size determination",
+        "S004 provides the CMD_SET_REG bit positions (CMDI, CRCE, RTS, etc.) used in the assembly"
+      ]
+    },
+    {
+      "id": "B5_seq_debounce_logic",
+      "target": "<block: seq_debounce_logic>",
+      "spec_refs": [
+        "S005"
+      ],
+      "selection_reason": [
+        "S005 fully details the debounce counter logic, threshold, and card_present flag update"
+      ]
+    },
+    {
+      "id": "B6_seq_synchronisers",
+      "target": "<block: seq_synchronisers>",
+      "spec_refs": [
+        "S006"
+      ],
+      "selection_reason": [
+        "S006 specifies the two-stage flip-flop synchronisation for req_in and ack_in"
+      ]
+    },
+    {
+      "id": "B7_seq_fsm_state_operations",
+      "target": "<block: seq_fsm_state_operations>",
+      "spec_refs": [
+        "S008",
+        "S004"
+      ],
+      "selection_reason": [
+        "S008 provides the complete state-dependent sequential operations (IDLE, SETUP, EXECUTE) including output updates, watchdog, handshake, and response capture",
+        "S004 supplies the interrupt/status register bit assignments and the definitions of bits like dat_ava, crc_valid used in the operational logic"
+      ]
+    }
+  ],
+  "fallback_used": false,
+  "fallback_reason": ""
+}

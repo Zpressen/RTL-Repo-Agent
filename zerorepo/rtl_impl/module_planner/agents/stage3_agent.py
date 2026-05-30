@@ -125,6 +125,7 @@ class Stage3Agent(BaseStageAgent):
             record = self._build_module_record(export)
             artifact.module_records.append(record)
             artifact.completed_modules.append(module_name)
+            artifact.resume_cursor = len(artifact.completed_modules)
             artifact.stage3_status = "module_skeletons_in_progress"
 
             incremental_errors = self.validate_quality(
@@ -204,6 +205,11 @@ class Stage3Agent(BaseStageAgent):
                 f"completed_modules must be a prefix of module_order; expected {expected_completed}, got {artifact.completed_modules}"
             )
 
+        if artifact.resume_cursor != len(artifact.completed_modules):
+            errors.append("resume_cursor must match completed_modules length")
+        if artifact.resume_cursor > len(planned_order):
+            errors.append("resume_cursor must not exceed module_order length")
+
         actual_modules = [item.module for item in artifact.module_records]
         if actual_modules != artifact.completed_modules:
             errors.append("module_records[].module must exactly match completed_modules")
@@ -246,6 +252,7 @@ class Stage3Agent(BaseStageAgent):
             "top_module": repo_skeleton.top_module,
             "module_order": list(planned_order),
             "completed_modules": [],
+            "resume_cursor": 0,
             "global_summary": list(global_summary),
             "module_records": [],
             "open_issues": list(repo_skeleton.open_issues),
@@ -256,19 +263,64 @@ class Stage3Agent(BaseStageAgent):
             return artifact
 
         existing_artifact = existing if isinstance(existing, Stage3ModuleSkeletonArtifact) else validate_model(Stage3ModuleSkeletonArtifact, existing)
-        for module_name in planned_order:
-            next_record = next((item for item in existing_artifact.module_records if item.module == module_name), None)
+        if not self._artifact_header_matches(
+            existing_artifact,
+            task=task,
+            modules_artifact=modules_artifact,
+            repo_skeleton=repo_skeleton,
+            planned_order=planned_order,
+        ):
+            return artifact
+
+        record_by_module = {item.module: item for item in existing_artifact.module_records}
+        cursor = min(existing_artifact.resume_cursor, len(planned_order))
+        if cursor == 0 and existing_artifact.completed_modules:
+            cursor = min(len(existing_artifact.completed_modules), len(planned_order))
+
+        for module_name in planned_order[:cursor]:
+            next_record = record_by_module.get(module_name)
             if next_record is None:
                 break
             expected_spec = self._resolve_module_spec_file(task, module_name)
-            if not self._record_is_reusable(next_record, expected_module=module_name, expected_spec_path=expected_spec):
+            if not self._record_checkpoint_exists(next_record, expected_module=module_name, expected_spec_path=expected_spec):
                 break
             artifact.module_records.append(next_record)
             artifact.completed_modules.append(module_name)
+            artifact.resume_cursor = len(artifact.completed_modules)
         if artifact.completed_modules == planned_order and existing_artifact.stage3_status == "module_skeletons_planned":
             artifact.stage3_status = "module_skeletons_planned"
             artifact.quality_report = existing_artifact.quality_report
         return artifact
+
+    def _artifact_header_matches(
+        self,
+        artifact: Stage3ModuleSkeletonArtifact,
+        *,
+        task: PlannerTaskInput,
+        modules_artifact: ModuleOrganizationArtifact,
+        repo_skeleton: Stage2RepoSkeletonArtifact,
+        planned_order: List[str],
+    ) -> bool:
+        return (
+            artifact.task_id == task.task_id
+            and artifact.top_module == repo_skeleton.top_module
+            and artifact.module_order == planned_order
+            and artifact.source_schema_versions.get("modules") == modules_artifact.schema_version
+            and artifact.source_schema_versions.get("repo_skeleton") == repo_skeleton.schema_version
+        )
+
+    def _record_checkpoint_exists(
+        self,
+        record: ModuleRecord,
+        *,
+        expected_module: str,
+        expected_spec_path: str,
+    ) -> bool:
+        if self._validate_module_record(record, expected_module=expected_module, expected_spec_path=expected_spec_path):
+            return False
+        doc_path = self._resolve_stage3_path(record.doc_file)
+        export_path = self._resolve_stage3_path(record.export_file)
+        return doc_path.exists() and export_path.exists()
 
     def _planned_module_order(
         self,
@@ -450,18 +502,27 @@ class Stage3Agent(BaseStageAgent):
             errors.append(f"{expected_module}: structural_blocks must not be empty")
         if not export.decision_ledger.chosen_decisions:
             errors.append(f"{expected_module}: decision_ledger.chosen_decisions must not be empty")
-        if export.module_behavior.control_style == "undecided":
+        if export.module_behavior.control_style == "undecided" and self._module_requires_strict_behavior(expected_module):
             errors.append(f"{expected_module}: module_behavior.control_style must not remain undecided")
         return errors
 
+    def _module_requires_strict_behavior(self, module_name: str) -> bool:
+        return module_name not in {"sd_defines"}
+
     def _resolve_module_spec_file(self, task_input: PlannerTaskInput, module_name: str) -> str:
-        direct_matches = [Path(item).resolve() for item in task_input.spec_md_files if Path(item).stem == module_name]
-        if direct_matches:
-            return str(direct_matches[0])
+        paths = [Path(item).resolve() for item in task_input.spec_md_files if str(item).strip()]
+
+        for path in paths:
+            if path.is_file() and path.stem == module_name:
+                return str(path)
+            if path.is_dir():
+                candidate = path / f"{module_name}.md"
+                if candidate.exists():
+                    return str(candidate.resolve())
 
         checked_dirs: List[Path] = []
-        for raw_path in task_input.spec_md_files:
-            parent = Path(raw_path).resolve().parent
+        for path in paths:
+            parent = path if path.is_dir() else path.parent
             if parent in checked_dirs:
                 continue
             checked_dirs.append(parent)

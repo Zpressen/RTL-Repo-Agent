@@ -1,0 +1,64 @@
+{
+  "schema_version": "block_spec_retrieval_v1",
+  "module": "sd_bd",
+  "selections": [
+    {
+      "id": "B1_decl_objects",
+      "target": "<block: B1_decl_objects>",
+      "spec_refs": [
+        "S003",
+        "S005"
+      ],
+      "selection_reason": [
+        "S003 provides the module interface (port names, directions, widths) required to declare ports and assign signals.",
+        "S005 lists all state registers (free_bd, m_wr_pnt, s_rd_pnt, last_a_cmp, wr_cnt, rd_cnt) and the memory array shape, directly supporting the declaration of storage objects."
+      ]
+    },
+    {
+      "id": "B2_write_sequence",
+      "target": "<block: B2_write_sequence>",
+      "spec_refs": [
+        "S005",
+        "S006"
+      ],
+      "selection_reason": [
+        "S006 details the write operation: we_m assertion, free_bd check, multi‑write completion via wr_cnt, new_bw generation, and free_bd decrement.",
+        "S005 provides reset initialization values for m_wr_pnt and wr_cnt needed by the write sequence block."
+      ]
+    },
+    {
+      "id": "B3_read_sequence",
+      "target": "<block: B3_read_sequence>",
+      "spec_refs": [
+        "S005",
+        "S007"
+      ],
+      "selection_reason": [
+        "S007 describes the read process: re_s, s_rd_pnt increment with multi‑read counting, directly supporting the read pointer and rd_cnt logic.",
+        "S005 supplies the reset initialization for s_rd_pnt and rd_cnt required by the read sequence block."
+      ]
+    },
+    {
+      "id": "B4_comb_output",
+      "target": "<block: B4_comb_output>",
+      "spec_refs": [
+        "S007"
+      ],
+      "selection_reason": [
+        "S007 specifies that dat_out_s comes from bd_mem[s_rd_pnt] and that ack_o_s is asserted during reads in 16‑bit mode, exactly matching the combinational output responsibilities."
+      ]
+    },
+    {
+      "id": "B5_release_edge_detect",
+      "target": "<block: B5_release_edge_detect>",
+      "spec_refs": [
+        "S008"
+      ],
+      "selection_reason": [
+        "S008 defines the release operation: rising‑edge detection on a_cmp, free_bd increment, and use of last_a_cmp, directly supporting the edge‑detection and counter increment logic."
+      ]
+    }
+  ],
+  "fallback_used": false,
+  "fallback_reason": ""
+}

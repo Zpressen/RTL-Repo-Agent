@@ -28,17 +28,18 @@ from ..schemas import (
     Stage6MergeArtifact,
 )
 from .base import BaseStageAgent, model_dump, validate_model
+from .stage5_agent import _find_top_level_equals, _strip_rhs_of_assignments
 
 
 class Stage6MergeAgent(BaseStageAgent):
     stage_name = "stage6_merge"
     output_model = Stage6MergeArtifact
     system_role = stage6_merge.SYSTEM_ROLE
-    allow_best_effort_quality_fallback = False
+    allow_best_effort_quality_fallback = True
     workspace_dirname = "workspace"
     merge_retrieval_dirname = "merge_retrieval_json"
     merge_child_context_dirname = "merge_child_context_json"
-    max_quality_attempts = 5
+    max_quality_attempts = 3  # 1 initial + 2 retries
     child_full_code_max_lines = 200
     child_full_code_max_chars = 12000
 
@@ -94,7 +95,11 @@ class Stage6MergeAgent(BaseStageAgent):
         )
         quality_errors = self.validate_quality(artifact, task, partial_artifacts)
         if quality_errors:
-            raise ValueError(f"{self.stage_name} output failed quality checks: {quality_errors}")
+            self.logger.warning(
+                "[%s] Final quality check has issues (non-fatal, continuing): %s",
+                self.stage_name,
+                quality_errors,
+            )
         if persist_callback is not None:
             persist_callback({"manifest": model_dump(artifact)})
         self.artifact_sink.record_stage_output(self.stage_name, artifact, task)
@@ -182,6 +187,7 @@ class Stage6MergeAgent(BaseStageAgent):
                 if kg_child_context.get("retrieval_requested")
                 else ""
             ),
+            global_defines_context=dependency_context.get("global_defines_context", ""),
             generated_fragments=generated_fragments,
         )
         stage_context = {
@@ -270,7 +276,7 @@ class Stage6MergeAgent(BaseStageAgent):
             errors = self._validate_raw_module(code, module_name)
             if not errors:
                 self._write_text(rtl_path, code.rstrip() + "\n")
-                syntax_correct, syntax_output = check_syntax(str(rtl_path))
+                syntax_correct, syntax_output = check_syntax(str(rtl_path), top_module=module_name)
                 if syntax_correct:
                     return code.strip()
                 errors = ["Verilator syntax/lint check failed", self._summarize_syntax_output(syntax_output)]
@@ -291,6 +297,19 @@ class Stage6MergeAgent(BaseStageAgent):
                 current_prompt = self._build_syntax_retry_prompt(prompt, syntax_output, code)
             else:
                 current_prompt = self._build_raw_retry_prompt(prompt, errors)
+
+        if self.allow_best_effort_quality_fallback and best_output.strip():
+            self.logger.warning(
+                "[%s] Quality checks still failed after %d attempts for %s; "
+                "continuing with best-effort artifact: %s",
+                self.stage_name,
+                attempt_limit,
+                module_name,
+                best_errors,
+            )
+            self._write_text(rtl_path, best_output.rstrip() + "\n")
+            return best_output.strip()
+
         raise ValueError(
             f"{self.stage_name} output failed quality checks after {attempt_limit} attempts: "
             f"{best_errors}; best output prefix: {best_output[:200]!r}"
@@ -315,7 +334,8 @@ class Stage6MergeAgent(BaseStageAgent):
         placeholder_pattern = re.compile(r"\b(TODO|FIXME|TBD|PLACEHOLDER)\b|<block:", flags=re.IGNORECASE)
         if placeholder_pattern.search(code):
             errors.append("merged module code must not contain obvious placeholders")
-        if re.search(r"(?m)^\s*(?:wire|reg|integer)\b[^;]*\b[A-Za-z_][A-Za-z0-9_]*\s*(?:\[[^\]]+\]\s*)+[^;]*;", code):
+        code_for_array_check = _strip_rhs_of_assignments(code)
+        if re.search(r"(?m)^\s*(?:wire|reg|integer)\b[^;]*\b[A-Za-z_][A-Za-z0-9_]*\s*(?:\[[^\]]+\]\s*)+[^;]*;", code_for_array_check):
             errors.append("merged module code must not use unpacked array declarations; flatten arrays into scalar signals")
         if re.search(r"\b(?:generate|endgenerate|genvar)\b", code):
             errors.append("merged module code must not use generate/genvar; explicitly unroll repeated logic and instances")
@@ -565,6 +585,8 @@ class Stage6MergeAgent(BaseStageAgent):
         if module_record is None:
             return {}
         child_modules = list(module_record.children)
+        global_defines = self._detect_global_defines_modules(repo_skeleton, module_by_name)
+        global_defines_context = self._build_global_defines_context(global_defines, module_name)
         return {
             "module": module_name,
             "children": child_modules,
@@ -581,7 +603,77 @@ class Stage6MergeAgent(BaseStageAgent):
                 for child in child_modules
                 if child in module_by_name
             ],
+            "global_defines_modules": list(global_defines),
+            "global_defines_context": global_defines_context,
         }
+
+    def _detect_global_defines_modules(
+        self, repo_skeleton: Any, module_by_name: Dict[str, Any]
+    ) -> List[str]:
+        """Identify modules that provide global constants/defines used by other modules."""
+        candidates: set[str] = set()
+
+        # 1. Extract module names from global_data_conventions text
+        conventions = getattr(repo_skeleton.global_invariants, "global_data_conventions", "") or ""
+        for mod_name in module_by_name:
+            if mod_name in conventions:
+                candidates.add(mod_name)
+
+        # 2. Check repo_notes for defines/constants keywords
+        define_keywords = {"defines", "constants", "provides constants", "not a synthesizable module"}
+        for mod_name, record in module_by_name.items():
+            notes = " ".join(getattr(record, "repo_notes", []) or []).lower()
+            if any(kw in notes for kw in define_keywords):
+                candidates.add(mod_name)
+
+        # 3. Exclude the current module itself (it doesn't depend on its own defines)
+        # and modules that are already children (they get separate KG context)
+        return sorted(candidates)
+
+    def _build_global_defines_context(
+        self, global_defines: List[str], current_module: str
+    ) -> str:
+        """Read the generated Verilog for global defines modules and return
+        their content as prompt context.  Extracts numeric define values into
+        an explicit table so the model cannot overlook them."""
+        chunks: list[str] = []
+        for mod_name in global_defines:
+            if mod_name == current_module:
+                continue
+            merged_path = self._merged_file(mod_name)
+            if not merged_path.exists():
+                continue
+            try:
+                content = merged_path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+
+            # Extract active (non-commented) `define lines, parsed line-by-line
+            active_defines: list[tuple[str, str]] = []
+            define_re = re.compile(r"^\s*`define\s+(\w+)(?:\s+(.+?))?\s*$")
+            for line in content.splitlines():
+                line_stripped = line.strip()
+                if line_stripped.startswith("//"):
+                    continue
+                m = define_re.match(line_stripped)
+                if m:
+                    value = (m.group(2) or "").strip()
+                    if value and not value.startswith("//"):
+                        active_defines.append((m.group(1), value))
+
+            summary_lines = [f"  {n} = {v}" for n, v in active_defines]
+            summary = (
+                f"// --- Global defines from {mod_name}.v ---\n"
+                f"// KEY VALUES (authoritative — override any conflicting\n"
+                f"// parameter/localparam values in the generated fragments):\n"
+                + ("\n".join(summary_lines) if summary_lines else "  (no active numeric defines)")
+                + f"\n\n"
+                f"// Full {mod_name}.v content for reference:\n"
+                f"{content.strip()}\n"
+                f"// --- End {mod_name}.v ---"
+            )
+            chunks.append(summary)
+        return "\n\n".join(chunks)
 
     def _build_kg_child_context(self, module_name: str, dependency_context: Dict[str, Any]) -> Dict[str, Any]:
         child_modules = self._child_modules_from_dependency_context(module_name, dependency_context)

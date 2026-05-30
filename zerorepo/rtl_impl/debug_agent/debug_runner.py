@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import shutil
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -20,7 +21,7 @@ DebugStatus = Literal["disabled", "skipped", "pass", "fixed", "fail", "error"]
 @dataclass(frozen=True)
 class RtlDebugConfig:
     enabled: bool = True
-    oracle_root: str = "/home/mokita/RealBench/aes"
+    oracle_root: str = "/home/mokita/RealBench"
     max_trials: int = 30
     allow_failure: bool = False
     enable_asserter: bool = True
@@ -44,6 +45,37 @@ class RtlDebugConfig:
             toolchain_bin=os.environ.get("ZEROREPO_RTL_DEBUG_TOOLCHAIN_BIN", ""),
             openai_config=load_openai_config(),
         )
+
+
+def _resolve_oracle_dir(oracle_root: Path, module_name: str) -> Path | None:
+    """Resolve the verification directory for *module_name* under *oracle_root*.
+
+    Resolution order:
+    1. Direct:  oracle_root / module_name / "verification"
+    2. Dynamic: oracle_root / <any_subdir> / module_name / "verification"
+
+    Returns the first matching Path, or None if not found.
+    """
+    # Step 1: direct lookup (backward-compatible with category-specific roots)
+    direct = oracle_root / module_name / "verification"
+    if direct.is_dir():
+        return direct
+
+    # Step 2: scan immediate subdirectories
+    if not oracle_root.is_dir():
+        return None
+
+    try:
+        for subdir in sorted(oracle_root.iterdir()):
+            if not subdir.is_dir():
+                continue
+            candidate = subdir / module_name / "verification"
+            if candidate.is_dir():
+                return candidate
+    except OSError:
+        return None
+
+    return None
 
 
 @dataclass(frozen=True)
@@ -90,12 +122,16 @@ class ModuleDebugRunner:
         if not self.config.enabled:
             return ModuleDebugResult(module=module_name, status="disabled", reason="RTL debug is disabled.")
 
-        oracle_dir = Path(self.config.oracle_root) / module_name / "verification"
-        if not oracle_dir.is_dir():
+        oracle_root_path = Path(self.config.oracle_root)
+        oracle_dir = _resolve_oracle_dir(oracle_root_path, module_name)
+        if oracle_dir is None:
             return ModuleDebugResult(
                 module=module_name,
                 status="skipped",
-                reason=f"Oracle directory not found: {oracle_dir}",
+                reason=(
+                    f"Oracle directory not found: no {module_name}/verification "
+                    f"under {oracle_root_path} or its immediate subdirectories"
+                ),
             )
 
         workdir = (self.debug_root / module_name).resolve()
@@ -200,6 +236,7 @@ class ModuleDebugRunner:
         shutil.copyfile(tb_path, workdir / "tb.sv")
         support_text = self._build_support_text(oracle_dir, module_name, tb_path)
         self._write_text(workdir / "support.sv", support_text)
+        self._copy_support_files_to_workdir(oracle_dir, module_name, tb_path, workdir)
         manifest = {
             "module": module_name,
             "oracle_dir": str(oracle_dir),
@@ -284,7 +321,7 @@ class ModuleDebugRunner:
             raise FileNotFoundError(f"No testbench found in {oracle_dir}")
         return candidates[0]
 
-    def _build_support_text(self, oracle_dir: Path, module_name: str, tb_path: Path) -> str:
+    def _select_support_files(self, oracle_dir: Path, module_name: str, tb_path: Path) -> list[Path]:
         source_files = sorted(
             path
             for path in oracle_dir.iterdir()
@@ -296,8 +333,30 @@ class ModuleDebugRunner:
             if stem == module_name or stem == f"{module_name}_top" or stem.endswith("_top"):
                 continue
             selected.append(path)
+        return selected
+
+    def _build_support_text(self, oracle_dir: Path, module_name: str, tb_path: Path) -> str:
+        selected = self._select_support_files(oracle_dir, module_name, tb_path)
         chunks = [f"// support source: {path.name}\n{path.read_text(encoding='utf-8')}" for path in selected]
         return "\n\n".join(chunks).rstrip() + "\n"
+
+    def _copy_support_files_to_workdir(self, oracle_dir: Path, module_name: str, tb_path: Path, workdir: Path) -> None:
+        # Only copy files that are referenced by `include directives from the
+        # testbench or support files.  Copying all support files would duplicate
+        # modules already concatenated into support.sv, breaking check_syntax.
+        include_names: set[str] = set()
+        include_re = re.compile(r"^\s*`include\s+\"(.+?)\"", re.MULTILINE)
+        for src_path in [tb_path, *self._select_support_files(oracle_dir, module_name, tb_path)]:
+            try:
+                text = src_path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            for m in include_re.finditer(text):
+                include_names.add(m.group(1))
+
+        for sf in self._select_support_files(oracle_dir, module_name, tb_path):
+            if sf.name in include_names:
+                shutil.copyfile(sf, workdir / sf.name)
 
     def _run_editor(
         self,

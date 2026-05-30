@@ -59,6 +59,7 @@ The final code should use Verilog-compatible style where it is functionally equi
 - Do not change port names, directions, or widths.
 - Do not add extra ports.
 - If KG child module context is provided, treat child port names, directions, widths, parameters, and verified status as authoritative for instantiation wiring.
+- If GLOBAL DEFINES context is provided, its numeric values are authoritative. Override any conflicting parameter or localparam values in the generated fragments with the GLOBAL DEFINES values.
 - Prefer instantiating verified child modules instead of reimplementing their internal logic in the parent module.
 - Connect every required child instance port exactly once unless the specification explicitly says a port may be unused.
 - Do not add clock, reset, FSM state, counter, pipeline register, or extra latency unless required by the specification.
@@ -102,8 +103,7 @@ Do not output internal reasoning.
 
 {module_skeleton}
 
-{kg_child_context_section}
-# GENERATED FRAGMENTS
+{kg_child_context_section}{global_defines_section}# GENERATED FRAGMENTS
 
 {generated_fragments}
 """.strip()
@@ -115,15 +115,22 @@ def build_prompt(
     module_skeleton: str,
     generated_fragments: str,
     kg_child_context: str = "",
+    global_defines_context: str = "",
 ) -> str:
     kg_child_context_section = (
         f"# KG CHILD MODULE CONTEXT\n\n{kg_child_context}\n\n"
         if kg_child_context
         else ""
     )
+    global_defines_section = (
+        f"# GLOBAL DEFINES (authoritative — use these exact values)\n\n{global_defines_context}\n\n"
+        if global_defines_context
+        else ""
+    )
     return PROMPT_TEMPLATE.format(
         module_spec=module_spec or "None",
         module_skeleton=module_skeleton or "None",
         kg_child_context_section=kg_child_context_section,
+        global_defines_section=global_defines_section,
         generated_fragments=generated_fragments or "None",
     )

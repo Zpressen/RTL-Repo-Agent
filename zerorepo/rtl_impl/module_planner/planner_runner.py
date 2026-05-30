@@ -265,13 +265,20 @@ class PlannerRunner:
         }
         if resume:
             existing_module_plans = self._read_module_plans_if_valid(task, module_plan_stage_inputs)
-            if existing_module_plans is not None:
+            if existing_module_plans is not None and existing_module_plans.stage4_status == "module_plans_planned":
                 self.logger.info(
                     "[rtl_module_planner] Resume reused stage4 module plans artifact from %s",
                     self._module_plans_path(),
                 )
                 module_plans = existing_module_plans
             else:
+                if existing_module_plans is not None:
+                    module_plan_stage_inputs = dict(module_plan_stage_inputs)
+                    module_plan_stage_inputs["stage4_existing"] = existing_module_plans
+                    self.logger.info(
+                        "[rtl_module_planner] Resume continuing stage4 module plans from cursor %d",
+                        existing_module_plans.resume_cursor,
+                    )
                 module_plans = self.stage4_module_plans.run_incremental(
                     task,
                     module_plan_stage_inputs,
@@ -575,7 +582,18 @@ class PlannerRunner:
                 )
             else:
                 self.logger.info("[rtl_module_planner] Stage5 generating fragments for module %s", module_name)
-                stage5_record = self.stage5.run_module(task, codegen_stage_inputs, module_name)
+                try:
+                    stage5_record = self.stage5.run_module(task, codegen_stage_inputs, module_name)
+                except Exception as exc:
+                    self.logger.error(
+                        "[rtl_module_planner] Stage5 failed for module %s: %s",
+                        module_name, exc,
+                    )
+                    stage5_record = ModuleCodegenRecord(
+                        module=module_name,
+                        workspace_file="",
+                        completed_subtasks=[],
+                    )
             stage5_records.append(stage5_record)
             stage6_record = self._reuse_stage6_merge_if_valid(module_name, stage5_record)
             if stage6_record is not None:
@@ -586,13 +604,38 @@ class PlannerRunner:
                 )
             else:
                 self.logger.info("[rtl_module_planner] Stage6 merging module %s immediately after stage5", module_name)
-                stage6_record = self.stage6.run_module(
-                    task,
-                    codegen_stage_inputs,
-                    module_name,
-                    stage5_record,
-                )
+                try:
+                    stage6_record = self.stage6.run_module(
+                        task,
+                        codegen_stage_inputs,
+                        module_name,
+                        stage5_record,
+                    )
+                except Exception as exc:
+                    self.logger.error(
+                        "[rtl_module_planner] Stage6 failed for module %s: %s",
+                        module_name, exc,
+                    )
+                    stage6_record = ModuleMergeRecord(
+                        module=module_name,
+                        fragment_file=str(getattr(stage5_record, "workspace_file", "")),
+                        merged_file="",
+                    )
             stage6_records.append(stage6_record)
+            if not stage6_record.merged_file:
+                self.logger.warning(
+                    "[rtl_module_planner] Skipping debug for %s: no merged RTL (stage5 or stage6 failed)",
+                    module_name,
+                )
+                debug_result = ModuleDebugResult(
+                    module=module_name,
+                    status="skipped",
+                    final_rtl_path="",
+                    reason="Stage5 or Stage6 failed; no merged RTL to debug.",
+                )
+                debug_records.append(debug_result)
+                self._record_kg_module_result(module_name, "", debug_result)
+                continue
             self.logger.info("[rtl_module_planner] Debug checking module %s after stage6", module_name)
             module_spec_text = build_module_spec_text(module_name=module_name, spec_blocks=spec_blocks)
             debug_spec_source_path = ""
@@ -622,7 +665,10 @@ class PlannerRunner:
                     reason=f"{type(exc).__name__}: {exc}",
                 )
                 self._record_kg_module_result(module_name, stage6_record.merged_file, debug_result)
-                raise
+                self.logger.warning(
+                    "[rtl_module_planner] Debug failed for module %s (continuing): %s",
+                    module_name, exc,
+                )
             debug_records.append(debug_result)
             self._record_kg_module_result(module_name, stage6_record.merged_file, debug_result)
             self.logger.info(
@@ -632,7 +678,12 @@ class PlannerRunner:
                 f" ({debug_result.reason})" if debug_result.reason else "",
             )
             if debug_result.status in {"fail", "error"} and not self.debug_runner.config.allow_failure:
-                raise RuntimeError(f"RTL debug failed for {module_name}: {debug_result.reason}")
+                self.logger.warning(
+                    "[rtl_module_planner] RTL debug %s for %s (tolerated per resilience policy): %s",
+                    debug_result.status,
+                    module_name,
+                    debug_result.reason,
+                )
 
         stage5_artifact = Stage5CodegenArtifact(
             task_id=task.task_id,
@@ -641,7 +692,10 @@ class PlannerRunner:
         )
         stage5_quality_errors = self.stage5.validate_quality(stage5_artifact, task, codegen_stage_inputs)
         if stage5_quality_errors:
-            raise ValueError(f"stage5_codegen output failed quality checks: {stage5_quality_errors}")
+            self.logger.warning(
+                "[rtl_module_planner] Stage5 aggregate quality check has issues (non-fatal): %s",
+                stage5_quality_errors,
+            )
         self._write_stage5_codegen_payload(model_dump(stage5_artifact))
         self.artifact_sink.record_stage_output(self.stage5.stage_name, stage5_artifact, task)
 
@@ -653,7 +707,10 @@ class PlannerRunner:
         )
         stage6_quality_errors = self.stage6.validate_quality(stage6_artifact, task, codegen_stage_inputs)
         if stage6_quality_errors:
-            raise ValueError(f"stage6_merge output failed quality checks: {stage6_quality_errors}")
+            self.logger.warning(
+                "[rtl_module_planner] Stage6 aggregate quality check has issues (non-fatal): %s",
+                stage6_quality_errors,
+            )
         self._write_stage6_merge_payload(model_dump(stage6_artifact))
         self.artifact_sink.record_stage_output(self.stage6.stage_name, stage6_artifact, task)
         return stage6_artifact

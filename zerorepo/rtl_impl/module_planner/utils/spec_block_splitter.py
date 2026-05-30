@@ -16,12 +16,16 @@ def resolve_module_spec_text(module_name: str, spec_md_files: Iterable[str]) -> 
     paths = [Path(item).resolve() for item in spec_md_files if str(item).strip()]
 
     for path in paths:
-        if path.stem == module_name and path.exists():
+        if path.is_file() and path.stem == module_name:
             return str(path), _read_markdown(path)
+        if path.is_dir():
+            candidate = path / f"{module_name}.md"
+            if candidate.exists():
+                return str(candidate.resolve()), _read_markdown(candidate)
 
     checked_dirs: List[Path] = []
     for path in paths:
-        parent = path.parent
+        parent = path if path.is_dir() else path.parent
         if parent in checked_dirs:
             continue
         checked_dirs.append(parent)
@@ -30,7 +34,7 @@ def resolve_module_spec_text(module_name: str, spec_md_files: Iterable[str]) -> 
             return str(candidate.resolve()), _read_markdown(candidate)
 
     for path in paths:
-        if not path.exists():
+        if not path.exists() or not path.is_file():
             continue
         markdown = _read_markdown(path)
         module_text = extract_module_section(markdown, module_name)

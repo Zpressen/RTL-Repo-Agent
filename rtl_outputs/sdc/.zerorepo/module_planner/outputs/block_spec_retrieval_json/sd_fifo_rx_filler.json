@@ -1,0 +1,62 @@
+{
+  "schema_version": "block_spec_retrieval_v1",
+  "module": "sd_fifo_rx_filler",
+  "selections": [
+    {
+      "id": "B1_decl_main_objects",
+      "target": "<block: decl_main_objects>",
+      "spec_refs": [
+        "S004",
+        "S005",
+        "S007",
+        "S012"
+      ],
+      "selection_reason": [
+        "S004 provides module interface context required by the first declaration block per selection rule",
+        "S005 defines the register set (offset, wb_free, reset_rx_fifo, rd) needed for declaration",
+        "S007 gives SD RX FIFO port widths (q[31:0], full, empty) for wire declarations",
+        "S012 documents MEM_OFFSET parameter existence and its external definition"
+      ]
+    },
+    {
+      "id": "B2_inst_sd_rx_fifo",
+      "target": "<block: inst_sd_rx_fifo>",
+      "spec_refs": [
+        "S006",
+        "S007"
+      ],
+      "selection_reason": [
+        "S006 introduces the sd_rx_fifo submodule",
+        "S007 lists all ports and widths required for instantiation and connection"
+      ]
+    },
+    {
+      "id": "B3_comb_wishbone_outputs",
+      "target": "<block: comb_wishbone_outputs>",
+      "spec_refs": [
+        "S004",
+        "S010"
+      ],
+      "selection_reason": [
+        "S004 defines Wishbone master signal names and widths",
+        "S010 describes combinational assignment of address, data, and control signals during a transaction"
+      ]
+    },
+    {
+      "id": "B4_seq_control_fsm",
+      "target": "<block: seq_control_fsm>",
+      "spec_refs": [
+        "S009",
+        "S010",
+        "S011"
+      ],
+      "selection_reason": [
+        "S009 specifies reset and initialization behavior for FSM registers",
+        "S010 details the enabled FSM steps: IDLE to ACTIVE transition, Wishbone handshake, offset update",
+        "S011 defines disabled state behavior forcing FIFO reset and bus idle"
+      ]
+    }
+  ],
+  "fallback_used": false,
+  "fallback_reason": ""
+}

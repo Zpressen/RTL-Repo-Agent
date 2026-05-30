@@ -1,0 +1,54 @@
+{
+  "schema_version": "module_plan_v1",
+  "module": "sd_controller_wb",
+  "subtasks": [
+    {
+      "id": "B1_decl_core",
+      "target": "<block: decl_core>",
+      "description": "Declare all internal storage: individual registers for each configuration register per S005 (argument, cmd_setting, etc.), BD FSM state register, registered outputs, and intermediate wires. Include reset values from S007 for all registers.",
+      "spec_refs": [
+        "S003",
+        "S005",
+        "S007"
+      ],
+      "constraints": []
+    },
+    {
+      "id": "B2_comb_decode_and_control",
+      "target": "<block: comb_decode_and_control>",
+      "description": "Generate combinational decode logic for address decoding (S005 register addresses), read data mux selecting from internal regfile or input status registers, write strobes for each writable register, BD FSM next-state and control signals (we_m_xx_bd, int_ack, wb_ack_o) per S008, and flag signals (cmd_int_busy, int_busy, new_cmd, we_ack) per S006. Ensure all next-state signals are solely combinational.",
+      "spec_refs": [
+        "S005",
+        "S006",
+        "S008"
+      ],
+      "constraints": [
+        "If handling BD writes with RAM_MEM_WIDTH=16, unroll the logic for two sequential writes explicitly; avoid generate constructs.",
+        "All next-state logic must be purely combinational."
+      ]
+    },
+    {
+      "id": "B3_seq_all_clocked",
+      "target": "<block: seq_all_clocked>",
+      "description": "Implement clocked processes (always @(posedge wb_clk_i or posedge wb_rst_i)) that update all registers: on reset, apply values per S007 (int_ack=1, others 0, configuration registers to S005 defaults); on posedge, write configuration registers when strobed, advance BD FSM state, update output registers with combinational next-state signals, and handle BD multi-cycle write (S008).",
+      "spec_refs": [
+        "S005",
+        "S007",
+        "S008"
+      ],
+      "constraints": [
+        "Use scalar registers; avoid unpacked arrays in FSM state.",
+        "Reset is asynchronous active high; all updates explicitly clocked."
+      ]
+    },
+    {
+      "id": "B4_port_assign",
+      "target": "<block: port_assign>",
+      "description": "Directly assign internal register values to output ports as defined in interface S003. No extra logic; purely wire connections.",
+      "spec_refs": [
+        "S003"
+      ],
+      "constraints": []
+    }
+  ]
+}

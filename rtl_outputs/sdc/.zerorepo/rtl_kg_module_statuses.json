@@ -1,0 +1,159 @@
+{
+  "schema_version": "rtl_kg_module_statuses_v2",
+  "repo_uid": "merged@8f5589b1691e",
+  "modules": {
+    "sd_defines": {
+      "module": "sd_defines",
+      "status": "skipped",
+      "passed": false,
+      "mismatch_count": 0,
+      "debug_trials": 0,
+      "final_rtl_path": "",
+      "trace_report_path": "",
+      "sim_output_path": "",
+      "reason": "Oracle directory not found: no sd_defines/verification under /home/mokita/RealBench or its immediate subdirectories",
+      "stage": "post_module_debug",
+      "timestamp": "2026-05-30T13:28:05.014053+00:00"
+    },
+    "sd_crc_7": {
+      "module": "sd_crc_7",
+      "status": "pass",
+      "passed": true,
+      "mismatch_count": 0,
+      "debug_trials": 0,
+      "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_crc_7/rtl.sv",
+      "trace_report_path": "",
+      "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_crc_7/initial_sim_output.json",
+      "reason": "",
+      "stage": "post_module_debug",
+      "timestamp": "2026-05-30T13:28:11.024321+00:00"
+    },
+    "sd_crc_16": {
+      "module": "sd_crc_16",
+      "status": "pass",
+      "passed": true,
+      "mismatch_count": 0,
+      "debug_trials": 0,
+      "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_crc_16/rtl.sv",
+      "trace_report_path": "",
+      "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_crc_16/initial_sim_output.json",
+      "reason": "",
+      "stage": "post_module_debug",
+      "timestamp": "2026-05-30T13:28:16.874246+00:00"
+    },
+    "sd_rx_fifo": {
+      "module": "sd_rx_fifo",
+      "status": "fail",
+      "passed": false,
+      "mismatch_count": 45091,
+      "debug_trials": 0,
+      "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_rx_fifo/rtl.sv",
+      "trace_report_path": "",
+      "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_rx_fifo/initial_sim_output.json",
+      "reason": "",
+      "stage": "post_initial_sim",
+      "timestamp": "2026-05-30T13:41:18.583862+00:00"
+    }
+  },
+  "records": {
+    "sd_defines": {
+      "post_module_debug": {
+        "module": "sd_defines",
+        "status": "skipped",
+        "passed": false,
+        "mismatch_count": 0,
+        "debug_trials": 0,
+        "final_rtl_path": "",
+        "trace_report_path": "",
+        "sim_output_path": "",
+        "reason": "Oracle directory not found: no sd_defines/verification under /home/mokita/RealBench or its immediate subdirectories",
+        "stage": "post_module_debug",
+        "timestamp": "2026-05-30T13:28:05.014053+00:00"
+      }
+    },
+    "sd_crc_7": {
+      "post_module_debug": {
+        "module": "sd_crc_7",
+        "status": "pass",
+        "passed": true,
+        "mismatch_count": 0,
+        "debug_trials": 0,
+        "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_crc_7/rtl.sv",
+        "trace_report_path": "",
+        "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_crc_7/initial_sim_output.json",
+        "reason": "",
+        "stage": "post_module_debug",
+        "timestamp": "2026-05-30T13:28:11.024321+00:00"
+      },
+      "post_initial_sim": {
+        "module": "sd_crc_7",
+        "status": "pass",
+        "passed": true,
+        "mismatch_count": 0,
+        "debug_trials": 0,
+        "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_crc_7/rtl.sv",
+        "trace_report_path": "",
+        "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_crc_7/initial_sim_output.json",
+        "reason": "",
+        "stage": "post_initial_sim",
+        "timestamp": "2026-05-30T13:28:10.630423+00:00"
+      }
+    },
+    "sd_crc_16": {
+      "post_module_debug": {
+        "module": "sd_crc_16",
+        "status": "pass",
+        "passed": true,
+        "mismatch_count": 0,
+        "debug_trials": 0,
+        "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_crc_16/rtl.sv",
+        "trace_report_path": "",
+        "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_crc_16/initial_sim_output.json",
+        "reason": "",
+        "stage": "post_module_debug",
+        "timestamp": "2026-05-30T13:28:16.874246+00:00"
+      },
+      "post_initial_sim": {
+        "module": "sd_crc_16",
+        "status": "pass",
+        "passed": true,
+        "mismatch_count": 0,
+        "debug_trials": 0,
+        "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_crc_16/rtl.sv",
+        "trace_report_path": "",
+        "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_crc_16/initial_sim_output.json",
+        "reason": "",
+        "stage": "post_initial_sim",
+        "timestamp": "2026-05-30T13:28:16.512935+00:00"
+      }
+    },
+    "sd_rx_fifo": {
+      "post_initial_sim": {
+        "module": "sd_rx_fifo",
+        "status": "fail",
+        "passed": false,
+        "mismatch_count": 45091,
+        "debug_trials": 0,
+        "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_rx_fifo/rtl.sv",
+        "trace_report_path": "",
+        "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_rx_fifo/initial_sim_output.json",
+        "reason": "",
+        "stage": "post_initial_sim",
+        "timestamp": "2026-05-30T13:41:18.583862+00:00"
+      },
+      "post_module_debug": {
+        "module": "sd_rx_fifo",
+        "status": "fail",
+        "passed": false,
+        "mismatch_count": 0,
+        "debug_trials": 0,
+        "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_rx_fifo/rtl.sv",
+        "trace_report_path": "",
+        "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_rx_fifo/initial_sim_output.json",
+        "reason": "%Warning-EOFNEWLINE: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_rx_fifo/tb.sv:169:10: Missing newline at end of file (POSIX 3.206).\n                                                                                                                : ... Suggest add newline.\n  169 | endmodule\n      |          ^\n                     ... For warning description see https://verilator.org/warn/EOFNEWLINE?v=5.044\n                     ... Use \"/* verilator lint_off EOFNEWLINE */\" and lint_on around source to disable this message.\n%Warning-DECLFILENAME: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_rx_fifo/tb.sv:3:8: Filename 'tb' does not match MODULE name: 'tb_sd_rx_fifo'\n    3 | module tb_sd_rx_fifo();\n      |        ^~~~~~~~~~~~~\n                       ... For warning description see https://verilator.org/warn/DECLFILENAME?v=5.044\n                       ... Use \"/* verilator lint_off DECLFILENAME */\" and lint_on around source to disable this message.\n%Warning-PINCONNECTEMPTY: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_rx_fifo/tb.sv:56:10: Instance pin connected by name with empty reference: 'wavedrom_title'\n   56 |         .wavedrom_title(),\n      |          ^~~~~~~~~~~~~~\n                          ... For warning description see https://verilator.org/warn/PINCONNECTEMPTY?v=5.044\n                          ... Use \"/* verilator lint_off PINCONNECTEMPTY */\" and lint_on around source to disable this message.\n%Warning-DECLFILENAME: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_rx_fifo/rtl.sv:1:8: Filename 'rtl' does not match MODULE name: 'sd_rx_fifo'\n    1 | module sd_rx_fifo (\n      |        ^~~~~~~~~~\n%Warning-DECLFILENAME: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_rx_fifo/support.sv:86:8: Filename 'support' does not match MODULE name: 'ref_sd_rx_fifo'\n   86 | module ref_sd_rx_fifo\n      |        ^~~~~~~~~~~~~~\n%Error: Specified --top-module \n...<snip>...",
+        "stage": "post_module_debug",
+        "timestamp": "2026-05-30T11:54:23.487034+00:00"
+      }
+    }
+  }
+}

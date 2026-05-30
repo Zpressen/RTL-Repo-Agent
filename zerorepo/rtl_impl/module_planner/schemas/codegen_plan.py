@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Literal
+from typing import Any, List, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -28,13 +28,41 @@ class Stage4ModulePlansArtifact(BaseModel):
     schema_version: str = Field(default="module_plans_v1")
     task_id: str = Field(..., min_length=1)
     module_order: List[str] = Field(..., min_length=1)
+    stage4_status: Literal["module_plans_in_progress", "module_plans_planned"] = Field(default="module_plans_planned")
+    completed_modules: List[str] = Field(default_factory=list)
+    resume_cursor: int = Field(default=0, ge=0)
     module_plan_files: List[ModulePlanRecord] = Field(..., min_length=1)
+
+    @model_validator(mode="before")
+    @classmethod
+    def infer_resume_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            data = dict(data)
+            if "completed_modules" not in data:
+                data["completed_modules"] = [item.get("module") for item in data.get("module_plan_files") or []]
+            if "resume_cursor" not in data:
+                data["resume_cursor"] = len(data.get("completed_modules") or [])
+            if "stage4_status" not in data:
+                data["stage4_status"] = (
+                    "module_plans_planned"
+                    if len(data.get("completed_modules") or []) == len(data.get("module_order") or [])
+                    else "module_plans_in_progress"
+                )
+        return data
 
     @model_validator(mode="after")
     def validate_structure(self) -> "Stage4ModulePlansArtifact":
         modules = [item.module for item in self.module_plan_files]
-        if modules != self.module_order:
-            raise ValueError("module_plan_files[].module must exactly match module_order")
+        if self.completed_modules != modules:
+            raise ValueError("completed_modules must exactly match module_plan_files[].module order")
+        if self.completed_modules != self.module_order[: len(self.completed_modules)]:
+            raise ValueError("completed_modules must be a prefix of module_order")
+        if self.resume_cursor != len(self.completed_modules):
+            raise ValueError("resume_cursor must match completed_modules length")
+        if self.resume_cursor > len(self.module_order):
+            raise ValueError("resume_cursor must not exceed module_order length")
+        if self.stage4_status == "module_plans_planned" and self.completed_modules != self.module_order:
+            raise ValueError("final stage4 artifact must cover every module in module_order")
         return self
 
 

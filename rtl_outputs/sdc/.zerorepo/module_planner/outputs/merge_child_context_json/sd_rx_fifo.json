@@ -1,0 +1,10 @@
+{
+  "schema_version": "merge_child_context_v1",
+  "module": "sd_rx_fifo",
+  "kg_enabled": true,
+  "retrieval_requested": false,
+  "retrieval_reason": "Module sd_rx_fifo has no children; dependency context shows empty children list, so no child-module interface or wiring context is needed.",
+  "available_child_modules": [],
+  "requested_child_modules": [],
+  "children": []
+}

@@ -1,0 +1,62 @@
+{
+  "schema_version": "block_spec_retrieval_v1",
+  "module": "sd_data_master",
+  "selections": [
+    {
+      "id": "B1_param_decl",
+      "target": "<block: param_decl>",
+      "spec_refs": [
+        "S008",
+        "S009"
+      ],
+      "selection_reason": [
+        "S008 contains parameter definitions for commands (CMD24, CMD17, CMD12, ACMD13, ACMD51) and FSM state encoding (IDLE, GET_TX_BD, etc.)",
+        "S009 defines conditional compile-time constants READ_CYCLE, BD_EMPTY, and bd_cnt width based on RAM_MEM_WIDTH"
+      ]
+    },
+    {
+      "id": "B2_decl_registers",
+      "target": "<block: decl_registers>",
+      "spec_refs": [
+        "S007"
+      ],
+      "selection_reason": [
+        "S007 provides the complete internal signal table with names, types, widths, and descriptions required for register declarations"
+      ]
+    },
+    {
+      "id": "B3_comb_fsm_ns",
+      "target": "<block: comb_fsm_ns>",
+      "spec_refs": [
+        "S011"
+      ],
+      "selection_reason": [
+        "S011 contains the explicit state transition table with conditions for all state transitions required for combinational next-state logic"
+      ]
+    },
+    {
+      "id": "B4_seq_fsm_and_reg_update",
+      "target": "<block: seq_fsm_and_reg_update>",
+      "spec_refs": [
+        "S014",
+        "S015"
+      ],
+      "selection_reason": [
+        "S014 defines the sequential reset and state-update behavior on clock edge",
+        "S015 specifies detailed per-state register updates, flag settings, handshake-driven actions, and the resend mechanism"
+      ]
+    },
+    {
+      "id": "B5_comb_output_assign",
+      "target": "<block: comb_output_assign>",
+      "spec_refs": [
+        "S015"
+      ],
+      "selection_reason": [
+        "S015 specifies the per-state output signal assertions, which directly map to the combinational output assignment logic"
+      ]
+    }
+  ],
+  "fallback_used": false,
+  "fallback_reason": ""
+}

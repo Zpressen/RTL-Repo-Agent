@@ -33,6 +33,7 @@ from zerorepo.rtl_impl.module_planner.schemas import (
 )
 from zerorepo.rtl_impl.module_planner.utils import (
     PlannerLLMClient,
+    expand_markdown_inputs,
     extract_module_section,
     parse_module_skeleton_doc,
     split_spec_blocks,
@@ -492,6 +493,153 @@ def make_planning_facts_payload(md_path: Path) -> dict:
                         "section_path": "AES Demo Repository > Datapath",
                         "start_line_anchor": "Main flow: initial_addroundkey, subbytes, shiftrows, mixcolumns, addroundkey",
                         "end_line_anchor": "aes_key_expand_128 is an explicit helper block used by aes_cipher_top.",
+                    }
+                ],
+                "image_grounding": [],
+            }
+        ]
+    }
+
+
+def make_module_structure_payload(module_name: str, md_path: Path, *, child: str = "") -> dict:
+    hierarchy = []
+    if child:
+        hierarchy.append(
+            {
+                "parent": module_name,
+                "child": child,
+                "text_grounding": [
+                    {
+                        "source_md_file": str(md_path.resolve()),
+                        "section_path": f"{module_name} > Submodules",
+                        "start_line_anchor": f"{module_name} instantiates {child}.",
+                        "end_line_anchor": f"{module_name} instantiates {child}.",
+                    }
+                ],
+                "image_grounding": [],
+            }
+        )
+    return {
+        "structure_contract": {
+            "system": "Batch Demo",
+            "top_module": module_name if child else "",
+            "files": [],
+            "modules": [module_name, *([child] if child else [])],
+            "file_map": {},
+            "hierarchy": hierarchy,
+            "instantiation_graph": [],
+            "generation_order_candidate": [],
+            "text_grounding": [
+                {
+                    "source_md_file": str(md_path.resolve()),
+                    "section_path": module_name,
+                    "start_line_anchor": f"Module: {module_name}",
+                    "end_line_anchor": f"Module: {module_name}",
+                }
+            ],
+            "image_grounding": [],
+        }
+    }
+
+
+def make_minimal_interface_payload(module_name: str, md_path: Path) -> dict:
+    return {
+        "interface_contracts": [
+            {
+                "module": module_name,
+                "ports": [
+                    {"name": "clk", "direction": "input", "width": "1", "role": "clock", "active": "", "meaning": "clock"}
+                ],
+                "params": [],
+                "clock": "clk",
+                "reset": "",
+                "reset_polarity": "",
+                "handshakes": [],
+                "parameter_constraints": [],
+                "bus_roles": [],
+                "text_grounding": [
+                    {
+                        "source_md_file": str(md_path.resolve()),
+                        "section_path": f"{module_name} > Interface",
+                        "start_line_anchor": "Ports:",
+                        "end_line_anchor": "Ports:",
+                    }
+                ],
+                "image_grounding": [],
+            }
+        ]
+    }
+
+
+def make_minimal_control_payload(module_name: str, md_path: Path) -> dict:
+    return {
+        "control_contracts": [
+            {
+                "module": module_name,
+                "abstract_states": ["IDLE"],
+                "transitions": [],
+                "control_signals": [],
+                "bypass_conditions": [],
+                "exception_conditions": [],
+                "counter_rules": [],
+                "text_grounding": [
+                    {
+                        "source_md_file": str(md_path.resolve()),
+                        "section_path": f"{module_name} > Control",
+                        "start_line_anchor": "States: IDLE",
+                        "end_line_anchor": "States: IDLE",
+                    }
+                ],
+                "image_grounding": [],
+            }
+        ]
+    }
+
+
+def make_minimal_datapath_payload(module_name: str, md_path: Path) -> dict:
+    return {
+        "datapath_contracts": [
+            {
+                "module": module_name,
+                "input_data": [],
+                "main_flow": ["pass_through"],
+                "intermediate_objects": [],
+                "path_annotations": [],
+                "registered_paths": [],
+                "combinational_paths": [],
+                "special_paths": [],
+                "text_grounding": [
+                    {
+                        "source_md_file": str(md_path.resolve()),
+                        "section_path": f"{module_name} > Datapath",
+                        "start_line_anchor": "Main flow: pass_through",
+                        "end_line_anchor": "Main flow: pass_through",
+                    }
+                ],
+                "image_grounding": [],
+            }
+        ]
+    }
+
+
+def make_minimal_planning_facts_payload(module_name: str, md_path: Path, *, child: str = "") -> dict:
+    submodule_facts = []
+    if child:
+        submodule_facts.append({"module": child, "count": 1, "usage": "child block"})
+    return {
+        "planning_facts": [
+            {
+                "module": module_name,
+                "registers": [{"name": f"{module_name}_r", "width": "1", "role": "state"}],
+                "state_names": ["IDLE"],
+                "submodule_facts": submodule_facts,
+                "local_mappings": [],
+                "text_grounding": [
+                    {
+                        "source_md_file": str(md_path.resolve()),
+                        "section_path": f"{module_name} > Planning",
+                        "start_line_anchor": f"Module: {module_name}",
+                        "end_line_anchor": f"Module: {module_name}",
                     }
                 ],
                 "image_grounding": [],
@@ -978,6 +1126,22 @@ def test_base_stage_agent_uses_up_to_five_quality_attempts_and_returns_best_effo
     assert len(backend.calls) == 5
 
 
+def test_expand_markdown_inputs_recurses_directories_and_sorts(tmp_path):
+    specs = tmp_path / "specs"
+    nested = specs / "nested"
+    nested.mkdir(parents=True)
+    b_path = specs / "b.md"
+    a_path = nested / "a.md"
+    ignored = nested / "ignored.txt"
+    b_path.write_text("# B\n", encoding="utf-8")
+    a_path.write_text("# A\n", encoding="utf-8")
+    ignored.write_text("ignore", encoding="utf-8")
+
+    expanded = expand_markdown_inputs([str(specs), str(a_path)])
+
+    assert expanded == sorted({str(a_path.resolve()), str(b_path.resolve())})
+
+
 def test_stage1_agent_runs_all_contract_rounds_without_alias_groups(tmp_path):
     task, md_path, image_paths = make_task_input(tmp_path, image_count=1)
     backend = QueueBackend(
@@ -1003,6 +1167,7 @@ def test_stage1_agent_runs_all_contract_rounds_without_alias_groups(tmp_path):
     assert isinstance(artifact, Stage1ContractsArtifact)
     assert artifact.stage1_status == "contracts_completed"
     assert artifact.completed_rounds == ["structure", "interface", "timing", "control", "datapath", "planning_facts"]
+    assert artifact.completed_batches == ["batch_0001"]
     assert artifact.structure_contract.top_module == "aes_cipher_top"
     assert artifact.interface_contracts[0].ports[0].name == "clk"
     assert artifact.timing_contracts[0].clocking["clock"] == "clk"
@@ -1013,6 +1178,68 @@ def test_stage1_agent_runs_all_contract_rounds_without_alias_groups(tmp_path):
     assert "entity_alias_groups" not in artifact.model_dump()
     assert context_provider.calls == ["stage1_contracts"]
     assert sink.calls == [("stage1_contracts", "aes_demo_001")]
+
+
+def test_stage1_agent_batches_directory_specs_and_reduces_hierarchy(tmp_path):
+    specs_dir = tmp_path / "batch_specs"
+    specs_dir.mkdir()
+    module_paths = []
+    for index in range(1, 7):
+        module_name = f"mod_{index}"
+        md_path = specs_dir / f"{module_name}.md"
+        md_path.write_text(
+            "\n".join(
+                [
+                    f"# {module_name}",
+                    f"Module: {module_name}",
+                    "Ports:",
+                    "- clk: input, width 1, role clock",
+                    "States: IDLE",
+                    "Main flow: pass_through",
+                    *(["mod_1 instantiates mod_6."] if module_name == "mod_1" else []),
+                ]
+            ),
+            encoding="utf-8",
+        )
+        module_paths.append(md_path)
+
+    responses = []
+    for module_name, md_path, child in [
+        ("mod_1", module_paths[0], "mod_6"),
+        ("mod_6", module_paths[5], ""),
+    ]:
+        responses.extend(
+            [
+                make_module_structure_payload(module_name, md_path, child=child),
+                make_minimal_interface_payload(module_name, md_path),
+                {"timing_contracts": []},
+                make_minimal_control_payload(module_name, md_path),
+                make_minimal_datapath_payload(module_name, md_path),
+                make_minimal_planning_facts_payload(module_name, md_path, child=child),
+            ]
+        )
+    task = PlannerTaskInput(
+        task_id="mod_1_demo",
+        spec_md_files=[str(specs_dir)],
+        spec_images=[],
+        project_type="light_repo_spec2rtl",
+        notes="batch test",
+    )
+    backend = QueueBackend(responses)
+    agent = Stage1Agent(PlannerLLMClient(backend=backend))
+
+    artifact = agent.run(task, {})
+
+    assert artifact.completed_batches == ["batch_0001", "batch_0002"]
+    assert list(artifact.spec_index) == [f"mod_{index}" for index in range(1, 7)]
+    assert set(artifact.structure_contract.modules) == {f"mod_{index}" for index in range(1, 7)}
+    assert [(item.parent, item.child) for item in artifact.structure_contract.hierarchy] == [("mod_1", "mod_6")]
+    assert artifact.structure_contract.generation_order_candidate.index("mod_6") < artifact.structure_contract.generation_order_candidate.index("mod_1")
+    assert len(backend.calls) == 12
+    assert backend.calls[0]["user_prompt"].count("[Document DOC_") == 5
+    assert backend.calls[6]["user_prompt"].count("[Document DOC_") == 1
+    organized = build_module_organized_artifact(artifact)
+    assert organized.module_order[:6] == [f"mod_{index}" for index in range(1, 7)]
 
 
 def test_stage1_agent_passes_existing_contracts_into_later_round_prompts(tmp_path):
@@ -1214,7 +1441,7 @@ def test_stage1_agent_leaves_missing_information_blank(tmp_path):
     artifact = agent.run(task, {})
 
     assert artifact.structure_contract.top_module == ""
-    assert artifact.structure_contract.modules == []
+    assert artifact.structure_contract.modules == ["empty"]
     assert artifact.interface_contracts == []
     assert artifact.planning_facts == []
     assert "image_contracts" not in artifact.model_dump()
@@ -1450,12 +1677,13 @@ def test_planner_runner_writes_incremental_contract_statuses(tmp_path):
     runner.run(task, end_stage="stage1")
 
     assert writes == [
-        "structure_completed",
-        "interface_completed",
-        "timing_completed",
-        "control_completed",
-        "datapath_completed",
-        "planning_facts_completed",
+        "batch_0001_structure_completed",
+        "batch_0001_interface_completed",
+        "batch_0001_timing_completed",
+        "batch_0001_control_completed",
+        "batch_0001_datapath_completed",
+        "batch_0001_planning_facts_completed",
+        "batch_0001_completed",
         "contracts_completed",
     ]
 
@@ -2577,6 +2805,37 @@ def test_stage3_agent_builds_module_skeletons_incrementally(tmp_path):
     assert '"module_skeleton"' not in backend.calls[0]["user_prompt"]
 
 
+def test_stage3_agent_resolves_specs_from_directory_input(tmp_path):
+    specs_dir = tmp_path / "specs"
+    specs_dir.mkdir()
+    top_spec, key_spec = make_module_spec_files(specs_dir)
+    task, _, _ = make_task_input(tmp_path, image_count=1)
+    task = PlannerTaskInput(
+        task_id=task.task_id,
+        spec_md_files=[str(specs_dir)],
+        spec_images=[],
+        project_type=task.project_type,
+        notes=task.notes,
+    )
+    stage1_artifact = make_stage1_contract_artifact(top_spec, [])
+    modules_artifact = build_module_organized_artifact(stage1_artifact)
+    stage2_artifact = validate_model(Stage2RepoSkeletonArtifact, make_repo_skeleton_payload())
+    backend = QueueBackend(
+        [
+            make_stage3_module_skeleton_doc("aes_key_expand_128", key_spec),
+            make_stage3_module_skeleton_doc("aes_cipher_top", top_spec),
+        ]
+    )
+    agent = Stage3Agent(PlannerLLMClient(backend=backend))
+
+    artifact = agent.run_incremental(task, {"modules": modules_artifact, "stage2": stage2_artifact})
+
+    assert artifact.stage3_status == "module_skeletons_planned"
+    assert [item.module for item in artifact.module_records] == ["aes_key_expand_128", "aes_cipher_top"]
+    assert "KEYEXP UNIQUE SPEC MARKER" in backend.calls[0]["user_prompt"]
+    assert "TOP UNIQUE SPEC MARKER" in backend.calls[1]["user_prompt"]
+
+
 def test_stage3_agent_requires_standalone_module_spec_files(tmp_path):
     task, md_path, image_paths = make_task_input(tmp_path, image_count=1)
     stage1_artifact = make_stage1_contract_artifact(md_path, image_paths)
@@ -2648,6 +2907,115 @@ def test_stage3_agent_resume_regenerates_missing_sidecars(tmp_path):
     assert len(backend.calls) == 2
 
 
+def test_stage3_agent_resume_uses_cursor_and_skips_completed_sidecar(tmp_path):
+    task, md_path, image_paths = make_task_input(tmp_path, image_count=1)
+    top_spec, key_spec = make_module_spec_files(tmp_path)
+    top_spec.write_text(md_path.read_text(encoding="utf-8"), encoding="utf-8")
+    stage1_artifact = make_stage1_contract_artifact(md_path, image_paths)
+    modules_artifact = build_module_organized_artifact(stage1_artifact)
+    stage2_artifact = validate_model(Stage2RepoSkeletonArtifact, make_repo_skeleton_payload())
+    output_root = tmp_path / "outputs"
+    (output_root / "module_skeleton_docs").mkdir(parents=True)
+    (output_root / "module_skeleton_json").mkdir(parents=True)
+
+    completed_doc = make_stage3_module_skeleton_doc("aes_key_expand_128", key_spec)
+    completed_export = parse_module_skeleton_doc(
+        completed_doc,
+        expected_module="aes_key_expand_128",
+        expected_file_path="rtl/aes_key_expand_128.v",
+        source_refs={
+            "module_contract_ref": "module_contracts_v1::aes_key_expand_128",
+            "repo_skeleton_ref": "repo_skeleton_v1::aes_key_expand_128",
+            "module_spec_file": str(key_spec.resolve()),
+        },
+    )
+    (output_root / "module_skeleton_docs" / "aes_key_expand_128.md").write_text(completed_doc, encoding="utf-8")
+    (output_root / "module_skeleton_json" / "aes_key_expand_128.json").write_text(
+        json.dumps(completed_export.model_dump(), indent=2),
+        encoding="utf-8",
+    )
+    existing_manifest = {
+        "schema_version": "stage3_skeleton_docs_v1",
+        "task_id": task.task_id,
+        "source_schema_versions": {
+            "modules": modules_artifact.schema_version,
+            "repo_skeleton": stage2_artifact.schema_version,
+        },
+        "stage3_status": "module_skeletons_in_progress",
+        "top_module": stage2_artifact.top_module,
+        "module_order": ["aes_key_expand_128", "aes_cipher_top"],
+        "completed_modules": ["aes_key_expand_128"],
+        "resume_cursor": 1,
+        "global_summary": ["resume test"],
+        "module_records": [
+            {
+                "module": "aes_key_expand_128",
+                "doc_file": "module_skeleton_docs/aes_key_expand_128.md",
+                "export_file": "module_skeleton_json/aes_key_expand_128.json",
+                "export_schema_version": "module_skeleton_export_v1",
+                "source_refs": {
+                    "module_contract_ref": "module_contracts_v1::aes_key_expand_128",
+                    "repo_skeleton_ref": "repo_skeleton_v1::aes_key_expand_128",
+                    "module_spec_file": str(key_spec.resolve()),
+                },
+                "planning_note": "completed checkpoint",
+                "block_ids": [item.block_id for item in completed_export.structural_blocks],
+            }
+        ],
+        "open_issues": [],
+        "quality_report": None,
+    }
+    backend = QueueBackend([make_stage3_module_skeleton_doc("aes_cipher_top", top_spec)])
+    agent = Stage3Agent(PlannerLLMClient(backend=backend), output_root=output_root)
+
+    artifact = agent.run_incremental(
+        task,
+        {"modules": modules_artifact, "stage2": stage2_artifact, "stage3": existing_manifest},
+    )
+
+    assert artifact.stage3_status == "module_skeletons_planned"
+    assert artifact.completed_modules == ["aes_key_expand_128", "aes_cipher_top"]
+    assert artifact.resume_cursor == 2
+    assert len(backend.calls) == 1
+    assert "TOP UNIQUE SPEC MARKER" in backend.calls[0]["user_prompt"]
+    assert "KEYEXP UNIQUE SPEC MARKER" not in backend.calls[0]["user_prompt"]
+
+
+def test_stage3_agent_reuses_definition_only_undecided_export(tmp_path):
+    spec_path = tmp_path / "sd_defines.md"
+    spec_path.write_text("# sd_defines\nDefinition constants only.\n", encoding="utf-8")
+    output_root = tmp_path / "outputs"
+    (output_root / "module_skeleton_docs").mkdir(parents=True)
+    (output_root / "module_skeleton_json").mkdir(parents=True)
+    doc = make_stage3_module_skeleton_doc("sd_defines", spec_path).replace(
+        "- control_style: mixed",
+        "- control_style: undecided",
+    )
+    export = parse_module_skeleton_doc(
+        doc,
+        expected_module="sd_defines",
+        expected_file_path="rtl/sd_defines.v",
+        source_refs={
+            "module_contract_ref": "module_contracts_v1::sd_defines",
+            "repo_skeleton_ref": "repo_skeleton_v1::sd_defines",
+            "module_spec_file": str(spec_path.resolve()),
+        },
+    )
+    (output_root / "module_skeleton_docs" / "sd_defines.md").write_text(doc, encoding="utf-8")
+    (output_root / "module_skeleton_json" / "sd_defines.json").write_text(
+        json.dumps(export.model_dump(), indent=2),
+        encoding="utf-8",
+    )
+    agent = Stage3Agent(PlannerLLMClient(backend=QueueBackend([])), output_root=output_root)
+    record = agent._build_module_record(export)
+
+    assert agent._record_is_reusable(
+        record,
+        expected_module="sd_defines",
+        expected_spec_path=str(spec_path),
+    )
+
+
 def test_stage3_parser_builds_export_from_doc(tmp_path):
     spec_path = tmp_path / "aes_cipher_top.md"
     spec_path.write_text("# aes_cipher_top\n", encoding="utf-8")
@@ -2668,6 +3036,31 @@ def test_stage3_parser_builds_export_from_doc(tmp_path):
     assert export.module == "aes_cipher_top"
     assert export.module_behavior.control_style == "counter_driven"
     assert any(item.block_kind == "helper" for item in export.structural_blocks)
+
+
+def test_stage3_parser_defaults_partial_state_model_entries(tmp_path):
+    spec_path = tmp_path / "sdc_controller.md"
+    spec_path.write_text("# sdc_controller\n", encoding="utf-8")
+    doc = make_stage3_module_skeleton_doc("sdc_controller", spec_path).replace(
+        "  - object: round_key_reg\n    storage_kind: registered\n    representation: packed vector\n    notes: primary stored representation for the module",
+        "  - object: no top-level registered state objects; state held inside sub-modules",
+    )
+
+    export = parse_module_skeleton_doc(
+        doc,
+        expected_module="sdc_controller",
+        expected_file_path="rtl/sdc_controller.v",
+        source_refs={
+            "module_contract_ref": "module_contracts_v1::sdc_controller",
+            "repo_skeleton_ref": "repo_skeleton_v1::sdc_controller",
+            "module_spec_file": str(spec_path.resolve()),
+        },
+    )
+
+    state_entry = export.module_behavior.state_model[0]
+    assert state_entry.object == "no top-level registered state objects; state held inside sub-modules"
+    assert state_entry.storage_kind == "unspecified"
+    assert state_entry.representation == "implementation-open"
 
 
 def test_spec_block_splitter_handles_bold_numbered_headings():

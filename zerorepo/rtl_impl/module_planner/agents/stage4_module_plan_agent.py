@@ -62,7 +62,19 @@ class Stage4ModulePlanAgent(BaseStageAgent):
         record_by_module = {item.module: item for item in stage3.module_records}
 
         records: List[ModulePlanRecord] = []
-        for module_name in stage3.module_order:
+        existing_artifact = self._get_existing_stage4_artifact(partial_artifacts)
+        if existing_artifact is not None:
+            if existing_artifact.task_id != task.task_id:
+                raise ValueError(f"Stage4 resume artifact task_id must remain {task.task_id}")
+            if existing_artifact.module_order != stage3.module_order:
+                raise ValueError("Stage4 resume artifact module_order must match stage3.module_order")
+            records.extend(existing_artifact.module_plan_files)
+            self.logger.info(
+                "[%s] Reusing %d completed module plan checkpoint(s)",
+                self.stage_name,
+                len(records),
+            )
+        for module_name in stage3.module_order[len(records) :]:
             if module_name not in module_spec_by_name:
                 raise ValueError(f"Stage4 module planning requires spec blocks for `{module_name}`")
             if module_name not in record_by_module:
@@ -149,6 +161,9 @@ class Stage4ModulePlanAgent(BaseStageAgent):
                             "schema_version": "module_plans_v1",
                             "task_id": task.task_id,
                             "module_order": list(stage3.module_order),
+                            "stage4_status": "module_plans_in_progress",
+                            "completed_modules": [item.module for item in records],
+                            "resume_cursor": len(records),
                             "module_plan_files": [model_dump(item) for item in records],
                         },
                     }
@@ -157,6 +172,9 @@ class Stage4ModulePlanAgent(BaseStageAgent):
         artifact = Stage4ModulePlansArtifact(
             task_id=task.task_id,
             module_order=list(stage3.module_order),
+            stage4_status="module_plans_planned",
+            completed_modules=[item.module for item in records],
+            resume_cursor=len(records),
             module_plan_files=records,
         )
         quality_errors = self.validate_quality(artifact, task, partial_artifacts)
@@ -185,8 +203,15 @@ class Stage4ModulePlanAgent(BaseStageAgent):
             errors.append(f"task_id must remain {task_input.task_id}")
         if artifact.module_order != stage3.module_order:
             errors.append("module_order must match stage3.module_order")
-        if [item.module for item in artifact.module_plan_files] != artifact.module_order:
-            errors.append("module_plan_files[].module must exactly match module_order")
+        modules = [item.module for item in artifact.module_plan_files]
+        if artifact.completed_modules != modules:
+            errors.append("completed_modules must exactly match module_plan_files[].module order")
+        if modules != artifact.module_order[: len(modules)]:
+            errors.append("module_plan_files[].module must be a prefix of module_order")
+        if artifact.resume_cursor != len(modules):
+            errors.append("resume_cursor must match completed module plan count")
+        if artifact.stage4_status == "module_plans_planned" and modules != artifact.module_order:
+            errors.append("final module_plan_files[].module must exactly match module_order")
         for record in artifact.module_plan_files:
             expected_file = self._plan_relative_path(record.module)
             if record.plan_file != expected_file:
@@ -234,8 +259,8 @@ class Stage4ModulePlanAgent(BaseStageAgent):
             subtask = artifact.subtasks[index]
             if subtask.id != expected_block.subtask_id:
                 errors.append(f"subtask {index + 1}: id must be {expected_block.subtask_id}")
-            if subtask.target != expected_block.target:
-                errors.append(f"{subtask.id}: target must be exact skeleton placeholder {expected_block.target}")
+            if not _target_matches_block(subtask.target, expected_block):
+                errors.append(f"{subtask.id}: target must reference skeleton placeholder {expected_block.target}")
             unknown_refs = [item for item in subtask.spec_refs if item not in valid_spec_ids]
             if unknown_refs:
                 errors.append(f"{subtask.id}: unknown spec_refs {unknown_refs}")
@@ -264,6 +289,14 @@ class Stage4ModulePlanAgent(BaseStageAgent):
         if isinstance(candidate, Stage4SpecBlocksArtifact):
             return candidate
         return validate_model(Stage4SpecBlocksArtifact, candidate)
+
+    def _get_existing_stage4_artifact(self, partial_artifacts: Dict[str, Any]) -> Stage4ModulePlansArtifact | None:
+        candidate = partial_artifacts.get("stage4_existing")
+        if candidate is None:
+            return None
+        if isinstance(candidate, Stage4ModulePlansArtifact):
+            return candidate
+        return validate_model(Stage4ModulePlansArtifact, candidate)
 
     def _resolve_output_path(self, relative_or_absolute: str) -> Path:
         path = Path(relative_or_absolute)
@@ -314,7 +347,12 @@ class _SkeletonBlock:
 
 def _extract_skeleton_blocks(skeleton_markdown: str) -> List[_SkeletonBlock]:
     markers = re.findall(r"<block:\s*([^>]+?)\s*>", skeleton_markdown)
-    marker_by_key = {marker.strip(): f"<block: {marker.strip()}>" for marker in markers}
+    marker_by_key: Dict[str, str] = {}
+    for marker in markers:
+        marker_text = marker.strip()
+        target = f"<block: {marker_text}>"
+        marker_by_key.setdefault(marker_text, target)
+        marker_by_key.setdefault(_normalize_block_marker(marker_text), target)
     blocks: List[_SkeletonBlock] = []
     for subsection in re.split(r"^###\s+Block\s*$", skeleton_markdown, flags=re.MULTILINE)[1:]:
         block_id_match = re.search(r"^\s*[-*]\s+block_id:\s*(\S+)\s*$", subsection, flags=re.MULTILINE)
@@ -326,9 +364,14 @@ def _extract_skeleton_blocks(skeleton_markdown: str) -> List[_SkeletonBlock]:
         block_label = label_match.group(1).strip()
         block_kind = kind_match.group(1).strip() if kind_match else ""
         subtask_id = f"{block_id}_{block_label}"
-        target = marker_by_key.get(subtask_id) or marker_by_key.get(block_label)
+        target = (
+            marker_by_key.get(subtask_id)
+            or marker_by_key.get(block_label)
+            or marker_by_key.get(_normalize_block_marker(subtask_id))
+            or marker_by_key.get(_normalize_block_marker(block_label))
+        )
         if target is None:
-            raise ValueError(f"Could not find exact <block: ...> placeholder for `{subtask_id}`")
+            target = f"<block: {block_label}>"
         blocks.append(
             _SkeletonBlock(
                 block_id=block_id,
@@ -341,6 +384,22 @@ def _extract_skeleton_blocks(skeleton_markdown: str) -> List[_SkeletonBlock]:
     if not blocks:
         raise ValueError("Module skeleton markdown must contain at least one `### Block` subsection")
     return blocks
+
+
+def _target_matches_block(target: str, expected_block: _SkeletonBlock) -> bool:
+    normalized_target = _normalize_block_marker(target)
+    candidates = {
+        _normalize_block_marker(expected_block.target),
+        _normalize_block_marker(expected_block.block_label),
+        _normalize_block_marker(expected_block.subtask_id),
+    }
+    return normalized_target in candidates
+
+
+def _normalize_block_marker(value: str) -> str:
+    normalized = value.strip().lower()
+    normalized = re.sub(r"[^a-z0-9]+", "_", normalized)
+    return normalized.strip("_")
 
 
 def _find_interface_spec_block_ids(module_spec: ModuleSpecBlocks) -> List[str]:

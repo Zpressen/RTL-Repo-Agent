@@ -24,7 +24,7 @@ def _verilator_has_fatal(stdout: str, stderr: str) -> bool:
     return ("syntax error" in text) or ("error:" in text)
 
 
-def check_syntax(rtl_path: str) -> Tuple[bool, str]:
+def check_syntax(rtl_path: str, top_module: str | None = None) -> Tuple[bool, str]:
     _require_executable("verilator")
     rtl_dir = os.path.dirname(os.path.abspath(rtl_path))
     # Collect all .sv and .v files in the directory so Verilator can resolve
@@ -33,8 +33,9 @@ def check_syntax(rtl_path: str) -> Tuple[bool, str]:
     if not src_files:
         src_files = [rtl_path]
     srcs = " ".join(src_files)
-    cmd = f"verilator --lint-only --sv --timing -Wall -Wno-fatal --assert {srcs}"
-    is_pass, sim_output = run_bash_command(cmd, timeout=60)
+    top_flag = f"--top-module {top_module} " if top_module else ""
+    cmd = f"verilator --lint-only --sv --timing -Wall -Wno-fatal --assert {top_flag}{srcs}"
+    is_pass, sim_output = run_bash_command(cmd, timeout=60, cwd=rtl_dir)
     sim_output_obj = CommandResult.model_validate_json(sim_output)
     stdout = sim_output_obj.stdout or ""
     stderr = sim_output_obj.stderr or ""
@@ -95,6 +96,18 @@ def sim_review(
     # - Use --trace so $dumpfile/$dumpvars can generate wave.vcd for debugging.
     # - Use --assert (or default-on in newer versions) for assertion support.
     srcs = f"{tb_path} {rtl_path} {golden_rtl_path}".strip()
+    # Auto-detect testbench top module name (most oracle testbenches use `tb`,
+    # but some use `tb_{module_name}`).
+    tb_top = "tb"
+    if os.path.isfile(tb_path):
+        try:
+            with open(tb_path, "r", encoding="utf-8") as fh:
+                tb_text = fh.read()
+            m = re.search(r"^\s*module\s+(\w+)", tb_text, re.MULTILINE)
+            if m:
+                tb_top = m.group(1)
+        except OSError:
+            pass
     realbench_warning_flags = (
         "-Wno-CASEOVERLAP -Wno-LATCH -Wno-UNOPTFLAT -Wno-MULTIDRIVEN "
         "-Wno-ASCRANGE -Wno-IMPLICIT -Wno-CASEINCOMPLETE -Wno-PINMISSING "
@@ -102,7 +115,7 @@ def sim_review(
     )
     cmd = (
         "verilator -cc --exe --binary --sv --timing --trace --assert --coverage-line -fno-table "
-        f"{realbench_warning_flags} -j 4 -fno-table --top tb -Wall -Wno-fatal "
+        f"{realbench_warning_flags} -j 4 -fno-table --top {tb_top} -Wall -Wno-fatal "
         f"-y {output_path_per_run} --Mdir obj_dir -o {sim_bin} {srcs}; "
         f"{sim_bin}"
     )

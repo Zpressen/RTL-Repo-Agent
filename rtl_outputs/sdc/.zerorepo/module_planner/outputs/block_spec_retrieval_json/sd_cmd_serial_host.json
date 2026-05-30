@@ -1,0 +1,95 @@
+{
+  "schema_version": "block_spec_retrieval_v1",
+  "module": "sd_cmd_serial_host",
+  "selections": [
+    {
+      "id": "B1_decl_core_objects",
+      "target": "<block: decl_core_objects>",
+      "spec_refs": [
+        "S002",
+        "S003",
+        "S006"
+      ],
+      "selection_reason": [
+        "S002 and S003 define the module input and output ports needed for the module interface; required by rule for first declaration block.",
+        "S006 lists all internal constants, FSM state encodings, and register/wire declarations that B1 must declare."
+      ]
+    },
+    {
+      "id": "B2_inst_crc7",
+      "target": "<block: inst_crc7>",
+      "spec_refs": [
+        "S016"
+      ],
+      "selection_reason": [
+        "S016 provides the exact sd_crc_7 submodule interface needed for instantiation."
+      ]
+    },
+    {
+      "id": "B3_sync_req",
+      "target": "<block: sync_req>",
+      "spec_refs": [
+        "S009"
+      ],
+      "selection_reason": [
+        "S009 describes the two-flip-flop REQ synchronizer behavior directly."
+      ]
+    },
+    {
+      "id": "B4_sync_ack",
+      "target": "<block: sync_ack>",
+      "spec_refs": [
+        "S010"
+      ],
+      "selection_reason": [
+        "S010 describes the two-flip-flop ACK synchronizer behavior directly."
+      ]
+    },
+    {
+      "id": "B5_command_decoder",
+      "target": "<block: command_decoder>",
+      "spec_refs": [
+        "S011",
+        "S005"
+      ],
+      "selection_reason": [
+        "S011 details the sequential decoding logic for SETTING_IN.",
+        "S005 defines the bit assignments of SETTING_IN that the decoder must extract."
+      ]
+    },
+    {
+      "id": "B6_fsm_combo",
+      "target": "<block: fsm_combo>",
+      "spec_refs": [
+        "S007"
+      ],
+      "selection_reason": [
+        "S007 contains the complete state transition table for the combinational next-state logic."
+      ]
+    },
+    {
+      "id": "B7_fsm_seq_state_update",
+      "target": "<block: fsm_seq_state_update>",
+      "spec_refs": [
+        "S008"
+      ],
+      "selection_reason": [
+        "S008 describes the sequential state update logic (FSM_SEQ) directly."
+      ]
+    },
+    {
+      "id": "B8_fsm_out",
+      "target": "<block: fsm_out>",
+      "spec_refs": [
+        "S012",
+        "S005"
+      ],
+      "selection_reason": [
+        "S012 details the per-state output control, CRC management, and counter updates.",
+        "S005 provides the STATUS register bit layout needed for correct status updates."
+      ]
+    }
+  ],
+  "fallback_used": false,
+  "fallback_reason": ""
+}

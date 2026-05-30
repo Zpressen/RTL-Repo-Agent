@@ -1,0 +1,382 @@
+{
+  "schema_version": "repo_skeleton_v1",
+  "task_id": "sdc",
+  "source_schema_version": "module_contracts_v1",
+  "stage2_status": "repo_skeleton_planned",
+  "top_module": "sdc_controller",
+  "global_invariants": {
+    "system_role": "SD card controller with Wishbone bus interface",
+    "clocking_model": {
+      "primary_clock": "wb_clk_i",
+      "reset_signal": "rst",
+      "reset_style": "Asynchronous active-high reset for most modules; multiple clock domains (wb_clk_i and sd_clk)"
+    },
+    "hierarchy": [
+      {
+        "parent": "sd_cmd_serial_host",
+        "child": "sd_crc_7"
+      },
+      {
+        "parent": "sd_data_serial_host",
+        "child": "sd_crc_16"
+      },
+      {
+        "parent": "sd_fifo_rx_filler",
+        "child": "sd_rx_fifo"
+      },
+      {
+        "parent": "sd_fifo_tx_filler",
+        "child": "sd_tx_fifo"
+      },
+      {
+        "parent": "sdc_controller",
+        "child": "sd_controller_wb"
+      },
+      {
+        "parent": "sdc_controller",
+        "child": "sd_clock_divider"
+      },
+      {
+        "parent": "sdc_controller",
+        "child": "sd_cmd_master"
+      },
+      {
+        "parent": "sdc_controller",
+        "child": "sd_cmd_serial_host"
+      },
+      {
+        "parent": "sdc_controller",
+        "child": "sd_data_master"
+      },
+      {
+        "parent": "sdc_controller",
+        "child": "sd_data_serial_host"
+      },
+      {
+        "parent": "sdc_controller",
+        "child": "sd_bd"
+      },
+      {
+        "parent": "sdc_controller",
+        "child": "sd_fifo_tx_filler"
+      },
+      {
+        "parent": "sdc_controller",
+        "child": "sd_fifo_rx_filler"
+      }
+    ],
+    "file_map": {
+      "sd_defines": "rtl/sd_defines.v",
+      "sd_crc_7": "rtl/sd_crc_7.v",
+      "sd_crc_16": "rtl/sd_crc_16.v",
+      "sd_rx_fifo": "rtl/sd_rx_fifo.v",
+      "sd_tx_fifo": "rtl/sd_tx_fifo.v",
+      "sd_bd": "rtl/sd_bd.v",
+      "sd_clock_divider": "rtl/sd_clock_divider.v",
+      "sd_controller_wb": "rtl/sd_controller_wb.v",
+      "sd_cmd_master": "rtl/sd_cmd_master.v",
+      "sd_data_master": "rtl/sd_data_master.v",
+      "sd_cmd_serial_host": "rtl/sd_cmd_serial_host.v",
+      "sd_data_serial_host": "rtl/sd_data_serial_host.v",
+      "sd_fifo_rx_filler": "rtl/sd_fifo_rx_filler.v",
+      "sd_fifo_tx_filler": "rtl/sd_fifo_tx_filler.v",
+      "sdc_controller": "rtl/sdc_controller.v"
+    },
+    "cross_module_alignment": [
+      "sdc_controller instantiates sd_clock_divider to generate sd_clk, which is used by sd_cmd_serial_host and sd_data_serial_host",
+      "sd_cmd_master and sd_cmd_serial_host communicate via request/acknowledge handshake (req_out/ack_in and req_in/ack_out)",
+      "sd_data_master controls sd_fifo_tx_filler and sd_fifo_rx_filler for DMA transfers",
+      "sd_data_master also interfaces with sd_data_serial_host to start data transfers",
+      "sd_bd is instantiated twice in sdc_controller for Tx and Rx buffer descriptors"
+    ],
+    "global_data_conventions": [
+      "Data bus widths and parameter definitions are provided by sd_defines"
+    ]
+  },
+  "modules": [
+    {
+      "module": "sd_defines",
+      "file_path": "rtl/sd_defines.v",
+      "role": "Global parameter definitions for SD controller",
+      "kind": "leaf_combinational",
+      "parents": [],
+      "children": [],
+      "instance_hints": [],
+      "repo_notes": [
+        "Not a synthesizable module; provides constants for bus widths, clock dividers, etc."
+      ]
+    },
+    {
+      "module": "sd_crc_7",
+      "file_path": "rtl/sd_crc_7.v",
+      "role": "7-bit CRC generator",
+      "kind": "leaf_stateful",
+      "parents": [
+        "sd_cmd_serial_host"
+      ],
+      "children": [],
+      "instance_hints": [],
+      "repo_notes": []
+    },
+    {
+      "module": "sd_crc_16",
+      "file_path": "rtl/sd_crc_16.v",
+      "role": "16-bit CRC generator",
+      "kind": "leaf_stateful",
+      "parents": [
+        "sd_data_serial_host"
+      ],
+      "children": [],
+      "instance_hints": [],
+      "repo_notes": []
+    },
+    {
+      "module": "sd_rx_fifo",
+      "file_path": "rtl/sd_rx_fifo.v",
+      "role": "Receive FIFO buffer (dual-clock)",
+      "kind": "leaf_stateful",
+      "parents": [
+        "sd_fifo_rx_filler"
+      ],
+      "children": [],
+      "instance_hints": [],
+      "repo_notes": [
+        "Accumulates 4-bit nibbles into 32-bit words"
+      ]
+    },
+    {
+      "module": "sd_tx_fifo",
+      "file_path": "rtl/sd_tx_fifo.v",
+      "role": "Transmit FIFO buffer (dual-clock)",
+      "kind": "leaf_stateful",
+      "parents": [
+        "sd_fifo_tx_filler"
+      ],
+      "children": [],
+      "instance_hints": [],
+      "repo_notes": []
+    },
+    {
+      "module": "sd_bd",
+      "file_path": "rtl/sd_bd.v",
+      "role": "Buffer descriptor manager",
+      "kind": "leaf_stateful",
+      "parents": [
+        "sdc_controller"
+      ],
+      "children": [],
+      "instance_hints": [],
+      "repo_notes": [
+        "Instantiated twice in sdc_controller for Tx and Rx buffer descriptors"
+      ]
+    },
+    {
+      "module": "sd_clock_divider",
+      "file_path": "rtl/sd_clock_divider.v",
+      "role": "Clock divider for SD card clock",
+      "kind": "leaf_stateful",
+      "parents": [
+        "sdc_controller"
+      ],
+      "children": [],
+      "instance_hints": [],
+      "repo_notes": []
+    },
+    {
+      "module": "sd_controller_wb",
+      "file_path": "rtl/sd_controller_wb.v",
+      "role": "Wishbone slave register file and control",
+      "kind": "leaf_stateful",
+      "parents": [
+        "sdc_controller"
+      ],
+      "children": [],
+      "instance_hints": [],
+      "repo_notes": []
+    },
+    {
+      "module": "sd_cmd_master",
+      "file_path": "rtl/sd_cmd_master.v",
+      "role": "Command master FSM for SD commands",
+      "kind": "iterative_engine",
+      "parents": [
+        "sdc_controller"
+      ],
+      "children": [],
+      "instance_hints": [],
+      "repo_notes": []
+    },
+    {
+      "module": "sd_data_master",
+      "file_path": "rtl/sd_data_master.v",
+      "role": "Data master FSM for SD data transfers",
+      "kind": "iterative_engine",
+      "parents": [
+        "sdc_controller"
+      ],
+      "children": [],
+      "instance_hints": [],
+      "repo_notes": []
+    },
+    {
+      "module": "sd_cmd_serial_host",
+      "file_path": "rtl/sd_cmd_serial_host.v",
+      "role": "Serial command interface host",
+      "kind": "iterative_engine",
+      "parents": [
+        "sdc_controller"
+      ],
+      "children": [
+        "sd_crc_7"
+      ],
+      "instance_hints": [],
+      "repo_notes": [
+        "Instantiates sd_crc_7 for CRC checking"
+      ]
+    },
+    {
+      "module": "sd_data_serial_host",
+      "file_path": "rtl/sd_data_serial_host.v",
+      "role": "Serial data interface host",
+      "kind": "iterative_engine",
+      "parents": [
+        "sdc_controller"
+      ],
+      "children": [
+        "sd_crc_16"
+      ],
+      "instance_hints": [],
+      "repo_notes": [
+        "Instantiates sd_crc_16 for data CRC"
+      ]
+    },
+    {
+      "module": "sd_fifo_rx_filler",
+      "file_path": "rtl/sd_fifo_rx_filler.v",
+      "role": "RX FIFO filler DMA controller",
+      "kind": "leaf_stateful",
+      "parents": [
+        "sdc_controller"
+      ],
+      "children": [
+        "sd_rx_fifo"
+      ],
+      "instance_hints": [],
+      "repo_notes": [
+        "Instantiates sd_rx_fifo; handles Wishbone read from FIFO to memory"
+      ]
+    },
+    {
+      "module": "sd_fifo_tx_filler",
+      "file_path": "rtl/sd_fifo_tx_filler.v",
+      "role": "TX FIFO filler DMA controller",
+      "kind": "leaf_stateful",
+      "parents": [
+        "sdc_controller"
+      ],
+      "children": [
+        "sd_tx_fifo"
+      ],
+      "instance_hints": [],
+      "repo_notes": [
+        "Instantiates sd_tx_fifo; handles Wishbone write from memory to FIFO"
+      ]
+    },
+    {
+      "module": "sdc_controller",
+      "file_path": "rtl/sdc_controller.v",
+      "role": "Top-level SD card controller",
+      "kind": "top_controller",
+      "parents": [],
+      "children": [
+        "sd_controller_wb",
+        "sd_clock_divider",
+        "sd_cmd_master",
+        "sd_cmd_serial_host",
+        "sd_data_master",
+        "sd_data_serial_host",
+        "sd_bd",
+        "sd_fifo_tx_filler",
+        "sd_fifo_rx_filler"
+      ],
+      "instance_hints": [
+        {
+          "module": "sd_controller_wb",
+          "count": 1,
+          "usage": "WISHBONE slave configuration interface"
+        },
+        {
+          "module": "sd_clock_divider",
+          "count": 1,
+          "usage": "Generate SD clock from system clock"
+        },
+        {
+          "module": "sd_cmd_master",
+          "count": 1,
+          "usage": "Command processing state machine"
+        },
+        {
+          "module": "sd_cmd_serial_host",
+          "count": 1,
+          "usage": "Serial command line interface"
+        },
+        {
+          "module": "sd_data_master",
+          "count": 1,
+          "usage": "Data transfer state machine"
+        },
+        {
+          "module": "sd_data_serial_host",
+          "count": 1,
+          "usage": "Serial data line interface"
+        },
+        {
+          "module": "sd_bd",
+          "count": 2,
+          "usage": "Buffer descriptors for Tx and Rx"
+        },
+        {
+          "module": "sd_fifo_tx_filler",
+          "count": 1,
+          "usage": "DMA TX FIFO filler"
+        },
+        {
+          "module": "sd_fifo_rx_filler",
+          "count": 1,
+          "usage": "DMA RX FIFO filler"
+        }
+      ],
+      "repo_notes": [
+        "Top-level integration; orchestrates all sub-modules and muxes Wishbone master signals based on start_tx_fifo/start_rx_fifo"
+      ]
+    }
+  ],
+  "planning_decisions": {
+    "generation_order": [
+      "sd_defines",
+      "sd_crc_7",
+      "sd_crc_16",
+      "sd_rx_fifo",
+      "sd_tx_fifo",
+      "sd_bd",
+      "sd_clock_divider",
+      "sd_controller_wb",
+      "sd_cmd_master",
+      "sd_data_master",
+      "sd_cmd_serial_host",
+      "sd_data_serial_host",
+      "sd_fifo_rx_filler",
+      "sd_fifo_tx_filler",
+      "sdc_controller"
+    ],
+    "leaf_first": true,
+    "shared_modules": [],
+    "top_level_integration_notes": [
+      "sdc_controller multiplexes Wishbone master signals between sd_fifo_tx_filler and sd_fifo_rx_filler based on start_tx_fifo/start_rx_fifo control signals."
+    ]
+  },
+  "open_issues": [
+    "sd_defines is a definitions file, not a synthesizable module; integration can be done via `include` or macro definitions, not elaborated here.",
+    "Precise cross-clock domain synchronization for FIFO pointers and multi-clock signals is not detailed in stage1, must be handled in implementation."
+  ]
+}

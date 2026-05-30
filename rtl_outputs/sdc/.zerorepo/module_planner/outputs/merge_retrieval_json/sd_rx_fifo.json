@@ -1,0 +1,27 @@
+{
+  "schema_version": "merge_context_retrieval_v1",
+  "module": "sd_rx_fifo",
+  "selected_spec_refs": [
+    "S004",
+    "S005",
+    "S010",
+    "S013"
+  ],
+  "use_kg_child_context": false,
+  "kg_child_modules": [],
+  "kg_child_context_reason": "Module sd_rx_fifo has no children; dependency context shows empty children list, so no child-module interface or wiring context is needed.",
+  "code_gap_notes": [
+    "The generated fragments define RAM registers for depth 8 and address width 3, but the spec and global defines require depth 16 and address width 5; the unrolled RAM array (ram_0..ram_7) and the case multiplexers must be expanded to 16 entries.",
+    "The fragments locally declare parameters with default values (8,3) that conflict with the global defines (16,5). The final module must correctly use the global parameters or make them configurable.",
+    "The top-level module port list is missing; must be filled from interface spec S004.",
+    "Synchronization flip-flops and flag logic rely on the extended high-bit of pointers; wrap-around behavior must be verified against S013.",
+    "Reset values of registers (we=8'h1, tmp=0, ft=0, adr_i=0, adr_o=0) must match S010."
+  ],
+  "selection_reason": [
+    "S004 provides the complete interface port list with directions, widths, and descriptions needed to finalize the module header.",
+    "S005 defines the register widths and inclusion of the extra high-bit in pointers, ensuring that the adr_i/adr_o declaration and RAM flattening align with the design.",
+    "S010 specifies the exact reset state of all registers and flags, which is critical for correct initialization.",
+    "S013 describes pointer wrap-around with high-bit toggle and its role in full/empty detection, verifying the increment and comparison logic in fragments."
+  ],
+  "fallback_used": false
+}

@@ -1,0 +1,62 @@
+{
+  "schema_version": "block_spec_retrieval_v1",
+  "module": "sd_tx_fifo",
+  "selections": [
+    {
+      "id": "B1_decl_core_objects",
+      "target": "<block: decl_core_objects>",
+      "spec_refs": [
+        "S004",
+        "S005"
+      ],
+      "selection_reason": [
+        "S004 provides the module interface signals needed to align internal declarations with ports",
+        "S005 specifies the registers and their widths (ram, adr_i, adr_o) for the declaration block."
+      ]
+    },
+    {
+      "id": "B2_write_pointer_update",
+      "target": "<block: write_pointer_update>",
+      "spec_refs": [
+        "S008",
+        "S009"
+      ],
+      "selection_reason": [
+        "S008 describes the write operation including write enable check and data writing",
+        "S009 covers write address increment and wrap-around needed for pointer update."
+      ]
+    },
+    {
+      "id": "B3_read_pointer_update",
+      "target": "<block: read_pointer_update>",
+      "spec_refs": [
+        "S010"
+      ],
+      "selection_reason": [
+        "S010 describes the read operation including read address increment and wrap-around."
+      ]
+    },
+    {
+      "id": "B4_status_flag_gen_sync",
+      "target": "<block: status_flag_gen_sync>",
+      "spec_refs": [
+        "S011"
+      ],
+      "selection_reason": [
+        "S011 specifies full, empty, mem_empt flag generation and cross-clock domain synchronization."
+      ]
+    },
+    {
+      "id": "B5_data_output",
+      "target": "<block: data_output>",
+      "spec_refs": [
+        "S010"
+      ],
+      "selection_reason": [
+        "S010 includes data reading from RAM to output q addressed by adr_o."
+      ]
+    }
+  ],
+  "fallback_used": false,
+  "fallback_reason": ""
+}

@@ -1,0 +1,42 @@
+{
+  "schema_version": "block_spec_retrieval_v1",
+  "module": "sd_clock_divider",
+  "selections": [
+    {
+      "id": "B1_decl_core_objects",
+      "target": "<block: decl_core_objects>",
+      "spec_refs": [
+        "S002",
+        "S004",
+        "S005"
+      ],
+      "selection_reason": [
+        "S002 provides the module interface context required for the first declaration block, establishing port definitions and module boundaries",
+        "S004 defines the clock division operation and reset behavior, justifying the need for a counter and an intermediate divided-clock signal",
+        "S005 introduces the intermediate signal SD_CLK_O by name and describes its role in the output path, directly informing the declaration of sd_clk_o"
+      ]
+    },
+    {
+      "id": "B2_seq_clock_division",
+      "target": "<block: seq_clock_division>",
+      "spec_refs": [
+        "S004"
+      ],
+      "selection_reason": [
+        "S004 directly specifies the division ratio (1/(DIVIDER+1)), the clock timing and asynchronous reset behavior, and the requirement to toggle SD_CLK based on a counter, which are the exact responsibilities of this sequential block"
+      ]
+    },
+    {
+      "id": "B3_comb_output_path",
+      "target": "<block: comb_output_path>",
+      "spec_refs": [
+        "S005"
+      ],
+      "selection_reason": [
+        "S005 explicitly lists the compile-time output mapping rules for SYN, SIM, and ACTEL, providing the target-specific routing directives that this combinational block must implement"
+      ]
+    }
+  ],
+  "fallback_used": false,
+  "fallback_reason": ""
+}

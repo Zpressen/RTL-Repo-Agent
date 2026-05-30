@@ -312,6 +312,10 @@ Stage1 round: {round_name}
 
 Rules:
 - Extract only facts directly supported by the provided spec text.
+- The provided markdown is one batch of the full repository specification, not necessarily the complete repository.
+- Emit complete module-local contracts only for modules whose primary specification appears in this batch.
+- If this batch mentions modules whose primary specification is outside the batch, record them only as referenced submodules or relationship candidates, not as full contracts.
+- Do not delete, overwrite, or reinterpret previously completed batch results; use existing contracts only for terminology consistency.
 - If a field is not explicitly supported, leave it blank or empty.
 - Do not infer module hierarchy, instantiation, timing, or control semantics from naming style, file names, or diagram layout alone.
 - Keep previously generated rounds unchanged. Use them only as context for terminology consistency.
@@ -343,7 +347,7 @@ def build_structure_prompt(
 
 Return JSON with exactly one key: `structure_contract`.
 
-Extract only explicitly stated structure facts:
+Extract explicitly stated structure candidate facts from this batch:
 - system
 - top_module
 - files
@@ -353,6 +357,8 @@ Extract only explicitly stated structure facts:
 - instantiation_graph
 - generation_order_candidate
 
+Treat `top_module`, `hierarchy`, `instantiation_graph`, and `generation_order_candidate` as batch-local evidence. The final global structure will be reduced after all batches complete, so do not force a complete repository-wide hierarchy from this batch alone.
+
 For every relationship in `hierarchy` or `instantiation_graph`, include grounding.
 If the spec does not explicitly describe a field, leave it empty.
 Do not output section-path strings directly inside `text_grounding`; each item must be a grounding object.
@@ -360,7 +366,7 @@ Do not output section-path strings directly inside `text_grounding`; each item m
 Example:
 {STRUCTURE_EXAMPLE}
 
-Full markdown source:
+Current batch markdown source:
 {document_markdown}
 """.strip()
 
@@ -399,7 +405,7 @@ Every non-empty interface contract must include at least one grounding object in
 Example:
 {INTERFACE_EXAMPLE}
 
-Full markdown source:
+Current batch markdown source:
 {document_markdown}
 """.strip()
 
@@ -491,7 +497,7 @@ Additional positive examples of timing evidence:
 - "writeback occurs in the final state"
 - "done is asserted for one cycle after completion"
 
-Full markdown source:
+Current batch markdown source:
 {document_markdown}
 """.strip()
 
@@ -528,7 +534,7 @@ Every non-empty control contract must include at least one grounding object in `
 Example:
 {CONTROL_EXAMPLE}
 
-Full markdown source:
+Current batch markdown source:
 {document_markdown}
 """.strip()
 
@@ -561,7 +567,7 @@ Every non-empty datapath contract must include at least one grounding object in 
 Example:
 {DATAPATH_EXAMPLE}
 
-Full markdown source:
+Current batch markdown source:
 {document_markdown}
 """.strip()
 
@@ -599,6 +605,6 @@ Grounding requirements:
 Example:
 {PLANNING_FACTS_EXAMPLE}
 
-Full markdown source:
+Current batch markdown source:
 {document_markdown}
 """.strip()

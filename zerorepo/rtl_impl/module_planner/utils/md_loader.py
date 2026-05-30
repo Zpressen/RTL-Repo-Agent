@@ -8,6 +8,27 @@ from typing import Iterable, List
 HEADER_RE = re.compile(r"^(#{1,6})\s+(.*)$")
 
 
+def expand_markdown_inputs(paths: List[str]) -> List[str]:
+    expanded: list[Path] = []
+    for raw_path in paths:
+        path = Path(raw_path).expanduser()
+        if path.is_dir():
+            expanded.extend(item for item in path.rglob("*.md") if item.is_file())
+            continue
+        if path.suffix.lower() == ".md":
+            expanded.append(path)
+
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for path in sorted((item.resolve() for item in expanded), key=lambda item: str(item)):
+        path_text = str(path)
+        if path_text in seen:
+            continue
+        seen.add(path_text)
+        ordered.append(path_text)
+    return ordered
+
+
 def load_markdown(path: str) -> str:
     content = Path(path).read_text(encoding="utf-8")
     return content.replace("\r\n", "\n").strip()
@@ -15,7 +36,7 @@ def load_markdown(path: str) -> str:
 
 def load_markdown_files(paths: List[str]) -> List[dict]:
     documents = []
-    for path in paths:
+    for path in expand_markdown_inputs(paths):
         documents.append(
             {
                 "path": str(path),

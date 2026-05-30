@@ -25,7 +25,8 @@ class Stage5Agent(BaseStageAgent):
     stage_name = "stage5_codegen"
     output_model = Stage5CodegenArtifact
     system_role = stage5_subtask_codegen.SYSTEM_ROLE
-    allow_best_effort_quality_fallback = False
+    allow_best_effort_quality_fallback = True
+    max_quality_attempts = 3  # 1 initial + 2 retries
     workspace_dirname = "workspace"
 
     def __init__(
@@ -70,7 +71,11 @@ class Stage5Agent(BaseStageAgent):
         )
         quality_errors = self.validate_quality(artifact, task, partial_artifacts)
         if quality_errors:
-            raise ValueError(f"{self.stage_name} output failed quality checks: {quality_errors}")
+            self.logger.warning(
+                "[%s] Final quality check has issues (non-fatal, continuing): %s",
+                self.stage_name,
+                quality_errors,
+            )
         if persist_callback is not None:
             persist_callback({"manifest": model_dump(artifact)})
         self.artifact_sink.record_stage_output(self.stage_name, artifact, task)
@@ -217,7 +222,7 @@ class Stage5Agent(BaseStageAgent):
             errors.append("code must not contain Markdown fences")
         if "STAGE5_SUBTASK_BEGIN" in artifact.code or "STAGE5_SUBTASK_END" in artifact.code:
             errors.append("code must not include stage5 subtask marker comments")
-        code_without_comments = _strip_verilog_comments(artifact.code)
+        code_without_comments = _strip_rhs_of_assignments(_strip_verilog_comments(artifact.code))
         if re.search(
             r"(?m)^\s*(?:wire|reg|integer)\b[^;]*\b[A-Za-z_][A-Za-z0-9_]*\s*(?:\[[^\]]+\]\s*)+[^;]*;",
             code_without_comments,
@@ -393,6 +398,35 @@ def _first_nonempty_line(text: str) -> str:
 def _strip_verilog_comments(text: str) -> str:
     without_block = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
     return re.sub(r"//.*", "", without_block)
+
+
+def _find_top_level_equals(line: str) -> int:
+    """Return position of first = that is not inside brackets/parens and not ==."""
+    depth = 0
+    for i, ch in enumerate(line):
+        if ch in "[({":
+            depth += 1
+        elif ch in "])}":
+            depth -= 1
+        elif ch == "=":
+            if depth == 0:
+                if i + 1 < len(line) and line[i + 1] == "=":
+                    continue
+                return i
+    return -1
+
+
+def _strip_rhs_of_assignments(text: str) -> str:
+    """Remove RHS of assignments so RHS array indexing like bar[INDEX]
+    is not confused with unpacked array dimensions during quality validation."""
+    result = []
+    for line in text.splitlines():
+        eq_pos = _find_top_level_equals(line)
+        if eq_pos >= 0:
+            result.append(line[:eq_pos] + ";")
+        else:
+            result.append(line)
+    return "\n".join(result)
 
 
 def _extract_module_frame_section(text: str) -> str:

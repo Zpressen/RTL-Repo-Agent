@@ -1,0 +1,102 @@
+{
+  "schema_version": "module_plans_v1",
+  "task_id": "sdc",
+  "module_order": [
+    "sd_defines",
+    "sd_crc_7",
+    "sd_crc_16",
+    "sd_rx_fifo",
+    "sd_tx_fifo",
+    "sd_bd",
+    "sd_clock_divider",
+    "sd_controller_wb",
+    "sd_cmd_master",
+    "sd_data_master",
+    "sd_cmd_serial_host",
+    "sd_data_serial_host",
+    "sd_fifo_rx_filler",
+    "sd_fifo_tx_filler",
+    "sdc_controller"
+  ],
+  "stage4_status": "module_plans_planned",
+  "completed_modules": [
+    "sd_defines",
+    "sd_crc_7",
+    "sd_crc_16",
+    "sd_rx_fifo",
+    "sd_tx_fifo",
+    "sd_bd",
+    "sd_clock_divider",
+    "sd_controller_wb",
+    "sd_cmd_master",
+    "sd_data_master",
+    "sd_cmd_serial_host",
+    "sd_data_serial_host",
+    "sd_fifo_rx_filler",
+    "sd_fifo_tx_filler",
+    "sdc_controller"
+  ],
+  "resume_cursor": 15,
+  "module_plan_files": [
+    {
+      "module": "sd_defines",
+      "plan_file": "module_plan_json/sd_defines.json"
+    },
+    {
+      "module": "sd_crc_7",
+      "plan_file": "module_plan_json/sd_crc_7.json"
+    },
+    {
+      "module": "sd_crc_16",
+      "plan_file": "module_plan_json/sd_crc_16.json"
+    },
+    {
+      "module": "sd_rx_fifo",
+      "plan_file": "module_plan_json/sd_rx_fifo.json"
+    },
+    {
+      "module": "sd_tx_fifo",
+      "plan_file": "module_plan_json/sd_tx_fifo.json"
+    },
+    {
+      "module": "sd_bd",
+      "plan_file": "module_plan_json/sd_bd.json"
+    },
+    {
+      "module": "sd_clock_divider",
+      "plan_file": "module_plan_json/sd_clock_divider.json"
+    },
+    {
+      "module": "sd_controller_wb",
+      "plan_file": "module_plan_json/sd_controller_wb.json"
+    },
+    {
+      "module": "sd_cmd_master",
+      "plan_file": "module_plan_json/sd_cmd_master.json"
+    },
+    {
+      "module": "sd_data_master",
+      "plan_file": "module_plan_json/sd_data_master.json"
+    },
+    {
+      "module": "sd_cmd_serial_host",
+      "plan_file": "module_plan_json/sd_cmd_serial_host.json"
+    },
+    {
+      "module": "sd_data_serial_host",
+      "plan_file": "module_plan_json/sd_data_serial_host.json"
+    },
+    {
+      "module": "sd_fifo_rx_filler",
+      "plan_file": "module_plan_json/sd_fifo_rx_filler.json"
+    },
+    {
+      "module": "sd_fifo_tx_filler",
+      "plan_file": "module_plan_json/sd_fifo_tx_filler.json"
+    },
+    {
+      "module": "sdc_controller",
+      "plan_file": "module_plan_json/sdc_controller.json"
+    }
+  ]
+}

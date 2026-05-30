@@ -1,0 +1,65 @@
+{
+  "schema_version": "block_spec_retrieval_v1",
+  "module": "sd_fifo_tx_filler",
+  "selections": [
+    {
+      "id": "B1_decl_registers_and_wires",
+      "target": "<block: decl_registers_and_wires>",
+      "spec_refs": [
+        "S004",
+        "S005"
+      ],
+      "selection_reason": [
+        "Module interface spec (S004) provides port context for first declaration block",
+        "Register specification (S005) lists all required register definitions"
+      ]
+    },
+    {
+      "id": "B2_inst_sd_tx_fifo",
+      "target": "<block: inst_sd_tx_fifo>",
+      "spec_refs": [
+        "S006",
+        "S007"
+      ],
+      "selection_reason": [
+        "Submodule description (S006) and its IO port specification (S007) provide exact port mappings for instantiation"
+      ]
+    },
+    {
+      "id": "B3_comb_address_and_static_wb",
+      "target": "<block: comb_address_and_static_wb>",
+      "spec_refs": [
+        "S004"
+      ],
+      "selection_reason": [
+        "Interface specification (S004) provides Wishbone master output port definitions for address and control signal generation"
+      ]
+    },
+    {
+      "id": "B4_seq_wishbone_control",
+      "target": "<block: seq_wishbone_control>",
+      "spec_refs": [
+        "S009",
+        "S010",
+        "S011"
+      ],
+      "selection_reason": [
+        "Operation specifications detail control sequence: initialization (S009), data transfer (S010), disabled state (S011), including flag usage and register updates"
+      ]
+    },
+    {
+      "id": "B5_comb_output_assign",
+      "target": "<block: comb_output_assign>",
+      "spec_refs": [
+        "S004",
+        "S007"
+      ],
+      "selection_reason": [
+        "Module interface (S004) defines output ports",
+        "FIFO port specification (S007) provides the internal signals to be forwarded"
+      ]
+    }
+  ],
+  "fallback_used": false,
+  "fallback_reason": ""
+}

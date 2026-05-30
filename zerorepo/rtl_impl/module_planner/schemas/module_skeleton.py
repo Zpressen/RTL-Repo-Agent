@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Literal
+from typing import Any, List, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -39,8 +39,8 @@ class SemanticMode(BaseModel):
 
 class StateModelEntry(BaseModel):
     object: str = Field(..., min_length=1)
-    storage_kind: str = Field(..., min_length=1)
-    representation: str = Field(..., min_length=1)
+    storage_kind: str = Field(default="unspecified")
+    representation: str = Field(default="implementation-open")
     notes: str = Field(default="")
 
 
@@ -120,10 +120,19 @@ class Stage3ModuleSkeletonArtifact(BaseModel):
     top_module: str = Field(..., min_length=1)
     module_order: List[str] = Field(..., min_length=1)
     completed_modules: List[str] = Field(default_factory=list)
+    resume_cursor: int = Field(default=0, ge=0)
     global_summary: List[str] = Field(default_factory=list)
     module_records: List[ModuleRecord] = Field(default_factory=list)
     open_issues: List[str] = Field(default_factory=list)
     quality_report: QualityReport | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def infer_resume_cursor(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "resume_cursor" not in data:
+            data = dict(data)
+            data["resume_cursor"] = len(data.get("completed_modules") or [])
+        return data
 
     @model_validator(mode="after")
     def validate_completed_modules(self) -> "Stage3ModuleSkeletonArtifact":
@@ -132,6 +141,10 @@ class Stage3ModuleSkeletonArtifact(BaseModel):
             raise ValueError("completed_modules must exactly match module_records[].module order")
         if self.completed_modules != self.module_order[: len(self.completed_modules)]:
             raise ValueError("completed_modules must be a prefix of module_order")
+        if self.resume_cursor != len(self.completed_modules):
+            raise ValueError("resume_cursor must match completed_modules length")
+        if self.resume_cursor > len(self.module_order):
+            raise ValueError("resume_cursor must not exceed module_order length")
         if self.stage3_status == "module_skeletons_planned" and self.completed_modules != self.module_order:
             raise ValueError("final stage3 artifact must cover every module in module_order")
         return self
