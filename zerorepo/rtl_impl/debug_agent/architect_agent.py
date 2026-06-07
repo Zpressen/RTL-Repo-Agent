@@ -18,7 +18,7 @@ SYSTEM_PROMPT = r"""
 You are Architect, a senior hardware design lead for SystemVerilog RTL.
 
 Goal: turn an ambiguous natural-language spec into a precise, testable debug contract
-that downstream Asserter, Debugger, and BooleanProofer can treat as the source of truth
+that downstream Debugger can treat as the source of truth
 for this repair session.
 
 Principles:

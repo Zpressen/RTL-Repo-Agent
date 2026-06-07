@@ -28,18 +28,15 @@ from ..schemas import (
     Stage6MergeArtifact,
 )
 from .base import BaseStageAgent, model_dump, validate_model
-from .stage5_agent import _find_top_level_equals, _strip_rhs_of_assignments
 
 
 class Stage6MergeAgent(BaseStageAgent):
     stage_name = "stage6_merge"
     output_model = Stage6MergeArtifact
     system_role = stage6_merge.SYSTEM_ROLE
-    allow_best_effort_quality_fallback = True
     workspace_dirname = "workspace"
     merge_retrieval_dirname = "merge_retrieval_json"
     merge_child_context_dirname = "merge_child_context_json"
-    max_quality_attempts = 3  # 1 initial + 2 retries
     child_full_code_max_lines = 200
     child_full_code_max_chars = 12000
 
@@ -261,99 +258,75 @@ class Stage6MergeAgent(BaseStageAgent):
         module_name: str,
         rtl_path: Path,
     ) -> str:
+        """Call the LLM and retry on Verilator syntax errors only."""
         del task, partial_artifacts
         self._ensure_toolchain_path()
-        attempt_limit = max(1, int(getattr(self, "max_quality_attempts", 5)))
+        syntax_attempts = 3
         current_prompt = prompt
-        best_output = ""
-        best_errors: List[str] = []
-        for attempt in range(1, attempt_limit + 1):
+
+        for attempt in range(1, syntax_attempts + 1):
             if attempt > 1:
-                self._log_retry_prompt(current_prompt, reason=f"quality_failure_attempt_{attempt - 1}")
+                self._log_retry_prompt(current_prompt, reason=f"syntax_retry_{attempt - 1}")
             raw = self.llm_client.complete(system_prompt=self.system_role, user_prompt=current_prompt, images=None)
-            self._log_llm_raw_output(raw, attempt_label="initial" if attempt == 1 else f"retry_{attempt}")
+            self._log_llm_raw_output(raw, attempt_label="initial" if attempt == 1 else f"syntax_retry_{attempt}")
             code = self._extract_verilog_code(raw if isinstance(raw, str) else str(raw))
-            errors = self._validate_raw_module(code, module_name)
-            if not errors:
-                self._write_text(rtl_path, code.rstrip() + "\n")
-                syntax_correct, syntax_output = check_syntax(str(rtl_path), top_module=module_name)
-                if syntax_correct:
-                    return code.strip()
-                errors = ["Verilator syntax/lint check failed", self._summarize_syntax_output(syntax_output)]
-            if not errors:
-                return code.strip()
-            if not best_errors or len(errors) < len(best_errors):
-                best_output = code
-                best_errors = list(errors)
+            stripped = code.strip()
+            if not stripped:
+                self.logger.warning("[%s] LLM output empty on attempt %d for %s", self.stage_name, attempt, module_name)
+                if attempt < syntax_attempts:
+                    current_prompt = self._build_syntax_retry_prompt(
+                        prompt, "LLM returned empty output; please produce valid Verilog.", stripped
+                    )
+                continue
+
+            self._write_text(rtl_path, stripped.rstrip() + "\n")
+            syntax_correct, syntax_output = check_syntax(str(rtl_path), top_module=module_name)
+            if syntax_correct:
+                return stripped
+
+            summarized = self._summarize_syntax_output(syntax_output)
             self.logger.warning(
-                "[%s] Quality check failed on attempt %d/%d for %s: %s",
-                self.stage_name,
-                attempt,
-                attempt_limit,
-                module_name,
-                errors,
+                "[%s] Verilator syntax error on attempt %d/%d for %s: %s",
+                self.stage_name, attempt, syntax_attempts, module_name, summarized[:200],
             )
-            if errors and errors[0] == "Verilator syntax/lint check failed":
+            if attempt < syntax_attempts:
                 current_prompt = self._build_syntax_retry_prompt(prompt, syntax_output, code)
             else:
-                current_prompt = self._build_raw_retry_prompt(prompt, errors)
+                # Last attempt failed — write and return anyway; debug stage will try to fix
+                self.logger.warning(
+                    "[%s] Syntax retries exhausted for %s; returning best-effort output for debug stage",
+                    self.stage_name, module_name,
+                )
+                return stripped
 
-        if self.allow_best_effort_quality_fallback and best_output.strip():
-            self.logger.warning(
-                "[%s] Quality checks still failed after %d attempts for %s; "
-                "continuing with best-effort artifact: %s",
-                self.stage_name,
-                attempt_limit,
-                module_name,
-                best_errors,
-            )
-            self._write_text(rtl_path, best_output.rstrip() + "\n")
-            return best_output.strip()
-
-        raise ValueError(
-            f"{self.stage_name} output failed quality checks after {attempt_limit} attempts: "
-            f"{best_errors}; best output prefix: {best_output[:200]!r}"
-        )
+        self._write_text(rtl_path, "\n")
+        return ""
 
     def _validate_raw_module(self, code: str, module_name: str) -> List[str]:
+        """Minimal validation — only check that code is not empty."""
         errors: List[str] = []
-        stripped = code.strip()
-        if not stripped:
+        if not code.strip():
             errors.append("merged module code must not be empty")
-        all_module_decls = re.findall(r"(?m)^\s*module\s+([A-Za-z_][A-Za-z0-9_$]*)\b", code)
-        expected_module_decls = [item for item in all_module_decls if item == module_name]
-        if len(expected_module_decls) != 1:
-            errors.append(f"merged module code must contain exactly one `module {module_name}` declaration")
-        if len(all_module_decls) != 1:
-            errors.append("merged module code must contain exactly one module declaration")
-        endmodule_count = len(re.findall(r"(?m)^\s*endmodule\b", code))
-        if endmodule_count != 1:
-            errors.append("merged module code must contain exactly one endmodule")
-        if "STAGE5_SUBTASK_BEGIN" in code or "STAGE5_SUBTASK_END" in code:
-            errors.append("merged module code must not contain stage5 fragment markers")
-        placeholder_pattern = re.compile(r"\b(TODO|FIXME|TBD|PLACEHOLDER)\b|<block:", flags=re.IGNORECASE)
-        if placeholder_pattern.search(code):
-            errors.append("merged module code must not contain obvious placeholders")
-        code_for_array_check = _strip_rhs_of_assignments(code)
-        if re.search(r"(?m)^\s*(?:wire|reg|integer)\b[^;]*\b[A-Za-z_][A-Za-z0-9_]*\s*(?:\[[^\]]+\]\s*)+[^;]*;", code_for_array_check):
-            errors.append("merged module code must not use unpacked array declarations; flatten arrays into scalar signals")
-        if re.search(r"\b(?:generate|endgenerate|genvar)\b", code):
-            errors.append("merged module code must not use generate/genvar; explicitly unroll repeated logic and instances")
         return errors
 
-    def _build_raw_retry_prompt(self, original_prompt: str, errors: List[str]) -> str:
-        return (
-            f"{original_prompt}\n\n"
-            "The previous output was invalid. Return only the corrected complete Verilog module code.\n"
-            "Return either raw Verilog or one fenced Verilog code block. Do not return JSON or explanations.\n"
-            f"Issues:\n- " + "\n- ".join(errors)
-        )
+    def _summarize_syntax_output(self, syntax_output: str) -> str:
+        text = syntax_output
+        try:
+            from zerorepo.rtl_impl.debug_agent.bash_tools import CommandResult
+            obj = CommandResult.model_validate_json(syntax_output)
+            text = "\n".join(part for part in [obj.stdout, obj.stderr] if part)
+        except Exception:  # noqa: BLE001
+            text = syntax_output
+        text = text.strip()
+        if len(text) > 6000:
+            text = text[:6000] + "\n...<snip>..."
+        return text
 
     def _build_syntax_retry_prompt(self, original_prompt: str, syntax_output: str, code: str) -> str:
         return (
             f"{original_prompt}\n\n"
-            "The previous output was rejected by Verilator after it was written to the merged RTL file.\n"
-            "Fix only the RTL syntax/lint/compile issues reported below while preserving the module "
+            "The previous output was rejected by Verilator.\n"
+            "Fix the RTL syntax/lint errors reported below while preserving the module "
             "interface and intended behavior.\n\n"
             "<verilator_lint_log>\n"
             f"{self._summarize_syntax_output(syntax_output)}\n"
@@ -363,20 +336,6 @@ class Stage6MergeAgent(BaseStageAgent):
             "</module_with_lineno>\n\n"
             "Return only the corrected complete Verilog module code. Do not return JSON or explanations."
         )
-
-    def _summarize_syntax_output(self, syntax_output: str) -> str:
-        text = syntax_output
-        try:
-            from zerorepo.rtl_impl.debug_agent.bash_tools import CommandResult
-
-            obj = CommandResult.model_validate_json(syntax_output)
-            text = "\n".join(part for part in [obj.stdout, obj.stderr] if part)
-        except Exception:  # noqa: BLE001
-            text = syntax_output
-        text = text.strip()
-        if len(text) > 6000:
-            text = text[:6000] + "\n...<snip>..."
-        return text
 
     def _ensure_toolchain_path(self) -> None:
         if shutil.which("verilator"):

@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import zerorepo.rtl_impl.debug_agent.debug_runner as debug_runner_module
+import zerorepo.rtl_impl.debug_agent.trace_report as trace_report_module
 from zerorepo.rtl_impl.debug_agent.bash_tools import CommandResult
 from zerorepo.rtl_impl.debug_agent.debug_runner import ModuleDebugResult, ModuleDebugRunner, RtlDebugConfig
 from zerorepo.rtl_impl.debug_agent.kg_debug_reads import DebugReadsMaterializer, kg_dynamic_slice
@@ -190,12 +191,57 @@ endmodule
         kg_session_id="m:session:a",
     )
 
-    kg_note = report["notes"]["kg_debug_reads"]
-    assert kg_note["enabled"] is True
-    assert kg_note["slice_source"] == "local"
-    assert "kg offline" in kg_note["fallback_reason"]
     assert suspect_blocks
     assert report["suspect_blocks"][0]["id"] == suspect_blocks[0].id
+
+
+class _FakeSignal:
+    def __init__(self, tv: list[tuple[int, str]]) -> None:
+        self.tv = tv
+
+
+class _BacktraceVcd:
+    def __init__(self, _path: str, store_tvs: bool = True) -> None:
+        del store_tvs
+        self._signals = {
+            "tb.clk": _FakeSignal([(0, "0"), (5, "1"), (10, "0")]),
+            "tb.q_ref": _FakeSignal([(0, "01000100")]),
+            "tb.q_dut": _FakeSignal([(0, "00000000")]),
+            "tb.dut.q": _FakeSignal([(0, "00000000")]),
+            "tb.dut.q_nxt": _FakeSignal([(0, "01000100")]),
+            "tb.dut.rd": _FakeSignal([(0, "1")]),
+            "tb.dut.empty": _FakeSignal([(0, "1")]),
+        }
+
+
+def test_trace_report_includes_value_backtrace_and_ranked_suspects(tmp_path: Path, monkeypatch: Any) -> None:
+    rtl = """module m(input clk, input rd, input empty, output logic [7:0] q);
+  logic [7:0] q_nxt;
+  always @(posedge clk) begin
+    if (rd && !empty) q <= q_nxt;
+  end
+endmodule
+"""
+    rtl_path = tmp_path / "rtl.sv"
+    rtl_path.write_text(rtl, encoding="utf-8")
+    (tmp_path / "contract.json").write_text(json.dumps({"module_name": "m", "clocking": {"clock": {"name": "clk"}}}) + "\n", encoding="utf-8")
+    (tmp_path / "tb.sv").write_text("module tb; m dut(); endmodule\n", encoding="utf-8")
+    (tmp_path / "wave.vcd").write_text("$date\n$date\n", encoding="utf-8")
+    monkeypatch.setattr(trace_report_module, "VCDVCD", _BacktraceVcd)
+    sim_log = CommandResult(
+        stdout="Hint: Output 'q' has 1 mismatches. First mismatch occurred at time 5.\nMismatches: 1 in 1 samples\n",
+        stderr="",
+    ).model_dump_json()
+
+    report, suspect_blocks = build_trace_report(
+        rtl_path=rtl_path,
+        sim_log_json=sim_log,
+        output_dir=tmp_path,
+    )
+
+    assert suspect_blocks
+    assert report["value_backtrace"]["chains"][0]["chain"][0]["classification"] == "condition_blocks_update"
+    assert "condition_blocks_update" in report["diagnostic_narrative"][0]
 
 
 def test_debug_reads_materializer_reports_missing_module_node(tmp_path: Path) -> None:

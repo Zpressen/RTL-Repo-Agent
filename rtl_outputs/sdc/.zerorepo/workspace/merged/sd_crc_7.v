@@ -6,24 +6,24 @@ module sd_crc_7 (
     output [6:0] CRC
 );
 
-    // Internal declarations
-    reg [6:0] crc_reg;
-    wire inv;
+// 7-bit CRC register
+reg [6:0] crc_reg;
 
-    // Connect internal register to output port
-    assign CRC = crc_reg;
+// Combinational inversion signal
+wire inv;
 
-    // Combinational inversion signal
-    assign inv = BITVAL ^ crc_reg[6];
+// Connect internal register to output port
+assign CRC = crc_reg;
 
-    // Sequential CRC update with asynchronous reset
-    always @(posedge CLK or posedge RST) begin
-        if (RST)
-            crc_reg <= 7'b0;
-        else if (Enable)
-            crc_reg <= {crc_reg[5], crc_reg[4], crc_reg[3],
-                        (crc_reg[2] ^ inv), crc_reg[1], crc_reg[0],
-                        inv};
-    end
+// Combinationally compute inv = BITVAL ^ CRC[6]
+assign inv = BITVAL ^ crc_reg[6];
+
+// Sequential CRC update with asynchronous reset
+always @(posedge CLK or posedge RST) begin
+    if (RST)
+        crc_reg <= 7'b0;
+    else if (Enable)
+        crc_reg <= {crc_reg[5], crc_reg[4], crc_reg[3], (crc_reg[2] ^ inv), crc_reg[1], crc_reg[0], inv};
+end
 
 endmodule

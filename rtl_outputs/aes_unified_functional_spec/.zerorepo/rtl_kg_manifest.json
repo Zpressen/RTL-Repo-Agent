@@ -1942,6 +1942,166 @@
         "aes_cipher_top.v"
       ],
       "filter_to_planned_skeleton": false
+    },
+    {
+      "stage": "post_initial_sim",
+      "repo_uid": "merged@af127efbdf0a",
+      "nodes": 55,
+      "edges": 89,
+      "changed_paths": [
+        "aes_sbox.v"
+      ],
+      "filter_to_planned_skeleton": false
+    },
+    {
+      "stage": "post_module_debug",
+      "repo_uid": "merged@af127efbdf0a",
+      "nodes": 55,
+      "edges": 89,
+      "changed_paths": [
+        "aes_sbox.v"
+      ],
+      "filter_to_planned_skeleton": false
+    },
+    {
+      "stage": "post_initial_sim",
+      "repo_uid": "merged@af127efbdf0a",
+      "nodes": 55,
+      "edges": 89,
+      "changed_paths": [
+        "aes_rcon.v"
+      ],
+      "filter_to_planned_skeleton": false
+    },
+    {
+      "stage": "post_module_debug",
+      "repo_uid": "merged@af127efbdf0a",
+      "nodes": 55,
+      "edges": 89,
+      "changed_paths": [
+        "aes_rcon.v"
+      ],
+      "filter_to_planned_skeleton": false
+    },
+    {
+      "stage": "post_initial_sim",
+      "repo_uid": "merged@af127efbdf0a",
+      "nodes": 55,
+      "edges": 89,
+      "changed_paths": [
+        "aes_key_expand_128.v"
+      ],
+      "filter_to_planned_skeleton": false
+    },
+    {
+      "stage": "post_module_debug",
+      "repo_uid": "merged@af127efbdf0a",
+      "nodes": 55,
+      "edges": 89,
+      "changed_paths": [
+        "aes_key_expand_128.v"
+      ],
+      "filter_to_planned_skeleton": false
+    },
+    {
+      "stage": "post_initial_sim",
+      "repo_uid": "merged@af127efbdf0a",
+      "nodes": 307,
+      "edges": 523,
+      "changed_paths": [
+        "aes_cipher_top.v"
+      ],
+      "filter_to_planned_skeleton": false
+    },
+    {
+      "stage": "post_module_debug",
+      "repo_uid": "merged@af127efbdf0a",
+      "nodes": 307,
+      "edges": 523,
+      "changed_paths": [
+        "aes_cipher_top.v"
+      ],
+      "filter_to_planned_skeleton": false
+    },
+    {
+      "stage": "post_initial_sim",
+      "repo_uid": "merged@af127efbdf0a",
+      "nodes": 307,
+      "edges": 523,
+      "changed_paths": [
+        "aes_sbox.v"
+      ],
+      "filter_to_planned_skeleton": false
+    },
+    {
+      "stage": "post_module_debug",
+      "repo_uid": "merged@af127efbdf0a",
+      "nodes": 307,
+      "edges": 523,
+      "changed_paths": [
+        "aes_sbox.v"
+      ],
+      "filter_to_planned_skeleton": false
+    },
+    {
+      "stage": "post_initial_sim",
+      "repo_uid": "merged@af127efbdf0a",
+      "nodes": 307,
+      "edges": 523,
+      "changed_paths": [
+        "aes_rcon.v"
+      ],
+      "filter_to_planned_skeleton": false
+    },
+    {
+      "stage": "post_module_debug",
+      "repo_uid": "merged@af127efbdf0a",
+      "nodes": 307,
+      "edges": 523,
+      "changed_paths": [
+        "aes_rcon.v"
+      ],
+      "filter_to_planned_skeleton": false
+    },
+    {
+      "stage": "post_initial_sim",
+      "repo_uid": "merged@af127efbdf0a",
+      "nodes": 307,
+      "edges": 523,
+      "changed_paths": [
+        "aes_key_expand_128.v"
+      ],
+      "filter_to_planned_skeleton": false
+    },
+    {
+      "stage": "post_module_debug",
+      "repo_uid": "merged@af127efbdf0a",
+      "nodes": 307,
+      "edges": 523,
+      "changed_paths": [
+        "aes_key_expand_128.v"
+      ],
+      "filter_to_planned_skeleton": false
+    },
+    {
+      "stage": "post_initial_sim",
+      "repo_uid": "merged@af127efbdf0a",
+      "nodes": 307,
+      "edges": 523,
+      "changed_paths": [
+        "aes_cipher_top.v"
+      ],
+      "filter_to_planned_skeleton": false
+    },
+    {
+      "stage": "post_module_debug",
+      "repo_uid": "merged@af127efbdf0a",
+      "nodes": 307,
+      "edges": 523,
+      "changed_paths": [
+        "aes_cipher_top.v"
+      ],
+      "filter_to_planned_skeleton": false
     }
   ]
 }

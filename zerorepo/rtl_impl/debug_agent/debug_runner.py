@@ -22,10 +22,8 @@ DebugStatus = Literal["disabled", "skipped", "pass", "fixed", "fail", "error"]
 class RtlDebugConfig:
     enabled: bool = True
     oracle_root: str = "/home/mokita/RealBench"
-    max_trials: int = 30
+    max_trials: int = 10
     allow_failure: bool = False
-    enable_asserter: bool = True
-    enable_boolean_proofer: bool = True
     toolchain_bin: str = ""
     openai_config: OpenAIConfig | None = None
 
@@ -38,10 +36,6 @@ class RtlDebugConfig:
             oracle_root=os.environ.get("ZEROREPO_RTL_DEBUG_ORACLE_ROOT", cls.oracle_root),
             max_trials=int(os.environ.get("ZEROREPO_RTL_DEBUG_MAX_TRIALS", str(cls.max_trials))),
             allow_failure=allow_failure_env not in {"0", "false", "no", "off"},
-            enable_asserter=os.environ.get("ZEROREPO_RTL_DEBUG_ASSERTER", "1").strip().lower()
-            not in {"0", "false", "no", "off"},
-            enable_boolean_proofer=os.environ.get("ZEROREPO_RTL_DEBUG_BOOLEAN_PROOFER", "1").strip().lower()
-            not in {"0", "false", "no", "off"},
             toolchain_bin=os.environ.get("ZEROREPO_RTL_DEBUG_TOOLCHAIN_BIN", ""),
             openai_config=load_openai_config(),
         )
@@ -384,8 +378,6 @@ class ModuleDebugRunner:
             cfg,
             sim_reviewer=sim_reviewer,
             max_trials=int(self.config.max_trials),
-            enable_asserter=bool(self.config.enable_asserter),
-            enable_boolean_proofer=bool(self.config.enable_boolean_proofer),
             kg_service=self.kg_service,
         )
         return self._run_async(

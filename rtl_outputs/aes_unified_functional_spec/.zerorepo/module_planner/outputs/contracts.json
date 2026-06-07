@@ -10,11 +10,27 @@
     "datapath",
     "planning_facts"
   ],
+  "completed_batches": [
+    "batch_0001"
+  ],
+  "completed_modules": [
+    "aes_cipher_top",
+    "aes_key_expand_128",
+    "aes_sbox",
+    "aes_rcon"
+  ],
+  "spec_index": {
+    "aes_unified_functional_spec": "/home/mokita/RPG-ZeroRepo/rtl_dataset/ase_cipher/aes_unified_functional_spec.md"
+  },
+  "structure_relation_candidates": [],
+  "instantiation_relation_candidates": [],
+  "top_module_candidates": [],
   "structure_contract": {
     "system": "AES Encryption System",
     "top_module": "aes_cipher_top",
     "files": [],
     "modules": [
+      "aes_unified_functional_spec",
       "aes_cipher_top",
       "aes_key_expand_128",
       "aes_sbox",
@@ -44,7 +60,13 @@
       }
     ],
     "instantiation_graph": [],
-    "generation_order_candidate": [],
+    "generation_order_candidate": [
+      "aes_unified_functional_spec",
+      "aes_sbox",
+      "aes_rcon",
+      "aes_key_expand_128",
+      "aes_cipher_top"
+    ],
     "image_grounding": []
   },
   "interface_contracts": [

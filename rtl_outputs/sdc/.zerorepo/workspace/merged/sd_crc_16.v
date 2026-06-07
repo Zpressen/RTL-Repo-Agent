@@ -10,7 +10,6 @@ reg [15:0] crc_reg;
 wire inv;
 
 assign inv = BITVAL ^ crc_reg[15];
-
 assign CRC = crc_reg;
 
 always @(posedge CLK or posedge RST) begin

@@ -45,7 +45,13 @@
       "Bash(python -m pytest tests/test_rtl_module_planner.py -q --ignore=tests/test_extraction_complete.py)",
       "Bash(python3 -c ' *)",
       "Bash(python -c \"from zerorepo.rtl_impl.debug_agent.debug_runner import ModuleDebugRunner; print\\('debug_runner OK'\\)\")",
-      "Bash(python -c \"from zerorepo.rtl_impl.debug_agent.sim_reviewer import check_syntax; print\\('check_syntax OK'\\)\")"
+      "Bash(python -c \"from zerorepo.rtl_impl.debug_agent.sim_reviewer import check_syntax; print\\('check_syntax OK'\\)\")",
+      "Bash(python3 -c \"from zerorepo.rtl_impl.debug_agent.rtl_editor import RTLEditor; print\\('OK'\\)\")",
+      "Bash(python -m pytest tests/test_debug_kg_reads.py -x -v)",
+      "Bash(python -m pytest tests/test_debug_agent_fixes.py -x -v)",
+      "Bash(python3 -c \"from zerorepo.rtl_impl.debug_agent.trace_report import build_trace_report; print\\('trace_report import OK'\\)\")",
+      "Bash(python3 -c \"from zerorepo.rtl_impl.debug_agent.rtl_editor import RtlEditorSession; print\\('rtl_editor import OK'\\)\")",
+      "Bash(python3 -c \"from zerorepo.rtl_impl.debug_agent.trace_report import build_trace_report; print\\('build_trace_report import OK'\\)\")"
     ]
   }
 }

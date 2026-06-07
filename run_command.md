@@ -6,7 +6,9 @@ bash scripts/run_main.sh
 bash scripts/run_main.sh /home/mokita/RPG-ZeroRepo/rtl_dataset/ase_cipher/aes_unified_functional_spec.md
 
 指定一个文件夹的spec
+
 bash scripts/run_main.sh /home/mokita/RPG-ZeroRepo/rtl_dataset/sdc
+
 
 不传参数时：
 按 `rtl_dataset` 目录中的 `.md` 文件名排序顺序依次执行
@@ -25,5 +27,5 @@ bash scripts/run_main.sh /home/mokita/RPG-ZeroRepo/rtl_dataset/sdc
   temperature: 0.6
   reasoning_effort: "high"
   provider: "openai"
-  api_key: "sk-c619e5281386c48c5c99b5c4e8412e1b5d3dce62be4703d7b6d8e2e825995b83"
-  base_url: "https://mx.free.codesonline.dev/v1"
+  api_key: "sk-8bce642542af301d17a07e0c979514bac29524d8acc922f57bf00325876f3b22"
+  base_url: "https://www.inroi.shop/v1"

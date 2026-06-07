@@ -133,6 +133,21 @@ class RtlBlock:
     reads: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class RtlAssignment:
+    id: str
+    block_id: str
+    lhs: str
+    rhs_signals: tuple[str, ...]
+    condition_signals: tuple[str, ...]
+    kind: Literal["continuous", "blocking", "nonblocking"]
+    clocking: str
+    start_line: int
+    end_line: int
+    code_snippet: str
+    condition_exprs: tuple[str, ...] = ()
+
+
 def _count_word(line: str, word: str) -> int:
     return len(re.findall(rf"\b{re.escape(word)}\b", line))
 
@@ -150,6 +165,114 @@ def _extract_writes(code: str) -> Set[str]:
     for m in re.finditer(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\b\s*(?:\[[^\]]+\])?\s*(?<![=!<>])=(?![=])", code):
         writes.add(m.group(1))
     return writes
+
+
+def _extract_assignments_from_block(block: RtlBlock) -> list[RtlAssignment]:
+    clean = _strip_comments_keep_lines(block.code)
+    raw_lines = block.code.splitlines()
+    clean_lines = clean.splitlines()
+    assignments: list[RtlAssignment] = []
+    depth = 0
+    seq = 0
+    pending_single: list[str] = []
+    if_stack: list[tuple[int, str]] = []
+    case_stack: list[str] = []
+
+    assign_re = re.compile(
+        r"(?:^|[^=!<>])\b(?P<assign>assign\s+)?"
+        r"(?P<lhs>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[[^\]]+\])?\s*"
+        r"(?P<op><=|(?<![=!<>])=(?![=]))\s*(?P<rhs>[^;]+);"
+    )
+
+    for idx, clean_line in enumerate(clean_lines):
+        raw_line = raw_lines[idx] if idx < len(raw_lines) else clean_line
+        stripped = clean_line.strip()
+
+        if re.search(r"\bendcase\b", stripped):
+            if case_stack:
+                case_stack.pop()
+
+        if_stack = [(d, expr) for d, expr in if_stack if depth >= d]
+        active_if_exprs = [expr for _d, expr in if_stack]
+        active_exprs = list(active_if_exprs) + list(case_stack)
+        if pending_single:
+            active_if_exprs.extend(pending_single)
+            active_exprs.extend(pending_single)
+            pending_single = []
+
+        if_match = re.search(r"\bif\s*\((.*?)\)", clean_line)
+        line_if_expr = if_match.group(1).strip() if if_match else ""
+        if line_if_expr:
+            active_if_exprs.append(line_if_expr)
+            active_exprs.append(line_if_expr)
+
+        for match in assign_re.finditer(clean_line):
+            lhs = match.group("lhs")
+            rhs = match.group("rhs")
+            if lhs in {"if", "for", "while", "case"}:
+                continue
+            seq += 1
+            op = match.group("op")
+            kind: Literal["continuous", "blocking", "nonblocking"]
+            if match.group("assign") or block.kind == "assign":
+                kind = "continuous"
+            elif op == "<=":
+                kind = "nonblocking"
+            else:
+                kind = "blocking"
+
+            rhs_signals = _extract_idents(rhs) - {lhs}
+            condition_signals: Set[str] = set()
+            for expr in active_exprs:
+                condition_signals |= _extract_idents(expr)
+
+            assignments.append(
+                RtlAssignment(
+                    id=f"{block.id}.S{seq}",
+                    block_id=block.id,
+                    lhs=lhs,
+                    rhs_signals=tuple(sorted(rhs_signals)),
+                    condition_signals=tuple(sorted(condition_signals - {lhs})),
+                    kind=kind,
+                    clocking=block.clocking,
+                    start_line=block.start_line + idx,
+                    end_line=block.start_line + idx,
+                    code_snippet=raw_line.strip(),
+                    condition_exprs=tuple(expr for expr in active_if_exprs if expr),
+                )
+            )
+
+        case_match = re.search(r"\bcase[zx]?\s*\((.*?)\)", clean_line)
+        if case_match:
+            case_stack.append(case_match.group(1).strip())
+
+        begin_count = _count_word(clean_line, "begin")
+        end_count = _count_word(clean_line, "end")
+        if line_if_expr:
+            if begin_count:
+                if_stack.append((depth + begin_count, line_if_expr))
+            elif not assignments or assignments[-1].start_line != block.start_line + idx:
+                pending_single.append(line_if_expr)
+        depth += begin_count
+        depth -= end_count
+        if depth < 0:
+            depth = 0
+
+    return assignments
+
+
+def parse_rtl_assignments(rtl_text: str, blocks: Iterable[RtlBlock] | None = None) -> list[RtlAssignment]:
+    """Extract assignment-level dependencies from parsed RTL blocks.
+
+    This deliberately stays lighter than a full SystemVerilog evaluator: it records
+    assignment targets, RHS signal dependencies, and simple enclosing if/case
+    conditions so waveform values can be propagated through the driver graph.
+    """
+    block_list = list(blocks) if blocks is not None else parse_rtl_blocks(rtl_text)
+    assignments: list[RtlAssignment] = []
+    for block in block_list:
+        assignments.extend(_extract_assignments_from_block(block))
+    return assignments
 
 
 def _classify_clocking(header: str) -> str:

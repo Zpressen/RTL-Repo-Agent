@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -16,7 +17,6 @@ from zerorepo.rtl_impl.debug_agent.debug_runner import (
     module_debug_result_to_dict,
 )
 from zerorepo.rtl_impl.kg_agent import ModuleResultWriter
-from zerorepo.rtl_impl.debug_agent.sim_reviewer import check_syntax
 
 from .agents import (
     Stage1Agent,
@@ -51,6 +51,31 @@ from .schemas import (
 )
 from .utils import PlannerLLMClient, get_planner_logger
 from .utils import resolve_module_spec_text
+
+
+def _check_single_file_syntax(rtl_path: str, top_module: str | None = None) -> tuple:
+    """Run Verilator --lint-only on a single file, without globbing other .v files."""
+    import os as _os
+    from zerorepo.rtl_impl.debug_agent.bash_tools import CommandResult, run_bash_command
+
+    # Defines-only files (sd_defines.v) have no module declaration — skip check
+    try:
+        content = Path(rtl_path).read_text(encoding="utf-8")
+    except Exception:
+        content = ""
+    if not re.search(r"\bmodule\s+\w+", content):
+        return True, "{}"  # not a synthesizable module, skip syntax check
+
+    rtl_dir = _os.path.dirname(_os.path.abspath(rtl_path))
+    top_flag = f"--top-module {top_module} " if top_module else ""
+    cmd = f"verilator --lint-only --sv --timing -Wall -Wno-fatal --assert {top_flag}{rtl_path}"
+    is_pass, sim_output = run_bash_command(cmd, timeout=60, cwd=rtl_dir)
+    obj = CommandResult.model_validate_json(sim_output)
+    stdout = obj.stdout or ""
+    stderr = obj.stderr or ""
+    # Only fail on %Error, not %Warning
+    is_pass = bool(is_pass) and "%Error" not in stdout and "%Error" not in stderr
+    return is_pass, sim_output
 
 
 class PlannerRunner:
@@ -130,8 +155,6 @@ class PlannerRunner:
                 oracle_root=debug_config.oracle_root,
                 max_trials=debug_config.max_trials,
                 allow_failure=debug_config.allow_failure,
-                enable_asserter=debug_config.enable_asserter,
-                enable_boolean_proofer=debug_config.enable_boolean_proofer,
                 toolchain_bin=debug_config.toolchain_bin,
                 openai_config=debug_openai_config_from_planner_config(llm_config),
             )
@@ -216,24 +239,35 @@ class PlannerRunner:
         if end_stage == "stage2":
             return repo_skeleton
 
+        module_skeletons = None
+
         if resume:
             existing_stage3 = self._read_module_skeletons_if_valid()
             if existing_stage3 is not None:
-                self.logger.info(
-                    "[rtl_module_planner] Resume continuing stage3 module skeleton artifact from %s",
-                    self._module_skeletons_path(),
-                )
-                artifacts["stage3"] = existing_stage3
+                if existing_stage3.stage3_status == "module_skeletons_planned":
+                    self.logger.info(
+                        "[rtl_module_planner] Resume reused stage3 module skeleton artifact from %s",
+                        self._module_skeletons_path(),
+                    )
+                    module_skeletons = existing_stage3
+                else:
+                    self.logger.info(
+                        "[rtl_module_planner] Resume continuing stage3 module skeleton artifact from %s (cursor=%d)",
+                        self._module_skeletons_path(),
+                        existing_stage3.resume_cursor,
+                    )
+                    artifacts["stage3"] = existing_stage3
 
-        module_skeletons = self.stage3.run_incremental(
-            task,
-            {
-                "modules": modules_artifact,
-                "stage2": repo_skeleton,
-                **({"stage3": artifacts["stage3"]} if "stage3" in artifacts else {}),
-            },
-            persist_callback=self._write_stage3_outputs,
-        )
+        if module_skeletons is None:
+            module_skeletons = self.stage3.run_incremental(
+                task,
+                {
+                    "modules": modules_artifact,
+                    "stage2": repo_skeleton,
+                    **({"stage3": artifacts["stage3"]} if "stage3" in artifacts else {}),
+                },
+                persist_callback=self._write_stage3_outputs,
+            )
         if end_stage == "stage3":
             return module_skeletons
 
@@ -807,34 +841,25 @@ class PlannerRunner:
         module_name: str,
         stage5_record: ModuleCodegenRecord,
     ):
+        """Reuse existing stage6 merge if it exists, is non-empty, and passes Verilator syntax check."""
         fragment_file = Path(stage5_record.workspace_file)
         merged_file = self.stage6._merged_file(module_name)
         if not fragment_file.exists() or not merged_file.exists():
             return None
         code = merged_file.read_text(encoding="utf-8").replace("\r\n", "\n")
-        errors = self.stage6._validate_raw_module(code, module_name)
-        if errors:
+        if not code.strip():
             self.logger.info(
-                "[rtl_module_planner] Existing stage6 merge for %s is invalid; regenerating: %s",
+                "[rtl_module_planner] Existing stage6 merge for %s is empty; regenerating",
                 module_name,
-                errors,
             )
             return None
         self.stage6._ensure_toolchain_path()
-        syntax_ok, syntax_output = check_syntax(str(merged_file))
+        # check_syntax globs all .v files in the directory — use a temp copy
+        # of just this module to avoid MULTITOP / cross-module errors.
+        syntax_ok, syntax_output = _check_single_file_syntax(
+            str(merged_file), top_module=module_name,
+        )
         if not syntax_ok:
-            if not self._syntax_output_mentions_file(syntax_output, merged_file):
-                self.logger.info(
-                    "[rtl_module_planner] Existing stage6 merge for %s passed local checks; "
-                    "ignoring syntax failure from another merged RTL file: %s",
-                    module_name,
-                    self.stage6._summarize_syntax_output(syntax_output),
-                )
-                return ModuleMergeRecord(
-                    module=module_name,
-                    fragment_file=str(fragment_file),
-                    merged_file=str(merged_file),
-                )
             self.logger.info(
                 "[rtl_module_planner] Existing stage6 merge for %s fails Verilator syntax; regenerating: %s",
                 module_name,
@@ -846,10 +871,6 @@ class PlannerRunner:
             fragment_file=str(fragment_file),
             merged_file=str(merged_file),
         )
-
-    def _syntax_output_mentions_file(self, syntax_output: str, path: Path) -> bool:
-        text = str(syntax_output or "")
-        return str(path) in text or path.name in text
 
     def _compact_stage1_payload(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         return self._drop_text_grounding(payload)

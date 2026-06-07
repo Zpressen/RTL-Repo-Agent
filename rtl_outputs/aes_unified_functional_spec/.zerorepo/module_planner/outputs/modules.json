@@ -5,6 +5,7 @@
   "top_module": "aes_cipher_top",
   "module_order": [
     "aes_cipher_top",
+    "aes_unified_functional_spec",
     "aes_key_expand_128",
     "aes_sbox",
     "aes_rcon"
@@ -14,6 +15,7 @@
     "top_module": "aes_cipher_top",
     "files": [],
     "modules": [
+      "aes_unified_functional_spec",
       "aes_cipher_top",
       "aes_key_expand_128",
       "aes_sbox",
@@ -43,7 +45,13 @@
       }
     ],
     "instantiation_graph": [],
-    "generation_order_candidate": [],
+    "generation_order_candidate": [
+      "aes_unified_functional_spec",
+      "aes_sbox",
+      "aes_rcon",
+      "aes_key_expand_128",
+      "aes_cipher_top"
+    ],
     "image_grounding": []
   },
   "modules": [
@@ -346,6 +354,21 @@
           "image_grounding": []
         }
       ],
+      "incoming_hierarchy_relations": [],
+      "outgoing_instantiation_relations": [],
+      "incoming_instantiation_relations": []
+    },
+    {
+      "module": "aes_unified_functional_spec",
+      "is_top_module": false,
+      "interface_contract": null,
+      "timing_contract": null,
+      "control_contract": null,
+      "datapath_contract": null,
+      "planning_facts": null,
+      "parent_modules": [],
+      "child_modules": [],
+      "outgoing_hierarchy_relations": [],
       "incoming_hierarchy_relations": [],
       "outgoing_instantiation_relations": [],
       "incoming_instantiation_relations": []

@@ -67,7 +67,7 @@
       "module": "aes_cipher_top",
       "status": "fixed",
       "mismatch_count": 0,
-      "debug_trials": 5,
+      "debug_trials": 7,
       "workdir": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_cipher_top",
       "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_cipher_top/rtl.sv",
       "trace_report_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_cipher_top/trace_report.json",

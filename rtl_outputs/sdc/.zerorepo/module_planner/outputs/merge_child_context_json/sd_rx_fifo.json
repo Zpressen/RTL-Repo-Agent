@@ -3,7 +3,7 @@
   "module": "sd_rx_fifo",
   "kg_enabled": true,
   "retrieval_requested": false,
-  "retrieval_reason": "Module sd_rx_fifo has no children; dependency context shows empty children list, so no child-module interface or wiring context is needed.",
+  "retrieval_reason": "sd_rx_fifo is a leaf module in the dependency context and the generated fragments do not instantiate or call child modules. Child-module interface context would not materially help the merge.",
   "available_child_modules": [],
   "requested_child_modules": [],
   "children": []
