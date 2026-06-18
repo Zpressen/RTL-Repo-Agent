@@ -1,0 +1,15 @@
+# Dockerfile.sim
+# Lightweight RTL simulation image (Icarus Verilog + Verilator)
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates git make python3 \
+    iverilog verilator \
+    yosys fpga-icestorm nextpnr-ice40 gettext-base \
+ && rm -rf /var/lib/apt/lists/*
+
+# Quality-of-life
+WORKDIR /work
+CMD ["bash"]

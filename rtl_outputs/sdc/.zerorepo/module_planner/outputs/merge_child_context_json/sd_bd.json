@@ -1,0 +1,10 @@
+{
+  "schema_version": "merge_child_context_v1",
+  "module": "sd_bd",
+  "kg_enabled": true,
+  "retrieval_requested": false,
+  "retrieval_reason": "sd_bd has no child modules in DEPENDENCY_CONTEXT and the generated fragments are self-contained; no submodule instance wiring or child port/interface correctness is involved.",
+  "available_child_modules": [],
+  "requested_child_modules": [],
+  "children": []
+}

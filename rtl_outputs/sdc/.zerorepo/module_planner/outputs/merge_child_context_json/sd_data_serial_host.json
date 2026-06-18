@@ -1,0 +1,93 @@
+{
+  "schema_version": "merge_child_context_v1",
+  "module": "sd_data_serial_host",
+  "kg_enabled": true,
+  "retrieval_requested": true,
+  "retrieval_reason": "The generated fragments instantiate sd_crc_16 four times and correctness depends on the child module port names, widths, reset polarity, and CRC output ordering. Retrieving child context would materially help verify instance wiring and port compatibility during merge.",
+  "requested_child_modules": [
+    "sd_crc_16"
+  ],
+  "children": [
+    {
+      "module": "sd_crc_16",
+      "child_status": "verified",
+      "ports": [
+        {
+          "name": "Enable",
+          "path": "sd_crc_16.v",
+          "sl": null,
+          "el": null,
+          "attrs": {
+            "dir": "input",
+            "module": "sd_crc_16"
+          },
+          "direction": "input",
+          "width": ""
+        },
+        {
+          "name": "CLK",
+          "path": "sd_crc_16.v",
+          "sl": null,
+          "el": null,
+          "attrs": {
+            "dir": "input",
+            "module": "sd_crc_16"
+          },
+          "direction": "input",
+          "width": ""
+        },
+        {
+          "name": "RST",
+          "path": "sd_crc_16.v",
+          "sl": null,
+          "el": null,
+          "attrs": {
+            "dir": "input",
+            "module": "sd_crc_16"
+          },
+          "direction": "input",
+          "width": ""
+        },
+        {
+          "name": "CRC",
+          "path": "sd_crc_16.v",
+          "sl": null,
+          "el": null,
+          "attrs": {
+            "dir": "output",
+            "module": "sd_crc_16",
+            "width_expr": "[15:0]"
+          },
+          "direction": "output",
+          "width": "[15:0]"
+        },
+        {
+          "name": "BITVAL",
+          "path": "sd_crc_16.v",
+          "sl": null,
+          "el": null,
+          "attrs": {
+            "dir": "input",
+            "module": "sd_crc_16"
+          },
+          "direction": "input",
+          "width": ""
+        }
+      ],
+      "parameters": [],
+      "file_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_crc_16/rtl.sv",
+      "module_path": "sd_crc_16.v",
+      "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_crc_16/rtl.sv",
+      "simulation_status": "pass",
+      "simulation_passed": true,
+      "module_start_line": 1,
+      "module_end_line": 38,
+      "code_mode": "full",
+      "full_code_included": true,
+      "source_file_read": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_crc_16/rtl.sv",
+      "functional_summary": "Use this child module by instantiation. Do not duplicate verified child internals in the parent module.",
+      "interface_code": "module sd_crc_16 (\n    input BITVAL,\n    input Enable,\n    input CLK,\n    input RST,\n    output [15:0] CRC\n);",
+      "full_code": "module sd_crc_16 (\n    input BITVAL,\n    input Enable,\n    input CLK,\n    input RST,\n    output [15:0] CRC\n);\n\nreg [15:0] crc_reg;\nwire inv;\n\nassign inv = BITVAL ^ crc_reg[15];\nassign CRC = crc_reg;\n\nalways @(posedge CLK or posedge RST) begin\n    if (RST) begin\n        crc_reg <= 16'd0;\n    end else if (Enable) begin\n        crc_reg[0]  <= inv;\n        crc_reg[1]  <= crc_reg[0];\n        crc_reg[2]  <= crc_reg[1];\n        crc_reg[3]  <= crc_reg[2];\n        crc_reg[4]  <= crc_reg[3];\n        crc_reg[5]  <= crc_reg[4] ^ inv;\n        crc_reg[6]  <= crc_reg[5];\n        crc_reg[7]  <= crc_reg[6];\n        crc_reg[8]  <= crc_reg[7];\n        crc_reg[9]  <= crc_reg[8];\n        crc_reg[10] <= crc_reg[9];\n        crc_reg[11] <= crc_reg[10];\n        crc_reg[12] <= crc_reg[11] ^ inv;\n        crc_reg[13] <= crc_reg[12];\n        crc_reg[14] <= crc_reg[13];\n        crc_reg[15] <= crc_reg[14];\n    end\nend\n\nendmodule"
+    }
+  ]
+}

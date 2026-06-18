@@ -1,0 +1,21 @@
+{
+  "schema_version": "merge_context_retrieval_v1",
+  "module": "sd_fifo_tx_filler",
+  "selected_spec_refs": [
+    "S004",
+    "S007"
+  ],
+  "use_kg_child_context": false,
+  "kg_child_modules": [],
+  "kg_child_context_reason": "The generated fragments already include a correct instantiation of sd_tx_fifo. The child module's port interface is fully described in spec block S007, which is selected. The merge conflict (redundant output assignments in B5) can be resolved by referring to S004 and S007 without needing the child's Verilog code. Therefore, extra KG child context is not useful.",
+  "code_gap_notes": [
+    "B5 fragment incorrectly assigns dat_o, empty, and fe from undeclared nets sd_tx_fifo_q, sd_tx_fifo_empty, sd_tx_fifo_full; these signals are already directly connected from the sd_tx_fifo instance to the top-level ports, making B5 redundant and erroneous.",
+    "The wire mem_empt used in the sd_tx_fifo instantiation is not declared in B1; it should be declared (likely a 6-bit wire).",
+    "Registers we and first are declared but never used in any fragment, potentially leftover and may be removed."
+  ],
+  "selection_reason": [
+    "S004 defines the complete port list, directions, and widths for sd_fifo_tx_filler, essential to verify the top-level interface and resolve the conflicting output assignments in B5.",
+    "S007 defines the sd_tx_fifo child module's I/O ports, confirming that empty, fe (full), and q (data output) are directly available, thus guiding the merge agent to discard the redundant combinational assignments in B5 and trust the instantiation connections."
+  ],
+  "fallback_used": false
+}

@@ -1,0 +1,93 @@
+{
+  "schema_version": "merge_child_context_v1",
+  "module": "sd_cmd_serial_host",
+  "kg_enabled": true,
+  "retrieval_requested": true,
+  "retrieval_reason": "The fragments instantiate sd_crc_7 and the BITVAL wiring is potentially ambiguous because both CRC_IN and CRC_OUT appear in the generated logic; child interface/code context can confirm the exact port names, directions, and intended serial CRC bit input wiring.",
+  "requested_child_modules": [
+    "sd_crc_7"
+  ],
+  "children": [
+    {
+      "module": "sd_crc_7",
+      "child_status": "verified",
+      "ports": [
+        {
+          "name": "Enable",
+          "path": "sd_crc_7.v",
+          "sl": null,
+          "el": null,
+          "attrs": {
+            "dir": "input",
+            "module": "sd_crc_7"
+          },
+          "direction": "input",
+          "width": ""
+        },
+        {
+          "name": "CLK",
+          "path": "sd_crc_7.v",
+          "sl": null,
+          "el": null,
+          "attrs": {
+            "dir": "input",
+            "module": "sd_crc_7"
+          },
+          "direction": "input",
+          "width": ""
+        },
+        {
+          "name": "BITVAL",
+          "path": "sd_crc_7.v",
+          "sl": null,
+          "el": null,
+          "attrs": {
+            "dir": "input",
+            "module": "sd_crc_7"
+          },
+          "direction": "input",
+          "width": ""
+        },
+        {
+          "name": "RST",
+          "path": "sd_crc_7.v",
+          "sl": null,
+          "el": null,
+          "attrs": {
+            "dir": "input",
+            "module": "sd_crc_7"
+          },
+          "direction": "input",
+          "width": ""
+        },
+        {
+          "name": "CRC",
+          "path": "sd_crc_7.v",
+          "sl": null,
+          "el": null,
+          "attrs": {
+            "dir": "output",
+            "module": "sd_crc_7",
+            "width_expr": "[6:0]"
+          },
+          "direction": "output",
+          "width": "[6:0]"
+        }
+      ],
+      "parameters": [],
+      "file_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_crc_7/rtl.sv",
+      "module_path": "sd_crc_7.v",
+      "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_crc_7/rtl.sv",
+      "simulation_status": "pass",
+      "simulation_passed": true,
+      "module_start_line": 1,
+      "module_end_line": 29,
+      "code_mode": "full",
+      "full_code_included": true,
+      "source_file_read": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_crc_7/rtl.sv",
+      "functional_summary": "Use this child module by instantiation. Do not duplicate verified child internals in the parent module.",
+      "interface_code": "module sd_crc_7 (\n    input BITVAL,\n    input Enable,\n    input CLK,\n    input RST,\n    output [6:0] CRC\n);",
+      "full_code": "module sd_crc_7 (\n    input BITVAL,\n    input Enable,\n    input CLK,\n    input RST,\n    output [6:0] CRC\n);\n\n// 7-bit CRC register\nreg [6:0] crc_reg;\n\n// Combinational inversion signal\nwire inv;\n\n// Connect internal register to output port\nassign CRC = crc_reg;\n\n// Combinationally compute inv = BITVAL ^ CRC[6]\nassign inv = BITVAL ^ crc_reg[6];\n\n// Sequential CRC update with asynchronous reset\nalways @(posedge CLK or posedge RST) begin\n    if (RST)\n        crc_reg <= 7'b0;\n    else if (Enable)\n        crc_reg <= {crc_reg[5], crc_reg[4], crc_reg[3], (crc_reg[2] ^ inv), crc_reg[1], crc_reg[0], inv};\nend\n\nendmodule"
+    }
+  ]
+}

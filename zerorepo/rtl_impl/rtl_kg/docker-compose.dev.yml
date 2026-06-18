@@ -1,0 +1,63 @@
+# docker-compose.dev.yml
+# Neo4j + optional RTL simulation container (Icarus/Verilator)
+#
+# Quick start (Neo4j only):
+#   cd /home/mokita/RPG-ZeroRepo
+#   docker compose -f zerorepo/rtl_impl/rtl_kg/docker-compose.dev.yml up -d
+#
+# With simulation container:
+#   RTL_REPO=/path/to/your/rtl/repo docker compose -f zerorepo/rtl_impl/rtl_kg/docker-compose.dev.yml --profile sim up -d
+#
+#   docker compose -f zerorepo/rtl_impl/rtl_kg/docker-compose.dev.yml logs -f neo4j
+#   docker compose -f zerorepo/rtl_impl/rtl_kg/docker-compose.dev.yml exec sim bash
+#   docker compose -f zerorepo/rtl_impl/rtl_kg/docker-compose.dev.yml down
+#
+# Inside sim container:
+#   cd /work/repo/src
+#   mkdir -p build
+#   iverilog -g2012 -o build/uart_tb.vvp -s uart_tb src/*.v
+#   vvp build/uart_tb.vvp
+#
+services:
+  neo4j:
+    image: neo4j:5
+    container_name: rtl-agent-neo4j
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      NEO4J_AUTH: "neo4j/neo4j123456"
+      NEO4J_dbms_memory_heap_initial__size: "1G"
+      NEO4J_dbms_memory_heap_max__size: "2G"
+      NEO4J_dbms_memory_pagecache_size: "1G"
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - neo4j_import:/import
+      - neo4j_plugins:/plugins
+    restart: unless-stopped
+
+  sim:
+    profiles: ["sim"]
+    build:
+      context: .
+      dockerfile: Dockerfile.sim
+    container_name: rtl-agent-sim
+    command: ["bash", "-lc", "sleep infinity"]
+    environment:
+      SERV: /work/serv
+    volumes:
+      - ${RTL_REPO:-/dev/null}:/work/repo:rw
+      - ${SERV_REPO:-/dev/null}:/work/serv:rw
+      - sim_build:/work/repo/build:rw
+    working_dir: /work/repo
+    depends_on:
+      - neo4j
+    restart: unless-stopped
+
+volumes:
+  neo4j_data:
+  neo4j_logs:
+  neo4j_import:
+  neo4j_plugins:
+  sim_build:

@@ -1,0 +1,8 @@
+{
+  "schema_version": "stage6_syntax_repair_v1",
+  "module": "sd_cmd_master",
+  "status": "pass_without_repair",
+  "max_trials": 5,
+  "attempts": [],
+  "final_rtl_hash": "781b578de48c4e90"
+}

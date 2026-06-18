@@ -1,0 +1,29 @@
+{
+  "schema_version": "merge_context_retrieval_v1",
+  "module": "sd_controller_wb",
+  "selected_spec_refs": [
+    "S003",
+    "S005",
+    "S006",
+    "S007",
+    "S008"
+  ],
+  "use_kg_child_context": false,
+  "kg_child_modules": [],
+  "kg_child_context_reason": "sd_controller_wb is a leaf module in the provided dependency context and the generated fragments do not instantiate child modules. The merge needs local register, bus, reset, and BD write behavior rather than child interface details.",
+  "code_gap_notes": [
+    "The module interface and skeleton contain width mismatches against the spec for status inputs such as normal_int_status_reg, error_int_status_reg, and Bd_Status_reg, so the interface block is needed to resolve final port widths.",
+    "The generated fragments use RAM_MEM_WIDTH, `BLOCK_SIZE, and `RESET_CLK_DIV without showing how global defines are included or parameterized; merge must preserve compatibility with the provided global define context.",
+    "BD write handling is partially ambiguous: the fragments start and complete BD writes in overlapping logic, while the spec requires int_ack to delay wb_ack_o until the BD write operation is complete and describes different behavior for 16-bit versus 32-bit RAM width.",
+    "Control pulse ownership and timing for new_cmd, int_busy, cmd_int_busy, we_ack, interrupt reset pulses, int_ack, and wb_ack_o need the operation/reset blocks to avoid merging inconsistent pulse behavior.",
+    "Read mux construction needs register address, access type, reset/default value, and read-only versus writable ownership from the register map."
+  ],
+  "selection_reason": [
+    "S003 is required because it is the current module interface block and defines all ports, widths, directions, and exposed register outputs.",
+    "S005 is required for the register address map, access permissions, bit widths, reset values, and special reset-on-write/status behavior used throughout the generated decode and sequential logic.",
+    "S006 is required for control semantics of cmd_int_busy, int_busy, new_cmd, we_ack, wb_ack_o, int_ack, and BD write enable behavior.",
+    "S007 is required for asynchronous active-high reset behavior and for distinguishing configuration register reset values from other variable reset defaults.",
+    "S008 is required for Wishbone read/write conditions, register decode behavior, and the multi-cycle BD RX/TX write sequencing that gates int_ack and wb_ack_o."
+  ],
+  "fallback_used": false
+}

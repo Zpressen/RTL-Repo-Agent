@@ -1,0 +1,35 @@
+{
+  "schema_version": "merge_context_retrieval_v1",
+  "module": "sd_cmd_master",
+  "selected_spec_refs": [
+    "S002",
+    "S003",
+    "S004",
+    "S005",
+    "S006",
+    "S007",
+    "S008",
+    "S010"
+  ],
+  "use_kg_child_context": false,
+  "kg_child_modules": [],
+  "kg_child_context_reason": "sd_cmd_master has no child modules in DEPENDENCY_CONTEXT and generated fragments do not instantiate submodules; merge correctness depends on local FSM, handshake, register, debounce, and interrupt behavior rather than child interfaces.",
+  "code_gap_notes": [
+    "Generated fragments declare ERR_INT_RST and NORMAL_INT_RST but do not implement their interrupt-clear behavior; corner-case spec context is needed to merge this correctly.",
+    "settings assembly uses a 16-bit vector with an apparent leading unused bit; merge needs the interface and FSM operation specs to preserve the intended bit placement.",
+    "response_size is driven both in a combinational block and a sequential FSM block, creating potential multiple-driver ambiguity that merge needs to resolve from the FSM/output behavior spec.",
+    "Handshake behavior across req_out, ack_in_int, req_in_int, and ack_out is split across fragments and needs the signal semantics plus FSM operation details for correct ownership and timing.",
+    "STATUS_REG/status, NORMAL_INT_REG, ERR_INT_REG, complete, go_idle_o, and response capture ownership are distributed across sequential logic and need register/state definitions and corner cases to avoid stale or conflicting assignments."
+  ],
+  "selection_reason": [
+    "S002 is required as the current module interface block, defining all ports, widths, directions, and reset polarity.",
+    "S003 defines the high-level handshake and signal-use semantics for New_CMD, settings, cmd_out, req_out, ack_in, req_in, ack_out, cmd_in, serial_status, and go_idle_o.",
+    "S004 defines CMD_SET_REG fields, STATUS_REG/interrupt bit meanings, FSM encodings, and status bit aliases used directly by the fragments.",
+    "S005 defines debounce counter and card_present behavior implemented by the generated debounce fragment.",
+    "S006 defines the two-stage req_in and ack_in synchronizers used by FSM transition and output fragments.",
+    "S007 defines FSM next-state behavior and reset update rules for IDLE, SETUP, and EXECUTE.",
+    "S008 defines reset clearing, per-state output ownership, command/settings assembly, watchdog timeout, CRC/index checks, response capture, and interrupt updates needed for final merge.",
+    "S010 defines corner-case error handling and interrupt reset behavior, including simultaneous ERR_INT_RST and NORMAL_INT_RST handling that is absent from the fragments."
+  ],
+  "fallback_used": false
+}

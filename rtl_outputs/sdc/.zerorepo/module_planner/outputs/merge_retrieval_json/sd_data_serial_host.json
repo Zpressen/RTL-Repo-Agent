@@ -1,0 +1,39 @@
+{
+  "schema_version": "merge_context_retrieval_v1",
+  "module": "sd_data_serial_host",
+  "selected_spec_refs": [
+    "S001",
+    "S002",
+    "S003",
+    "S004",
+    "S005",
+    "S007",
+    "S010",
+    "S013"
+  ],
+  "use_kg_child_context": true,
+  "kg_child_modules": [
+    "sd_crc_16"
+  ],
+  "kg_child_context_reason": "The generated fragments instantiate sd_crc_16 four times and correctness depends on the child module port names, widths, reset polarity, and CRC output ordering. Retrieving child context would materially help verify instance wiring and port compatibility during merge.",
+  "code_gap_notes": [
+    "The module frame still needs the exact port declarations, directions, and widths, especially SD_BUS_W-dependent DAT/data ports.",
+    "The generated fragments rely on sd_defines macros and derived parameters; merge needs authoritative global define usage and include expectations.",
+    "State parameters are emitted inside the FSM_COMBO fragment while earlier fragments reference READ_WAIT and IDLE, so the merge must place declarations legally and consistently.",
+    "Output ownership and reg declarations must align with procedural assignments in FSM_OUT.",
+    "CRC output is flattened and manually sliced; merge needs the child sd_crc_16 interface and intended per-lane slice mapping.",
+    "FSM_COMBO appears simplified around start_dat/read/write semantics and transfer-count thresholds, so state-transition and FSM_OUT behavioral specs are needed to preserve intended control behavior.",
+    "Reset values and done/busy/crc_ok semantics are concentrated in FSM_OUT and must be preserved across merged sequential blocks."
+  ],
+  "selection_reason": [
+    "S001 is the current module interface/introduction block and identifies the module purpose and external DAT integration expectation.",
+    "S002 defines all input ports, widths, and start_dat command encodings needed to build the final module header.",
+    "S003 defines all output ports, widths, and status signal meanings needed for declarations and output ownership.",
+    "S004 defines the internal registers and widths referenced across the generated fragments.",
+    "S005 defines external parameters and sd_defines-derived constants used by declarations, counters, and bus-width-specific logic.",
+    "S007 defines the sd_crc_16 child interface and the required crc_in/crc_en/crc_rst/crc_out wiring.",
+    "S010 defines the FSM states and transition behavior needed to merge and validate FSM_COMBO and state declarations.",
+    "S013 defines reset assignments and per-state output/control behavior, including CRC, busy, transfer completion, FIFO read/write, and read/write data handling."
+  ],
+  "fallback_used": false
+}

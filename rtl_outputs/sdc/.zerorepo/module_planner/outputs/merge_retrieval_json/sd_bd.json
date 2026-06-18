@@ -1,0 +1,35 @@
+{
+  "schema_version": "merge_context_retrieval_v1",
+  "module": "sd_bd",
+  "selected_spec_refs": [
+    "S003",
+    "S005",
+    "S006",
+    "S007",
+    "S008",
+    "S009",
+    "S010"
+  ],
+  "use_kg_child_context": false,
+  "kg_child_modules": [],
+  "kg_child_context_reason": "sd_bd has no child modules in DEPENDENCY_CONTEXT and the generated fragments are self-contained; no submodule instance wiring or child port/interface correctness is involved.",
+  "code_gap_notes": [
+    "The module interface still needs authoritative port directions and widths, especially for output regs free_bd, ack_o_s, and dat_out_s.",
+    "free_bd is assigned in both the write/reset block and the a_cmp release block, creating a multiple-driver merge hazard; reset, decrement, and increment ownership must be reconciled into valid sequential logic.",
+    "The generated write block references new_bw, but new_bw is not in the interface specification or declared in the declaration fragment, so the merge must decide whether to omit it, keep it internal, or correct it.",
+    "Initialization and asynchronous reset behavior for free_bd, pointers, counters, and last_a_cmp must be preserved, including 32-bit versus 16-bit initial free_bd counts.",
+    "Read/write completion counts differ by mode and must be merged consistently with pointer wraparound and free_bd updates.",
+    "The flattened bd_mem case logic assumes BD_SIZE is 8 and BD_WIDTH is 3 from global defines; circular wrap and power-of-two assumptions should be kept aligned with the spec.",
+    "ack_o_s semantics are mode-dependent and only asserted during reads in 16-bit mode; 32-bit mode behavior must remain low unless another selected constraint overrides it."
+  ],
+  "selection_reason": [
+    "S003 is required because it defines the current module interface, including required ports, directions, and RAM_MEM_WIDTH/BD_WIDTH-dependent widths.",
+    "S005 is needed for reset and initialization semantics for free_bd, write/read pointers, and counters in 32-bit and 16-bit modes.",
+    "S006 is needed to merge the write sequence, write completion count, pointer increment, new BD indication, and free_bd decrement behavior.",
+    "S007 is needed to merge read sequencing, dat_out_s selection, read pointer increment, read completion counts, and ack_o_s behavior.",
+    "S008 is needed because the generated release block implements a_cmp rising-edge detection through last_a_cmp and increments free_bd.",
+    "S009 is needed to preserve circular pointer wraparound and dynamic free_bd tracking across writes, reads, and releases.",
+    "S010 is needed for constraints that affect merge correctness, especially power-of-two BD sizing, non-overlap assumptions, and consecutive multi-word BD operations in 16-bit mode."
+  ],
+  "fallback_used": false
+}

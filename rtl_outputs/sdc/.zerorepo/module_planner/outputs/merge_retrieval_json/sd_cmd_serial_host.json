@@ -1,0 +1,37 @@
+{
+  "schema_version": "merge_context_retrieval_v1",
+  "module": "sd_cmd_serial_host",
+  "selected_spec_refs": [
+    "S002",
+    "S003",
+    "S004",
+    "S006",
+    "S007",
+    "S011",
+    "S012",
+    "S016"
+  ],
+  "use_kg_child_context": true,
+  "kg_child_modules": [
+    "sd_crc_7"
+  ],
+  "kg_child_context_reason": "The fragments instantiate sd_crc_7 and the BITVAL wiring is potentially ambiguous because both CRC_IN and CRC_OUT appear in the generated logic; child interface/code context can confirm the exact port names, directions, and intended serial CRC bit input wiring.",
+  "code_gap_notes": [
+    "The final merge must preserve the exact split input/output interface and output reg ownership, including ACK_OUT/REQ_OUT/status/CMD line control.",
+    "CRC wiring is ambiguous in the fragments: sd_crc_7 BITVAL is connected to CRC_IN[6] while FSM_OUT also drives CRC_OUT as a serial bit signal, so the merge needs authoritative CRC submodule/interface context.",
+    "Reset behavior differs by block: synchronizers use asynchronous reset while the command decoder, FSM state update, and FSM_OUT use clocked reset behavior; merge must not homogenize these incorrectly.",
+    "Handshake semantics for REQ_IN/ACK_OUT and REQ_OUT/ACK_IN must be preserved so SETTING_IN/CMD_IN stability and completion notification are correct.",
+    "FSM_OUT contains most output ownership and status/st_dat_t behavior, including CRC validation and command response buffering, so per-state details are needed to avoid incorrect signal defaults or duplicate drivers."
+  ],
+  "selection_reason": [
+    "S002 is required for the current module input interface, including widths for SETTING_IN, CMD_IN, REQ_IN, ACK_IN, and cmd_dat_i.",
+    "S003 is required for the current module output interface, including widths and ownership of CMD_OUT, ACK_OUT, REQ_OUT, STATUS, cmd_oe_o, cmd_out_o, and st_dat_t.",
+    "S004 defines the cross-clock request/acknowledge handshake semantics that constrain ACK_OUT, REQ_OUT, SETTING_IN, and CMD_IN behavior during merge.",
+    "S006 defines parameters, FSM state sizing, internal registers/wires, and CRC-related signals used throughout the generated fragments.",
+    "S007 defines the FSM next-state transition table implemented by the fsm_combo fragment.",
+    "S011 defines SETTING_IN bit decoding, command buffer capture, mutually exclusive Write_Read/Write_Only flags, and DECODER_ACK behavior.",
+    "S012 defines reset values, per-state registered output behavior, counters, CRC control, STATUS bits, CMD_OUT buffering, and st_dat_t updates for the largest generated fragment.",
+    "S016 defines the sd_crc_7 child module interface needed to verify the generated instance wiring."
+  ],
+  "fallback_used": false
+}

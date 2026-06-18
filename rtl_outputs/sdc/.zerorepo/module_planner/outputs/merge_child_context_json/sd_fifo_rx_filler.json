@@ -1,0 +1,12 @@
+{
+  "schema_version": "merge_child_context_v1",
+  "module": "sd_fifo_rx_filler",
+  "kg_enabled": true,
+  "retrieval_requested": false,
+  "retrieval_reason": "The generated instantiation of sd_rx_fifo is complete and correct; the child's port interface is fully described in S007, so no further submodule code is required.",
+  "available_child_modules": [
+    "sd_rx_fifo"
+  ],
+  "requested_child_modules": [],
+  "children": []
+}

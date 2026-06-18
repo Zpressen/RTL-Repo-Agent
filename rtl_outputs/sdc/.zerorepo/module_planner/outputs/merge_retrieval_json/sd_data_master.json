@@ -1,0 +1,37 @@
+{
+  "schema_version": "merge_context_retrieval_v1",
+  "module": "sd_data_master",
+  "selected_spec_refs": [
+    "S004",
+    "S005",
+    "S007",
+    "S008",
+    "S009",
+    "S011",
+    "S015",
+    "S017"
+  ],
+  "use_kg_child_context": false,
+  "kg_child_modules": [],
+  "kg_child_context_reason": "sd_data_master has no child modules in DEPENDENCY_CONTEXT, and the generated fragments do not instantiate or wire submodules. Merge correctness depends on local interface, registers, parameters, FSM, and output ownership rather than child-module port context.",
+  "code_gap_notes": [
+    "The generated fragments need the complete module port list and exact input/output widths to form a valid final module.",
+    "Output ownership is ambiguous because B4 drives several outputs procedurally while B5 also drives them combinationally; the merge needs the spec's output behavior to choose a single-driver structure.",
+    "The fragments declare bd_cnt inside the parameter block and omit it from the register declaration block; conditional width rules from the spec are needed to place and size it correctly.",
+    "The generated code relies on global defines and conditional RAM width behavior, but DEPENDENCY_CONTEXT defines RAM_MEM_WIDTH rather than RAM_MEM_WIDTH_32, so merge should preserve the intended fallback/conditional behavior carefully.",
+    "Reset behavior and all cleared registers/outputs must be aligned with the active-high asynchronous reset requirement.",
+    "FSM transition logic includes a potentially off-by-one GET_TX_BD condition using bd_cnt > READ_CYCLE - 1 while the sequential code increments to READ_CYCLE; the transition table is needed to resolve intended behavior.",
+    "Command setup, FIFO start, BD completion, ack_transfer, CRC/error status, and resend retry behavior need the FSM_OUT rules to merge fragmented sequential and combinational behavior consistently."
+  ],
+  "selection_reason": [
+    "S004 is required as the current module input interface block, including port names, directions, widths, and reset polarity.",
+    "S005 is required as the current module output interface block, including output names, widths, and externally visible status/control ownership.",
+    "S007 defines the internal registers and widths that must be declared once and shared across FSM, command, transfer, and status logic.",
+    "S008 defines command constants, one-hot FSM encodings, retry maximum, READ_CYCLE, and BD_EMPTY parameters used directly by the fragments.",
+    "S009 defines the external macro-dependent RAM/BD sizing behavior and bd_cnt width rules needed to merge parameter and declaration fragments correctly.",
+    "S011 defines the intended next-state transition table implemented by the generated combinational FSM fragment.",
+    "S015 defines per-state output and register behavior, including BD loading, command send/receive, FIFO start, transfer completion, CRC/error handling, stop command, and Dat_Int_Status reset.",
+    "S017 provides the active-high asynchronous reset requirement needed to finalize the sequential block correctly."
+  ],
+  "fallback_used": false
+}
