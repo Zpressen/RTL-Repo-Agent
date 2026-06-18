@@ -416,3 +416,51 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# ============================================================
+# Project-specific rules
+# ============================================================
+
+# Python virtual environments / package installs
+.zerorepo/lib/
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+*.egg
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Verilator build artifacts
+**/obj_dir/
+*.gch
+
+# Waveform dump files
+*.vcd
+*.vpd
+*.vpd.gz
+
+# Agent artifacts / tarballs
+*.tar
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+
+# IDE / Editor
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Code generation (excluded from version control)
+zerorepo/code_gen/
+
+# Trae agent artifacts
+rtl_outputs/rtl_spec_/trae-agent-artifacts/
