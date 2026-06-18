@@ -327,7 +327,11 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
                             logger.info("RTL KG enabled for module planner at repo path: %s", merged_dir)
                         except Exception as exc:
                             kg_service = None
-                            logger.warning("RTL KG initialization failed; continuing without KG writes: %s", exc)
+                            msg = f"RTL KG initialization failed: {exc}"
+                            if str(rtl_kg_cfg.get("mode", "required")).strip().lower() == "required":
+                                logger.error("%s", msg)
+                                raise RuntimeError(msg) from exc
+                            logger.warning("%s; continuing without KG writes", msg)
 
                     def _discover_spec_images() -> list[str]:
                         import re

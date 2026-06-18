@@ -5,13 +5,13 @@
 # LLM Configuration
 # ============================================================================
 llm:
-  model: "gpt-5.5"
+  model: "deepseek-v4-pro"
   max_tokens: 65536
   temperature: 0.6
   reasoning_effort: "high"
   provider: "openai"
-  api_key: "sk-8bce642542af301d17a07e0c979514bac29524d8acc922f57bf00325876f3b22"
-  base_url: "https://www.inroi.shop/v1"
+  api_key: "sk-69b2599638a24105962d6b186788d6ce"
+  base_url: "https://api.deepseek.com"
   # api_version: ""
   # tenant_id: ""
   # token_scope: ""

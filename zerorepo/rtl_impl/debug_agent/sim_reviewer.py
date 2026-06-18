@@ -53,6 +53,15 @@ def sim_review_mismatch_cnt(stdout: str) -> int:
         if m is not None:
             mismatch_cnt = int(m.group(1))
             return mismatch_cnt
+    counts = [
+        int(item)
+        for item in re.findall(
+            r"(?:Hint:\s+Output\s+)?(?:'[^']+'|[A-Za-z_][A-Za-z0-9_]*(?:\s+signal)?)\s+has\s+(\d+)\s+mismatches",
+            stdout,
+        )
+    ]
+    if counts:
+        return sum(counts)
     # Fallback for VerilogEval-style golden testbenches.
     m2 = re.search(r"^Mismatches:\s*(\d+)\s*in\s*(\d+)\s*samples$", stdout, re.MULTILINE)
     if m2:
@@ -62,16 +71,32 @@ def sim_review_mismatch_cnt(stdout: str) -> int:
     if m3:
         mismatch_cnt = int(m3.group(1))
         return mismatch_cnt
-    counts = [
-        int(item)
-        for item in re.findall(
-            r"(?:Hint:\s+Output\s+)?(?:'[^']+'|[A-Za-z_][A-Za-z0-9_]*(?:\s+signal)?)\s+has\s+(\d+)\s+mismatches",
-            stdout,
-        )
-    ]
-    if counts:
-        mismatch_cnt = sum(counts)
     return mismatch_cnt
+
+
+def _local_include_sources(output_path_per_run: str, source_paths: list[str]) -> list[str]:
+    include_re = re.compile(r"^\s*`include\s+\"(.+?)\"", re.MULTILINE)
+    root = os.path.abspath(output_path_per_run)
+    found: list[str] = []
+    seen: set[str] = set()
+    queue = [path for path in source_paths if path and os.path.isfile(path)]
+    for source_path in queue:
+        try:
+            with open(source_path, "r", encoding="utf-8") as fh:
+                text = fh.read()
+        except OSError:
+            continue
+        for m in include_re.finditer(text):
+            include_name = m.group(1)
+            include_path = os.path.abspath(os.path.join(root, include_name))
+            if not include_path.startswith(root + os.sep):
+                continue
+            if not os.path.isfile(include_path) or include_path in seen:
+                continue
+            seen.add(include_path)
+            found.append(include_path)
+            queue.append(include_path)
+    return found
 
 
 def sim_review(
@@ -95,7 +120,18 @@ def sim_review(
     # - Use --timing to support delays/event controls in testbenches.
     # - Use --trace so $dumpfile/$dumpvars can generate wave.vcd for debugging.
     # - Use --assert (or default-on in newer versions) for assertion support.
-    srcs = f"{tb_path} {rtl_path} {golden_rtl_path}".strip()
+    primary_sources = [tb_path, rtl_path]
+    if golden_rtl_path:
+        primary_sources.append(golden_rtl_path)
+    include_sources = _local_include_sources(output_path_per_run, primary_sources)
+    ordered_sources: list[str] = []
+    seen_sources: set[str] = set()
+    for src in [*include_sources, *primary_sources]:
+        if not src or src in seen_sources:
+            continue
+        seen_sources.add(src)
+        ordered_sources.append(src)
+    srcs = " ".join(ordered_sources)
     # Auto-detect testbench top module name (most oracle testbenches use `tb`,
     # but some use `tb_{module_name}`).
     tb_top = "tb"

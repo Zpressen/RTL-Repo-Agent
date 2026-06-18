@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import re
@@ -12,7 +13,8 @@ from typing import Any, Callable, Literal
 
 from .bash_tools import CommandResult
 from .config import OpenAIConfig, load_openai_config
-from .sim_reviewer import SimReviewer
+from .sim_reviewer import SimReviewer, check_syntax
+from .utils import add_lineno, clip_text
 
 
 DebugStatus = Literal["disabled", "skipped", "pass", "fixed", "fail", "error"]
@@ -86,6 +88,8 @@ class ModuleDebugResult:
 
 
 class ModuleDebugRunner:
+    pre_debug_syntax_max_attempts = 5
+
     def __init__(
         self,
         *,
@@ -101,6 +105,9 @@ class ModuleDebugRunner:
         self.logger = logger
         self.kg_service = kg_service
         self.initial_result_recorder = initial_result_recorder
+
+    def _rtl_hash(self, text: str) -> str:
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
     def run_module(
         self,
@@ -138,6 +145,12 @@ class ModuleDebugRunner:
                 workdir=workdir,
                 contract_json=contract_json,
                 spec_source_path=spec_source_path,
+            )
+            self._repair_debug_workspace_syntax(
+                module_name=module_name,
+                workdir=workdir,
+                spec_text=spec_text,
+                contract_json=contract_json,
             )
             sim_reviewer = SimReviewer(str(workdir), str(workdir / "support.sv"))
             is_pass, mismatch_count, sim_output = sim_reviewer.review()
@@ -183,6 +196,8 @@ class ModuleDebugRunner:
                     trace_report_path=str(trace_report) if trace_report.exists() else "",
                     sim_output_path=str(debug_sim_output) if debug_sim_output.exists() else str(workdir / "initial_sim_output.json"),
                 )
+            if final_rtl.is_file():
+                shutil.copyfile(final_rtl, Path(merged_file))
             return ModuleDebugResult(
                 module=module_name,
                 status="fail",
@@ -292,6 +307,347 @@ class ModuleDebugRunner:
                     module_name,
                     exc,
                 )
+
+    def _repair_debug_workspace_syntax(
+        self,
+        *,
+        module_name: str,
+        workdir: Path,
+        spec_text: str,
+        contract_json: str,
+    ) -> None:
+        rtl_path = workdir / "rtl.sv"
+        support_path = workdir / "support.sv"
+        support_text = support_path.read_text(encoding="utf-8") if support_path.exists() else ""
+        support_index = self._build_support_interface_index(workdir)
+        macro_table = self._build_macro_table(workdir)
+        self._write_text(
+            workdir / "support_interface_index.json",
+            json.dumps(support_index, indent=2, ensure_ascii=False) + "\n",
+        )
+
+        log: dict[str, Any] = {
+            "module": module_name,
+            "status": "unknown",
+            "attempts": [],
+            "max_attempts": int(self.pre_debug_syntax_max_attempts),
+            "support_interface_index_path": str(workdir / "support_interface_index.json"),
+        }
+
+        try:
+            syntax_passed, syntax_output = check_syntax(str(rtl_path), top_module=module_name)
+        except Exception as exc:  # noqa: BLE001
+            log["status"] = "error"
+            log["initial"] = {
+                "syntax_passed": False,
+                "rtl_hash": self._rtl_hash(rtl_path.read_text(encoding="utf-8")),
+                "syntax_summary": f"{type(exc).__name__}: {exc}",
+                "raw_output_excerpt": f"{type(exc).__name__}: {exc}",
+            }
+            self._write_text(
+                workdir / "pre_debug_syntax_repair.json",
+                json.dumps(log, indent=2, ensure_ascii=False) + "\n",
+            )
+            return
+        log["initial"] = {
+            "syntax_passed": bool(syntax_passed),
+            "rtl_hash": self._rtl_hash(rtl_path.read_text(encoding="utf-8")),
+            "syntax_summary": self._summarize_syntax_output(syntax_output),
+            "raw_output_excerpt": clip_text(syntax_output, max_chars=8000),
+        }
+        if syntax_passed:
+            log["status"] = "pass_without_repair"
+            self._write_text(
+                workdir / "pre_debug_syntax_repair.json",
+                json.dumps(log, indent=2, ensure_ascii=False) + "\n",
+            )
+            return
+
+        current_syntax_output = syntax_output
+        for attempt in range(1, int(self.pre_debug_syntax_max_attempts) + 1):
+            rtl_code = rtl_path.read_text(encoding="utf-8")
+            prompt = self._build_pre_debug_syntax_repair_prompt(
+                module_name=module_name,
+                rtl_code=rtl_code,
+                syntax_output=current_syntax_output,
+                support_index=support_index,
+                support_text=support_text,
+                macro_table=macro_table,
+                spec_text=spec_text,
+                contract_json=contract_json,
+            )
+            try:
+                raw = self._call_pre_debug_syntax_repair_llm(prompt)
+                repaired = self._extract_verilog_code(raw)
+                if repaired.strip():
+                    self._write_text(rtl_path, repaired.rstrip() + "\n")
+                else:
+                    current_syntax_output = "LLM returned empty RTL."
+            except Exception as exc:  # noqa: BLE001
+                current_syntax_output = f"{type(exc).__name__}: {exc}"
+
+            try:
+                syntax_passed, syntax_output_after = check_syntax(str(rtl_path), top_module=module_name)
+            except Exception as exc:  # noqa: BLE001
+                syntax_passed = False
+                syntax_output_after = f"{type(exc).__name__}: {exc}"
+            attempt_log = {
+                "attempt": attempt,
+                "syntax_passed": bool(syntax_passed),
+                "rtl_hash": self._rtl_hash(rtl_path.read_text(encoding="utf-8")),
+                "syntax_summary": self._summarize_syntax_output(syntax_output_after),
+                "raw_output_excerpt": clip_text(syntax_output_after, max_chars=8000),
+            }
+            log["attempts"].append(attempt_log)
+            current_syntax_output = syntax_output_after
+            if syntax_passed:
+                log["status"] = "pass_after_repair"
+                self._write_text(
+                    workdir / "pre_debug_syntax_repair.json",
+                    json.dumps(log, indent=2, ensure_ascii=False) + "\n",
+                )
+                return
+
+        log["status"] = "fail"
+        self._write_text(
+            workdir / "pre_debug_syntax_repair.json",
+            json.dumps(log, indent=2, ensure_ascii=False) + "\n",
+        )
+
+    def _build_support_interface_index(self, workdir: Path) -> dict[str, Any]:
+        support_path = workdir / "support.sv"
+        support_text = support_path.read_text(encoding="utf-8") if support_path.exists() else ""
+        modules: dict[str, Any] = {}
+        for m in re.finditer(r"\bmodule\s+([a-zA-Z_][a-zA-Z0-9_$]*)\b", support_text):
+            name = m.group(1)
+            end_m = re.search(r"\bendmodule\b", support_text[m.end() :], flags=re.IGNORECASE)
+            module_end = m.end() + end_m.end() if end_m else len(support_text)
+            module_text = support_text[m.start() : module_end]
+            header_end = module_text.find(";")
+            declaration = module_text[: header_end + 1].strip() if header_end >= 0 else module_text[:4000].strip()
+            header_text = declaration
+            body_text = module_text[header_end + 1 :] if header_end >= 0 else ""
+            parameters = self._parse_support_parameters(header_text)
+            ports = self._parse_support_ports(header_text, body_text)
+            modules[name] = {
+                "name": name,
+                "parameters": parameters,
+                "ports": ports,
+                "declaration": declaration,
+            }
+        return {"source": str(support_path), "modules": modules}
+
+    def _parse_support_parameters(self, header_text: str) -> list[dict[str, Any]]:
+        params: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        param_block = ""
+        m = re.search(r"#\s*\((.*)\)\s*\(", header_text, flags=re.DOTALL)
+        if m:
+            param_block = m.group(1)
+        for pm in re.finditer(
+            r"\b(?:parameter|localparam)\b\s+(?:\w+\s+)?(?:\[[^\]]+\]\s*)?([a-zA-Z_][a-zA-Z0-9_$]*)\s*(?:=\s*([^,\)]+))?",
+            param_block,
+            flags=re.DOTALL,
+        ):
+            name = pm.group(1)
+            if name in seen:
+                continue
+            seen.add(name)
+            params.append({"name": name, "default": (pm.group(2) or "").strip()})
+        return params
+
+    def _parse_support_ports(self, header_text: str, body_text: str) -> list[dict[str, Any]]:
+        ports_by_name: dict[str, dict[str, Any]] = {}
+
+        def add_port(name: str, direction: str = "", width: str = "") -> None:
+            if not name or name in {"input", "output", "inout", "wire", "logic", "reg"}:
+                return
+            current = ports_by_name.get(name, {"name": name, "direction": "", "width": ""})
+            if direction:
+                current["direction"] = direction
+            if width:
+                current["width"] = width
+            ports_by_name[name] = current
+
+        header_no_params = re.sub(r"#\s*\(.*?\)\s*", "", header_text, flags=re.DOTALL)
+        port_block = ""
+        start = header_no_params.find("(")
+        end = header_no_params.rfind(")")
+        if start >= 0 and end > start:
+            port_block = header_no_params[start + 1 : end]
+        for part in self._split_commas(port_block):
+            text = part.strip()
+            if not text:
+                continue
+            direction_match = re.search(r"\b(input|output|inout)\b", text)
+            direction = direction_match.group(1) if direction_match else ""
+            width_match = re.search(r"(\[[^\]]+\])", text)
+            width = width_match.group(1) if width_match else ""
+            name_match = re.search(r"([a-zA-Z_][a-zA-Z0-9_$]*)\s*(?:\[[^\]]+\])?\s*$", text)
+            if name_match:
+                add_port(name_match.group(1), direction, width)
+
+        decl_re = re.compile(
+            r"^\s*(input|output|inout)\b\s*(?:wire|logic|reg|signed|unsigned\s+)*\s*(\[[^\]]+\])?\s*([^;]+);",
+            flags=re.MULTILINE,
+        )
+        for dm in decl_re.finditer(body_text):
+            direction = dm.group(1)
+            width = (dm.group(2) or "").strip()
+            names_text = dm.group(3)
+            for name_part in names_text.split(","):
+                nm = re.search(r"([a-zA-Z_][a-zA-Z0-9_$]*)", name_part.strip())
+                if nm:
+                    add_port(nm.group(1), direction, width)
+
+        return [ports_by_name[name] for name in sorted(ports_by_name)]
+
+    def _split_commas(self, text: str) -> list[str]:
+        parts: list[str] = []
+        current: list[str] = []
+        depth = 0
+        for ch in text:
+            if ch in "([{":
+                depth += 1
+            elif ch in ")]}" and depth > 0:
+                depth -= 1
+            if ch == "," and depth == 0:
+                parts.append("".join(current))
+                current = []
+                continue
+            current.append(ch)
+        if current:
+            parts.append("".join(current))
+        return parts
+
+    def _build_macro_table(self, workdir: Path) -> list[dict[str, Any]]:
+        macros: list[dict[str, Any]] = []
+        define_re = re.compile(r"^\s*`define\s+([a-zA-Z_][a-zA-Z0-9_$]*)(?:\s+(.*?))?\s*$")
+        for path in sorted([*workdir.glob("*.sv"), *workdir.glob("*.v")], key=lambda item: item.name):
+            try:
+                lines = path.read_text(encoding="utf-8").splitlines()
+            except OSError:
+                continue
+            for line_no, line in enumerate(lines, start=1):
+                m = define_re.match(line)
+                if m:
+                    macros.append(
+                        {
+                            "name": m.group(1),
+                            "value": (m.group(2) or "").strip(),
+                            "file": path.name,
+                            "line": line_no,
+                        }
+                    )
+        return macros
+
+    def _extract_relevant_support_declarations(
+        self,
+        syntax_output: str,
+        index: dict[str, Any],
+        support_text: str,
+    ) -> str:
+        modules = index.get("modules") if isinstance(index, dict) else {}
+        if not isinstance(modules, dict) or not modules:
+            return clip_text(support_text, max_chars=12000)
+        names: set[str] = set()
+        haystack = syntax_output
+        for name in modules:
+            if str(name) in haystack:
+                names.add(str(name))
+        if not names:
+            return clip_text("\n\n".join(str(info.get("declaration", "")) for info in modules.values() if isinstance(info, dict)), max_chars=12000)
+        snippets = [
+            str(modules[name].get("declaration", ""))
+            for name in sorted(names)
+            if isinstance(modules.get(name), dict)
+        ]
+        return clip_text("\n\n".join(snippets), max_chars=12000)
+
+    def _build_pre_debug_syntax_repair_prompt(
+        self,
+        *,
+        module_name: str,
+        rtl_code: str,
+        syntax_output: str,
+        support_index: dict[str, Any],
+        support_text: str,
+        macro_table: list[dict[str, Any]],
+        spec_text: str,
+        contract_json: str,
+    ) -> str:
+        relevant_support = self._extract_relevant_support_declarations(syntax_output, support_index, support_text)
+        return (
+            "You are repairing Verilog/SystemVerilog syntax, interface, and elaboration errors before functional debug.\n"
+            "support.sv is the authoritative child module interface source. Only modify rtl.sv.\n"
+            "Do not modify support.sv, tb.sv, sd_defines.v, include files, or testbench behavior.\n"
+            "Do not pass macros as parameter overrides unless the support module explicitly declares that parameter. "
+            "For example, if the child has no SD_BUS_W parameter, remove #(.SD_BUS_W(...)).\n"
+            "Do not connect ports that are absent from the support module. Remove or replace nonexistent ports with real ports.\n"
+            "Do not invent child ports or child parameters. Preserve the top module interface and intended behavior.\n"
+            "Return only the complete corrected rtl.sv code, preferably in a systemverilog fenced block.\n\n"
+            f"<module_name>\n{module_name}\n</module_name>\n\n"
+            "<verilator_lint_log>\n"
+            f"{self._summarize_syntax_output(syntax_output)}\n"
+            "</verilator_lint_log>\n\n"
+            "<rtl_sv_with_lineno>\n"
+            f"{add_lineno(rtl_code)}"
+            "</rtl_sv_with_lineno>\n\n"
+            "<support_interface_index_json>\n"
+            f"{json.dumps(support_index, indent=2, ensure_ascii=False)}\n"
+            "</support_interface_index_json>\n\n"
+            "<relevant_support_declarations>\n"
+            f"{relevant_support}\n"
+            "</relevant_support_declarations>\n\n"
+            "<macro_table>\n"
+            f"{json.dumps(macro_table, indent=2, ensure_ascii=False)}\n"
+            "</macro_table>\n\n"
+            "<original_spec_background>\n"
+            f"{clip_text(spec_text, max_chars=4000)}\n"
+            "</original_spec_background>\n\n"
+            "<contract_json_background>\n"
+            f"{clip_text(contract_json, max_chars=4000)}\n"
+            "</contract_json_background>\n"
+        )
+
+    def _call_pre_debug_syntax_repair_llm(self, prompt: str) -> str:
+        from agentscope.memory import InMemoryMemory
+        from agentscope.message import Msg
+
+        from .agents import SafeReActAgent, clear_memory_safely
+        from .model import make_formatter, make_openai_model
+
+        cfg = self.config.openai_config or load_openai_config()
+        agent = SafeReActAgent(
+            name="PreDebugSyntaxRepair",
+            sys_prompt=(
+                "You are a precise RTL syntax/interface repair assistant. "
+                "Return only corrected rtl.sv code."
+            ),
+            model=make_openai_model(cfg),
+            formatter=make_formatter(cfg.model, cfg.base_url),
+            memory=InMemoryMemory(),
+            max_iters=3,
+        )
+        try:
+            msg = self._run_async(agent(Msg("user", prompt, role="user")))
+            return msg.get_text_content() or ""
+        finally:
+            clear_memory_safely(agent)
+
+    def _extract_verilog_code(self, raw: str) -> str:
+        text = raw if isinstance(raw, str) else str(raw)
+        fenced_blocks = re.findall(
+            r"```(?:verilog|systemverilog|sv)?\s*\n(.*?)```",
+            text,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        if fenced_blocks:
+            return fenced_blocks[0].strip()
+        generic_blocks = re.findall(r"```\s*\n(.*?)```", text, flags=re.DOTALL)
+        if generic_blocks:
+            return generic_blocks[0].strip()
+        return text.strip()
 
     def _ensure_toolchain_path(self) -> None:
         if which("verilator"):
@@ -424,6 +780,17 @@ class ModuleDebugRunner:
         text = text.strip()
         if len(text) > 2000:
             text = text[:2000] + "\n...<snip>..."
+        return text
+
+    def _summarize_syntax_output(self, syntax_output: str) -> str:
+        try:
+            obj = CommandResult.model_validate_json(syntax_output)
+            text = "\n".join(part for part in [obj.stdout, obj.stderr] if part)
+        except Exception:  # noqa: BLE001
+            text = syntax_output
+        text = text.strip()
+        if len(text) > 6000:
+            text = text[:6000] + "\n...<snip>..."
         return text
 
     def _write_text(self, path: Path, text: str) -> None:

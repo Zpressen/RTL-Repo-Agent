@@ -3,6 +3,14 @@ from pathlib import Path
 from zerorepo.config.checkpoint_config import CheckpointManager
 from zerorepo.rtl_impl.kg_agent.module_result_writer import ModuleResultWriter
 from zerorepo.rtl_impl.rtl_kg import RTLKgService
+from zerorepo.rtl_impl.rtl_kg.graph_types_rtl import (
+    KnowledgeGraphEdge,
+    KnowledgeGraphEdgeType,
+    KnowledgeGraphNode,
+    ModuleNode,
+    PortNode,
+)
+from zerorepo.rtl_impl.rtl_kg.neo4j_ingest import Neo4jConnection, RTLNeo4jIngestor
 
 
 def test_rtl_kg_snapshot_filter_keeps_only_planned_skeleton_paths(tmp_path):
@@ -85,6 +93,47 @@ def test_rtl_kg_empty_repo_data_does_not_filter_to_root_only(tmp_path):
     )
 
     assert service._planned_kg_file_paths() == set()
+
+
+def test_rtl_kg_edges_emit_explicit_neo4j_schema():
+    module = KnowledgeGraphNode(
+        uid="repo1:module:top:top.v",
+        repo_uid="repo1",
+        node=ModuleNode(name="top", path="top.v", sl=1, el=3),
+    )
+    port = KnowledgeGraphNode(
+        uid="repo1:port:top:y:top.v",
+        repo_uid="repo1",
+        node=PortNode(name="y", path="top.v"),
+    )
+    edge = KnowledgeGraphEdge(
+        source=module,
+        target=port,
+        type=KnowledgeGraphEdgeType.has,
+        props={"eid": "repo1:module:top:top.v:HAS:repo1:port:top:y:top.v", "k": "Port"},
+    ).to_neo4j_edge()
+
+    assert edge["type"] == "HAS"
+    assert edge["source_uid"] == module.uid
+    assert edge["target_uid"] == port.uid
+    assert edge["uid"] == edge["eid"]
+
+
+def test_neo4j_ingestor_prefers_eid_for_relationship_uid():
+    ingestor = RTLNeo4jIngestor(Neo4jConnection("bolt://unused", "neo4j", "pw"))
+    reltype, source_uid, target_uid, props = ingestor._normalize_edge(
+        {
+            "source": {"uid": "repo1:module:top:top.v"},
+            "target": {"uid": "repo1:port:top:y:top.v"},
+            "eid": "repo1:module:top:top.v:HAS:repo1:port:top:y:top.v",
+            "k": "Port",
+        }
+    )
+
+    assert reltype == "HAS"
+    assert source_uid == "repo1:module:top:top.v"
+    assert target_uid == "repo1:port:top:y:top.v"
+    assert props["uid"] == "repo1:module:top:top.v:HAS:repo1:port:top:y:top.v"
 
 
 def test_module_result_writer_refreshes_full_generated_rtl_graph(tmp_path):

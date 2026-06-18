@@ -44,3 +44,25 @@ def test_sim_review_fails_when_output_mismatch_conflicts_with_zero_summary(tmp_p
     assert is_pass is False
     assert mismatch_cnt == 27
     assert json.loads(sim_output)["stdout"] == stdout
+
+
+def test_sim_review_puts_local_include_sources_before_testbench(tmp_path, monkeypatch) -> None:
+    (tmp_path / "sd_defines.v").write_text("`define RAM_MEM_WIDTH 16\n", encoding="utf-8")
+    (tmp_path / "support.sv").write_text('`include "sd_defines.v"\nmodule ref; endmodule\n', encoding="utf-8")
+    (tmp_path / "rtl.sv").write_text("module dut; endmodule\n", encoding="utf-8")
+    (tmp_path / "tb.sv").write_text("module tb; logic [`RAM_MEM_WIDTH-1:0] x; endmodule\n", encoding="utf-8")
+    command_result = CommandResult(is_pass=True, stdout="Mismatches: 0 in 1 samples\n", stderr="").model_dump_json()
+    captured: dict[str, str] = {}
+
+    def fake_run_bash_command(cmd: str, *args, **kwargs):
+        del args, kwargs
+        captured["cmd"] = cmd
+        return True, command_result
+
+    monkeypatch.setattr(sim_reviewer_mod, "_require_executable", lambda _name: None)
+    monkeypatch.setattr(sim_reviewer_mod, "run_bash_command", fake_run_bash_command)
+
+    sim_review(str(tmp_path), str(tmp_path / "support.sv"))
+
+    cmd = captured["cmd"]
+    assert cmd.index(str(tmp_path / "sd_defines.v")) < cmd.index(str(tmp_path / "tb.sv"))

@@ -772,7 +772,14 @@ class PlannerRunner:
                 status.status,
                 status.passed,
             )
-        except Exception as exc:  # noqa: BLE001 - KG must not block RTL generation/debug.
+        except Exception as exc:  # noqa: BLE001 - optional KG must not block RTL generation/debug.
+            if str(getattr(self.kg_service, "mode", "") or "").strip().lower() == "required":
+                self.logger.error(
+                    "[rtl_module_planner] RTL KG module result write failed for %s in required mode: %s",
+                    module_name,
+                    exc,
+                )
+                raise
             self.logger.warning(
                 "[rtl_module_planner] RTL KG module result write failed for %s: %s",
                 module_name,

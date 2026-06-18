@@ -170,12 +170,13 @@ class RTLKgService:
             stage=stage,
             filter_to_planned_skeleton=filter_to_planned_skeleton,
         )
-        self._ingestor.ingest(nodes=nodes, edges=edges, mode="full", repo_uid=self.repo_uid)
+        ingest_stats = self._ingestor.ingest(nodes=nodes, edges=edges, mode="full", repo_uid=self.repo_uid)
         payload = {
             "stage": stage,
             "repo_uid": self.repo_uid,
             "nodes": len(nodes),
             "edges": len(edges),
+            "ingest_stats": ingest_stats or {},
             "changed_paths": [],
             "filter_to_planned_skeleton": filter_to_planned_skeleton,
         }
@@ -194,12 +195,13 @@ class RTLKgService:
             stage=stage,
             filter_to_planned_skeleton=filter_to_planned_skeleton,
         )
-        self._ingestor.ingest(nodes=nodes, edges=edges, mode="full", repo_uid=self.repo_uid)
+        ingest_stats = self._ingestor.ingest(nodes=nodes, edges=edges, mode="full", repo_uid=self.repo_uid)
         payload = {
             "stage": stage,
             "repo_uid": self.repo_uid,
             "nodes": len(nodes),
             "edges": len(edges),
+            "ingest_stats": ingest_stats or {},
             "changed_paths": list(changed_paths or []),
             "filter_to_planned_skeleton": filter_to_planned_skeleton,
         }

@@ -470,38 +470,47 @@ class KnowledgeGraphEdge:
         """Convert to a Neo4j edge property dict with embedded endpoints."""
         src = self.source.to_neo4j_node()
         dst = self.target.to_neo4j_node()
-        p = self.props or {}
+        p = dict(self.props or {})
+        base = {
+            "type": self.type.value,
+            "source": src,
+            "target": dst,
+            "source_uid": self.source.uid,
+            "target_uid": self.target.uid,
+        }
+        if "uid" not in p and p.get("eid"):
+            p["uid"] = p["eid"]
 
         match self.type:
             case KnowledgeGraphEdgeType.contains:
-                edge: Neo4jContainsEdge = {"source": src, "target": dst, **p}
+                edge: Neo4jContainsEdge = {**base, **p}
                 return edge
             case KnowledgeGraphEdgeType.defines:
-                edge: Neo4jDefinesEdge = {"source": src, "target": dst, **p}
+                edge: Neo4jDefinesEdge = {**base, **p}
                 return edge
             case KnowledgeGraphEdgeType.includes:
-                edge: Neo4jIncludesEdge = {"source": src, "target": dst, **p}
+                edge: Neo4jIncludesEdge = {**base, **p}
                 return edge
             case KnowledgeGraphEdgeType.imports:
-                edge: Neo4jImportsEdge = {"source": src, "target": dst, **p}
+                edge: Neo4jImportsEdge = {**base, **p}
                 return edge
             case KnowledgeGraphEdgeType.instantiates:
-                edge: Neo4jInstantiatesEdge = {"source": src, "target": dst, **p}
+                edge: Neo4jInstantiatesEdge = {**base, **p}
                 return edge
             case KnowledgeGraphEdgeType.of_module:
-                edge: Neo4jOfModuleEdge = {"source": src, "target": dst, **p}
+                edge: Neo4jOfModuleEdge = {**base, **p}
                 return edge
             case KnowledgeGraphEdgeType.has:
-                edge: Neo4jHasEdge = {"source": src, "target": dst, **p}
+                edge: Neo4jHasEdge = {**base, **p}
                 return edge
             case KnowledgeGraphEdgeType.connects:
-                edge: Neo4jConnectsEdge = {"source": src, "target": dst, **p}
+                edge: Neo4jConnectsEdge = {**base, **p}
                 return edge
             case KnowledgeGraphEdgeType.calls:
-                edge: Neo4jCallsEdge = {"source": src, "target": dst, **p}
+                edge: Neo4jCallsEdge = {**base, **p}
                 return edge
             case KnowledgeGraphEdgeType.drives:
-                edge: Neo4jDrivesEdge = {"source": src, "target": dst, **p}
+                edge: Neo4jDrivesEdge = {**base, **p}
                 return edge
             case _:
                 raise ValueError(f"Unknown edge type: {self.type}")
@@ -632,6 +641,10 @@ Neo4jAnyNode = Union[
 class Neo4jBaseEdge(TypedDict, total=False):
     source: Required[Neo4jAnyNode]
     target: Required[Neo4jAnyNode]
+    type: Required[str]
+    source_uid: Required[str]
+    target_uid: Required[str]
+    uid: NotRequired[str]
     eid: NotRequired[str]  # recommended relationship MERGE key
 
 

@@ -302,6 +302,48 @@ def test_module_debug_runner_initial_result_callback() -> None:
     assert calls == [("m", "m.v", fail_result)]
 
 
+def test_module_debug_runner_persists_last_failed_repair(tmp_path: Path, monkeypatch: Any) -> None:
+    oracle_dir = tmp_path / "oracle" / "m" / "verification"
+    oracle_dir.mkdir(parents=True)
+    (oracle_dir / "m_testbench.sv").write_text("module tb; endmodule\n", encoding="utf-8")
+    merged_file = tmp_path / "workspace" / "merged" / "m.v"
+    merged_file.parent.mkdir(parents=True)
+    merged_file.write_text("module m; assign y = 1'b0; endmodule\n", encoding="utf-8")
+
+    class FailingReviewer:
+        def __init__(self, workdir: str, support_path: str) -> None:
+            self.workdir = workdir
+            self.support_path = support_path
+
+        def review(self) -> tuple[bool, int, str]:
+            return False, 1, CommandResult(stdout="mismatch", stderr="").model_dump_json()
+
+    def fake_editor(self: ModuleDebugRunner, **kwargs: Any) -> tuple[bool, str, int]:
+        workdir = Path(kwargs["workdir"])
+        repaired = "module m; assign y = 1'b1; endmodule\n"
+        (workdir / "rtl.sv").write_text(repaired, encoding="utf-8")
+        return False, repaired, 1
+
+    monkeypatch.setattr(debug_runner_module, "SimReviewer", FailingReviewer)
+    monkeypatch.setattr(ModuleDebugRunner, "_ensure_toolchain_path", lambda self: None)
+    monkeypatch.setattr(ModuleDebugRunner, "_run_editor", fake_editor)
+
+    runner = ModuleDebugRunner(
+        config=RtlDebugConfig(openai_config=None, oracle_root=str(tmp_path / "oracle"), max_trials=1),
+        workspace_root=tmp_path / "workspace",
+    )
+    result = runner.run_module(
+        module_name="m",
+        merged_file=merged_file,
+        task=None,
+        spec_text="",
+        contract_json=json.dumps({"module_name": "m"}),
+    )
+
+    assert result.status == "fail"
+    assert "1'b1" in merged_file.read_text(encoding="utf-8")
+
+
 class _FailingSimReviewer:
     def __init__(self, workdir: str, support_path: str) -> None:
         self.workdir = workdir

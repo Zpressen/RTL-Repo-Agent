@@ -163,3 +163,46 @@ def test_repair_debug_workspace_syntax_failure_is_non_fatal(tmp_path: Path, monk
     log = json.loads((workdir / "pre_debug_syntax_repair.json").read_text(encoding="utf-8"))
     assert log["status"] == "fail"
     assert len(log["attempts"]) == 5
+
+
+def test_run_module_runs_pre_debug_syntax_gate_before_sim_review(tmp_path: Path, monkeypatch) -> None:
+    oracle_dir = tmp_path / "oracle" / "m" / "verification"
+    oracle_dir.mkdir(parents=True)
+    (oracle_dir / "m_testbench.sv").write_text("module tb; endmodule\n", encoding="utf-8")
+    merged_file = tmp_path / "workspace" / "merged" / "m.v"
+    merged_file.parent.mkdir(parents=True)
+    merged_file.write_text("module m; endmodule\n", encoding="utf-8")
+    events: list[str] = []
+
+    class PassingReviewer:
+        def __init__(self, workdir: str, support_path: str) -> None:
+            self.workdir = workdir
+            self.support_path = support_path
+
+        def review(self) -> tuple[bool, int, str]:
+            events.append("review")
+            return True, 0, "{}"
+
+    def fake_check_syntax(_path: str, top_module=None) -> tuple[bool, str]:
+        events.append(f"syntax:{top_module}")
+        return True, ""
+
+    monkeypatch.setattr(debug_runner_module, "check_syntax", fake_check_syntax)
+    monkeypatch.setattr(debug_runner_module, "SimReviewer", PassingReviewer)
+    monkeypatch.setattr(ModuleDebugRunner, "_ensure_toolchain_path", lambda self: None)
+
+    runner = ModuleDebugRunner(
+        config=RtlDebugConfig(openai_config=None, oracle_root=str(tmp_path / "oracle")),
+        workspace_root=tmp_path / "workspace",
+    )
+    result = runner.run_module(
+        module_name="m",
+        merged_file=merged_file,
+        task=None,
+        spec_text="spec",
+        contract_json='{"module_name": "m"}',
+    )
+
+    assert result.status == "pass"
+    assert events == ["syntax:m", "review"]
+    assert (Path(result.workdir) / "pre_debug_syntax_repair.json").exists()

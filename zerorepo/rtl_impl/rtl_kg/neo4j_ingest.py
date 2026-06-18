@@ -20,12 +20,13 @@ Expected edge format (from kg.neo4j_edges()):
       "type": "CONTAINS" | "DEFINES" | "HAS_PORT" | "CONNECTS" | "DRIVES" | ... ,  # relationship type
       "source_uid": "...",    # OR "source": {"uid": "..."}
       "target_uid": "...",    # OR "target": {"uid": "..."}
-      "uid": "stable-edge-id",  # optional; if missing we will derive one
+      "uid": "stable-edge-id",  # optional; if missing we prefer eid, then derive one
+      "eid": "stable-edge-id",  # optional compatibility key
       ... relationship properties ...
     }
 
-If your edges are in Prometheus-style typed dicts ({"source": {...}, "target": {...}})
-you MUST add "type" to each edge before ingestion.
+Edges in Prometheus-style typed dicts ({"source": {...}, "target": {...}, "eid": ...})
+are still accepted, but explicit "type"/"source_uid"/"target_uid" is preferred.
 """
 from __future__ import annotations
 
@@ -261,7 +262,7 @@ class RTLNeo4jIngestor:
         props["target_uid"] = t_uid
 
         # Relationship uid for MERGE uniqueness (per rel)
-        r_uid = props.get("uid") or props.get("rel_uid")
+        r_uid = props.get("uid") or props.get("eid") or props.get("rel_uid")
         if not r_uid:
             # Use a stable hash of endpoints + reltype + a subset of properties that
             # typically disambiguate multi-edges (e.g., port_name/order for CONNECTS).
@@ -287,7 +288,7 @@ class RTLNeo4jIngestor:
         edges: List[Dict[str, Any]],
         mode: str = "delta",
         repo_uid: Optional[str] = None,
-    ) -> None:
+    ) -> Dict[str, Any]:
         """
         Ingest nodes/edges.
 
@@ -316,33 +317,50 @@ class RTLNeo4jIngestor:
                     session.run("MATCH (r:Repo {uid:$repo_uid}) DETACH DELETE r", repo_uid=repo_uid)
 
                 self.log(f"[neo4j] ingest nodes: {len(norm_nodes)}")
-                self._ingest_nodes(session, norm_nodes)
+                node_stats = self._ingest_nodes(session, norm_nodes)
                 self.log(f"[neo4j] ingest edges: {len(edges)}")
                 norm_edges = [self._normalize_edge(e) for e in edges]
-                self._ingest_edges(session, norm_edges)
+                edge_stats = self._ingest_edges(session, norm_edges)
+                if edges and edge_stats.get("relationships_touched", 0) == 0:
+                    self.log(
+                        "[neo4j] WARNING: edge input was non-empty but no relationships were touched; "
+                        "check edge endpoints and relationship type schema."
+                    )
+                return {
+                    "nodes_input": len(nodes),
+                    "edges_input": len(edges),
+                    **node_stats,
+                    **edge_stats,
+                }
 
-    def _ingest_nodes(self, session, norm_nodes: List[Tuple[str, Dict[str, Any]]]) -> None:
+    def _ingest_nodes(self, session, norm_nodes: List[Tuple[str, Dict[str, Any]]]) -> Dict[str, Any]:
         # Group by label, run one query per label (labels cannot be parameterized)
         by_label: Dict[str, List[Dict[str, Any]]] = {}
         for label, props in norm_nodes:
             by_label.setdefault(label, []).append(props)
 
+        nodes_touched = 0
         for label, rows in by_label.items():
             cypher = f"""
 UNWIND $rows AS row
 MERGE (n:{label} {{uid: row.uid}})
 SET n += row
+RETURN count(n) AS touched
 """
             for i in range(0, len(rows), self.batch_size):
                 batch = rows[i : i + self.batch_size]
-                session.run(cypher, rows=batch)
+                record = session.run(cypher, rows=batch).single()
+                nodes_touched += int(record["touched"] if record else 0)
+        return {"nodes_touched": nodes_touched}
 
-    def _ingest_edges(self, session, norm_edges: List[Tuple[str, str, str, Dict[str, Any]]]) -> None:
+    def _ingest_edges(self, session, norm_edges: List[Tuple[str, str, str, Dict[str, Any]]]) -> Dict[str, Any]:
         # Group by relationship type
         by_rel: Dict[str, List[Dict[str, Any]]] = {}
         for reltype, s_uid, t_uid, props in norm_edges:
             by_rel.setdefault(reltype, []).append(props)
 
+        relationships_touched = 0
+        reltype_counts: Dict[str, int] = {}
         for reltype, rows in by_rel.items():
             cypher = f"""
 UNWIND $rows AS row
@@ -350,7 +368,15 @@ MATCH (s {{uid: row.source_uid}})
 MATCH (t {{uid: row.target_uid}})
 MERGE (s)-[r:{reltype} {{uid: row.uid}}]->(t)
 SET r += row
+RETURN count(r) AS touched
 """
             for i in range(0, len(rows), self.batch_size):
                 batch = rows[i : i + self.batch_size]
-                session.run(cypher, rows=batch)
+                record = session.run(cypher, rows=batch).single()
+                touched = int(record["touched"] if record else 0)
+                relationships_touched += touched
+                reltype_counts[reltype] = reltype_counts.get(reltype, 0) + touched
+        return {
+            "relationships_touched": relationships_touched,
+            "relationship_types_touched": reltype_counts,
+        }

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import re
 from dataclasses import dataclass, field
@@ -26,7 +27,7 @@ from .trace_report import (
     _resolve_ref_instance as _resolve_ref_instance_static,
     _vcd_time_range,
 )
-from .trace_slicer import RtlBlock
+from .trace_slicer import RtlBlock, parse_rtl_blocks
 
 try:
     from vcdvcd import VCDVCD  # type: ignore[import-not-found]
@@ -235,7 +236,7 @@ Workflow (repeat until pass):
 4) Call read_block(block_id) for the most relevant suspect block from trace_summary.first_failure or value_backtrace_summary.
 5) Make one small change via replace_block(block_id, new_code).
    - If the root cause is a declaration, port type, or instance connection, call read_rtl_context()
-     and use apply_patch_set(patches) with up to 10 line-range replacements.
+     and use read_lines(start_line, end_line), then apply_patch_set(patches) with exactly one line-range replacement.
 6) Immediately call run_simulation() and iterate based on the new trace summary.
 
 Rules:
@@ -244,7 +245,7 @@ Rules:
   port declaration only when it does not change the contract-defined name, direction, or width.
 - Keep RTL synthesizable and Verilator-compatible (avoid fancy SVA, no delays).
 - Do not bundle independent semantic fixes. One simulation trial should test one repair hypothesis only.
-- apply_patch_set(patches) accepts up to 10 line-range patches; split larger sets into separate trials.
+- apply_patch_set(patches) accepts exactly one line-range patch; split larger fixes into separate trials.
 
 You will also receive a structured trace-grounded bug report (JSON) that includes:
 1) earliest mismatch time, 2) (expected vs actual) values when available, 3) a short input window,
@@ -254,6 +255,7 @@ Use tools:
 - read_block(block_id)
 - replace_block(block_id, new_code)
 - read_rtl_context()
+- read_lines(start_line, end_line)
 - apply_patch_set(patches)
 - run_simulation()
 
@@ -275,7 +277,7 @@ Workflow (repeat until pass):
 4) Call read_block(block_id) for the most relevant suspect block from trace_summary.first_failure or value_backtrace_summary.
 5) Make one small change via replace_block(block_id, new_code).
    - If the root cause is a declaration, port type, or instance connection, call read_rtl_context()
-     and use apply_patch_set(patches) with up to 10 line-range replacements.
+     and use read_lines(start_line, end_line), then apply_patch_set(patches) with exactly one line-range replacement.
 6) Immediately call run_simulation() and iterate based on the new trace summary.
 
 Rules:
@@ -284,7 +286,7 @@ Rules:
   by the visible testbench.
 - Keep RTL synthesizable and Verilator-compatible (avoid fancy SVA, no delays).
 - Do not bundle independent semantic fixes. One simulation trial should test one repair hypothesis only.
-- apply_patch_set(patches) accepts up to 10 line-range patches; split larger sets into separate trials.
+- apply_patch_set(patches) accepts exactly one line-range patch; split larger fixes into separate trials.
 
 You will also receive a structured trace-grounded bug report (JSON) that includes:
 1) earliest mismatch time, 2) (expected vs actual) values when available, 3) a short input window,
@@ -294,6 +296,7 @@ Use tools:
 - read_block(block_id)
 - replace_block(block_id, new_code)
 - read_rtl_context()
+- read_lines(start_line, end_line)
 - apply_patch_set(patches)
 - run_simulation()
 
@@ -320,6 +323,8 @@ class _EditSession:
     blocks_by_id: Dict[str, RtlBlock] | None = None
     last_fail_time: int | None = None
     repair_journal: list[dict[str, Any]] = field(default_factory=list)
+    behavior_source: Literal["contract", "spec_tb"] = "contract"
+    source_of_truth: dict[str, Any] = field(default_factory=dict)
 
     def read_rtl(self) -> str:
         with open(self.rtl_path, "r", encoding="utf-8") as f:
@@ -328,6 +333,9 @@ class _EditSession:
     def read_rtl_with_lineno(self) -> str:
         lines = self.read_rtl().splitlines()
         return "\n".join(f"{i+1}: {line}" for i, line in enumerate(lines)) + "\n"
+
+    def current_rtl_hash(self) -> str:
+        return hashlib.sha256(self.read_rtl().encode("utf-8")).hexdigest()
 
     def write_rtl(self, content: str) -> None:
         with open(self.rtl_path, "w", encoding="utf-8") as f:
@@ -359,8 +367,81 @@ class _EditSession:
         lines = block.code.splitlines()
         return "\n".join(f"{block.start_line + i}: {line}" for i, line in enumerate(lines)) + "\n"
 
+    def read_lines(self, start_line: int, end_line: int) -> str:
+        start = _parse_patch_line_number(start_line)
+        end = _parse_patch_line_number(end_line)
+        lines = self.read_rtl().splitlines()
+        if start is None or end is None:
+            return "ERROR: start_line and end_line must be integer line numbers."
+        if start < 1 or end < start or end > len(lines):
+            return f"ERROR: Invalid line range {start}-{end}; RTL has {len(lines)} lines."
+        if end - start + 1 > 160:
+            return "ERROR: read_lines is limited to 160 lines. Request a smaller local range."
+        return "\n".join(f"{i}: {lines[i - 1]}" for i in range(start, end + 1)) + "\n"
+
     def read_rtl_context(self) -> str:
-        return self.read_rtl_with_lineno()
+        rtl_text = self.read_rtl()
+        lines = rtl_text.splitlines()
+        blocks = list(self.blocks_by_id.values()) if self.blocks_by_id else parse_rtl_blocks(rtl_text)
+        block_ranges = [(b.start_line, b.end_line) for b in blocks]
+
+        def in_block(line_no: int) -> bool:
+            return any(start <= line_no <= end for start, end in block_ranges)
+
+        header_lines: list[int] = []
+        in_header = False
+        for idx, line in enumerate(lines, start=1):
+            if not in_header and re.search(r"\bmodule\b", line):
+                in_header = True
+            if in_header:
+                header_lines.append(idx)
+                if ";" in line:
+                    break
+
+        decl_or_inst_lines: list[int] = []
+        decl_re = re.compile(
+            r"^\s*(?:input|output|inout|wire|logic|reg|tri|parameter|localparam|typedef|genvar|integer|"
+            r"signed|unsigned)\b"
+        )
+        inst_re = re.compile(r"^\s*[a-zA-Z_][a-zA-Z0-9_$]*\s+(?:#\s*\([^;]*\)\s*)?[a-zA-Z_][a-zA-Z0-9_$]*\s*\(")
+        skip_inst_re = re.compile(r"^\s*(?:module|endmodule|if|for|while|case|assign|always|initial|function|task)\b")
+        for idx, line in enumerate(lines, start=1):
+            stripped = line.strip()
+            if not stripped or stripped.startswith("//") or in_block(idx):
+                continue
+            if idx in header_lines or decl_re.search(line):
+                decl_or_inst_lines.append(idx)
+                continue
+            if inst_re.search(line) and not skip_inst_re.search(line):
+                decl_or_inst_lines.append(idx)
+
+        context_lines = sorted(set(header_lines + decl_or_inst_lines))
+        header = [
+            "RTL context index only. Use read_lines(start_line, end_line) before editing local declarations or wiring.",
+            "",
+            "[module_header_declarations_instances]",
+        ]
+        body = [f"{idx}: {lines[idx - 1]}" for idx in context_lines]
+        block_index = [
+            "",
+            "[block_index]",
+            *[
+                json.dumps(
+                    {
+                        "id": b.id,
+                        "kind": b.kind,
+                        "start_line": b.start_line,
+                        "end_line": b.end_line,
+                        "clocking": b.clocking,
+                        "writes": list(b.writes),
+                        "reads": list(b.reads)[:12],
+                    },
+                    ensure_ascii=False,
+                )
+                for b in sorted(blocks, key=lambda item: (item.start_line, item.id))
+            ],
+        ]
+        return "\n".join(header + body + block_index) + "\n"
 
     # ------------------------------------------------------------------
     # VCD probe helpers
@@ -624,11 +705,103 @@ class _EditSession:
                     "patch_summary": entry.get("patch_summary"),
                     "effect": entry.get("effect"),
                     "lesson": entry.get("lesson"),
+                    "hypothesis": entry.get("hypothesis"),
+                    "evidence": entry.get("evidence"),
+                    "changed_signals": entry.get("changed_signals"),
+                    "rolled_back": entry.get("rolled_back"),
                     "before": entry.get("before"),
                     "after": entry.get("after"),
                 }
             )
         return summary
+
+    def _recent_edited_ranges(self, limit: int = 5) -> list[dict[str, Any]]:
+        ranges: list[dict[str, Any]] = []
+        for entry in reversed(self.repair_journal):
+            target = entry.get("target")
+            if not isinstance(target, dict):
+                continue
+            item: dict[str, Any] | None = None
+            if target.get("block_id") is not None:
+                item = {
+                    "trial": entry.get("trial"),
+                    "action_type": entry.get("action_type"),
+                    "block_id": target.get("block_id"),
+                    "start_line": target.get("start_line"),
+                    "end_line": target.get("end_line"),
+                    "changed_signals": entry.get("changed_signals") or [],
+                    "effect": entry.get("effect"),
+                }
+            elif target.get("start_line") is not None:
+                item = {
+                    "trial": entry.get("trial"),
+                    "action_type": entry.get("action_type"),
+                    "start_line": target.get("start_line"),
+                    "end_line": target.get("end_line"),
+                    "changed_signals": entry.get("changed_signals") or [],
+                    "effect": entry.get("effect"),
+                }
+            if item:
+                ranges.append(item)
+            if len(ranges) >= max(1, int(limit)):
+                break
+        return list(reversed(ranges))
+
+    def _directions_by_effect(self, effects: set[str], limit: int = 5) -> list[dict[str, Any]]:
+        directions: list[dict[str, Any]] = []
+        for entry in reversed(self.repair_journal):
+            if str(entry.get("effect") or "") not in effects:
+                continue
+            directions.append(
+                {
+                    "trial": entry.get("trial"),
+                    "action_type": entry.get("action_type"),
+                    "target": entry.get("target"),
+                    "patch_summary": entry.get("patch_summary"),
+                    "changed_signals": entry.get("changed_signals") or [],
+                    "effect": entry.get("effect"),
+                    "lesson": entry.get("lesson"),
+                }
+            )
+            if len(directions) >= max(1, int(limit)):
+                break
+        return list(reversed(directions))
+
+    def memory_snapshot(self) -> dict[str, Any]:
+        snapshot = {
+            "schema": "debug_memory_snapshot.v1",
+            "source_of_truth": {
+                "behavior_source": self.behavior_source,
+                **(self.source_of_truth or {}),
+            },
+            "paths": {
+                "rtl": self.rtl_path,
+                "testbench": self.tb_path,
+                "output_dir": self.output_dir,
+                "trace_report": self.trace_report_path(),
+                "repair_journal": str(Path(self.output_dir) / "repair_journal.json"),
+            },
+            "current_rtl_hash": self.current_rtl_hash(),
+            "latest_trace_summary": self.trace_summary(),
+            "recent_repair_journal": self.repair_journal_summary(limit=5),
+            "recent_edited_ranges": self._recent_edited_ranges(limit=5),
+            "failed_directions": self._directions_by_effect({"rejected", "syntax_failed", "regressed"}, limit=5),
+            "promising_directions": self._directions_by_effect({"passed", "improved"}, limit=5),
+            "action_calls": int(self.action_calls),
+            "max_trials": int(self.max_trials),
+        }
+        return snapshot
+
+    def persist_memory_snapshot(self) -> dict[str, Any]:
+        snapshot = self.memory_snapshot()
+        try:
+            Path(self.output_dir, "debug_memory_snapshot.json").write_text(
+                json.dumps(snapshot, indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+        except Exception:  # noqa: BLE001
+            pass
+        return snapshot
 
     def _top_diagnosis(self) -> Any:
         tr = self.trace_report or {}
@@ -649,6 +822,43 @@ class _EditSession:
         if len(text) > max_chars:
             return text[: max_chars - 3] + "..."
         return text
+
+    def _changed_signals_for_patch(self, code: str) -> list[str]:
+        writes: set[str] = set()
+        for m in re.finditer(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\b\s*(?:\[[^\]]+\])?\s*<=", code):
+            writes.add(m.group(1))
+        for m in re.finditer(r"\b(?:assign\s+)?([a-zA-Z_][a-zA-Z0-9_]*)\b\s*(?:\[[^\]]+\])?\s*(?<![=!<>])=(?![=])", code):
+            lhs = m.group(1)
+            if lhs not in {"if", "for", "while", "case"}:
+                writes.add(lhs)
+        return sorted(writes)
+
+    def _evidence_for_journal(self, before: dict[str, Any]) -> dict[str, Any]:
+        ts = self.trace_summary()
+        return {
+            "fail_time": before.get("fail_time"),
+            "mismatch_cnt": before.get("mismatch_cnt"),
+            "top_diagnosis": before.get("top_diagnosis"),
+            "first_failure": ts.get("first_failure"),
+            "value_backtrace_summary": ts.get("value_backtrace_summary"),
+        }
+
+    def _hypothesis_for_journal(
+        self,
+        *,
+        action_type: str,
+        target: dict[str, Any],
+        patch_summary: str,
+        changed_signals: list[str],
+    ) -> str:
+        target_bits: list[str] = []
+        if target.get("block_id") is not None:
+            target_bits.append(f"block {target.get('block_id')}")
+        if target.get("start_line") is not None:
+            target_bits.append(f"lines {target.get('start_line')}-{target.get('end_line')}")
+        signal_text = ", ".join(changed_signals[:6]) if changed_signals else "the targeted RTL"
+        scope = " / ".join(target_bits) if target_bits else action_type
+        return f"Patch {scope} to correct {signal_text}: {patch_summary}"
 
     def _classify_repair_effect(self, *, before: dict[str, Any], result: dict[str, Any]) -> str:
         if result.get("is_sim_pass") and int(result.get("sim_mismatch_cnt") or 0) == 0:
@@ -686,8 +896,8 @@ class _EditSession:
         if effect == "syntax_failed":
             return "Patch failed syntax and was rolled back; fix syntax before retrying this idea."
         error_msg = str(result.get("error_msg") or "")
-        if "at most 10 patches" in error_msg:
-            return "Too many patches in one call; split into smaller groups of up to 10 patches each."
+        if "exactly one" in error_msg:
+            return "Batch patch was rejected; apply exactly one semantic line-range patch per trial."
         if "rolled back" in error_msg:
             return "Patch was rolled back; avoid retrying this exact change without new evidence."
         return "Patch was rejected; choose a smaller evidence-backed edit."
@@ -710,8 +920,11 @@ class _EditSession:
         patch_summary: str,
         before: dict[str, Any],
         result: dict[str, Any],
+        changed_signals: list[str] | None = None,
     ) -> None:
         effect = self._classify_repair_effect(before=before, result=result)
+        if changed_signals is None:
+            changed_signals = self._changed_signals_for_patch(patch_summary)
         after = {
             "accepted": bool(result.get("is_action_executed")),
             "is_sim_pass": bool(result.get("is_sim_pass")),
@@ -719,12 +932,22 @@ class _EditSession:
             "fail_time": result.get("new_fail_time"),
             "error_msg": result.get("error_msg") or "",
         }
+        error_msg = str(after["error_msg"] or "")
         entry = {
             "trial": len(self.repair_journal) + 1,
             "action_type": action_type,
             "target": target,
             "patch_count": int(patch_count),
             "patch_summary": patch_summary,
+            "hypothesis": self._hypothesis_for_journal(
+                action_type=action_type,
+                target=target,
+                patch_summary=patch_summary,
+                changed_signals=changed_signals,
+            ),
+            "evidence": self._evidence_for_journal(before),
+            "changed_signals": changed_signals,
+            "rolled_back": (not bool(result.get("is_action_executed"))) and ("rolled back" in error_msg.lower()),
             "before": before,
             "after": after,
             "effect": effect,
@@ -846,6 +1069,7 @@ class _EditSession:
                 patch_summary=self._summarize_code(new_code),
                 before=before,
                 result=result,
+                changed_signals=list(block.writes),
             )
             return self._attach_repair_journal_summary(result)
 
@@ -861,6 +1085,7 @@ class _EditSession:
             patch_summary=self._summarize_code(new_code),
             before=before,
             result=result,
+            changed_signals=list(block.writes),
         )
         return self._attach_repair_journal_summary(result)
 
@@ -877,16 +1102,16 @@ class _EditSession:
                 patch_summary=error_msg,
                 before=before,
                 result=result,
+                changed_signals=[],
             )
             return self._attach_repair_journal_summary(result)
 
         if not isinstance(patches, list) or not patches:
-            return reject_without_edit("patches must contain exactly one line-range replacement.")
+            return reject_without_edit("patches must contain exactly one semantic line-range patch.")
 
-        if len(patches) > 10:
+        if len(patches) != 1:
             return reject_without_edit(
-                f"apply_patch_set accepts at most 10 patches per trial (got {len(patches)}); "
-                "split independent edits across multiple apply_patch_set calls.",
+                f"apply_patch_set accepts exactly one semantic line-range patch per trial (got {len(patches)}).",
                 patch_count=len(patches),
             )
 
@@ -940,6 +1165,7 @@ class _EditSession:
                 patch_summary=self._summarize_code(str(patch)),
                 before=before,
                 result=result,
+                changed_signals=[],
             )
             return self._attach_repair_journal_summary(result)
 
@@ -958,6 +1184,7 @@ class _EditSession:
             patch_summary=self._summarize_code(new_code),
             before=before,
             result=result,
+            changed_signals=self._changed_signals_for_patch(new_code),
         )
         return self._attach_repair_journal_summary(result)
 
@@ -978,12 +1205,15 @@ class RTLEditor:
         self.kg_service = kg_service
         self.kg_hop_depth = int(kg_hop_depth)
         self._session: _EditSession | None = None
+        self._last_compacted_action_calls = 0
+        self._tool_result_chars_since_compact = 0
 
         toolkit = Toolkit()
         toolkit.register_tool_function(self._tool_list_suspect_blocks)
         toolkit.register_tool_function(self._tool_read_block)
         toolkit.register_tool_function(self._tool_replace_block)
         toolkit.register_tool_function(self._tool_read_rtl_context)
+        toolkit.register_tool_function(self._tool_read_lines)
         toolkit.register_tool_function(
             self._tool_apply_patch_set,
             json_schema={
@@ -1056,6 +1286,10 @@ class RTLEditor:
                     fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
             except Exception:  # noqa: BLE001
                 pass
+        if role == "tool_result":
+            self._tool_result_chars_since_compact = int(
+                getattr(self, "_tool_result_chars_since_compact", 0) or 0
+            ) + len(content)
 
     def _tool_response(self, tool_name: str, text: str) -> ToolResponse:
         """Return a ToolResponse and log its content to the session message log."""
@@ -1065,6 +1299,79 @@ class RTLEditor:
     def reset(self) -> None:
         clear_memory_safely(self._agent)
         self._session = None
+        self._last_compacted_action_calls = 0
+        self._tool_result_chars_since_compact = 0
+
+    def _build_source_of_truth_summary(
+        self,
+        *,
+        spec: str,
+        contract_json: str,
+        behavior_source: Literal["contract", "spec_tb"],
+    ) -> dict[str, Any]:
+        if behavior_source == "spec_tb":
+            return {
+                "summary": "original module specification plus visible testbench are authoritative; contract metadata is diagnostic only",
+                "spec_excerpt": _clip_text(spec, max_chars=2000),
+            }
+        contract_summary: dict[str, Any] = {
+            "summary": "contract_json is authoritative; input_spec is background only",
+            "input_spec_excerpt": _clip_text(spec, max_chars=1200),
+        }
+        try:
+            contract_obj = json.loads(contract_json)
+            if isinstance(contract_obj, dict):
+                contract_summary["module_name"] = contract_obj.get("module_name")
+                io = contract_obj.get("io")
+                if isinstance(io, list):
+                    contract_summary["io"] = [
+                        {
+                            "name": item.get("name"),
+                            "dir": item.get("dir") or item.get("direction"),
+                            "width": item.get("width"),
+                        }
+                        for item in io[:24]
+                        if isinstance(item, dict)
+                    ]
+                contract_summary["clocking"] = contract_obj.get("clocking")
+                contract_summary["timing"] = contract_obj.get("timing")
+        except Exception:  # noqa: BLE001
+            contract_summary["contract_excerpt"] = _clip_text(contract_json, max_chars=2000)
+        return contract_summary
+
+    def _build_compact_continue_prompt(self, snapshot: dict[str, Any]) -> str:
+        return (
+            "Compact checkpoint. Do not rely on prior chat history; the JSON below is the current "
+            "authoritative debug state.\n\n"
+            "<debug_memory_snapshot_json>\n"
+            f"{json.dumps(snapshot, indent=2, ensure_ascii=False)}\n"
+            "</debug_memory_snapshot_json>\n\n"
+            "Next-step rules:\n"
+            "1. Use latest_trace_summary, failed_directions, and promising_directions as the source of truth for progress.\n"
+            "2. Prefer read_block(block_id) for suspect logic; for declarations or wiring use read_rtl_context() "
+            "to get the index, then read_lines(start_line, end_line) for the exact local range.\n"
+            "3. Make one small evidence-backed edit via replace_block() or apply_patch_set() with exactly one line-range patch.\n"
+            "4. Immediately call run_simulation() after an edit and update your next hypothesis from the new trace summary.\n"
+            "5. Do not retry failed_directions unless new evidence distinguishes the attempt."
+        )
+
+    async def _compact_agent_memory(self) -> None:
+        if self._session is None:
+            return
+        snapshot = self._session.persist_memory_snapshot()
+        prompt = self._build_compact_continue_prompt(snapshot)
+        clear_memory_safely(self._agent)
+        self._last_compacted_action_calls = int(self._session.action_calls)
+        self._tool_result_chars_since_compact = 0
+        self._log_message("user", prompt)
+        await self._agent(Msg("user", prompt, role="user"))
+
+    def _needs_compact_checkpoint(self) -> bool:
+        if self._session is None:
+            return False
+        edit_delta = int(self._session.action_calls) - int(self._last_compacted_action_calls)
+        tool_chars = int(getattr(self, "_tool_result_chars_since_compact", 0) or 0)
+        return edit_delta >= 2 or tool_chars >= 12000
 
     async def _tool_list_suspect_blocks(self) -> ToolResponse:
         """List dynamically sliced suspect blocks (always/assign)."""
@@ -1112,10 +1419,16 @@ class RTLEditor:
         return self._tool_response("replace_block", json.dumps(result, indent=4))
 
     async def _tool_read_rtl_context(self) -> ToolResponse:
-        """Read the complete RTL file with line numbers for declaration or wiring diagnosis."""
+        """Read a compact RTL index with module header, declarations, instances, and block ranges."""
         if self._session is None:
             return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
         return self._tool_response("read_rtl_context", self._session.read_rtl_context())
+
+    async def _tool_read_lines(self, start_line: int, end_line: int) -> ToolResponse:
+        """Read a precise local RTL line range with line numbers."""
+        if self._session is None:
+            return ToolResponse(content=[{"type": "text", "text": "ERROR: No active edit session."}])
+        return self._tool_response("read_lines", self._session.read_lines(start_line, end_line))
 
     async def _tool_apply_patch_set(self, patches: list[dict[str, Any]]) -> ToolResponse:
         """Apply exactly one RTL line-range replacement as one validated semantic patch."""
@@ -1186,6 +1499,8 @@ class RTLEditor:
         max_trials: int | None = None,
     ) -> Tuple[bool, str, int]:
         self.reset()
+        self._last_compacted_action_calls = 0
+        self._tool_result_chars_since_compact = 0
         if behavior_source not in {"contract", "spec_tb"}:
             raise ValueError(f"Unsupported behavior_source: {behavior_source!r}")
         tb_path = f"{output_dir_per_run}/tb.sv"
@@ -1212,6 +1527,12 @@ class RTLEditor:
             kg_service=self.kg_service,
             kg_session_id=kg_session_id,
             kg_hop_depth=self.kg_hop_depth,
+            behavior_source=behavior_source,
+            source_of_truth=self._build_source_of_truth_summary(
+                spec=spec,
+                contract_json=contract_json,
+                behavior_source=behavior_source,
+            ),
         )
 
         with open(tb_path, "r", encoding="utf-8") as f:
@@ -1255,8 +1576,9 @@ class RTLEditor:
                 f"{continue_source_context}\n\n"
                 "Continue debugging. Preserve the original specification's top-level interface and observed "
                 "testbench behavior. If mismatches remain, use read_block(block_id) and "
-                "replace_block(block_id, new_code), or read_rtl_context() and apply_patch_set(patches) "
-                "with exactly one line-range replacement for declaration or wiring fixes, then run_simulation()."
+                "replace_block(block_id, new_code), or read_rtl_context(), read_lines(start_line, end_line), "
+                "and apply_patch_set(patches) with exactly one line-range replacement for declaration or wiring fixes, "
+                "then run_simulation()."
             )
         else:
             init = CONTRACT_INIT_EDITION_PROMPT.format(
@@ -1270,9 +1592,9 @@ class RTLEditor:
             continue_prompt = (
                 f"{continue_source_context}\n\n"
                 "Continue debugging. Preserve the contract-defined module interface. If mismatches remain, "
-                "use read_block(block_id) and replace_block(block_id, new_code), or read_rtl_context() and "
-                "apply_patch_set(patches) with exactly one line-range replacement for declaration or wiring fixes, "
-                "then run_simulation()."
+                "use read_block(block_id) and replace_block(block_id, new_code), or read_rtl_context(), "
+                "read_lines(start_line, end_line), and apply_patch_set(patches) with exactly one line-range "
+                "replacement for declaration or wiring fixes, then run_simulation()."
             )
         # Build a trace-grounded report to guide minimal patching.
         report, suspect_blocks = build_trace_report(
@@ -1345,8 +1667,8 @@ class RTLEditor:
             "Start by checking first_failure and top_diagnosis above. "
             "If the root cause is not obvious, use probe_vcd or probe_compare to inspect internal signals "
             "before making a patch. Write a causal diagnosis BEFORE each replace_block. "
-            "Use replace_block(block_id, new_code), or read_rtl_context() and apply_patch_set(patches) "
-            "with up to 10 line-range replacements; finally call run_simulation()."
+            "Use replace_block(block_id, new_code), or read_rtl_context(), read_lines(start_line, end_line), "
+            "and apply_patch_set(patches) with exactly one line-range replacement; finally call run_simulation()."
         )
         try:
             (Path(output_dir_per_run) / "debugger_prompt.txt").write_text(first_prompt + "\n", encoding="utf-8")
@@ -1358,6 +1680,11 @@ class RTLEditor:
         for trial_idx in range(session_max_trials):
             if self._session.is_done:
                 break
+
+            if self._needs_compact_checkpoint() and self._session.action_calls < session_max_trials:
+                await self._compact_agent_memory()
+                if self._session.is_done:
+                    break
 
             # Stop sending continue_prompt when the edit budget is exhausted.
             if self._session.action_calls >= session_max_trials:
@@ -1378,6 +1705,9 @@ class RTLEditor:
                     role="user",
                 )
             )
+
+        if self._session is not None:
+            self._session.persist_memory_snapshot()
 
         with open(rtl_path, "r", encoding="utf-8") as f:
             rtl_code = f.read()

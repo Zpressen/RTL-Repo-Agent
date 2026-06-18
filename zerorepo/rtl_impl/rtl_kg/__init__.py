@@ -10,6 +10,7 @@ Core exports:
 - compute_repo_uid: generate <repo_name>@<commit_sha> identity
 - Neo4jConnection: Neo4j Bolt connection wrapper
 - RTLNeo4jIngestor: bulk MERGE of nodes/edges into Neo4j
+- RTLKgService / QueryRtlKgTool: service wrapper exports kept for migration compatibility
 """
 
 from .rtl_knowledge_graph import KnowledgeGraphRTL, compute_repo_uid
@@ -22,4 +23,14 @@ __all__ = [
     "compute_repo_uid",
     "Neo4jConnection",
     "RTLNeo4jIngestor",
+    "RTLKgService",
+    "QueryRtlKgTool",
 ]
+
+
+def __getattr__(name: str):
+    if name in {"RTLKgService", "QueryRtlKgTool"}:
+        from zerorepo.rtl_impl.rtl_kg_service import QueryRtlKgTool, RTLKgService
+
+        return {"RTLKgService": RTLKgService, "QueryRtlKgTool": QueryRtlKgTool}[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
