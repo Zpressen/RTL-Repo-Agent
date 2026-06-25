@@ -24,7 +24,7 @@ DebugStatus = Literal["disabled", "skipped", "pass", "fixed", "fail", "error"]
 class RtlDebugConfig:
     enabled: bool = True
     oracle_root: str = "/home/mokita/RealBench"
-    max_trials: int = 10
+    max_trials: int = 15
     allow_failure: bool = False
     toolchain_bin: str = ""
     openai_config: OpenAIConfig | None = None
@@ -95,12 +95,16 @@ class ModuleDebugRunner:
         *,
         config: RtlDebugConfig | None = None,
         workspace_root: str | Path,
+        output_root: str | Path | None = None,
+        repo_root: str | Path | None = None,
         logger: Any | None = None,
         kg_service: Any | None = None,
         initial_result_recorder: Callable[[str, str | Path, ModuleDebugResult], Any] | None = None,
     ) -> None:
         self.config = config or RtlDebugConfig.from_env()
         self.workspace_root = Path(workspace_root)
+        self.output_root = Path(output_root) if output_root is not None else None
+        self.repo_root = Path(repo_root) if repo_root is not None else Path.cwd()
         self.debug_root = self.workspace_root / "debug"
         self.logger = logger
         self.kg_service = kg_service
@@ -119,7 +123,6 @@ class ModuleDebugRunner:
         contract_json: str,
         spec_source_path: str | None = None,
     ) -> ModuleDebugResult:
-        del task
         if not self.config.enabled:
             return ModuleDebugResult(module=module_name, status="disabled", reason="RTL debug is disabled.")
 
@@ -146,11 +149,75 @@ class ModuleDebugRunner:
                 contract_json=contract_json,
                 spec_source_path=spec_source_path,
             )
-            self._repair_debug_workspace_syntax(
-                module_name=module_name,
-                workdir=workdir,
-                spec_text=spec_text,
-                contract_json=contract_json,
+            syntax_passed, syntax_output = check_syntax(str(workdir / "rtl.sv"), top_module=module_name)
+            if not syntax_passed:
+                syntax_passed, _rtl_code, syntax_trials = self._run_repo_react_syntax_repair(
+                    spec_text=spec_text,
+                    workdir=workdir,
+                    syntax_output=syntax_output,
+                    contract_json=contract_json,
+                    task=task,
+                    module_name=module_name,
+                    merged_file=Path(merged_file),
+                    spec_source_path=spec_source_path,
+                )
+                self._write_text(
+                    workdir / "pre_debug_syntax_repair.json",
+                    json.dumps(
+                        {
+                            "module": module_name,
+                            "status": "pass_after_repo_react" if syntax_passed else "fail",
+                            "repair_mode": "repo_react_syntax",
+                            "debug_trials": int(syntax_trials),
+                            "initial_syntax_summary": self._summarize_syntax_output(syntax_output),
+                        },
+                        indent=2,
+                        ensure_ascii=False,
+                    )
+                    + "\n",
+                )
+            else:
+                self._write_text(
+                    workdir / "pre_debug_syntax_repair.json",
+                    json.dumps(
+                        {
+                            "module": module_name,
+                            "status": "pass_without_repair",
+                            "repair_mode": "repo_react_syntax",
+                            "initial_syntax_summary": self._summarize_syntax_output(syntax_output),
+                        },
+                        indent=2,
+                        ensure_ascii=False,
+                    )
+                    + "\n",
+                )
+            if not syntax_passed:
+                self._write_text(workdir / "initial_sim_output.json", syntax_output)
+                initial_result = self._initial_debug_result(
+                    module_name=module_name,
+                    is_pass=False,
+                    mismatch_count=0,
+                    sim_output=syntax_output,
+                    workdir=workdir,
+                )
+                self._record_initial_result(
+                    module_name=module_name,
+                    merged_file=merged_file,
+                    result=initial_result,
+                )
+                return initial_result
+            self._write_text(
+                workdir / "pre_debug_syntax_repair_legacy_skipped.json",
+                json.dumps(
+                    {
+                        "module": module_name,
+                        "status": "skipped",
+                        "reason": "RepoReAct syntax repair path is active.",
+                    },
+                    indent=2,
+                    ensure_ascii=False,
+                )
+                + "\n",
             )
             sim_reviewer = SimReviewer(str(workdir), str(workdir / "support.sv"))
             is_pass, mismatch_count, sim_output = sim_reviewer.review()
@@ -172,13 +239,17 @@ class ModuleDebugRunner:
             if mismatch_count <= 0:
                 return initial_result
 
-            final_pass, _rtl_code, used_trials = self._run_editor(
+            final_pass, _rtl_code, used_trials = self._run_repo_react(
                 sim_reviewer=sim_reviewer,
                 spec_text=spec_text,
                 workdir=workdir,
                 sim_output=sim_output,
                 mismatch_count=mismatch_count,
                 contract_json=contract_json,
+                task=task,
+                module_name=module_name,
+                merged_file=Path(merged_file),
+                spec_source_path=spec_source_path,
                 behavior_source="spec_tb",
             )
             final_rtl = workdir / "rtl.sv"
@@ -708,7 +779,7 @@ class ModuleDebugRunner:
             if sf.name in include_names:
                 shutil.copyfile(sf, workdir / sf.name)
 
-    def _run_editor(
+    def _run_repo_react(
         self,
         *,
         sim_reviewer: SimReviewer,
@@ -717,10 +788,14 @@ class ModuleDebugRunner:
         sim_output: str,
         mismatch_count: int,
         contract_json: str,
+        task: Any,
+        module_name: str,
+        merged_file: Path,
+        spec_source_path: str | None,
         behavior_source: Literal["contract", "spec_tb"] = "contract",
     ) -> tuple[bool, str, int]:
         try:
-            from .rtl_editor import RTLEditor
+            from zerorepo.rtl_impl.repo_react import RepoReActInput, RepoReActRunner
         except ModuleNotFoundError as exc:
             if exc.name == "agentscope":
                 raise ModuleNotFoundError(
@@ -730,23 +805,100 @@ class ModuleDebugRunner:
             raise
 
         cfg = self.config.openai_config or load_openai_config()
-        editor = RTLEditor(
+        spec_paths = []
+        try:
+            spec_paths = [str(item) for item in (getattr(task, "spec_md_files", []) or [])]
+        except Exception:  # noqa: BLE001
+            spec_paths = []
+        output_root = self.output_root
+        if output_root is None:
+            candidate = self.workspace_root.parent / "outputs"
+            output_root = candidate if candidate.exists() else None
+        runner = RepoReActRunner(
             cfg,
             sim_reviewer=sim_reviewer,
-            max_trials=int(self.config.max_trials),
             kg_service=self.kg_service,
+            max_steps=int(self.config.max_trials),
+            logger=self.logger,
         )
-        return self._run_async(
-            editor.chat(
-                spec=spec_text,
-                output_dir_per_run=str(workdir),
-                sim_failed_log=sim_output,
-                sim_mismatch_cnt=int(mismatch_count),
-                contract_json=contract_json,
-                behavior_source=behavior_source,
-                max_trials=int(self.config.max_trials),
-            )
+        repo_input = RepoReActInput(
+            module_name=module_name,
+            workspace_root=self.workspace_root,
+            debug_workdir=workdir,
+            rtl_path=workdir / "rtl.sv",
+            merged_file=merged_file,
+            output_root=output_root,
+            repo_root=self.repo_root,
+            spec_text=spec_text,
+            spec_source_path=spec_source_path or "",
+            spec_paths=spec_paths,
+            contract_json=contract_json,
+            sim_failed_log=sim_output,
+            initial_mismatch_count=int(mismatch_count),
+            max_steps=int(self.config.max_trials),
         )
+        del behavior_source
+        result = self._run_async(runner.chat(repo_input))
+        return bool(result.is_pass), result.rtl_code, int(result.action_calls)
+
+    def _run_repo_react_syntax_repair(
+        self,
+        *,
+        spec_text: str,
+        workdir: Path,
+        syntax_output: str,
+        contract_json: str,
+        task: Any,
+        module_name: str,
+        merged_file: Path,
+        spec_source_path: str | None,
+    ) -> tuple[bool, str, int]:
+        try:
+            from zerorepo.rtl_impl.repo_react import RepoReActInput, RepoReActRunner
+        except ModuleNotFoundError as exc:
+            if exc.name == "agentscope":
+                raise ModuleNotFoundError(
+                    "Missing Python dependency 'agentscope'. Install RTL debug dependencies with "
+                    "`python -m pip install -r requirements.txt` in the environment that runs ZeroRepo."
+                ) from exc
+            raise
+
+        cfg = self.config.openai_config or load_openai_config()
+        spec_paths = []
+        try:
+            spec_paths = [str(item) for item in (getattr(task, "spec_md_files", []) or [])]
+        except Exception:  # noqa: BLE001
+            spec_paths = []
+        output_root = self.output_root
+        if output_root is None:
+            candidate = self.workspace_root.parent / "outputs"
+            output_root = candidate if candidate.exists() else None
+        runner = RepoReActRunner(
+            cfg,
+            sim_reviewer=SimReviewer(str(workdir), str(workdir / "support.sv")),
+            kg_service=self.kg_service,
+            max_steps=int(self.pre_debug_syntax_max_attempts),
+            logger=self.logger,
+        )
+        repo_input = RepoReActInput(
+            module_name=module_name,
+            repair_mode="syntax",
+            workspace_root=self.workspace_root,
+            debug_workdir=workdir,
+            rtl_path=workdir / "rtl.sv",
+            merged_file=merged_file,
+            output_root=output_root,
+            repo_root=self.repo_root,
+            spec_text=spec_text,
+            spec_source_path=spec_source_path or "",
+            spec_paths=spec_paths,
+            contract_json=contract_json,
+            sim_failed_log=syntax_output,
+            initial_mismatch_count=0,
+            max_steps=int(self.pre_debug_syntax_max_attempts),
+        )
+        result = self._run_async(runner.chat(repo_input))
+        return bool(result.is_pass), result.rtl_code, int(result.action_calls)
 
     def _run_async(self, coroutine: Any) -> Any:
         try:

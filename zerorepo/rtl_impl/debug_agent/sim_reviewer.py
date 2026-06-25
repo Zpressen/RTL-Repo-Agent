@@ -3,6 +3,7 @@ from __future__ import annotations
 import glob
 import os
 import re
+import shlex
 import shutil
 from typing import Tuple
 
@@ -24,7 +25,11 @@ def _verilator_has_fatal(stdout: str, stderr: str) -> bool:
     return ("syntax error" in text) or ("error:" in text)
 
 
-def check_syntax(rtl_path: str, top_module: str | None = None) -> Tuple[bool, str]:
+def check_syntax(
+    rtl_path: str,
+    top_module: str | None = None,
+    include_dirs: list[str] | None = None,
+) -> Tuple[bool, str]:
     _require_executable("verilator")
     rtl_dir = os.path.dirname(os.path.abspath(rtl_path))
     # Collect all .sv and .v files in the directory so Verilator can resolve
@@ -34,7 +39,22 @@ def check_syntax(rtl_path: str, top_module: str | None = None) -> Tuple[bool, st
         src_files = [rtl_path]
     srcs = " ".join(src_files)
     top_flag = f"--top-module {top_module} " if top_module else ""
-    cmd = f"verilator --lint-only --sv --timing -Wall -Wno-fatal --assert {top_flag}{srcs}"
+    include_flags = ""
+    if include_dirs:
+        unique_dirs: list[str] = []
+        seen_dirs: set[str] = set()
+        for include_dir in include_dirs:
+            if not include_dir:
+                continue
+            abs_dir = os.path.abspath(include_dir)
+            if abs_dir in seen_dirs:
+                continue
+            seen_dirs.add(abs_dir)
+            unique_dirs.append(abs_dir)
+        include_flags = " ".join(f"-I{shlex.quote(item)}" for item in unique_dirs)
+        if include_flags:
+            include_flags += " "
+    cmd = f"verilator --lint-only --sv --timing -Wall -Wno-fatal --assert {include_flags}{top_flag}{srcs}"
     is_pass, sim_output = run_bash_command(cmd, timeout=60, cwd=rtl_dir)
     sim_output_obj = CommandResult.model_validate_json(sim_output)
     stdout = sim_output_obj.stdout or ""

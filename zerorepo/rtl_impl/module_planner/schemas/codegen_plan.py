@@ -66,6 +66,16 @@ class Stage4ModulePlansArtifact(BaseModel):
         return self
 
 
+class FragmentContract(BaseModel):
+    writes: List[str] = Field(default_factory=list)
+    reads: List[str] = Field(default_factory=list)
+    clocking: str = Field(default="")
+    reset_behavior: str = Field(default="")
+    hold_behavior: str = Field(default="")
+    latency: str = Field(default="")
+    assumptions: List[str] = Field(default_factory=list)
+
+
 class SubtaskCodeArtifact(BaseModel):
     task_id: str = Field(..., min_length=1)
     module: str = Field(..., min_length=1)
@@ -73,6 +83,7 @@ class SubtaskCodeArtifact(BaseModel):
     target: str = Field(..., min_length=1)
     spec_refs: List[str] = Field(..., min_length=1)
     code: str = Field(..., min_length=1)
+    contract: FragmentContract | None = None
 
 
 class ModuleCodegenRecord(BaseModel):

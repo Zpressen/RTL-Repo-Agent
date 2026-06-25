@@ -1,0 +1,20 @@
+{
+  "sd_data_master": [
+    {
+      "step": 1,
+      "module": "sd_data_master",
+      "correction_type": "wrong_interface",
+      "original_artifact": "stage5_codegen B5_comb_output_assign",
+      "problem": "The GET_RX_BD transition condition uses '>' (bd_cnt > READ_CYCLE-1) but the reference uses '>=' (bd_cnt >= READ_CYCLE-1). With READ_CYCLE=4, DUT transitions at bd_cnt>3 (bd_cnt>=4) while reference transitions at bd_cnt>=3, causing a one-cycle lag in the RX path. Additionally, the reference uses separate FSM_SEQ and output logic always blocks with NO default-zero assignments; each state only sets signals that need to change. The DUT has default-zero assignments that clear all outputs every cycle, preventing signals from persisting across states.",
+      "evidence": [
+        "Reference support.sv FSM_COMBO: GET_RX_BD uses bd_cnt >= (READ_CYCLE-1)",
+        "DUT uses bd_cnt > (READ_CYCLE - 1) for both GET_TX_BD and GET_RX_BD",
+        "Alignment diagnosis shows we_req best_alignment is dut_lag1 with match_rate 1.0",
+        "Known planning correction states reference does NOT use default-zero assignments"
+      ],
+      "override": {
+        "action": "1) Fix GET_RX_BD transition: change bd_cnt > (READ_CYCLE-1) to bd_cnt >= (READ_CYCLE-1). 2) Remove ALL default-zero assignments and instead explicitly set every signal that needs to change in each state, matching the reference output logic exactly. The IDLE state clears all signals; other states only set what they need. 3) Ensure signals that should persist (cmd_set, cmd_arg, sys_adr, tx_cycle, rx_cycle, etc.) are not cleared in states where they should hold."
+      }
+    }
+  ]
+}

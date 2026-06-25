@@ -185,7 +185,10 @@ class PlannerLLMClient:
     ):
         if backend is None and llm_config is None:
             raise ValueError("PlannerLLMClient requires either llm_config or a custom backend.")
+        self.config = LLMConfig.from_source(llm_config) if llm_config is not None else None
         self.backend = backend if backend is not None else DefaultPlannerLLMBackend(llm_config)
+        if self.config is None:
+            self.config = getattr(self.backend, "config", None)
 
     def complete(
         self,

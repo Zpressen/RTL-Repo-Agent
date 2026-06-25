@@ -13,7 +13,7 @@
       "sim_output_path": "",
       "reason": "Oracle directory not found: no sd_defines/verification under /home/mokita/RealBench or its immediate subdirectories",
       "stage": "post_module_debug",
-      "timestamp": "2026-06-18T11:37:00.844403+00:00"
+      "timestamp": "2026-06-22T14:35:06.247713+00:00"
     },
     "sd_crc_7": {
       "module": "sd_crc_7",
@@ -26,7 +26,7 @@
       "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_crc_7/initial_sim_output.json",
       "reason": "",
       "stage": "post_module_debug",
-      "timestamp": "2026-06-18T11:37:08.898240+00:00"
+      "timestamp": "2026-06-22T14:35:19.125936+00:00"
     },
     "sd_crc_16": {
       "module": "sd_crc_16",
@@ -39,7 +39,7 @@
       "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_crc_16/initial_sim_output.json",
       "reason": "",
       "stage": "post_module_debug",
-      "timestamp": "2026-06-18T11:37:18.698824+00:00"
+      "timestamp": "2026-06-22T14:35:29.337373+00:00"
     },
     "sd_rx_fifo": {
       "module": "sd_rx_fifo",
@@ -52,7 +52,7 @@
       "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_rx_fifo/initial_sim_output.json",
       "reason": "",
       "stage": "post_module_debug",
-      "timestamp": "2026-06-18T11:37:26.462442+00:00"
+      "timestamp": "2026-06-22T14:35:38.414023+00:00"
     },
     "sd_tx_fifo": {
       "module": "sd_tx_fifo",
@@ -65,7 +65,7 @@
       "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_tx_fifo/initial_sim_output.json",
       "reason": "",
       "stage": "post_module_debug",
-      "timestamp": "2026-06-18T11:37:34.397374+00:00"
+      "timestamp": "2026-06-22T14:35:46.499240+00:00"
     },
     "sd_bd": {
       "module": "sd_bd",
@@ -78,7 +78,7 @@
       "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_bd/initial_sim_output.json",
       "reason": "",
       "stage": "post_module_debug",
-      "timestamp": "2026-06-18T11:37:42.384106+00:00"
+      "timestamp": "2026-06-22T14:35:54.882422+00:00"
     },
     "sd_clock_divider": {
       "module": "sd_clock_divider",
@@ -91,7 +91,7 @@
       "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_clock_divider/initial_sim_output.json",
       "reason": "",
       "stage": "post_module_debug",
-      "timestamp": "2026-06-18T11:37:51.760537+00:00"
+      "timestamp": "2026-06-22T14:36:04.739318+00:00"
     },
     "sd_controller_wb": {
       "module": "sd_controller_wb",
@@ -104,7 +104,7 @@
       "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/initial_sim_output.json",
       "reason": "",
       "stage": "post_module_debug",
-      "timestamp": "2026-06-18T11:37:59.503638+00:00"
+      "timestamp": "2026-06-22T14:36:14.856745+00:00"
     },
     "sd_cmd_master": {
       "module": "sd_cmd_master",
@@ -117,20 +117,20 @@
       "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_cmd_master/initial_sim_output.json",
       "reason": "",
       "stage": "post_module_debug",
-      "timestamp": "2026-06-18T11:38:07.406233+00:00"
+      "timestamp": "2026-06-22T14:36:23.733114+00:00"
     },
     "sd_data_master": {
       "module": "sd_data_master",
       "status": "fail",
       "passed": false,
-      "mismatch_count": 185395,
+      "mismatch_count": 35448,
       "debug_trials": 0,
       "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_master/rtl.sv",
       "trace_report_path": "",
       "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_master/initial_sim_output.json",
       "reason": "",
       "stage": "post_initial_sim",
-      "timestamp": "2026-06-18T11:38:14.403442+00:00"
+      "timestamp": "2026-06-22T14:36:31.252564+00:00"
     },
     "sd_cmd_serial_host": {
       "module": "sd_cmd_serial_host",
@@ -143,7 +143,46 @@
       "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_cmd_serial_host/initial_sim_output.json",
       "reason": "",
       "stage": "post_module_debug",
-      "timestamp": "2026-06-18T10:31:30.981329+00:00"
+      "timestamp": "2026-06-22T14:28:49.675278+00:00"
+    },
+    "sd_data_serial_host": {
+      "module": "sd_data_serial_host",
+      "status": "pass",
+      "passed": true,
+      "mismatch_count": 0,
+      "debug_trials": 0,
+      "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_serial_host/rtl.sv",
+      "trace_report_path": "",
+      "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_serial_host/initial_sim_output.json",
+      "reason": "",
+      "stage": "post_module_debug",
+      "timestamp": "2026-06-22T14:29:01.522209+00:00"
+    },
+    "sd_fifo_rx_filler": {
+      "module": "sd_fifo_rx_filler",
+      "status": "pass",
+      "passed": true,
+      "mismatch_count": 0,
+      "debug_trials": 0,
+      "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_fifo_rx_filler/rtl.sv",
+      "trace_report_path": "",
+      "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_fifo_rx_filler/initial_sim_output.json",
+      "reason": "",
+      "stage": "post_module_debug",
+      "timestamp": "2026-06-22T14:29:11.878875+00:00"
+    },
+    "sd_fifo_tx_filler": {
+      "module": "sd_fifo_tx_filler",
+      "status": "pass",
+      "passed": true,
+      "mismatch_count": 0,
+      "debug_trials": 0,
+      "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_fifo_tx_filler/rtl.sv",
+      "trace_report_path": "",
+      "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_fifo_tx_filler/initial_sim_output.json",
+      "reason": "",
+      "stage": "post_module_debug",
+      "timestamp": "2026-06-22T14:29:22.490161+00:00"
     }
   },
   "records": {
@@ -159,7 +198,7 @@
         "sim_output_path": "",
         "reason": "Oracle directory not found: no sd_defines/verification under /home/mokita/RealBench or its immediate subdirectories",
         "stage": "post_module_debug",
-        "timestamp": "2026-06-18T11:37:00.844403+00:00"
+        "timestamp": "2026-06-22T14:35:06.247713+00:00"
       }
     },
     "sd_crc_7": {
@@ -174,7 +213,7 @@
         "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_crc_7/initial_sim_output.json",
         "reason": "",
         "stage": "post_module_debug",
-        "timestamp": "2026-06-18T11:37:08.898240+00:00"
+        "timestamp": "2026-06-22T14:35:19.125936+00:00"
       },
       "post_initial_sim": {
         "module": "sd_crc_7",
@@ -187,7 +226,7 @@
         "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_crc_7/initial_sim_output.json",
         "reason": "",
         "stage": "post_initial_sim",
-        "timestamp": "2026-06-18T11:37:07.528435+00:00"
+        "timestamp": "2026-06-22T14:35:16.506582+00:00"
       }
     },
     "sd_crc_16": {
@@ -202,7 +241,7 @@
         "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_crc_16/initial_sim_output.json",
         "reason": "",
         "stage": "post_module_debug",
-        "timestamp": "2026-06-18T11:37:18.698824+00:00"
+        "timestamp": "2026-06-22T14:35:29.337373+00:00"
       },
       "post_initial_sim": {
         "module": "sd_crc_16",
@@ -215,7 +254,7 @@
         "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_crc_16/initial_sim_output.json",
         "reason": "",
         "stage": "post_initial_sim",
-        "timestamp": "2026-06-18T11:37:17.114916+00:00"
+        "timestamp": "2026-06-22T14:35:27.644017+00:00"
       }
     },
     "sd_rx_fifo": {
@@ -230,7 +269,7 @@
         "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_rx_fifo/initial_sim_output.json",
         "reason": "",
         "stage": "post_initial_sim",
-        "timestamp": "2026-06-18T11:37:25.088754+00:00"
+        "timestamp": "2026-06-22T14:35:36.803614+00:00"
       },
       "post_module_debug": {
         "module": "sd_rx_fifo",
@@ -243,7 +282,7 @@
         "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_rx_fifo/initial_sim_output.json",
         "reason": "",
         "stage": "post_module_debug",
-        "timestamp": "2026-06-18T11:37:26.462442+00:00"
+        "timestamp": "2026-06-22T14:35:38.414023+00:00"
       }
     },
     "sd_tx_fifo": {
@@ -258,7 +297,7 @@
         "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_tx_fifo/initial_sim_output.json",
         "reason": "",
         "stage": "post_initial_sim",
-        "timestamp": "2026-06-18T11:37:32.998992+00:00"
+        "timestamp": "2026-06-22T14:35:45.043509+00:00"
       },
       "post_module_debug": {
         "module": "sd_tx_fifo",
@@ -271,7 +310,7 @@
         "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_tx_fifo/initial_sim_output.json",
         "reason": "",
         "stage": "post_module_debug",
-        "timestamp": "2026-06-18T11:37:34.397374+00:00"
+        "timestamp": "2026-06-22T14:35:46.499240+00:00"
       }
     },
     "sd_bd": {
@@ -286,7 +325,7 @@
         "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_bd/initial_sim_output.json",
         "reason": "",
         "stage": "post_initial_sim",
-        "timestamp": "2026-06-18T11:37:41.112970+00:00"
+        "timestamp": "2026-06-22T14:35:53.321151+00:00"
       },
       "post_module_debug": {
         "module": "sd_bd",
@@ -299,7 +338,7 @@
         "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_bd/initial_sim_output.json",
         "reason": "",
         "stage": "post_module_debug",
-        "timestamp": "2026-06-18T11:37:42.384106+00:00"
+        "timestamp": "2026-06-22T14:35:54.882422+00:00"
       }
     },
     "sd_clock_divider": {
@@ -314,7 +353,7 @@
         "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_clock_divider/initial_sim_output.json",
         "reason": "",
         "stage": "post_initial_sim",
-        "timestamp": "2026-06-18T11:37:50.339394+00:00"
+        "timestamp": "2026-06-22T14:36:02.910620+00:00"
       },
       "post_module_debug": {
         "module": "sd_clock_divider",
@@ -327,7 +366,7 @@
         "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_clock_divider/initial_sim_output.json",
         "reason": "",
         "stage": "post_module_debug",
-        "timestamp": "2026-06-18T11:37:51.760537+00:00"
+        "timestamp": "2026-06-22T14:36:04.739318+00:00"
       }
     },
     "sd_controller_wb": {
@@ -342,7 +381,7 @@
         "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/initial_sim_output.json",
         "reason": "",
         "stage": "post_initial_sim",
-        "timestamp": "2026-06-18T11:37:58.296505+00:00"
+        "timestamp": "2026-06-22T14:36:13.089781+00:00"
       },
       "post_module_debug": {
         "module": "sd_controller_wb",
@@ -355,7 +394,7 @@
         "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/initial_sim_output.json",
         "reason": "",
         "stage": "post_module_debug",
-        "timestamp": "2026-06-18T11:37:59.503638+00:00"
+        "timestamp": "2026-06-22T14:36:14.856745+00:00"
       }
     },
     "sd_cmd_master": {
@@ -370,7 +409,7 @@
         "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_cmd_master/initial_sim_output.json",
         "reason": "",
         "stage": "post_initial_sim",
-        "timestamp": "2026-06-18T11:38:06.178700+00:00"
+        "timestamp": "2026-06-22T14:36:22.114683+00:00"
       },
       "post_module_debug": {
         "module": "sd_cmd_master",
@@ -383,7 +422,7 @@
         "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_cmd_master/initial_sim_output.json",
         "reason": "",
         "stage": "post_module_debug",
-        "timestamp": "2026-06-18T11:38:07.406233+00:00"
+        "timestamp": "2026-06-22T14:36:23.733114+00:00"
       }
     },
     "sd_data_master": {
@@ -391,27 +430,27 @@
         "module": "sd_data_master",
         "status": "fail",
         "passed": false,
-        "mismatch_count": 185395,
+        "mismatch_count": 35448,
         "debug_trials": 0,
         "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_master/rtl.sv",
         "trace_report_path": "",
         "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_master/initial_sim_output.json",
         "reason": "",
         "stage": "post_initial_sim",
-        "timestamp": "2026-06-18T11:38:14.403442+00:00"
+        "timestamp": "2026-06-22T14:36:31.252564+00:00"
       },
       "post_module_debug": {
         "module": "sd_data_master",
-        "status": "error",
+        "status": "fail",
         "passed": false,
-        "mismatch_count": 0,
-        "debug_trials": 0,
-        "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_data_master.v",
-        "trace_report_path": "",
-        "sim_output_path": "",
-        "reason": "RuntimeError: BadRequestError: Error code: 400 - {'error': {'message': \"An assistant message with 'tool_calls' must be followed by tool messages responding to each 'tool_call_id'. (insufficient tool messages following tool_calls message)\", 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}",
+        "mismatch_count": 37206,
+        "debug_trials": 15,
+        "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_master/rtl.sv",
+        "trace_report_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_master/trace_report.json",
+        "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_master/debug_sim_output.json",
+        "reason": "Debug trials ended without passing simulation.",
         "stage": "post_module_debug",
-        "timestamp": "2026-06-18T11:32:24.749116+00:00"
+        "timestamp": "2026-06-22T14:28:37.626091+00:00"
       }
     },
     "sd_cmd_serial_host": {
@@ -426,7 +465,7 @@
         "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_cmd_serial_host/initial_sim_output.json",
         "reason": "",
         "stage": "post_initial_sim",
-        "timestamp": "2026-06-18T10:31:29.180337+00:00"
+        "timestamp": "2026-06-22T14:28:47.585370+00:00"
       },
       "post_module_debug": {
         "module": "sd_cmd_serial_host",
@@ -439,7 +478,91 @@
         "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_cmd_serial_host/initial_sim_output.json",
         "reason": "",
         "stage": "post_module_debug",
-        "timestamp": "2026-06-18T10:31:30.981329+00:00"
+        "timestamp": "2026-06-22T14:28:49.675278+00:00"
+      }
+    },
+    "sd_data_serial_host": {
+      "post_initial_sim": {
+        "module": "sd_data_serial_host",
+        "status": "pass",
+        "passed": true,
+        "mismatch_count": 0,
+        "debug_trials": 0,
+        "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_serial_host/rtl.sv",
+        "trace_report_path": "",
+        "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_serial_host/initial_sim_output.json",
+        "reason": "",
+        "stage": "post_initial_sim",
+        "timestamp": "2026-06-22T14:28:59.617488+00:00"
+      },
+      "post_module_debug": {
+        "module": "sd_data_serial_host",
+        "status": "pass",
+        "passed": true,
+        "mismatch_count": 0,
+        "debug_trials": 0,
+        "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_serial_host/rtl.sv",
+        "trace_report_path": "",
+        "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_serial_host/initial_sim_output.json",
+        "reason": "",
+        "stage": "post_module_debug",
+        "timestamp": "2026-06-22T14:29:01.522209+00:00"
+      }
+    },
+    "sd_fifo_rx_filler": {
+      "post_initial_sim": {
+        "module": "sd_fifo_rx_filler",
+        "status": "pass",
+        "passed": true,
+        "mismatch_count": 0,
+        "debug_trials": 0,
+        "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_fifo_rx_filler/rtl.sv",
+        "trace_report_path": "",
+        "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_fifo_rx_filler/initial_sim_output.json",
+        "reason": "",
+        "stage": "post_initial_sim",
+        "timestamp": "2026-06-22T14:29:09.751960+00:00"
+      },
+      "post_module_debug": {
+        "module": "sd_fifo_rx_filler",
+        "status": "pass",
+        "passed": true,
+        "mismatch_count": 0,
+        "debug_trials": 0,
+        "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_fifo_rx_filler/rtl.sv",
+        "trace_report_path": "",
+        "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_fifo_rx_filler/initial_sim_output.json",
+        "reason": "",
+        "stage": "post_module_debug",
+        "timestamp": "2026-06-22T14:29:11.878875+00:00"
+      }
+    },
+    "sd_fifo_tx_filler": {
+      "post_initial_sim": {
+        "module": "sd_fifo_tx_filler",
+        "status": "pass",
+        "passed": true,
+        "mismatch_count": 0,
+        "debug_trials": 0,
+        "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_fifo_tx_filler/rtl.sv",
+        "trace_report_path": "",
+        "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_fifo_tx_filler/initial_sim_output.json",
+        "reason": "",
+        "stage": "post_initial_sim",
+        "timestamp": "2026-06-22T14:29:20.796892+00:00"
+      },
+      "post_module_debug": {
+        "module": "sd_fifo_tx_filler",
+        "status": "pass",
+        "passed": true,
+        "mismatch_count": 0,
+        "debug_trials": 0,
+        "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_fifo_tx_filler/rtl.sv",
+        "trace_report_path": "",
+        "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_fifo_tx_filler/initial_sim_output.json",
+        "reason": "",
+        "stage": "post_module_debug",
+        "timestamp": "2026-06-22T14:29:22.490161+00:00"
       }
     }
   }

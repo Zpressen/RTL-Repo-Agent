@@ -20,14 +20,12 @@ parameter RESEND_MAX_CNT = `RESEND_MAX_CNT;
 parameter READ_CYCLE = 2;
 parameter BD_EMPTY = (`BD_SIZE / 2);
 reg [1:0] bd_cnt;
-`elsif RAM_MEM_WIDTH_16
+`endif
+
+`ifdef RAM_MEM_WIDTH_16
 parameter READ_CYCLE = 4;
 parameter BD_EMPTY = (`BD_SIZE / 4);
 reg [2:0] bd_cnt;
-`else
-parameter READ_CYCLE = 2;
-parameter BD_EMPTY = (`BD_SIZE / 2);
-reg [1:0] bd_cnt;
 `endif
 // STAGE5_SUBTASK_END B1_param_decl
 
@@ -139,6 +137,7 @@ always_ff @(posedge clk or posedge rst) begin
         tx_cycle <= 1'b0;
         rx_cycle <= 1'b0;
         resend_try_cnt <= 3'b000;
+        bd_cnt <= {($bits(bd_cnt)){1'b0}};
         trans_done <= 1'b0;
         trans_failed <= 1'b0;
         internal_transm_complete <= 1'b0;
@@ -148,7 +147,6 @@ always_ff @(posedge clk or posedge rst) begin
         cmd_set <= 16'h0000;
         CIDAT <= 1'b0;
         Dat_Int_Status <= 8'h00;
-        bd_cnt <= {READ_CYCLE{1'b0}};
         re_s_tx <= 1'b0;
         a_cmp_tx <= 1'b0;
         re_s_rx <= 1'b0;
@@ -164,181 +162,165 @@ always_ff @(posedge clk or posedge rst) begin
         transm_complete_q <= transm_complete;
         internal_transm_complete <= transm_complete & ~transm_complete_q;
 
+        if (Dat_Int_Status_rst) begin
+            Dat_Int_Status <= 8'h00;
+        end
+
         re_s_tx <= 1'b0;
         a_cmp_tx <= 1'b0;
         re_s_rx <= 1'b0;
         a_cmp_rx <= 1'b0;
         we_req <= 1'b0;
+        d_write <= 1'b0;
+        d_read <= 1'b0;
         start_tx_fifo <= 1'b0;
         start_rx_fifo <= 1'b0;
         ack_transfer <= 1'b0;
-
-        if (Dat_Int_Status_rst) begin
-            Dat_Int_Status <= 8'h00;
-        end
+        send_done <= 1'b0;
+        rec_done <= 1'b0;
+        rec_failed <= 1'b0;
+        trans_done <= 1'b0;
+        trans_failed <= 1'b0;
 
         case (state)
             IDLE: begin
-                send_done <= 1'b0;
-                rec_done <= 1'b0;
-                rec_failed <= 1'b0;
                 tx_cycle <= 1'b0;
                 rx_cycle <= 1'b0;
+                bd_cnt <= {($bits(bd_cnt)){1'b0}};
                 resend_try_cnt <= 3'b000;
-                trans_done <= 1'b0;
-                trans_failed <= 1'b0;
-                internal_transm_complete <= 1'b0;
                 sys_adr <= 32'h00000000;
                 cmd_arg <= 32'h00000000;
                 cmd_set <= 16'h0000;
                 CIDAT <= 1'b0;
-                bd_cnt <= {READ_CYCLE{1'b0}};
-                d_write <= 1'b0;
-                d_read <= 1'b0;
+                if (!Dat_Int_Status_rst) begin
+                    Dat_Int_Status <= Dat_Int_Status;
+                end
             end
 
             GET_TX_BD: begin
-                re_s_tx <= 1'b1;
                 tx_cycle <= 1'b1;
                 rx_cycle <= 1'b0;
                 cmd_set <= CMD24;
-                send_done <= 1'b0;
-                rec_done <= 1'b0;
-                rec_failed <= 1'b0;
-                trans_done <= 1'b0;
-                trans_failed <= 1'b0;
-`ifdef RAM_MEM_WIDTH_16
+                re_s_tx <= 1'b1;
                 if (ack_i_s_tx) begin
-                    if (bd_cnt == 3'd0) begin
-                        sys_adr[31:16] <= dat_in_tx[15:0];
-                        bd_cnt <= 3'd1;
-                    end else if (bd_cnt == 3'd1) begin
-                        sys_adr[15:0] <= dat_in_tx[15:0];
-                        bd_cnt <= 3'd2;
-                    end else if (bd_cnt == 3'd2) begin
-                        cmd_arg[31:16] <= dat_in_tx[15:0];
-                        bd_cnt <= 3'd3;
-                    end else if (bd_cnt == 3'd3) begin
-                        cmd_arg[15:0] <= dat_in_tx[15:0];
-                        start_tx_fifo <= 1'b1;
-                        bd_cnt <= 3'd4;
-                    end
-                end
-`else
-                if (ack_i_s_tx) begin
+`ifdef RAM_MEM_WIDTH_32
                     if (bd_cnt == 2'd0) begin
-                        sys_adr <= dat_in_tx[31:0];
-                        bd_cnt <= 2'd1;
+                        sys_adr <= dat_in_tx;
+                        bd_cnt <= bd_cnt + 1'b1;
                     end else if (bd_cnt == 2'd1) begin
-                        cmd_arg <= dat_in_tx[31:0];
+                        cmd_arg <= dat_in_tx;
                         start_tx_fifo <= 1'b1;
-                        bd_cnt <= 2'd2;
+                        bd_cnt <= bd_cnt + 1'b1;
+                    end else begin
+                        bd_cnt <= bd_cnt + 1'b1;
                     end
-                end
 `endif
+`ifdef RAM_MEM_WIDTH_16
+                    if (bd_cnt == 3'd0) begin
+                        sys_adr[31:16] <= dat_in_tx;
+                        bd_cnt <= bd_cnt + 1'b1;
+                    end else if (bd_cnt == 3'd1) begin
+                        sys_adr[15:0] <= dat_in_tx;
+                        bd_cnt <= bd_cnt + 1'b1;
+                    end else if (bd_cnt == 3'd2) begin
+                        cmd_arg[31:16] <= dat_in_tx;
+                        bd_cnt <= bd_cnt + 1'b1;
+                    end else if (bd_cnt == 3'd3) begin
+                        cmd_arg[15:0] <= dat_in_tx;
+                        start_tx_fifo <= 1'b1;
+                        bd_cnt <= bd_cnt + 1'b1;
+                    end else begin
+                        bd_cnt <= bd_cnt + 1'b1;
+                    end
+`endif
+                end
             end
 
             GET_RX_BD: begin
-                re_s_rx <= 1'b1;
                 tx_cycle <= 1'b0;
                 rx_cycle <= 1'b1;
-                send_done <= 1'b0;
-                rec_done <= 1'b0;
-                rec_failed <= 1'b0;
-                trans_done <= 1'b0;
-                trans_failed <= 1'b0;
+                re_s_rx <= 1'b1;
                 if (transfer_type == 2'b00) begin
                     cmd_set <= CMD17;
+                    CIDAT <= 1'b0;
                 end else if (transfer_type == 2'b01) begin
                     cmd_set <= ACMD13;
+                    CIDAT <= 1'b1;
                 end else begin
                     cmd_set <= ACMD51;
+                    CIDAT <= 1'b1;
                 end
-`ifdef RAM_MEM_WIDTH_16
                 if (ack_i_s_rx) begin
-                    if (bd_cnt == 3'd0) begin
-                        sys_adr[31:16] <= dat_in_rx[15:0];
-                        bd_cnt <= 3'd1;
-                    end else if (bd_cnt == 3'd1) begin
-                        sys_adr[15:0] <= dat_in_rx[15:0];
-                        bd_cnt <= 3'd2;
-                    end else if (bd_cnt == 3'd2) begin
-                        cmd_arg[31:16] <= dat_in_rx[15:0];
-                        bd_cnt <= 3'd3;
-                    end else if (bd_cnt == 3'd3) begin
-                        cmd_arg[15:0] <= dat_in_rx[15:0];
-                        bd_cnt <= 3'd4;
-                    end
-                end
-`else
-                if (ack_i_s_rx) begin
+`ifdef RAM_MEM_WIDTH_32
                     if (bd_cnt == 2'd0) begin
-                        sys_adr <= dat_in_rx[31:0];
-                        bd_cnt <= 2'd1;
+                        sys_adr <= dat_in_rx;
+                        bd_cnt <= bd_cnt + 1'b1;
                     end else if (bd_cnt == 2'd1) begin
-                        cmd_arg <= dat_in_rx[31:0];
-                        bd_cnt <= 2'd2;
+                        cmd_arg <= dat_in_rx;
+                        bd_cnt <= bd_cnt + 1'b1;
+                    end else begin
+                        bd_cnt <= bd_cnt + 1'b1;
                     end
-                end
 `endif
+`ifdef RAM_MEM_WIDTH_16
+                    if (bd_cnt == 3'd0) begin
+                        sys_adr[31:16] <= dat_in_rx;
+                        bd_cnt <= bd_cnt + 1'b1;
+                    end else if (bd_cnt == 3'd1) begin
+                        sys_adr[15:0] <= dat_in_rx;
+                        bd_cnt <= bd_cnt + 1'b1;
+                    end else if (bd_cnt == 3'd2) begin
+                        cmd_arg[31:16] <= dat_in_rx;
+                        bd_cnt <= bd_cnt + 1'b1;
+                    end else if (bd_cnt == 3'd3) begin
+                        cmd_arg[15:0] <= dat_in_rx;
+                        bd_cnt <= bd_cnt + 1'b1;
+                    end else begin
+                        bd_cnt <= bd_cnt + 1'b1;
+                    end
+`endif
+                end
             end
 
             SEND_CMD: begin
-                bd_cnt <= {READ_CYCLE{1'b0}};
-                send_done <= 1'b0;
-                rec_done <= 1'b0;
-                rec_failed <= 1'b0;
-                if (rx_cycle) begin
-                    d_read <= 1'b1;
-                    d_write <= 1'b0;
-                end else if (tx_cycle) begin
-                    d_read <= 1'b0;
+                if (tx_cycle) begin
                     d_write <= 1'b1;
-                end else begin
                     d_read <= 1'b0;
+                end else if (rx_cycle) begin
                     d_write <= 1'b0;
+                    d_read <= 1'b1;
                 end
                 if (!cmd_busy) begin
                     we_req <= 1'b1;
-                    if (we_ack) begin
-                        send_done <= 1'b1;
-                    end
+                end
+                if (we_ack) begin
+                    send_done <= 1'b1;
                 end
             end
 
             RECIVE_CMD: begin
-                send_done <= 1'b0;
                 if (rx_cycle) begin
                     start_rx_fifo <= 1'b1;
                 end
                 if (!cmd_busy) begin
                     if (cmd_tsf_err) begin
                         rec_failed <= 1'b1;
-                        rec_done <= 1'b0;
-                        Dat_Int_Status[0] <= 1'b1;
                     end else if ((card_status[0] == 1'b1) && ((card_status[4:1] == 4'd4) || (card_status[4:1] == 4'd5) || (card_status[4:1] == 4'd6))) begin
                         rec_done <= 1'b1;
-                        rec_failed <= 1'b0;
                     end else begin
-                        rec_done <= 1'b0;
                         rec_failed <= 1'b1;
                     end
                 end
             end
 
             DATA_TRANSFER: begin
-                rec_done <= 1'b0;
-                rec_failed <= 1'b0;
                 if (tx_cycle && tx_empt) begin
                     trans_failed <= 1'b1;
-                    Dat_Int_Status[2] <= 1'b1;
                 end else if (rx_cycle && rx_full) begin
                     trans_failed <= 1'b1;
-                    Dat_Int_Status[2] <= 1'b1;
                 end else if (internal_transm_complete) begin
                     if (crc_ok) begin
                         trans_done <= 1'b1;
-                        trans_failed <= 1'b0;
                         ack_transfer <= 1'b1;
                         if (tx_cycle) begin
                             a_cmp_tx <= 1'b1;
@@ -347,9 +329,7 @@ always_ff @(posedge clk or posedge rst) begin
                             a_cmp_rx <= 1'b1;
                         end
                     end else begin
-                        trans_done <= 1'b0;
                         trans_failed <= 1'b1;
-                        Dat_Int_Status[3] <= 1'b1;
                     end
                 end
             end
@@ -368,16 +348,18 @@ always_ff @(posedge clk or posedge rst) begin
             end
 
             STOP_SEND: begin
-                send_done <= 1'b0;
-                if (resend_try_cnt < RESEND_MAX_CNT[2:0]) begin
-                    resend_try_cnt <= resend_try_cnt + 3'd1;
-                end else begin
-                    Dat_Int_Status[1] <= 1'b1;
-                end
+                d_read <= 1'b1;
+                d_write <= 1'b1;
                 if (!cmd_busy) begin
                     we_req <= 1'b1;
-                    if (we_ack) begin
-                        send_done <= 1'b1;
+                end
+                if (we_ack) begin
+                    send_done <= 1'b1;
+                    if (resend_try_cnt != RESEND_MAX_CNT[2:0]) begin
+                        resend_try_cnt <= resend_try_cnt + 1'b1;
+                    end
+                    if (!Dat_Int_Status_rst && (resend_try_cnt >= RESEND_MAX_CNT[2:0])) begin
+                        Dat_Int_Status[1] <= 1'b1;
                     end
                 end
             end
@@ -388,12 +370,9 @@ always_ff @(posedge clk or posedge rst) begin
                 rec_failed <= 1'b0;
                 tx_cycle <= 1'b0;
                 rx_cycle <= 1'b0;
-                resend_try_cnt <= 3'b000;
+                bd_cnt <= {($bits(bd_cnt)){1'b0}};
                 trans_done <= 1'b0;
                 trans_failed <= 1'b0;
-                bd_cnt <= {READ_CYCLE{1'b0}};
-                d_write <= 1'b0;
-                d_read <= 1'b0;
             end
         endcase
     end
@@ -429,9 +408,16 @@ always_comb begin
 
         GET_TX_BD: begin
             re_s_tx = 1'b1;
-            if (ack_i_s_tx && (bd_cnt == (READ_CYCLE - 1))) begin
+`ifdef RAM_MEM_WIDTH_32
+            if ((ack_i_s_tx == 1'b1) && (bd_cnt == 2'd1)) begin
                 start_tx_fifo = 1'b1;
             end
+`endif
+`ifdef RAM_MEM_WIDTH_16
+            if ((ack_i_s_tx == 1'b1) && (bd_cnt == 3'd3)) begin
+                start_tx_fifo = 1'b1;
+            end
+`endif
         end
 
         GET_RX_BD: begin
@@ -439,35 +425,32 @@ always_comb begin
         end
 
         SEND_CMD: begin
-            if (tx_cycle) begin
+            if (tx_cycle == 1'b1) begin
                 d_write = 1'b1;
                 d_read = 1'b0;
-            end else if (rx_cycle) begin
+            end else if (rx_cycle == 1'b1) begin
                 d_write = 1'b0;
                 d_read = 1'b1;
-            end else begin
-                d_write = 1'b0;
-                d_read = 1'b0;
             end
 
-            if (!cmd_busy) begin
+            if (cmd_busy == 1'b0) begin
                 we_req = 1'b1;
             end
         end
 
         RECIVE_CMD: begin
-            if (rx_cycle) begin
+            if (rx_cycle == 1'b1) begin
                 start_rx_fifo = 1'b1;
             end
         end
 
         DATA_TRANSFER: begin
-            if (internal_transm_complete && crc_ok) begin
+            if ((internal_transm_complete == 1'b1) && (crc_ok == 1'b1)) begin
                 ack_transfer = 1'b1;
-                if (tx_cycle) begin
+                if (tx_cycle == 1'b1) begin
                     a_cmp_tx = 1'b1;
                 end
-                if (rx_cycle) begin
+                if (rx_cycle == 1'b1) begin
                     a_cmp_rx = 1'b1;
                 end
             end
@@ -481,7 +464,9 @@ always_comb begin
         end
 
         STOP_SEND: begin
-            if (!cmd_busy) begin
+            d_write = 1'b1;
+            d_read = 1'b1;
+            if (cmd_busy == 1'b0) begin
                 we_req = 1'b1;
             end
         end
@@ -500,4 +485,7 @@ always_comb begin
         end
     endcase
 end
+
+/* cmd_arg, cmd_set, sys_adr, Dat_Int_Status, and CIDAT are registered signals
+   declared with the output names and are passed directly through by the module. */
 // STAGE5_SUBTASK_END B5_comb_output_assign

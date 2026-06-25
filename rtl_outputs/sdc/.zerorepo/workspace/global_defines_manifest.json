@@ -1,0 +1,13 @@
+{
+  "schema_version": "global_defines_manifest_v1",
+  "global_define_files": [
+    {
+      "name": "sd_defines.v",
+      "module": "sd_defines",
+      "source": "/home/mokita/RealBench/sdc/sd_defines/sd_defines.v",
+      "workspace_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_defines.v",
+      "mode": "official_copy",
+      "must_include": true
+    }
+  ]
+}

@@ -10,7 +10,7 @@ import zerorepo.rtl_impl.debug_agent.trace_report as trace_report_module
 from zerorepo.rtl_impl.debug_agent.bash_tools import CommandResult
 from zerorepo.rtl_impl.debug_agent.debug_runner import ModuleDebugResult, ModuleDebugRunner, RtlDebugConfig
 from zerorepo.rtl_impl.debug_agent.kg_debug_reads import DebugReadsMaterializer, kg_dynamic_slice
-from zerorepo.rtl_impl.debug_agent.trace_report import build_trace_report
+from zerorepo.rtl_impl.debug_agent.trace_report import build_first_divergence_report, build_trace_report
 from zerorepo.rtl_impl.debug_agent.trace_slicer import parse_rtl_blocks
 from zerorepo.rtl_impl.kg_agent.module_result_writer import ModuleResultWriter
 
@@ -244,6 +244,109 @@ endmodule
     assert "condition_blocks_update" in report["diagnostic_narrative"][0]
 
 
+def test_trace_report_filters_tb_metric_first_failure(tmp_path: Path) -> None:
+    rtl = """module m(clk, settings);
+  input clk;
+  output [1:0] settings;
+  reg [1:0] settings;
+  always @(posedge clk) settings <= 2'b01;
+endmodule
+"""
+    rtl_path = tmp_path / "rtl.sv"
+    rtl_path.write_text(rtl, encoding="utf-8")
+    sim_log = CommandResult(
+        stdout="Hint: Output 'errors_settings' has 1 mismatches. First mismatch occurred at time 5.\nMismatches: 1 in 1 samples\n",
+        stderr="",
+    ).model_dump_json()
+
+    report, _blocks = build_trace_report(rtl_path=rtl_path, sim_log_json=sim_log, output_dir=tmp_path)
+
+    assert report["first_failure"] is None
+    assert report["fail_outputs"] == []
+    assert report["ignored_tb_metrics"][0]["sig"] == "errors_settings"
+    assert report["required_next_tool"] == "run_check(first_divergence)"
+
+
+class _FirstDivergenceVcd:
+    def __init__(self, _path: str, store_tvs: bool = True) -> None:
+        del store_tvs
+        self._signals = {
+            "tb.clk": _FakeSignal([(0, "0"), (5, "1"), (10, "0")]),
+            "tb.settings_ref": _FakeSignal([(0, "00"), (5, "01")]),
+            "tb.settings_dut": _FakeSignal([(0, "00"), (10, "01")]),
+            "tb.good1.state": _FakeSignal([(0, "001"), (5, "010")]),
+            "tb.top_module1.state": _FakeSignal([(0, "001"), (10, "010")]),
+        }
+
+
+class _EdgeActiveDivergenceVcd:
+    def __init__(self, _path: str, store_tvs: bool = True) -> None:
+        del store_tvs
+        self._signals = {
+            "tb.clk": _FakeSignal([(0, "0"), (5, "1"), (10, "0")]),
+            "tb.settings_ref": _FakeSignal([(0, "00"), (5, "01")]),
+            "tb.settings_dut": _FakeSignal([(0, "00"), (5, "01")]),
+        }
+
+
+def test_first_divergence_reports_real_dut_ref_output(tmp_path: Path, monkeypatch: Any) -> None:
+    rtl = """module m(clk, settings);
+  input clk;
+  output [1:0] settings;
+  reg [1:0] settings;
+  always @(posedge clk) settings <= 2'b01;
+endmodule
+"""
+    rtl_path = tmp_path / "rtl.sv"
+    rtl_path.write_text(rtl, encoding="utf-8")
+    (tmp_path / "contract.json").write_text(json.dumps({"module_name": "m", "clocking": {"clock": {"name": "clk"}}}) + "\n", encoding="utf-8")
+    (tmp_path / "tb.sv").write_text("module tb; m top_module1(); ref_m good1(); endmodule\n", encoding="utf-8")
+    (tmp_path / "wave.vcd").write_text("$date\n$date\n", encoding="utf-8")
+    monkeypatch.setattr(trace_report_module, "VCDVCD", _FirstDivergenceVcd)
+
+    result = build_first_divergence_report(rtl_path=rtl_path, output_dir=tmp_path)
+
+    assert result["status"] == "ok"
+    assert result["first_divergence"]["signal"] == "settings"
+    assert result["first_divergence"]["time"] == 5
+    assert result["first_divergence"]["classification"] == "dut_late"
+
+
+def test_first_divergence_reports_edge_active_mismatch_when_settled_values_match(tmp_path: Path, monkeypatch: Any) -> None:
+    rtl = """module m(clk, settings);
+  input clk;
+  output [1:0] settings;
+  reg [1:0] settings;
+  always @(posedge clk) settings <= 2'b01;
+endmodule
+"""
+    rtl_path = tmp_path / "rtl.sv"
+    rtl_path.write_text(rtl, encoding="utf-8")
+    (tmp_path / "contract.json").write_text(json.dumps({"module_name": "m", "clocking": {"clock": {"name": "clk"}}}) + "\n", encoding="utf-8")
+    (tmp_path / "tb.sv").write_text("module tb; m top_module1(); ref_m good1(); endmodule\n", encoding="utf-8")
+    (tmp_path / "wave.vcd").write_text("$date\n$date\n", encoding="utf-8")
+    sim_log = CommandResult(
+        cmd=["sim"],
+        returncode=1,
+        stdout="Mismatches: 1 in 2 samples\nHint: Output 'settings' has 1 mismatches. First mismatch occurred at time 5.\n",
+        stderr="",
+    ).model_dump_json()
+    monkeypatch.setattr(trace_report_module, "VCDVCD", _EdgeActiveDivergenceVcd)
+
+    stable = build_first_divergence_report(rtl_path=rtl_path, output_dir=tmp_path, sim_log_json=sim_log, sampling_mode="stable")
+    result = build_first_divergence_report(rtl_path=rtl_path, output_dir=tmp_path, sim_log_json=sim_log)
+
+    assert stable["status"] == "no_divergence"
+    assert result["status"] == "stable_values_match_but_tb_edge_mismatch"
+    assert result["first_divergence"]["signal"] == "settings"
+    assert result["first_divergence"]["time"] == 5
+    assert result["first_divergence"]["sampling_mode"] == "edge_active"
+    assert result["first_divergence"]["edge"] == "posedge"
+    assert result["first_divergence"]["driver_assignment_kind"] == "nonblocking"
+    assert result["first_divergence"]["dut"] == "00"
+    assert result["first_divergence"]["ref"] == "01"
+
+
 def test_debug_reads_materializer_reports_missing_module_node(tmp_path: Path) -> None:
     rtl = """module m(input a, output y);
   assign y = a;
@@ -325,8 +428,9 @@ def test_module_debug_runner_persists_last_failed_repair(tmp_path: Path, monkeyp
         return False, repaired, 1
 
     monkeypatch.setattr(debug_runner_module, "SimReviewer", FailingReviewer)
+    monkeypatch.setattr(debug_runner_module, "check_syntax", lambda *_args, **_kwargs: (True, CommandResult(stdout="", stderr="").model_dump_json()))
     monkeypatch.setattr(ModuleDebugRunner, "_ensure_toolchain_path", lambda self: None)
-    monkeypatch.setattr(ModuleDebugRunner, "_run_editor", fake_editor)
+    monkeypatch.setattr(ModuleDebugRunner, "_run_repo_react", fake_editor)
 
     runner = ModuleDebugRunner(
         config=RtlDebugConfig(openai_config=None, oracle_root=str(tmp_path / "oracle"), max_trials=1),
@@ -381,12 +485,13 @@ def test_module_debug_runner_uses_original_spec_and_stage1_metadata_for_editor(t
     captured: dict[str, Any] = {}
 
     monkeypatch.setattr(debug_runner_module, "SimReviewer", _FailingSimReviewer)
+    monkeypatch.setattr(debug_runner_module, "check_syntax", lambda *_args, **_kwargs: (True, CommandResult(stdout="", stderr="").model_dump_json()))
 
     def fake_run_editor(self: ModuleDebugRunner, **kwargs: Any) -> tuple[bool, str, int]:
         captured.update(kwargs)
         return True, kwargs["contract_json"], 1
 
-    monkeypatch.setattr(ModuleDebugRunner, "_run_editor", fake_run_editor)
+    monkeypatch.setattr(ModuleDebugRunner, "_run_repo_react", fake_run_editor)
 
     result = runner.run_module(
         module_name="m",
@@ -429,12 +534,13 @@ def test_module_debug_runner_keeps_stage1_metadata_when_debug_fails(tmp_path: Pa
     captured: dict[str, Any] = {}
 
     monkeypatch.setattr(debug_runner_module, "SimReviewer", _FailingSimReviewer)
+    monkeypatch.setattr(debug_runner_module, "check_syntax", lambda *_args, **_kwargs: (True, CommandResult(stdout="", stderr="").model_dump_json()))
 
     def fake_run_editor(self: ModuleDebugRunner, **kwargs: Any) -> tuple[bool, str, int]:
         captured["contract_json"] = kwargs["contract_json"]
         return False, "", 1
 
-    monkeypatch.setattr(ModuleDebugRunner, "_run_editor", fake_run_editor)
+    monkeypatch.setattr(ModuleDebugRunner, "_run_repo_react", fake_run_editor)
 
     result = runner.run_module(
         module_name="m",

@@ -6,29 +6,52 @@ from typing import Any
 from .config import OpenAIConfig, load_openai_config
 
 
+def _config_get(obj: Any, *names: str, default: Any = None) -> Any:
+    for name in names:
+        value = default
+        found = False
+        if isinstance(obj, dict) and name in obj:
+            value = obj[name]
+            found = True
+        if hasattr(obj, name):
+            value = getattr(obj, name)
+            found = True
+        if found and value is not None:
+            return value
+    return default
+
+
 def debug_openai_config_from_planner_config(llm_config: Any) -> OpenAIConfig:
     if llm_config is None:
         return load_openai_config()
+    cfg = llm_config
     try:
         from zerorepo.rpg_gen.base.llm_client import LLMConfig
 
         cfg = LLMConfig.from_source(llm_config)
+    except Exception:  # noqa: BLE001
+        cfg = llm_config
+
+    try:
         extra = dict(getattr(cfg, "extra", {}) or {})
         generate_kwargs: dict[str, Any] = {}
-        if getattr(cfg, "temperature", None) is not None:
-            generate_kwargs["temperature"] = cfg.temperature
-        if getattr(cfg, "top_p", None) is not None:
-            generate_kwargs["top_p"] = cfg.top_p
-        if getattr(cfg, "max_tokens", None) is not None:
-            generate_kwargs["max_completion_tokens"] = cfg.max_tokens
+        temperature = _config_get(cfg, "temperature")
+        top_p = _config_get(cfg, "top_p")
+        max_tokens = _config_get(cfg, "max_tokens", "max_completion_tokens")
+        if temperature is not None:
+            generate_kwargs["temperature"] = temperature
+        if top_p is not None:
+            generate_kwargs["top_p"] = top_p
+        if max_tokens is not None:
+            generate_kwargs["max_completion_tokens"] = max_tokens
         if extra:
             generate_kwargs["extra_body"] = extra
         return OpenAIConfig(
-            model=cfg.model,
-            api_key=cfg.api_key,
-            base_url=cfg.base_url or cfg.endpoint_url,
+            model=_config_get(cfg, "model", default=OpenAIConfig.model),
+            api_key=_config_get(cfg, "api_key"),
+            base_url=_config_get(cfg, "base_url", "endpoint_url"),
             reasoning_effort=extra.get("reasoning_effort"),
-            stream=bool(getattr(cfg, "stream", False)),
+            stream=bool(_config_get(cfg, "stream", default=False)),
             generate_kwargs=generate_kwargs,
         )
     except Exception:  # noqa: BLE001

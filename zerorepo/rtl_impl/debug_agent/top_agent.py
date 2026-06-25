@@ -23,7 +23,7 @@ class TopAgentConfig:
     sim_max_retry: int = 4
     is_ablation: bool = False
     contract_only: bool = True
-    debug_max_trials: int = 10
+    debug_max_trials: int = 30
 
 
 @dataclass(frozen=True)

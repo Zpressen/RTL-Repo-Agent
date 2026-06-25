@@ -3,7 +3,7 @@
   "module": "sd_cmd_master",
   "kg_enabled": true,
   "retrieval_requested": false,
-  "retrieval_reason": "sd_cmd_master has no child modules in DEPENDENCY_CONTEXT and generated fragments do not instantiate submodules; merge correctness depends on local FSM, handshake, register, debounce, and interrupt behavior rather than child interfaces.",
+  "retrieval_reason": "sd_cmd_master has no child modules in the dependency context and the generated fragments do not instantiate or wire submodules; merge correctness depends on local interface, FSM, handshake, debounce, synchronizer, register, and interrupt behavior only.",
   "available_child_modules": [],
   "requested_child_modules": [],
   "children": []

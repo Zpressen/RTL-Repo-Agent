@@ -7,6 +7,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from ..prompts import stage5_subtask_codegen
 from ..schemas import (
+    FragmentContract,
     ModuleCodegenRecord,
     ModulePlanArtifact,
     ModulePlanSubtask,
@@ -19,6 +20,7 @@ from ..schemas import (
     SubtaskCodeArtifact,
 )
 from .base import BaseStageAgent, model_dump, validate_model
+from .global_defines import copy_official_define_file, is_define_only_module, read_global_defines_manifest
 
 
 class Stage5Agent(BaseStageAgent):
@@ -59,6 +61,7 @@ class Stage5Agent(BaseStageAgent):
         plan_record_by_module = {item.module: item for item in stage4.module_plan_files}
 
         self._validate_inputs(module_order, spec_by_module, plan_record_by_module)
+        self._ensure_global_defines_copied(task, partial_artifacts)
 
         records: List[ModuleCodegenRecord] = []
         for module_name in module_order:
@@ -110,7 +113,46 @@ class Stage5Agent(BaseStageAgent):
         )
 
         workspace_file = self._workspace_file(module_name)
+        repo_skeleton = partial_artifacts.get("stage2") or partial_artifacts.get("repo_skeleton")
+        if is_define_only_module(module_name, repo_skeleton):
+            entry = copy_official_define_file(
+                task=task,
+                module_name=module_name,
+                workspace_root=self.workspace_root,
+                output_root=self.output_root,
+            )
+            if entry is not None:
+                official_text = Path(entry["workspace_path"]).read_text(encoding="utf-8")
+                self._write_text(workspace_file, official_text.rstrip() + "\n")
+                self._write_contracts_file(
+                    module_name,
+                    [
+                        {
+                            "subtask_id": "official_copy",
+                            "target": "<official define-only file>",
+                            "spec_refs": [],
+                            "contract": {
+                                "writes": [],
+                                "reads": [],
+                                "clocking": "preprocessor_defines",
+                                "reset_behavior": "none",
+                                "hold_behavior": "none",
+                                "latency": "compile_time",
+                                "assumptions": ["Official define-only file copied verbatim; do not rewrite with LLM."],
+                            },
+                            "analysis": {"mode": "official_copy", "source": entry["source"]},
+                        }
+                    ],
+                )
+                return ModuleCodegenRecord(
+                    module=module_name,
+                    workspace_file=str(workspace_file),
+                    completed_subtasks=["official_copy"],
+                )
+
         completed_subtasks: List[str] = []
+        contract_entries: List[Dict[str, Any]] = []
+        global_defines_context = self._build_global_defines_context()
         for subtask in module_plan.subtasks:
             previous_snippets = self._read_text_if_exists(workspace_file)
             selected_blocks = self._select_spec_blocks(module_spec, subtask.spec_refs)
@@ -130,6 +172,7 @@ class Stage5Agent(BaseStageAgent):
                 "module_skeleton_file": module_skeleton_file,
                 "module_skeleton_chars": len(module_skeleton),
                 "previous_module_snippets_chars": len(previous_snippets),
+                "global_define_files": self._global_define_file_names(),
             }
             prompt = stage5_subtask_codegen.build_prompt(
                 task_id=task.task_id,
@@ -139,6 +182,7 @@ class Stage5Agent(BaseStageAgent):
                 selected_spec_blocks=self.to_pretty_json(selected_blocks),
                 module_interface_spec_blocks=self.to_pretty_json(supplemental_interface_blocks),
                 previous_module_snippets=previous_snippets,
+                global_defines_context=global_defines_context,
                 stage_context=self.to_pretty_json(stage_context),
             )
             self.logger.info(
@@ -161,12 +205,107 @@ class Stage5Agent(BaseStageAgent):
             )
             updated_text = self._upsert_subtask_section(previous_snippets, subtask, artifact.code)
             self._write_text(workspace_file, updated_text)
+            contract_entries.append(
+                self._contract_entry(
+                    artifact=artifact,
+                    subtask=subtask,
+                )
+            )
+            self._write_contracts_file(module_name, contract_entries)
             completed_subtasks.append(subtask.id)
 
         return ModuleCodegenRecord(
             module=module_name,
             workspace_file=str(workspace_file),
             completed_subtasks=completed_subtasks,
+        )
+
+    def _contract_entry(self, *, artifact: SubtaskCodeArtifact, subtask: ModulePlanSubtask) -> Dict[str, Any]:
+        extracted = self._extract_fragment_contract(artifact.code)
+        if artifact.contract is not None:
+            contract = model_dump(artifact.contract)
+            writes = sorted(set(str(item) for item in contract.get("writes", []) if item) | set(extracted.writes))
+            reads = sorted((set(str(item) for item in contract.get("reads", []) if item) | set(extracted.reads)) - set(writes))
+            contract["writes"] = writes
+            contract["reads"] = reads
+            if not contract.get("clocking"):
+                contract["clocking"] = extracted.clocking
+        else:
+            contract = model_dump(extracted)
+        return {
+            "subtask_id": subtask.id,
+            "target": subtask.target,
+            "spec_refs": list(subtask.spec_refs),
+            "contract": contract,
+            "analysis": {
+                "extracted_writes": extracted.writes,
+                "extracted_reads": extracted.reads,
+            },
+        }
+
+    def _write_contracts_file(self, module_name: str, entries: List[Dict[str, Any]]) -> Path:
+        path = self._contracts_file(module_name)
+        payload = {
+            "schema_version": "stage5_fragment_contracts_v1",
+            "module": module_name,
+            "contracts": entries,
+        }
+        self._write_text(path, json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
+        return path
+
+    def _contracts_file(self, module_name: str) -> Path:
+        return (self.workspace_root / "fragments" / f"{module_name}_contracts.json").resolve()
+
+    def _extract_fragment_contract(self, code: str) -> FragmentContract:
+        text = _strip_verilog_comments(code)
+        writes: set[str] = set()
+        for match in re.finditer(r"\b([A-Za-z_][A-Za-z0-9_$]*)\b\s*(?:\[[^\]]+\])?\s*(?:<=|(?<![=!<>])=(?![=]))", text):
+            lhs = match.group(1)
+            if lhs not in {"if", "for", "while", "case", "assign"}:
+                writes.add(lhs)
+        identifiers = {
+            item
+            for item in re.findall(r"\b[A-Za-z_][A-Za-z0-9_$]*\b", text)
+            if item
+            and item not in {
+                "always",
+                "assign",
+                "begin",
+                "end",
+                "if",
+                "else",
+                "case",
+                "endcase",
+                "posedge",
+                "negedge",
+                "wire",
+                "reg",
+                "input",
+                "output",
+                "localparam",
+                "parameter",
+            }
+            and not item[0].isdigit()
+        }
+        reads = sorted(identifiers - writes)
+        if "posedge" in text or "negedge" in text:
+            edge = "posedge" if "posedge" in text else "negedge"
+            clk_match = re.search(rf"{edge}\s+([A-Za-z_][A-Za-z0-9_$]*)", text)
+            clocking = f"{edge} {clk_match.group(1)}" if clk_match else edge
+        elif re.search(r"\balways\s*@", text):
+            clocking = "combinational"
+        elif writes:
+            clocking = "continuous_or_declaration"
+        else:
+            clocking = "declarations"
+        return FragmentContract(
+            writes=sorted(writes),
+            reads=reads,
+            clocking=clocking,
+            reset_behavior="unknown",
+            hold_behavior="unknown",
+            latency="unknown",
+            assumptions=[],
         )
 
     def build_prompt(self, task_input: PlannerTaskInput, partial_artifacts: Dict[str, Any], stage_context: Dict[str, Any]):
@@ -314,6 +453,102 @@ class Stage5Agent(BaseStageAgent):
         collapsed = " ".join(description.replace("\r\n", "\n").split())
         return collapsed[:120]
 
+    def _ensure_global_defines_copied(self, task: PlannerTaskInput, partial_artifacts: Dict[str, Any]) -> None:
+        repo_skeleton = partial_artifacts.get("stage2") or partial_artifacts.get("repo_skeleton")
+        if repo_skeleton is None:
+            return
+        for module_name in self._detect_global_defines_modules(repo_skeleton):
+            copied = copy_official_define_file(
+                task=task,
+                module_name=module_name,
+                workspace_root=self.workspace_root,
+                output_root=self.output_root,
+            )
+            if copied is not None:
+                self.logger.info(
+                    "[%s] Copied official global defines %s -> %s",
+                    self.stage_name,
+                    copied.get("source"),
+                    copied.get("workspace_path"),
+                )
+
+    def _detect_global_defines_modules(self, repo_skeleton: Any) -> List[str]:
+        modules = list(_get(repo_skeleton, "modules", []) or [])
+        by_name = {str(_get(item, "module", "") or ""): item for item in modules}
+        candidates: set[str] = set()
+        for module_name, record in by_name.items():
+            notes = " ".join(_get(record, "repo_notes", []) or []).lower()
+            role = str(_get(record, "role", "") or "").lower()
+            local_define_hint = any(
+                marker in notes or marker in role
+                for marker in ("not a synthesizable module", "provides constants", "global parameter", "global defines", "preprocessor define")
+            )
+            if module_name and (is_define_only_module(module_name, repo_skeleton) or local_define_hint):
+                candidates.add(module_name)
+
+        invariants = _get(repo_skeleton, "global_invariants", None)
+        conventions = str(_get(invariants, "global_data_conventions", "") or "")
+        lowered_conventions = conventions.lower()
+        for module_name in by_name:
+            lowered = module_name.lower()
+            if lowered and lowered in lowered_conventions and ("define" in lowered or "constant" in lowered_conventions):
+                candidates.add(module_name)
+        return sorted(candidates)
+
+    def _global_define_file_names(self) -> List[str]:
+        manifest = read_global_defines_manifest(self.workspace_root)
+        names: List[str] = []
+        for item in manifest.get("global_define_files", []) or []:
+            if not isinstance(item, dict) or not item.get("must_include"):
+                continue
+            name = str(item.get("name") or item.get("module") or "")
+            if name:
+                names.append(name)
+        return names
+
+    def _build_global_defines_context(self, max_chars: int = 20000) -> str:
+        manifest = read_global_defines_manifest(self.workspace_root)
+        entries = [
+            item
+            for item in manifest.get("global_define_files", []) or []
+            if isinstance(item, dict) and item.get("must_include")
+        ]
+        if not entries:
+            return ""
+
+        chunks: List[str] = [
+            "Official global macro definitions are available for this task.",
+            "Use these macro names and values as authoritative compile-time context.",
+            "Do not redefine these macros in Stage5 fragments; the merge stage owns final include placement.",
+            "",
+        ]
+        for entry in entries:
+            name = str(entry.get("name") or entry.get("module") or "global_defines")
+            path = Path(str(entry.get("workspace_path") or ""))
+            if not path.is_file():
+                continue
+            content = path.read_text(encoding="utf-8", errors="replace").replace("\r\n", "\n").strip()
+            if not content:
+                continue
+            chunks.extend(
+                [
+                    f"## {name}",
+                    f"- source: {entry.get('source', '')}",
+                    f"- workspace_path: {path}",
+                    "```verilog",
+                    content,
+                    "```",
+                    "",
+                ]
+            )
+
+        text = "\n".join(chunks).strip()
+        if not text or text.count("```verilog") == 0:
+            return ""
+        if len(text) > max_chars:
+            text = text[:max_chars].rstrip() + "\n...<global defines truncated>..."
+        return text
+
     def _workspace_file(self, module_name: str) -> Path:
         return (self.workspace_root / "fragments" / f"{module_name}_fragments.v").resolve()
 
@@ -374,6 +609,12 @@ def _is_primary_interface_spec_block(text: str) -> bool:
         return False
     prefix = heading.split("interface", 1)[0]
     return not re.search(r"\d+\.\d+", prefix)
+
+
+def _get(obj: Any, name: str, default: Any = None) -> Any:
+    if isinstance(obj, dict):
+        return obj.get(name, default)
+    return getattr(obj, name, default)
 
 
 def _is_interface_like_spec_block(text: str) -> bool:

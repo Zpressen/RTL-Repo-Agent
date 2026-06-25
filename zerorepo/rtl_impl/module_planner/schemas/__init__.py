@@ -50,6 +50,7 @@ from .contracts import (
     TextGrounding,
 )
 from .codegen_plan import (
+    FragmentContract,
     ModuleCodegenRecord,
     ModuleDebugRecord,
     ModuleMergeRecord,
@@ -149,6 +150,7 @@ __all__ = [
     "ModulePlanArtifact",
     "ModulePlanRecord",
     "Stage4ModulePlansArtifact",
+    "FragmentContract",
     "SubtaskCodeArtifact",
     "ModuleCodegenRecord",
     "ModuleDebugRecord",

@@ -16,6 +16,7 @@ from zerorepo.rtl_impl.module_planner.agents import (
     Stage5Agent,
     Stage6MergeAgent,
 )
+import zerorepo.rtl_impl.module_planner.agents.global_defines as global_defines_mod
 from zerorepo.rtl_impl.module_planner.agents.base import BaseStageAgent, validate_model
 from zerorepo.rtl_impl.module_planner.module_organizer import build_module_organized_artifact
 from zerorepo.rtl_impl.module_planner.planner_runner import PlannerRunner
@@ -2346,6 +2347,72 @@ def test_stage5_prompt_deduplicates_interface_blocks_already_selected(tmp_path):
     assert '"module_interface_spec_refs": []' in prompt
 
 
+def test_stage5_prompt_includes_global_defines_when_available(tmp_path, monkeypatch):
+    task, _, _ = make_task_input(tmp_path, image_count=0)
+    official = tmp_path / "RealBench" / "sdc" / "sd_defines" / "sd_defines.v"
+    official.parent.mkdir(parents=True)
+    official.write_text("`define BIT_BLOCK 1044\n`define SD_BUS_W 4\n", encoding="utf-8")
+    monkeypatch.setattr(global_defines_mod, "find_official_define_file", lambda _task, _module: official)
+
+    output_root = tmp_path / ".zerorepo" / "module_planner" / "outputs"
+    plan_dir = output_root / "module_plan_json"
+    plan_dir.mkdir(parents=True)
+    plan = {
+        "schema_version": "module_plan_v1",
+        "module": "mod_a",
+        "subtasks": [
+            {
+                "id": "B1_logic",
+                "target": "<block: B1_logic>",
+                "description": "Generate logic using global constants.",
+                "spec_refs": ["S001"],
+                "constraints": [],
+            }
+        ],
+    }
+    (plan_dir / "mod_a.json").write_text(json.dumps(plan), encoding="utf-8")
+    stage4 = {
+        "schema_version": "module_plans_v1",
+        "task_id": task.task_id,
+        "module_order": ["mod_a"],
+        "module_plan_files": [{"module": "mod_a", "plan_file": "module_plan_json/mod_a.json"}],
+    }
+    spec_blocks = {
+        "schema_version": "spec_blocks_v1",
+        "task_id": task.task_id,
+        "module_order": ["mod_a"],
+        "modules": [
+            {
+                "module": "mod_a",
+                "source_spec_file": "mod_a.md",
+                "blocks": [{"block_id": "S001", "text": "**Operation**\nUse global SD constants."}],
+            }
+        ],
+    }
+    repo_skeleton = {
+        "modules": [
+            {"module": "sd_defines", "role": "global defines", "repo_notes": ["provides constants"]},
+            {"module": "mod_a", "role": "logic", "repo_notes": []},
+        ],
+        "global_invariants": {"global_data_conventions": "sd_defines provides global constants"},
+    }
+    backend = QueueBackend(
+        [make_stage5_code_payload(task.task_id, "mod_a", plan["subtasks"][0], "wire [`SD_BUS_W-1:0] bus;")]
+    )
+    agent = Stage5Agent(PlannerLLMClient(backend=backend), output_root=output_root)
+
+    agent.run_incremental(task, {"stage4": stage4, "spec_blocks": spec_blocks, "repo_skeleton": repo_skeleton})
+
+    prompt = backend.calls[0]["user_prompt"]
+    workspace_root = tmp_path / ".zerorepo" / "workspace"
+    assert "[GLOBAL_DEFINES_CONTEXT]" in prompt
+    assert "`define BIT_BLOCK 1044" in prompt
+    assert "`define SD_BUS_W 4" in prompt
+    assert '"global_define_files": [\n    "sd_defines.v"\n  ]' in prompt
+    assert (workspace_root / "global_defines_manifest.json").exists()
+    assert not (workspace_root / "merged" / "global_defines_manifest.json").exists()
+
+
 def test_stage5_prompt_includes_current_module_skeleton_context(tmp_path):
     task, _, _ = make_task_input(tmp_path, image_count=0)
     output_root = tmp_path / ".zerorepo" / "module_planner" / "outputs"
@@ -2561,7 +2628,7 @@ def test_stage6_merge_agent_writes_raw_merged_module_and_prompt_context(tmp_path
     assert "STAGE5_SUBTASK_BEGIN B1_logic" in prompt
 
 
-def test_stage6_merge_agent_retries_invalid_raw_verilog(tmp_path):
+def test_stage6_merge_agent_delegates_invalid_raw_verilog_to_debug(tmp_path):
     task, _, _ = make_task_input(tmp_path, image_count=0)
     output_root = tmp_path / ".zerorepo" / "module_planner" / "outputs"
     fragment_dir = tmp_path / ".zerorepo" / "workspace" / "fragments"
@@ -2584,7 +2651,6 @@ def test_stage6_merge_agent_retries_invalid_raw_verilog(tmp_path):
         [
             make_merge_context_retrieval_payload("mod_a"),
             "```verilog\nmodule wrong_name(input a, output y);\n// TODO\n// STAGE5_SUBTASK_BEGIN B1\n",
-            make_stage6_module_code("mod_a"),
         ]
     )
     agent = Stage6MergeAgent(PlannerLLMClient(backend=backend), output_root=output_root)
@@ -2596,9 +2662,12 @@ def test_stage6_merge_agent_retries_invalid_raw_verilog(tmp_path):
         {"module": "mod_a", "workspace_file": str(fragment_file), "completed_subtasks": ["B1_logic"]},
     )
 
-    assert len(backend.calls) == 3
-    assert "previous output was invalid" in backend.calls[2]["user_prompt"]
-    assert "module mod_a" in Path(record.merged_file).read_text(encoding="utf-8")
+    assert len(backend.calls) == 2
+    assert "module wrong_name" in Path(record.merged_file).read_text(encoding="utf-8")
+    syntax_log = json.loads((output_root / "stage6_syntax_repair" / "mod_a.json").read_text(encoding="utf-8"))
+    assert syntax_log["status"] == "delegated_to_debug_syntax_repair"
+    assert syntax_log["syntax_passed"] is False
+    assert syntax_log["delegated_to"] == "ModuleDebugRunner.repo_react_syntax"
 
 
 def test_planner_runner_supports_stage5_subtask_codegen_workspace(tmp_path):

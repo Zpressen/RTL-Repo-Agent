@@ -3,7 +3,7 @@
   "module": "sd_data_serial_host",
   "kg_enabled": true,
   "retrieval_requested": true,
-  "retrieval_reason": "The generated fragments instantiate sd_crc_16 four times and correctness depends on the child module port names, widths, reset polarity, and CRC output ordering. Retrieving child context would materially help verify instance wiring and port compatibility during merge.",
+  "retrieval_reason": "Generated fragments instantiate sd_crc_16 four times and depend on exact child port names, directions, reset/clock behavior, and CRC output width/slicing, so child-module context can materially help validate instance wiring during merge.",
   "requested_child_modules": [
     "sd_crc_16"
   ],
@@ -13,7 +13,32 @@
       "child_status": "verified",
       "ports": [
         {
-          "name": "Enable",
+          "name": "CRC",
+          "path": "sd_crc_16.v",
+          "sl": null,
+          "el": null,
+          "attrs": {
+            "dir": "output",
+            "module": "sd_crc_16",
+            "width_expr": "[15:0]"
+          },
+          "direction": "output",
+          "width": "[15:0]"
+        },
+        {
+          "name": "RST",
+          "path": "sd_crc_16.v",
+          "sl": null,
+          "el": null,
+          "attrs": {
+            "dir": "input",
+            "module": "sd_crc_16"
+          },
+          "direction": "input",
+          "width": ""
+        },
+        {
+          "name": "BITVAL",
           "path": "sd_crc_16.v",
           "sl": null,
           "el": null,
@@ -37,32 +62,7 @@
           "width": ""
         },
         {
-          "name": "RST",
-          "path": "sd_crc_16.v",
-          "sl": null,
-          "el": null,
-          "attrs": {
-            "dir": "input",
-            "module": "sd_crc_16"
-          },
-          "direction": "input",
-          "width": ""
-        },
-        {
-          "name": "CRC",
-          "path": "sd_crc_16.v",
-          "sl": null,
-          "el": null,
-          "attrs": {
-            "dir": "output",
-            "module": "sd_crc_16",
-            "width_expr": "[15:0]"
-          },
-          "direction": "output",
-          "width": "[15:0]"
-        },
-        {
-          "name": "BITVAL",
+          "name": "Enable",
           "path": "sd_crc_16.v",
           "sl": null,
           "el": null,

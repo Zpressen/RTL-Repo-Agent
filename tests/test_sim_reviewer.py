@@ -4,7 +4,7 @@ import json
 
 import zerorepo.rtl_impl.debug_agent.sim_reviewer as sim_reviewer_mod
 from zerorepo.rtl_impl.debug_agent.bash_tools import CommandResult
-from zerorepo.rtl_impl.debug_agent.sim_reviewer import sim_review, sim_review_mismatch_cnt
+from zerorepo.rtl_impl.debug_agent.sim_reviewer import check_syntax, sim_review, sim_review_mismatch_cnt
 
 
 def test_output_mismatch_lines_override_zero_summary() -> None:
@@ -66,3 +66,28 @@ def test_sim_review_puts_local_include_sources_before_testbench(tmp_path, monkey
 
     cmd = captured["cmd"]
     assert cmd.index(str(tmp_path / "sd_defines.v")) < cmd.index(str(tmp_path / "tb.sv"))
+
+
+def test_check_syntax_passes_include_dirs_to_verilator(tmp_path, monkeypatch) -> None:
+    rtl_dir = tmp_path / "merge_drafts"
+    include_dir = tmp_path / "merged"
+    rtl_dir.mkdir()
+    include_dir.mkdir()
+    rtl_path = rtl_dir / "m.v"
+    rtl_path.write_text('`include "sd_defines.v"\nmodule m; endmodule\n', encoding="utf-8")
+    (include_dir / "sd_defines.v").write_text("`define SD_BUS_W 4\n", encoding="utf-8")
+    command_result = CommandResult(is_pass=True, stdout="", stderr="").model_dump_json()
+    captured: dict[str, str] = {}
+
+    def fake_run_bash_command(cmd: str, *args, **kwargs):
+        del args, kwargs
+        captured["cmd"] = cmd
+        return True, command_result
+
+    monkeypatch.setattr(sim_reviewer_mod, "_require_executable", lambda _name: None)
+    monkeypatch.setattr(sim_reviewer_mod, "run_bash_command", fake_run_bash_command)
+
+    is_pass, _output = check_syntax(str(rtl_path), top_module="m", include_dirs=[str(include_dir)])
+
+    assert is_pass is True
+    assert f"-I{include_dir}" in captured["cmd"]

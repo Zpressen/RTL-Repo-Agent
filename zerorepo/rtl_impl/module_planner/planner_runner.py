@@ -161,6 +161,8 @@ class PlannerRunner:
         self.debug_runner = ModuleDebugRunner(
             config=debug_config,
             workspace_root=self.stage6.workspace_root,
+            output_root=self.output_root,
+            repo_root=Path.cwd(),
             logger=self.logger,
             kg_service=self.kg_service,
             initial_result_recorder=self._record_initial_kg_module_result,

@@ -3,7 +3,7 @@
   "module": "sd_controller_wb",
   "kg_enabled": true,
   "retrieval_requested": false,
-  "retrieval_reason": "sd_controller_wb is a leaf module in the provided dependency context and the generated fragments do not instantiate child modules. The merge needs local register, bus, reset, and BD write behavior rather than child interface details.",
+  "retrieval_reason": "sd_controller_wb is a leaf module in the dependency context and the generated fragments do not instantiate or call child modules. Merge correctness depends on local Wishbone register/control behavior and global RAM_MEM_WIDTH defines, not child-module interfaces.",
   "available_child_modules": [],
   "requested_child_modules": [],
   "children": []

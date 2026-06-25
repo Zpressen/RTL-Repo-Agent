@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from zerorepo.rtl_impl.debug_agent.sim_reviewer import check_syntax
-from zerorepo.rtl_impl.debug_agent.utils import add_lineno
 from zerorepo.rtl_impl.kg_agent import KGRetriever
 from zerorepo.rtl_impl.retrieval_agent import MergeContextRetrievalResult, MergeContextRetriever
 from zerorepo.rtl_impl.retrieval_agent.utils import interface_block_refs
@@ -28,6 +27,13 @@ from ..schemas import (
     Stage6MergeArtifact,
 )
 from .base import BaseStageAgent, model_dump, validate_model
+from .global_defines import copy_official_define_file, is_define_only_module, read_global_defines_manifest
+from .stage6_semantic_merge import (
+    MergeJournal,
+    SemanticMergeState,
+    Stage6MergeRunner,
+    Stage6MergeTools,
+)
 
 
 class Stage6MergeAgent(BaseStageAgent):
@@ -78,6 +84,7 @@ class Stage6MergeAgent(BaseStageAgent):
         spec_blocks = self._get_spec_blocks_artifact(partial_artifacts)
         stage5 = self._get_stage5_artifact(partial_artifacts)
         stage5_by_module = {item.module: item for item in stage5.module_files}
+        self._ensure_global_defines_copied(task, partial_artifacts)
 
         records: List[ModuleMergeRecord] = []
         for module_name in spec_blocks.module_order:
@@ -119,6 +126,22 @@ class Stage6MergeAgent(BaseStageAgent):
             raise ValueError(f"Stage6 expected fragments for `{module_name}`, got `{record.module}`")
 
         spec_blocks = self._get_spec_blocks_artifact(partial_artifacts)
+        repo_skeleton = self._get_repo_skeleton_artifact(partial_artifacts)
+        if is_define_only_module(module_name, repo_skeleton):
+            entry = copy_official_define_file(
+                task=task,
+                module_name=module_name,
+                workspace_root=self.workspace_root,
+                output_root=self.output_root,
+            )
+            if entry is not None:
+                return ModuleMergeRecord(
+                    module=module_name,
+                    fragment_file=str(Path(record.workspace_file)),
+                    merged_file=str(Path(entry["workspace_path"])),
+                )
+
+        self._ensure_global_defines_copied(task, partial_artifacts)
         stage3 = self._get_stage3_artifact(partial_artifacts)
         spec_by_module = {item.module: item for item in spec_blocks.modules}
         skeleton_by_module = {item.module: item for item in stage3.module_records} if stage3 is not None else {}
@@ -208,7 +231,23 @@ class Stage6MergeAgent(BaseStageAgent):
         merged_file = self._merged_file(module_name)
         self.logger.info("[%s] Merging %s into %s", self.stage_name, module_name, merged_file)
         self._log_stage_input(prompt=prompt, images=[], stage_context=stage_context)
-        merged_code = self._invoke_raw_with_repair(prompt, task, partial_artifacts, module_name, merged_file)
+        merged_code = self._invoke_semantic_merge(
+            prompt=prompt,
+            task=task,
+            partial_artifacts=partial_artifacts,
+            module_name=module_name,
+            merged_file=merged_file,
+            module_spec=module_spec,
+            module_skeleton=module_skeleton,
+            kg_child_context=(
+                self._format_kg_child_context_for_prompt(kg_child_context)
+                if kg_child_context.get("retrieval_requested")
+                else ""
+            ),
+            global_defines_context=dependency_context.get("global_defines_context", ""),
+            generated_fragments=generated_fragments,
+            fragment_file=fragment_file,
+        )
         self._write_text(merged_file, merged_code.rstrip() + "\n")
         return ModuleMergeRecord(
             module=module_name,
@@ -218,6 +257,136 @@ class Stage6MergeAgent(BaseStageAgent):
 
     def build_prompt(self, task_input: PlannerTaskInput, partial_artifacts: Dict[str, Any], stage_context: Dict[str, Any]):
         raise NotImplementedError("Stage6MergeAgent uses a custom raw-Verilog flow.")
+
+    def _invoke_semantic_merge(
+        self,
+        *,
+        prompt: str,
+        task: PlannerTaskInput,
+        partial_artifacts: Dict[str, Any],
+        module_name: str,
+        merged_file: Path,
+        module_spec: str,
+        module_skeleton: str,
+        kg_child_context: str,
+        global_defines_context: str,
+        generated_fragments: str,
+        fragment_file: Path,
+    ) -> str:
+        manifest = read_global_defines_manifest(self.workspace_root)
+        required_includes = [
+            str(item.get("name"))
+            for item in manifest.get("global_define_files", [])
+            if isinstance(item, dict)
+            and item.get("must_include")
+            and str(item.get("name") or "").endswith((".v", ".sv"))
+        ]
+        contracts_file = fragment_file.with_name(f"{module_name}_contracts.json")
+        draft_file = self.workspace_root / "merge_drafts" / f"{module_name}_draft.v"
+
+        # 读取 module_plan（如有）
+        module_plan_str = ""
+        try:
+            plan_record = self._read_module_plan_context(module_name, partial_artifacts)
+            if plan_record is not None:
+                module_plan_str = json.dumps(model_dump(plan_record), indent=2, ensure_ascii=False)
+        except Exception:
+            module_plan_str = ""
+
+        state = SemanticMergeState(
+            module_name=module_name,
+            merged_file=merged_file,
+            draft_file=draft_file,
+            fragment_file=fragment_file,
+            contracts_file=contracts_file if contracts_file.exists() else None,
+            global_defines_manifest=manifest,
+            required_includes=required_includes,
+            module_spec=module_spec,
+            module_skeleton=module_skeleton,
+            module_plan=module_plan_str,
+            kg_child_context=kg_child_context,
+            global_defines_context=global_defines_context,
+        )
+        tools = Stage6MergeTools(state, logger=self.logger)
+
+        def fallback(raw_override: str | None = None) -> str:
+            return self._invoke_raw_with_repair(
+                prompt,
+                task,
+                partial_artifacts,
+                module_name,
+                merged_file,
+                raw_override=raw_override,
+            )
+
+        # 检查前序模块是否已有 merge report（用于跨模块学习）
+        learned_rules_available = False
+        reports_dir = self.workspace_root / "merge_reports"
+        if reports_dir.is_dir():
+            others = [p for p in reports_dir.glob("*.json") if p.stem != module_name]
+            if others:
+                learned_rules_available = True
+
+        # 构建渐进式初始 prompt（仅索引）
+        from zerorepo.rtl_impl.module_planner.prompts.stage6_merge import build_merge_initial_prompt
+
+        initial_prompt = build_merge_initial_prompt(
+            module_name=module_name,
+            fragment_file=str(fragment_file),
+            required_includes=required_includes,
+            manifest=manifest,
+            learned_rules_available=learned_rules_available,
+        )
+
+        # Create AgentScope model from the planner backend config instead of environment variables.
+        from zerorepo.rtl_impl.debug_agent.adapters import debug_openai_config_from_planner_config
+        from zerorepo.rtl_impl.debug_agent.model import make_formatter, make_openai_model
+
+        try:
+            llm_config = getattr(self.llm_client, "config", None)
+            if llm_config is None:
+                llm_config = getattr(getattr(self.llm_client, "backend", None), "config", None)
+            cfg = debug_openai_config_from_planner_config(llm_config)
+            model = make_openai_model(cfg)
+            formatter = make_formatter(cfg.model, cfg.base_url)
+        except Exception as exc:
+            self.logger.warning(
+                "[%s] Cannot create AgentScope model for %s; falling back to raw merge: %s",
+                self.stage_name,
+                module_name,
+                exc,
+            )
+            return fallback(None)
+
+        try:
+            runner = Stage6MergeRunner(model, formatter, tools, logger=self.logger, max_steps=8)
+            merged = runner.run(initial_prompt, fallback_raw_merge=fallback)
+        except Exception as exc:
+            self.logger.warning(
+                "[%s] Semantic merge failed for %s; falling back to raw merge: %s",
+                self.stage_name,
+                module_name,
+                exc,
+            )
+            merged = fallback(None)
+
+        # 写 merge report
+        report_path = self.workspace_root / "merge_reports" / f"{module_name}_merge_report.json"
+        try:
+            report = tools.write_merge_report(report_path)
+            if self.output_root is not None:
+                self._write_json(
+                    (self.output_root / "merge_reports" / f"{module_name}_merge_report.json").resolve(),
+                    report,
+                )
+        except Exception as exc:
+            self.logger.warning(
+                "[%s] Failed to write semantic merge report for %s: %s",
+                self.stage_name,
+                module_name,
+                exc,
+            )
+        return merged
 
     def validate_quality(
         self,
@@ -257,50 +426,65 @@ class Stage6MergeAgent(BaseStageAgent):
         partial_artifacts: Dict[str, Any],
         module_name: str,
         rtl_path: Path,
+        raw_override: str | None = None,
     ) -> str:
-        """Call the LLM and retry on Verilator syntax errors only."""
+        """Call the LLM once and delegate syntax repair to the debug stage.
+
+        Stage6 is responsible for producing a best-effort merged module.  Syntax
+        repair is now handled by ModuleDebugRunner -> RepoReActRunner in
+        repair_mode="syntax", where the agent can inspect files and apply
+        controlled patches instead of asking Stage6 to regenerate the whole
+        module.
+        """
         del task, partial_artifacts
         self._ensure_toolchain_path()
-        syntax_attempts = 3
-        current_prompt = prompt
-
-        for attempt in range(1, syntax_attempts + 1):
-            if attempt > 1:
-                self._log_retry_prompt(current_prompt, reason=f"syntax_retry_{attempt - 1}")
-            raw = self.llm_client.complete(system_prompt=self.system_role, user_prompt=current_prompt, images=None)
-            self._log_llm_raw_output(raw, attempt_label="initial" if attempt == 1 else f"syntax_retry_{attempt}")
-            code = self._extract_verilog_code(raw if isinstance(raw, str) else str(raw))
-            stripped = code.strip()
-            if not stripped:
-                self.logger.warning("[%s] LLM output empty on attempt %d for %s", self.stage_name, attempt, module_name)
-                if attempt < syntax_attempts:
-                    current_prompt = self._build_syntax_retry_prompt(
-                        prompt, "LLM returned empty output; please produce valid Verilog.", stripped
-                    )
-                continue
-
-            self._write_text(rtl_path, stripped.rstrip() + "\n")
-            syntax_correct, syntax_output = check_syntax(str(rtl_path), top_module=module_name)
-            if syntax_correct:
-                return stripped
-
-            summarized = self._summarize_syntax_output(syntax_output)
+        raw = raw_override if raw_override is not None else self.llm_client.complete(system_prompt=self.system_role, user_prompt=prompt, images=None)
+        self._log_llm_raw_output(raw, attempt_label="initial")
+        code = self._extract_verilog_code(raw if isinstance(raw, str) else str(raw))
+        stripped = code.strip()
+        if not stripped:
             self.logger.warning(
-                "[%s] Verilator syntax error on attempt %d/%d for %s: %s",
-                self.stage_name, attempt, syntax_attempts, module_name, summarized[:200],
+                "[%s] LLM output empty for %s; returning empty best-effort output for debug syntax repair",
+                self.stage_name,
+                module_name,
             )
-            if attempt < syntax_attempts:
-                current_prompt = self._build_syntax_retry_prompt(prompt, syntax_output, code)
-            else:
-                # Last attempt failed — write and return anyway; debug stage will try to fix
-                self.logger.warning(
-                    "[%s] Syntax retries exhausted for %s; returning best-effort output for debug stage",
-                    self.stage_name, module_name,
-                )
-                return stripped
+            self._write_text(rtl_path, "\n")
+            self._write_stage6_syntax_diagnostic(
+                module_name=module_name,
+                rtl_path=rtl_path,
+                status="empty_output_delegated_to_debug",
+                syntax_passed=False,
+                syntax_output="LLM returned empty output.",
+            )
+            return ""
 
-        self._write_text(rtl_path, "\n")
-        return ""
+        self._write_text(rtl_path, stripped.rstrip() + "\n")
+        syntax_correct, syntax_output = check_syntax(str(rtl_path), top_module=module_name)
+        if syntax_correct:
+            self._write_stage6_syntax_diagnostic(
+                module_name=module_name,
+                rtl_path=rtl_path,
+                status="pass",
+                syntax_passed=True,
+                syntax_output=syntax_output,
+            )
+            return stripped
+
+        summarized = self._summarize_syntax_output(syntax_output)
+        self.logger.warning(
+            "[%s] Verilator syntax error for %s; delegating best-effort RTL to RepoReAct syntax repair: %s",
+            self.stage_name,
+            module_name,
+            summarized[:200],
+        )
+        self._write_stage6_syntax_diagnostic(
+            module_name=module_name,
+            rtl_path=rtl_path,
+            status="delegated_to_debug_syntax_repair",
+            syntax_passed=False,
+            syntax_output=syntax_output,
+        )
+        return stripped
 
     def _validate_raw_module(self, code: str, module_name: str) -> List[str]:
         """Minimal validation — only check that code is not empty."""
@@ -322,19 +506,28 @@ class Stage6MergeAgent(BaseStageAgent):
             text = text[:6000] + "\n...<snip>..."
         return text
 
-    def _build_syntax_retry_prompt(self, original_prompt: str, syntax_output: str, code: str) -> str:
-        return (
-            f"{original_prompt}\n\n"
-            "The previous output was rejected by Verilator.\n"
-            "Fix the RTL syntax/lint errors reported below while preserving the module "
-            "interface and intended behavior.\n\n"
-            "<verilator_lint_log>\n"
-            f"{self._summarize_syntax_output(syntax_output)}\n"
-            "</verilator_lint_log>\n\n"
-            "<module_with_lineno>\n"
-            f"{add_lineno(code)}\n"
-            "</module_with_lineno>\n\n"
-            "Return only the corrected complete Verilog module code. Do not return JSON or explanations."
+    def _write_stage6_syntax_diagnostic(
+        self,
+        *,
+        module_name: str,
+        rtl_path: Path,
+        status: str,
+        syntax_passed: bool,
+        syntax_output: str,
+    ) -> None:
+        if self.output_root is None:
+            return
+        self._write_json(
+            (self.output_root / "stage6_syntax_repair" / f"{module_name}.json").resolve(),
+            {
+                "schema_version": "stage6_syntax_diagnostic_v1",
+                "module": module_name,
+                "status": status,
+                "syntax_passed": bool(syntax_passed),
+                "delegated_to": "ModuleDebugRunner.repo_react_syntax",
+                "merged_file": str(rtl_path),
+                "syntax_summary": self._summarize_syntax_output(syntax_output),
+            },
         )
 
     def _ensure_toolchain_path(self) -> None:
@@ -565,6 +758,26 @@ class Stage6MergeAgent(BaseStageAgent):
             "global_defines_modules": list(global_defines),
             "global_defines_context": global_defines_context,
         }
+
+    def _ensure_global_defines_copied(self, task: PlannerTaskInput, partial_artifacts: Dict[str, Any]) -> None:
+        repo_skeleton = self._get_repo_skeleton_artifact(partial_artifacts)
+        if repo_skeleton is None:
+            return
+        module_by_name = {item.module: item for item in repo_skeleton.modules}
+        for module_name in self._detect_global_defines_modules(repo_skeleton, module_by_name):
+            copied = copy_official_define_file(
+                task=task,
+                module_name=module_name,
+                workspace_root=self.workspace_root,
+                output_root=self.output_root,
+            )
+            if copied is not None:
+                self.logger.info(
+                    "[%s] Copied official global defines %s -> %s",
+                    self.stage_name,
+                    copied.get("source"),
+                    copied.get("workspace_path"),
+                )
 
     def _detect_global_defines_modules(
         self, repo_skeleton: Any, module_by_name: Dict[str, Any]

@@ -1,0 +1,22 @@
+{
+  "sd_controller_wb": [
+    {
+      "step": 0,
+      "module": "sd_controller_wb",
+      "correction_type": "wrong_contract",
+      "original_artifact": "sd_controller_wb.md / spec_blocks.json Controller settings reset field",
+      "problem": "The spec/stage contract says the readable Controller Setting register at 0x1c is reset/not-in-use value 0, but the fixed RealBench oracle returns 16'h0002 for address 0x1c. The generated RTL chose 16'h0000, causing the current first wb_dat_o divergence.",
+      "evidence": [
+        "first_divergence reports wb_dat_o at t=325 for wb_adr_i=8'h1c: ref=32'h00000002, dut=32'h00000000.",
+        "VCD probe at t=325 shows wb_cyc_i=1, wb_stb_i=1, wb_we_i=1, wb_adr_i=8'h1c, and wb_dat_o_ref=32'h2 while DUT is 0.",
+        "RTL line 181 decodes addr_controller_setting by returning {16'h0, CONTROLLER_SETTING_RESET}, and line 50 defines that constant as 16'h0000.",
+        "merge_child_context_json/sdc_controller.json includes original interface text with parameter controll_setting_reg =16'b0000_0000_0000_0010, conflicting with the zero parameter/spec detail."
+      ],
+      "override": {
+        "controller_setting_read_value": "16'h0002",
+        "scope": "When sd_controller_wb decodes address 8'h1c, wb_dat_o should return 32'h00000002 for the fixed oracle, despite the spec reset-text conflict.",
+        "preserve": "Do not alter address decode, reset sequencing, write decode, ack/int_ack/new_cmd, or other readable constants."
+      }
+    }
+  ]
+}

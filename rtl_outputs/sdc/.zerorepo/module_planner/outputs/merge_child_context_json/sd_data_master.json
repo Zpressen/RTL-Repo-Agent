@@ -3,7 +3,7 @@
   "module": "sd_data_master",
   "kg_enabled": true,
   "retrieval_requested": false,
-  "retrieval_reason": "KG child context is not useful because sd_data_master has no child modules in DEPENDENCY_CONTEXT and the generated fragments do not instantiate or wire submodules; they only drive external control/status interfaces.",
+  "retrieval_reason": "sd_data_master has no child modules in DEPENDENCY_CONTEXT, and the generated fragments implement internal FSM/control logic rather than instantiating or wiring submodules. KG child context would not materially help the merge.",
   "available_child_modules": [],
   "requested_child_modules": [],
   "children": []

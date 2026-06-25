@@ -1,0 +1,716 @@
+{
+  "prompt": "Begin repository-level RTL repair.\n\n<module_name>\nsd_controller_wb\n</module_name>\n\n<repair_mode>\nfunctional\n</repair_mode>\n\n<current_debug_rtl_path>\n/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv\n</current_debug_rtl_path>\n\n<merged_rtl_path>\n/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_controller_wb.v\n</merged_rtl_path>\n\n<source_of_truth>\nThe visible testbench and original module specification are authoritative for this repair session.\n</source_of_truth>\n\n<spec_excerpt>\n# sd_controller_wb design specification\n\nThe `sd_controller_wb` module are the wishbone slave interface, it manage the reading and writing to the configuration registers. \n\n\n## Introduction\n\nWISHBONE is a simple, open-source hardware bus architecture used in digital circuits. It connects different components like processors and memory, allowing them to communicate. This interface should adhere to wishbone specification, detailed in WISHBONE SoC Architecture Specification, Revision B.3.\n\nThe host uses this module to assign values to configuration registers to configure the SD card and reads some register values to obtain the SD card's operational status.\n\n### Module Function\n\nThe sd_controller_wb module perform two main tasks:\n\n- Assign values to the configuration registers according to the host's settings.\n- Return the value of the configuration register specified by the host.\n\n## Interface\n\n### IO Ports\n\n| Port Type |     Width     | Name                         | Description                             |\n| :-------: | :-----------: | :--------------------------- | :-------------------------------------- |\n|   Input   |       1       | wb_clk_i                     | Slave WISHBONE Clock Input              |\n|   Input   |       1       | wb_rst_i                     | Slave WISHBONE Reset Input              |\n|   Input   |      32       | wb_dat_i                     | Slave WISHBONE Data Inputs              |\n|  Output   |      32       | wb_dat_o                     | Slave WISHBONE Data Outputs             |\n|   Input   |       8       | wb_adr_i                     | Slave WISHBONE Address Input            |\n|   Input   |       4       | wb_sel_i                     | Slave WISHBONE Select Input             |\n|   Input   |       1       | wb_we_i                      | Slave WISHBONE Write Enable             |\n|   Input   |       1       | wb_cyc_i                     | Slave WISHBONE Cycle                    |\n|   Input   |       1       | wb_stb_i                     | Slave WISHBONE Strobe                   |\n|  Output   |       1       | wb_ack_o                     | Slave WISHBONE Acknowledge              |\n|  Output   |       1       | we_m_tx_bd                   | Write enable TIx BD                     |\n|  Output   |       1       | we_m_rx_bd                   | Write enable Rx BD                      |\n|  Output   |       1       | new_cmd                      | New command indication signal           |\n|  Output   |       1       | we_ack                       | Ack on cmd access request               |\n|  Output   |       1       | int_ack                      | Internal Delayed Acknowledge            |\n|  Output   |       1       | cmd_int_busy                 | Cmd busy by data module                 |\n|  Output   |       1       | int_busy                     | Command Busy by data module             |\n|   Input   |       1       | write_req_s                  | Cmd access request                      |\n|   Input   |      16       | cmd_set_s                    | Command setting input from data master  |\n|   Input   |      32       | cmd_arg_s                    | Command argument input from data master |\n|  Output   |      32       | argument_reg                 | Command Argument Reg                    |\n|  Output   |      16       | cmd_setting_reg              | Command Setting Reg                     |\n|   Input   |      16       | status_reg                   | Card Status Reg                         |\n|   Input   |      32       | cmd_resp_1                   | Command Response                        |\n|  Output   |       8       | software_reset_reg           | Software reset Reg                      |\n|  Output   |      16       | time_out_reg                 | Timeout Reg                             |\n|   Input   |      16       | normal_int_status_reg        | Normal Interrupt Status Reg             |\n|   Input   |      16       | error_int_status_reg         | Error Interrupt Status Reg              |\n|  Output   |      16       | normal_int_signal_enable_reg | Normal Interrupt Enable Reg             |\n|  Output   |      16       | error_int_signal_enable_reg  | Error Interrupt Enable Reg              |\n|  Output   |       8       | clock_divider                | Clock Divider Reg                       |\n|   input   |      16       | Bd_Status_reg                | BD Status Reg                           |\n|   input   |       8       | Bd_isr_reg                   | Data Interrupt Status Reg               |\n|  output   |       8       | Bd_isr_enable_reg            | Data Interrupt Enable Reg               |\n|  Output   |       1       | Bd_isr_reset                 | Reset data interrupt status             |\n|  Output   |       1       | normal_isr_reset             | Reset normal interrupt status           |\n|  Output   |       1       | error_isr_reset              | Reset error interrupt status            |\n|  Output   | RAM_MEM_WIDTH | dat_in_m_tx_bd               | Data going to the Tx BD                 |\n|  Output   | RAM_MEM_WIDTH | dat_in_m_rx_bd               | Data going to the RX BD                 |\n\n\n### IO Signal Description\n\nThe module contain the master wishbone interface signals. \n\n- `wb_clk_i`:The clock input `wb_clk_i` coordinates all activities for the internal logic within the WISHBONE interconnect. All WISHBONE output signals are registered at the rising edge of `wb_clk_i`.\n\n- `wb_rst_i`:The reset input `wb_rst_i` forces the WISHBONE interface to restart. Furthermore, all registers will be forced into an initial state. The reset values of registers can be found in Register Definition.\n\n- `wb_dat_i`:The data input array `wb_dat_i` is used to pass values to be written to the registers\n\n- `wb_dat_o`:The data output array `wb_dat_o` is used to pass values read from the registers.\n\n- `wb_adr_i`:The address input array `wb_adr_i` is used to pass a binary address. \n\n- `wb_sel_i`:The select input array `wb_sel_i` indicates where valid data\n</spec_excerpt>\n\n<contract_json_diagnostic_only>\n{\n  \"module_name\": \"sd_controller_wb\",\n  \"io\": [\n    {\n      \"name\": \"wb_clk_i\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Slave WISHBONE Clock Input\"\n    },\n    {\n      \"name\": \"wb_rst_i\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Slave WISHBONE Reset Input\"\n    },\n    {\n      \"name\": \"wb_dat_i\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"32\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Slave WISHBONE Data Inputs\"\n    },\n    {\n      \"name\": \"wb_dat_o\",\n      \"dir\": \"output\",\n      \"direction\": \"output\",\n      \"width\": \"32\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Slave WISHBONE Data Outputs\"\n    },\n    {\n      \"name\": \"wb_adr_i\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"8\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Slave WISHBONE Address Input\"\n    },\n    {\n      \"name\": \"wb_sel_i\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"4\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Slave WISHBONE Select Input\"\n    },\n    {\n      \"name\": \"wb_we_i\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Slave WISHBONE Write Enable\"\n    },\n    {\n      \"name\": \"wb_cyc_i\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Slave WISHBONE Cycle\"\n    },\n    {\n      \"name\": \"wb_stb_i\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Slave WISHBONE Strobe\"\n    },\n    {\n      \"name\": \"wb_ack_o\",\n      \"dir\": \"output\",\n      \"direction\": \"output\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Slave WISHBONE Acknowledge\"\n    },\n    {\n      \"name\": \"we_m_tx_bd\",\n      \"dir\": \"output\",\n      \"direction\": \"output\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Write enable TIx BD\"\n    },\n    {\n      \"name\": \"we_m_rx_bd\",\n      \"dir\": \"output\",\n      \"direction\": \"output\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Write enable Rx BD\"\n    },\n    {\n      \"name\": \"new_cmd\",\n      \"dir\": \"output\",\n      \"direction\": \"output\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"New command indication signal\"\n    },\n    {\n      \"name\": \"we_ack\",\n      \"dir\": \"output\",\n      \"direction\": \"output\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Ack on cmd access request\"\n    },\n    {\n      \"name\": \"int_ack\",\n      \"dir\": \"output\",\n      \"direction\": \"output\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Internal Delayed Acknowledge\"\n    },\n    {\n      \"name\": \"cmd_int_busy\",\n      \"dir\": \"output\",\n      \"direction\": \"output\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Cmd busy by data module\"\n    },\n    {\n      \"name\": \"int_busy\",\n      \"dir\": \"output\",\n      \"direction\": \"output\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Command Busy by data module\"\n    },\n    {\n      \"name\": \"write_req_s\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Cmd access request\"\n    },\n    {\n      \"name\": \"cmd_set_s\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"16\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Command setting input from data master\"\n    },\n    {\n      \"name\": \"cmd_arg_s\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"32\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Command argument input from data master\"\n    },\n    {\n      \"name\": \"argument_reg\",\n      \"dir\": \"output\",\n      \"direction\": \"output\",\n      \"width\": \"32\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Command Argument Reg\"\n    },\n    {\n      \"name\": \"cmd_setting_reg\",\n      \"dir\": \"output\",\n      \"direction\": \"output\",\n      \"width\": \"16\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Command Setting Reg\"\n    },\n    {\n      \"name\": \"status_reg\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"16\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Card Status Reg\"\n    },\n    {\n      \"name\": \"cmd_resp_1\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"32\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Command Response\"\n    },\n    {\n      \"name\": \"software_reset_reg\",\n      \"dir\": \"output\",\n      \"direction\": \"output\",\n      \"width\": \"8\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Software reset Reg\"\n    },\n    {\n      \"name\": \"time_out_reg\",\n      \"dir\": \"output\",\n      \"direction\": \"output\",\n      \"width\": \"16\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Timeout Reg\"\n    },\n    {\n      \"name\": \"normal_int_status_reg\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"16\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Normal Interrupt Status Reg\"\n    },\n    {\n      \"name\": \"error_int_status_reg\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"16\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Error Interrupt Status Reg\"\n    },\n    {\n      \"name\": \"normal_int_signal_enable_reg\",\n      \"dir\": \"output\",\n      \"direction\": \"output\",\n      \"width\": \"16\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Normal Interrupt Enable Reg\"\n    },\n    {\n      \"name\": \"error_int_signal_enable_reg\",\n      \"dir\": \"output\",\n      \"direction\": \"output\",\n      \"width\": \"16\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Error Interrupt Enable Reg\"\n    },\n    {\n      \"name\": \"clock_divider\",\n      \"dir\": \"output\",\n      \"directi\n</contract_json_diagnostic_only>\n\n<initial_sim_failure_excerpt>\nHint: Output 'wb_dat_o' has 162 mismatches. First mismatch occurred at time 12050.\nHint: Output 'wb_ack_o' has 2 mismatches. First mismatch occurred at time 29330.\nHint: Output 'we_m_tx_bd' has 12 mismatches. First mismatch occurred at time 4670.\nHint: Output 'new_cmd' has 2 mismatches. First mismatch occurred at time 29340.\nHint: Output 'we_ack' has 2 mismatches. First mismatch occurred at time 29340.\nHint: Output 'int_ack' has 70 mismatches. First mismatch occurred at time 3260.\nHint: Output 'cmd_int_busy' has 2 mismatches. First mismatch occurred at time 29340.\nHint: Output 'we_m_rx_bd' has 24 mismatches. First mismatch occurred at time 3310.\nHint: Output 'int_busy' has no mismatches.\nHint: Output 'argument_reg' has 2 mismatches. First mismatch occurred at time 29340.\nHint: Output 'cmd_setting_reg' has 2 mismatches. First mismatch occurred at time 29340.\nHint: Output 'software_reset_reg' has 620 mismatches. First mismatch occurred at time 4280.\nHint: Output 'time_out_reg' has 26 mismatches. First mismatch occurred at time 12670.\nHint: Output 'normal_int_signal_enable_reg' has no mismatches.\nHint: Output 'error_int_signal_enable_reg' has no mismatches.\nHint: Output 'clock_divider' has no mismatches.\nHint: Output 'Bd_isr_enable_reg' has 628 mismatches. First mismatch occurred at time 9080.\nHint: Output 'Bd_isr_reset' has 112 mismatches. First mismatch occurred at time 5460.\nHint: Output 'normal_isr_reset' has 94 mismatches. First mismatch occurred at time 3800.\nHint: Output 'error_isr_reset' has 112 mismatches. First mismatch occurred at time 17290.\nHint: Output 'dat_in_m_rx_bd' has 462 mismatches. First mismatch occurred at time 3310.\nHint: Output 'dat_in_m_tx_bd' has 206 mismatches. First mismatch occurred at time 4670.\nHint: Total mismatched samples is 2052 out of 10591 samples\nMismatches: 2052 in 10591 samples\n  290 |   if (stats1.errors_wb_dat_o) $display(\"Hint: Output '%s' has %0d mismatches. First mismatch occurred at time %0d.\", \"wb_dat_o\", stats1.errors_wb\n...<snip>...\nnt_signal_enable_reg) $display(\"Hint: Output '%s' has %0d mismatches. First mismatch occurred at time %0d.\", \"normal_int_signal_enable_reg\", stats1.errors_normal_int_signal_enable_reg, stats1.errortime_normal_int_signal_enable_reg);\n  318 |   if (stats1.errors_error_int_signal_enable_reg) $display(\"Hint: Output '%s' has %0d mismatches. First mismatch occurred at time %0d.\", \"error_int_signal_enable_reg\", stats1.errors_error_int_signal_enable_reg, stats1.errortime_error_int_signal_enable_reg);\n  320 |   if (stats1.errors_clock_divider) $display(\"Hint: Output '%s' has %0d mismatches. First mismatch occurred at time %0d.\", \"clock_divider\", stats1.errors_clock_divider, stats1.errortime_clock_divider);\n  322 |   if (stats1.errors_Bd_isr_enable_reg) $display(\"Hint: Output '%s' has %0d mismatches. First mismatch occurred at time %0d.\", \"Bd_isr_enable_reg\", stats1.errors_Bd_isr_enable_reg, stats1.errortime_Bd_isr_enable_reg);\n  324 |   if (stats1.errors_Bd_isr_reset) $display(\"Hint: Output '%s' has %0d mismatches. First mismatch occurred at time %0d.\", \"Bd_isr_reset\", stats1.errors_Bd_isr_reset, stats1.errortime_Bd_isr_reset);\n  326 |   if (stats1.errors_normal_isr_reset) $display(\"Hint: Output '%s' has %0d mismatches. First mismatch occurred at time %0d.\", \"normal_isr_reset\", stats1.errors_normal_isr_reset, stats1.errortime_normal_isr_reset);\n  328 |   if (stats1.errors_error_isr_reset) $display(\"Hint: Output '%s' has %0d mismatches. First mismatch occurred at time %0d.\", \"error_isr_reset\", stats1.errors_error_isr_reset, stats1.errortime_error_isr_reset);\n  330 |   if (stats1.errors_dat_in_m_rx_bd) $display(\"Hint: Output '%s' has %0d mismatches. First mismatch occurred at time %0d.\", \"dat_in_m_rx_bd\", stats1.errors_dat_in_m_rx_bd, stats1.errortime_dat_in_m_rx_bd);\n  332 |   if (stats1.errors_dat_in_m_tx_bd) $display(\"Hint: Output '%s' has %0d mismatches. First mismatch occurred at time %0d.\", \"dat_in_m_tx_bd\", stats1.errors_dat_in_m_tx_bd, stats1.errortime_dat_in_m_tx_bd);\n</initial_sim_failure_excerpt>\n\n<initial_trace_summary_json>\n{\n  \"fail_time\": 3260,\n  \"total_mismatches\": 2052,\n  \"first_failure\": {\n    \"signal\": \"int_ack\",\n    \"time\": 3255,\n    \"ref\": \"0\",\n    \"dut\": \"1\",\n    \"classification\": \"dut_late\",\n    \"ref_path\": \"tb.int_ack_ref\",\n    \"dut_path\": \"tb.int_ack_dut\",\n    \"sampling_mode\": \"stable\",\n    \"edge\": null,\n    \"driver_assignment_kind\": \"nonblocking\",\n    \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"\n  },\n  \"root_failure\": {\n    \"signal\": \"int_ack\",\n    \"time\": 3255,\n    \"ref\": \"0\",\n    \"dut\": \"1\",\n    \"classification\": \"dut_late\",\n    \"ref_path\": \"tb.int_ack_ref\",\n    \"dut_path\": \"tb.int_ack_dut\",\n    \"sampling_mode\": \"stable\",\n    \"edge\": null,\n    \"driver_assignment_kind\": \"nonblocking\",\n    \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"\n  },\n  \"first_divergence\": {\n    \"status\": \"ok\",\n    \"sampling_mode\": \"stable\",\n    \"edge\": null,\n    \"driver_assignment_kind\": \"nonblocking\",\n    \"active_region_model\": \"settled VCD ref/dut values at sample/change times\",\n    \"first_divergence\": {\n      \"signal\": \"int_ack\",\n      \"time\": 3255,\n      \"ref\": \"0\",\n      \"dut\": \"1\",\n      \"classification\": \"dut_late\",\n      \"ref_path\": \"tb.int_ack_ref\",\n      \"dut_path\": \"tb.int_ack_dut\",\n      \"sampling_mode\": \"stable\",\n      \"edge\": null,\n      \"driver_assignment_kind\": \"nonblocking\",\n      \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"\n    },\n    \"nearby\": {\n      \"times\": [\n        3240,\n        3245,\n        3250,\n        3255,\n        3260,\n        3265,\n        3270\n      ],\n      \"rows\": [\n        {\n          \"t\": 3240,\n          \"Bd_Status_reg\": \"0010111010000000\",\n          \"Bd_isr_reg\": \"01100110\",\n          \"cmd_arg_s\": \"11011001010101000000000011000010\",\n          \"cmd_resp_1\": \"00000110101010010001111000101111\",\n          \"cmd_set_s\": \"1100000101000000\",\n          \"error_int_status_reg\": \"0011110111110001\",\n          \"normal_int_status_reg\": \"0010100100101001\",\n          \"status_reg\": \"1110001111110011\",\n          \"wb_adr_i\": \"01001100\",\n          \"wb_clk_i\": \"0\",\n          \"wb_cyc_i\": \"0\",\n          \"wb_dat_i\": \"01010000101111001111111100101011\",\n          \"int_ack_ref\": \"1\",\n          \"int_ack_dut\": \"1\",\n          \"wb_dat_o_ref\": \"00000110101010010001111000101111\",\n          \"wb_dat_o_dut\": \"00000110101010010001111000101111\",\n          \"wb_ack_o_ref\": \"0\",\n          \"wb_ack_o_dut\": \"0\",\n          \"we_m_tx_bd_ref\": \"0\",\n          \"we_m_tx_bd_dut\": \"0\",\n          \"new_cmd_ref\": \"0\",\n          \"new_cmd_dut\": \"0\",\n          \"we_ack_ref\": \"0\",\n          \"we_ack_dut\": \"0\",\n          \"cmd_int_busy_ref\": \"0\",\n          \"cmd_int_busy_dut\": \"0\",\n          \"we_m_rx_bd_ref\": \"0\",\n          \"we_m_rx_bd_dut\": \"0\"\n        },\n        {\n          \"t\": 3245,\n          \"Bd_Status_reg\": \"0010111010000000\",\n          \"Bd_isr_reg\": \"01100110\",\n          \"cmd_arg_s\": \"11100001001101010110110111011011\",\n          \"cmd_resp_1\": \"00000110101010010001111000101111\",\n          \"cmd_set_s\": \"0100011011111110\",\n          \"error_int_status_reg\": \"0011110111110001\",\n          \"normal_int_status_reg\": \"0010100100101001\",\n          \"status_reg\": \"1110001111110011\",\n          \"wb_adr_i\": \"00001000\",\n          \"wb_clk_i\": \"1\",\n          \"wb_cyc_i\": \"1\",\n          \"wb_dat_i\": \"11010110101000110101110100000011\",\n          \"int_ack_ref\": \"1\",\n          \"int_ack_dut\": \"1\",\n          \"wb_dat_o_ref\": \"00000000000000001110001111110011\",\n          \"wb_dat_o_dut\": \"00000000000000001110001111110011\",\n          \"wb_ack_o_ref\": \"1\",\n          \"wb_ack_o_dut\": \"1\",\n          \"we_m_tx_bd_ref\": \"0\",\n          \"we_m_tx_bd_dut\": \"0\",\n          \"new_cmd_ref\": \"0\",\n          \"new_cmd_dut\": \"0\",\n          \"we_ack_ref\": \"0\",\n          \"we_ack_dut\": \"0\",\n          \"cmd_int_busy_ref\": \"0\",\n          \"cmd_int_busy_dut\": \"0\",\n          \"we_m_rx_bd_ref\": \"0\",\n          \"we_m_rx_bd_dut\": \"0\"\n        },\n        {\n          \"t\": 3250,\n          \"Bd_Status_reg\": \"0010111010000000\",\n          \"Bd_isr_reg\": \"01100110\",\n          \"cmd_arg_s\": \"11100001001101010110110111011011\",\n          \"cmd_resp_1\": \"00000110101010010001111000101111\",\n          \"cmd_set_s\": \"0100011011111110\",\n          \"error_int_status_reg\": \"0011110111110001\",\n          \"normal_int_status_reg\": \"0010100100101001\",\n          \"status_reg\": \"1110001111110011\",\n          \"wb_adr_i\": \"00001000\",\n          \"wb_clk_i\": \"0\",\n          \"wb_cyc_i\": \"1\",\n          \"wb_dat_i\": \"11010110101000110101110100000011\",\n          \"int_ack_ref\": \"1\",\n          \"int_ack_dut\": \"1\",\n          \"wb_dat_o_ref\": \"00000000000000001110001111110011\",\n          \"wb_dat_o_dut\": \"00000000000000001110001111110011\",\n          \"wb_ack_o_ref\": \"1\",\n          \"wb_ack_o_dut\": \"1\",\n          \"we_m_tx_bd_ref\": \"0\",\n          \"we_m_tx_bd_dut\": \"0\",\n          \"new_cmd_ref\": \"0\",\n          \"new_cmd_dut\": \"0\",\n          \"we_ack_ref\": \"0\",\n          \"we_ack_dut\": \"0\",\n          \"cmd_int_busy_ref\": \"0\",\n          \"cmd_int_busy_dut\": \"0\",\n          \"we_m_rx_bd_ref\": \"0\",\n          \"we_m_rx_bd_dut\": \"0\"\n        },\n        {\n          \"t\": 3255,\n          \"Bd_Status_reg\": \"1010011110011011\",\n          \"Bd_isr_reg\": \"11000110\",\n          \"cmd_arg_s\": \"10001111000001111101100011111111\",\n          \"cmd_resp_1\": \"01000110111000101011100000110000\",\n          \"cmd_set_s\": \"0001110000001110\",\n          \"error_int_status_reg\": \"0010100101000111\",\n          \"normal_int_status_reg\": \"0010111110011010\",\n          \"status_reg\": \"0111110100010011\",\n          \"wb_adr_i\": \"10000000\",\n          \"wb_clk_i\": \"1\",\n          \"wb_cyc_i\": \"1\",\n          \"wb_dat_i\": \"11010000000100110011010111110110\",\n          \"int_ack_ref\": \"0\",\n          \"int_ack_dut\": \"1\",\n          \"wb_dat_o_ref\": \"00000000000000001110001111110011\",\n          \"wb_dat_o_dut\": \"00000000000000001110001111110011\",\n          \"wb_ack_o_ref\": \"0\",\n          \"wb_ack_o_dut\": \"0\",\n          \"we_m_tx_bd_ref\": \"0\",\n          \"we_m_tx_bd_dut\": \"0\",\n          \"new_cmd_ref\": \"0\",\n          \"new_cmd_dut\": \"0\",\n          \"we_ack_ref\": \"0\",\n          \"we_ack_dut\": \"0\",\n          \"cmd_int_busy_ref\": \"0\",\n          \"cmd_int_busy_dut\": \"0\",\n          \"we_m_rx_bd_ref\": \"0\",\n          \"we_m_rx_bd_dut\": \"0\"\n        },\n        {\n          \"t\": 3260,\n          \"Bd_Status_reg\": \"1010011110011011\",\n          \"Bd_isr_reg\": \"11000110\",\n          \"cmd_arg_s\": \"10001111000001111101100011111111\",\n          \"cmd_resp_1\": \"01000110111000101011100000110000\",\n          \"cmd_set_s\": \"0001110000001110\",\n          \"error_int_status_reg\": \"0010100101000111\",\n          \"normal_int_status_reg\": \"0010111110011010\",\n          \"status_reg\": \"0111110100010011\",\n          \"wb_adr_i\": \"10000000\",\n          \"wb_clk_i\": \"0\",\n          \"wb_cyc_i\": \"1\",\n          \"wb_dat_i\": \"11010000000100110011010111110110\",\n          \"int_ack_ref\": \"0\",\n          \"int_ack_dut\": \"1\",\n          \"wb_dat_o_ref\": \"00000000000000001110001111110011\",\n          \"wb_dat_o_dut\": \"00000000000000001110001111110011\",\n          \"wb_ack_o_ref\": \"0\",\n          \"wb_ack_o_dut\": \"0\",\n          \"we_m_tx_bd_ref\": \"0\",\n          \"we_m_tx_bd_dut\": \"0\",\n          \"new_cmd_ref\": \"0\",\n          \"new_cmd_dut\": \"0\",\n          \"we_ack_ref\": \"0\",\n          \"we_ack_dut\": \"0\",\n          \"cmd_int_busy_ref\": \"0\",\n          \"cmd_int_busy_dut\": \"0\",\n          \"we_m_rx_bd_ref\": \"0\",\n          \"we_m_rx_bd_dut\": \"0\"\n        },\n        {\n          \"t\": 3265,\n          \"Bd_Status_reg\": \"1010011110011011\",\n          \"Bd_isr_reg\": \"11000110\",\n          \"cmd_arg_s\": \"10010100101100100101111100111111\",\n          \"cmd_resp_1\": \"01000110111000101011100000110000\",\n          \"cmd_set_s\": \"1111000011010110\",\n          \"error_int_status_reg\": \"0010100101000111\",\n          \"normal_int_status_reg\": \"0010111110011010\",\n          \"status_reg\": \"0111110100010011\",\n          \"wb_adr_i\": \"01010000\",\n          \"wb_clk_i\": \"1\",\n          \"wb_cyc_i\": \"1\",\n          \"wb_dat_i\": \"00111100100011101011011001111111\",\n          \"int_ack_ref\": \"1\",\n          \"int_ack_dut\": \"1\",\n          \"wb_dat_o_ref\": \"00000000000000001110001111110011\",\n          \"wb_dat_o_dut\": \"00000000000000001110001111110011\",\n          \"wb_ack_o_ref\": \"0\",\n          \"wb_ack_o_dut\": \"0\",\n          \"we_m_tx_bd_ref\": \"0\",\n          \"we_m_tx_bd_dut\": \"0\",\n          \"new_cmd_ref\": \"1\",\n          \"new_cmd_dut\": \"1\",\n          \"we_ack_ref\": \"1\",\n          \"we_ack_dut\": \"1\",\n          \"cmd_int_busy_ref\": \"1\",\n          \"cmd_int_busy_dut\": \"1\",\n          \"we_m_rx_bd_ref\": \"0\",\n          \"we_m_rx_bd_dut\": \"0\"\n        },\n        {\n          \"t\": 3270,\n          \"Bd_Status_reg\": \"1010011110011011\",\n          \"Bd_isr_reg\": \"11000110\",\n          \"cmd_arg_s\": \"10010100101100100101111100111111\",\n          \"cmd_resp_1\": \"01000110111000101011100000110000\",\n          \"cmd_set_s\": \"1111000011010110\",\n          \"error_int_status_reg\": \"0010100101000111\",\n          \"normal_int_status_reg\": \"0010111110011010\",\n          \"status_reg\": \"0111110100010011\",\n          \"wb_adr_i\": \"01010000\",\n          \"wb_clk_i\": \"0\",\n          \"wb_cyc_i\": \"1\",\n          \"wb_dat_i\": \"00111100100011101011011001111111\",\n          \"int_ack_ref\": \"1\",\n          \"int_ack_dut\": \"1\",\n          \"wb_dat_o_ref\": \"00000000000000001110001111110011\",\n          \"wb_dat_o_dut\": \"00000000000000001110001111110011\",\n          \"wb_ack_o_ref\": \"0\",\n          \"wb_ack_o_dut\": \"0\",\n          \"we_m_tx_bd_ref\": \"0\",\n          \"we_m_tx_bd_dut\": \"0\",\n          \"new_cmd_ref\": \"1\",\n          \"new_cmd_dut\": \"1\",\n          \"we_ack_ref\": \"1\",\n          \"we_ack_dut\": \"1\",\n          \"cmd_int_busy_ref\": \"1\",\n          \"cmd_int_busy_dut\": \"1\",\n          \"we_m_rx_bd_ref\": \"0\",\n          \"we_m_rx_bd_dut\": \"0\"\n        }\n      ]\n    },\n    \"suspect\": {\n      \"driver_blocks\": [\n        {\n          \"id\": \"A2\",\n          \"kind\": \"always\",\n          \"clocking\": \"seq\",\n          \"writes\": [\n            \"Bd_isr_enable_reg\",\n            \"Bd_isr_reset\",\n            \"argument_reg\",\n            \"bd_high_word\",\n            \"bd_state\",\n            \"clock_divider\",\n            \"cmd_int_busy\",\n            \"cmd_setting_reg\",\n            \"dat_in_m_rx_bd\",\n            \"dat_in_m_tx_bd\",\n            \"error_int_signal_enable_reg\",\n            \"error_isr_reset\",\n            \"int_ack\",\n            \"int_busy\",\n            \"new_cmd\",\n            \"normal_int_signal_enable_reg\",\n            \"normal_isr_reset\",\n            \"software_reset_reg\",\n            \"time_out_reg\",\n            \"wb_ack_o\",\n            \"wb_dat_o\",\n            \"we_ack\",\n            \"we_m_rx_bd\",\n            \"we_m_tx_bd\"\n          ],\n          \"start_line\": 299,\n          \"end_line\": 355\n        },\n        {\n          \"id\": \"A1\",\n          \"kind\": \"always\",\n          \"clocking\": \"comb\",\n          \"writes\": [\n            \"Bd_isr_enable_reg_next\",\n            \"Bd_isr_reset_next\",\n            \"argument_reg_next\",\n            \"bd_high_word_next\",\n            \"bd_state_next\",\n            \"clock_divider_next\",\n            \"cmd_int_busy_next\",\n            \"cmd_setting_reg_next\",\n            \"dat_in_m_rx_bd_next\",\n            \"dat_in_m_tx_bd_next\",\n            \"error_int_signal_enable_reg_next\",\n            \"error_isr_reset_next\",\n            \"int_ack_next\",\n            \"int_busy_next\",\n            \"new_cmd_next\",\n            \"normal_int_signal_enable_reg_next\",\n            \"normal_isr_reset_next\",\n            \"software_reset_reg_next\",\n            \"time_out_reg_next\",\n            \"wb_ack_o_next\",\n            \"wb_dat_o_next\",\n            \"we_ack_next\",\n            \"we_m_rx_bd_next\",\n            \"we_m_tx_bd_next\"\n          ],\n          \"start_line\": 143,\n          \"end_line\": 297\n        },\n        {\n          \"id\": \"C8\",\n          \"kind\": \"assign\",\n          \"clocking\": \"comb\",\n          \"writes\": [\n            \"addr_controller_setting\"\n          ],\n          \"start_line\": 126,\n          \"end_line\": 126\n        },\n        {\n          \"id\": \"C22\",\n          \"kind\": \"assign\",\n          \"clocking\": \"comb\",\n          \"writes\": [\n            \"addr_bd_rx\"\n          ],\n          \"start_line\": 140,\n          \"end_line\": 140\n        },\n        {\n          \"id\": \"C10\",\n          \"kind\": \"assign\",\n          \"clocking\": \"comb\",\n          \"writes\": [\n            \"addr_power_control\"\n          ],\n          \"start_line\": 128,\n          \"end_line\": 128\n        },\n        {\n          \"id\": \"C1\",\n          \"kind\": \"assign\",\n          \"clocking\": \"comb\",\n          \"writes\": [\n            \"wb_access\"\n          ],\n          \"start_line\": 118,\n          \"end_line\": 118\n        },\n        {\n          \"id\": \"C13\",\n          \"kind\": \"assign\",\n          \"clocking\": \"comb\",\n          \"writes\": [\n            \"addr_normal_int_status\"\n          ],\n          \"start_line\": 131,\n          \"end_line\": 131\n        },\n        {\n          \"id\": \"C2\",\n          \"kind\": \"assign\",\n          \"clocking\": \"comb\",\n          \"writes\": [\n            \"wb_write_access\"\n          ],\n          \"start_line\": 119,\n          \"end_line\": 119\n        }\n      ],\n      \"signals\": [\n        \"cmd_int_busy\",\n        \"int_ack\",\n        \"new_cmd\",\n        \"wb_ack_o\",\n        \"wb_dat_o\",\n        \"we_ack\",\n        \"we_m_rx_bd\",\n        \"we_m_tx_bd\"\n      ],\n      \"hint\": \"First real DUT/ref output divergence; use this instead of testbench metric counters.\"\n    },\n    \"candidate_signals\": [\n      \"Bd_isr_enable_reg\",\n      \"Bd_isr_reset\",\n      \"argument_reg\",\n      \"clock_divider\",\n      \"cmd_int_busy\",\n      \"cmd_setting_reg\",\n      \"dat_in_m_rx_bd\",\n      \"dat_in_m_tx_bd\",\n      \"error_int_signal_enable_reg\",\n      \"error_isr_reset\",\n      \"int_ack\",\n      \"int_busy\",\n      \"new_cmd\",\n      \"normal_int_signal_enable_reg\",\n      \"normal_isr_reset\",\n      \"software_reset_reg\",\n      \"time_out_reg\",\n      \"wb_ack_o\",\n      \"wb_dat_o\",\n      \"we_ack\",\n      \"we_m_rx_bd\",\n      \"we_m_tx_bd\"\n    ],\n    \"ignored_tb_metrics\": [],\n    \"raw_fail_outputs\": [\n      {\n        \"sig\": \"wb_dat_o\",\n        \"mismatches\": 162,\n        \"time\": 12050\n      },\n      {\n        \"sig\": \"wb_ack_o\",\n        \"mismatches\": 2,\n        \"time\": 29330\n      },\n      {\n        \"sig\": \"we_m_tx_bd\",\n        \"mismatches\": 12,\n        \"time\": 4670\n      },\n      {\n        \"sig\": \"new_cmd\",\n        \"mismatches\": 2,\n        \"time\": 29340\n      },\n      {\n        \"sig\": \"we_ack\",\n        \"mismatches\": 2,\n        \"time\": 29340\n      },\n      {\n        \"sig\": \"int_ack\",\n        \"mismatches\": 70,\n        \"time\": 3260\n      },\n      {\n        \"sig\": \"cmd_int_busy\",\n        \"mismatches\": 2,\n        \"time\": 29340\n      },\n      {\n        \"sig\": \"we_m_rx_bd\",\n        \"mismatches\": 24,\n        \"time\": 3310\n      },\n      {\n        \"sig\": \"argument_reg\",\n        \"mismatches\": 2,\n        \"time\": 29340\n      },\n      {\n        \"sig\": \"cmd_setting_reg\",\n        \"mismatches\": 2,\n        \"time\": 29340\n      },\n      {\n        \"sig\": \"software_reset_reg\",\n        \"mismatches\": 620,\n        \"time\": 4280\n      },\n      {\n        \"sig\": \"time_out_reg\",\n        \"mismatches\": 26,\n        \"time\": 12670\n      },\n      {\n        \"sig\": \"Bd_isr_enable_reg\",\n        \"mismatches\": 628,\n        \"time\": 9080\n      },\n      {\n        \"sig\": \"Bd_isr_reset\",\n        \"mismatches\": 112,\n        \"time\": 5460\n      },\n      {\n        \"sig\": \"normal_isr_reset\",\n        \"mismatches\": 94,\n        \"time\": 3800\n      },\n      {\n        \"sig\": \"error_isr_reset\",\n        \"mismatches\": 112,\n        \"time\": 17290\n      },\n      {\n        \"sig\": \"dat_in_m_rx_bd\",\n        \"mismatches\": 462,\n        \"time\": 3310\n      },\n      {\n        \"sig\": \"dat_in_m_tx_bd\",\n        \"mismatches\": 206,\n        \"time\": 4670\n      }\n    ],\n    \"dut_instance\": \"top_module1\",\n    \"ref_instance\": \"good1\"\n  },\n  \"required_next_tool\": null,\n  \"ignored_tb_metrics\": [],\n  \"raw_fail_outputs\": [\n    {\n      \"sig\": \"wb_dat_o\",\n      \"mismatches\": 162,\n      \"time\": 12050\n    },\n    {\n      \"sig\": \"wb_ack_o\",\n      \"mismatches\": 2,\n      \"time\": 29330\n    },\n    {\n      \"sig\": \"we_m_tx_bd\",\n      \"mismatches\": 12,\n      \"time\": 4670\n    },\n    {\n      \"sig\": \"new_cmd\",\n      \"mismatches\": 2,\n      \"time\": 29340\n    },\n    {\n      \"sig\": \"we_ack\",\n      \"mismatches\": 2,\n      \"time\": 29340\n    },\n    {\n      \"sig\": \"int_ack\",\n      \"mismatches\": 70,\n      \"time\": 3260\n    },\n    {\n      \"sig\": \"cmd_int_busy\",\n      \"mismatches\": 2,\n      \"time\": 29340\n    },\n    {\n      \"sig\": \"we_m_rx_bd\",\n      \"mismatches\": 24,\n      \"time\": 3310\n    },\n    {\n      \"sig\": \"argument_reg\",\n      \"mismatches\": 2,\n      \"time\": 29340\n    },\n    {\n      \"sig\": \"cmd_setting_reg\",\n      \"mismatches\": 2,\n      \"time\": 29340\n    },\n    {\n      \"sig\": \"software_reset_reg\",\n      \"mismatches\": 620,\n      \"time\": 4280\n    },\n    {\n      \"sig\": \"time_out_reg\",\n      \"mismatches\": 26,\n      \"time\": 12670\n    },\n    {\n      \"sig\": \"Bd_isr_enable_reg\",\n      \"mismatches\": 628,\n      \"time\": 9080\n    },\n    {\n      \"sig\": \"Bd_isr_reset\",\n      \"mismatches\": 112,\n      \"time\": 5460\n    },\n    {\n      \"sig\": \"normal_isr_reset\",\n      \"mismatches\": 94,\n      \"time\": 3800\n    },\n    {\n      \"sig\": \"error_isr_reset\",\n      \"mismatches\": 112,\n      \"time\": 17290\n    },\n    {\n      \"sig\": \"dat_in_m_rx_bd\",\n      \"mismatches\": 462,\n      \"time\": 3310\n    },\n    {\n      \"sig\": \"dat_in_m_tx_bd\",\n      \"mismatches\": 206,\n      \"time\": 4670\n    }\n  ],\n  \"top_diagnosis\": \"FIRST FAILURE: int_ack failed: expected=0, actual=1. Direct driver A2 classified as condition_blocks_update: Observed condition values appear to block this assignment update.\",\n  \"suspect_blocks\": [\n    {\n      \"id\": \"A2\",\n      \"kind\": \"always\",\n      \"clocking\": \"seq\",\n      \"writes\": [\n        \"Bd_isr_enable_reg\",\n        \"Bd_isr_reset\",\n        \"argument_reg\",\n        \"bd_high_word\",\n        \"bd_state\",\n        \"clock_divider\",\n        \"cmd_int_busy\",\n        \"cmd_setting_reg\",\n        \"dat_in_m_rx_bd\",\n        \"dat_in_m_tx_bd\",\n        \"error_int_signal_enable_reg\",\n        \"error_isr_reset\",\n        \"int_ack\",\n        \"int_busy\",\n        \"new_cmd\",\n        \"normal_int_signal_enable_reg\",\n        \"normal_isr_reset\",\n        \"software_reset_reg\",\n        \"time_out_reg\",\n        \"wb_ack_o\",\n        \"wb_dat_o\",\n        \"we_ack\",\n        \"we_m_rx_bd\",\n        \"we_m_tx_bd\"\n      ],\n      \"start_line\": 299,\n      \"end_line\": 355\n    }\n  ],\n  \"value_backtrace_summary\": [\n    {\n      \"sig\": \"int_ack\",\n      \"expected\": \"0\",\n      \"actual\": \"1\",\n      \"steps\": [\n        {\n          \"signal\": \"int_ack\",\n          \"driver_block_id\": \"A2\",\n          \"classification\": \"condition_blocks_update\",\n          \"reason\": \"Observed condition values appear to block this assignment update.\"\n        }\n      ]\n    },\n    {\n      \"sig\": \"wb_dat_o\",\n      \"expected\": \"00000000000000001110001111110011\",\n      \"actual\": \"00000000000000001110001111110011\",\n      \"steps\": [\n        {\n          \"signal\": \"wb_dat_o\",\n          \"driver_block_id\": \"A2\",\n          \"classification\": \"condition_blocks_update\",\n          \"reason\": \"Observed condition values appear to block this assignment update.\"\n        }\n      ]\n    },\n    {\n      \"sig\": \"wb_ack_o\",\n      \"expected\": \"0\",\n      \"actual\": \"0\",\n      \"steps\": [\n        {\n          \"signal\": \"wb_ack_o\",\n          \"driver_block_id\": \"A2\",\n          \"classification\": \"condition_blocks_update\",\n          \"reason\": \"Observed condition values appear to block this assignment update.\"\n        }\n      ]\n    }\n  ],\n  \"vcd_available\": true,\n  \"trace_error\": null\n}\n</initial_trace_summary_json>\n\n<known_planning_corrections_json>\n[\n  {\n    \"step\": 0,\n    \"module\": \"sd_controller_wb\",\n    \"correction_type\": \"wrong_contract\",\n    \"original_artifact\": \"sd_controller_wb.md / spec_blocks.json Controller settings reset field\",\n    \"problem\": \"The spec/stage contract says the readable Controller Setting register at 0x1c is reset/not-in-use value 0, but the fixed RealBench oracle returns 16'h0002 for address 0x1c. The generated RTL chose 16'h0000, causing the current first wb_dat_o divergence.\",\n    \"evidence\": [\n      \"first_divergence reports wb_dat_o at t=325 for wb_adr_i=8'h1c: ref=32'h00000002, dut=32'h00000000.\",\n      \"VCD probe at t=325 shows wb_cyc_i=1, wb_stb_i=1, wb_we_i=1, wb_adr_i=8'h1c, and wb_dat_o_ref=32'h2 while DUT is 0.\",\n      \"RTL line 181 decodes addr_controller_setting by returning {16'h0, CONTROLLER_SETTING_RESET}, and line 50 defines that constant as 16'h0000.\",\n      \"merge_child_context_json/sdc_controller.json includes original interface text with parameter controll_setting_reg =16'b0000_0000_0000_0010, conflicting with the zero parameter/spec detail.\"\n    ],\n    \"override\": {\n      \"controller_setting_read_value\": \"16'h0002\",\n      \"scope\": \"When sd_controller_wb decodes address 8'h1c, wb_dat_o should return 32'h00000002 for the fixed oracle, despite the spec reset-text conflict.\",\n      \"preserve\": \"Do not alter address decode, reset sequencing, write decode, ack/int_ack/new_cmd, or other readable constants.\"\n    }\n  }\n]\n</known_planning_corrections_json>\n\n<repo_react_memory_brief_json>\n{\n  \"schema\": \"repo_react_memory_brief.v1\",\n  \"module\": \"sd_controller_wb\",\n  \"current_rtl_hash\": \"4a6de127c1e7c606baf492fbaf3c586c0ca1d4389db23c5392e1bfee4e0592ee\",\n  \"last_sim\": {\n    \"is_pass\": false,\n    \"mismatch_count\": 2540,\n    \"first_fail_time\": 3260,\n    \"sim_output_path\": \"/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/initial_sim_output.json\"\n  },\n  \"latest_trace_summary\": {\n    \"fail_time\": 3260,\n    \"total_mismatches\": 2052,\n    \"root_failure\": {\n      \"signal\": \"int_ack\",\n      \"time\": 3255,\n      \"ref\": \"0\",\n      \"dut\": \"1\",\n      \"classification\": \"dut_late\",\n      \"ref_path\": \"tb.int_ack_ref\",\n      \"dut_path\": \"tb.int_ack_dut\",\n      \"sampling_mode\": \"stable\",\n      \"edge\": null,\n      \"driver_assignment_kind\": \"nonblocking\",\n      \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"\n    },\n    \"edge_active_failure\": null,\n    \"required_next_tool\": null,\n    \"suspect_blocks\": [\n      {\n        \"id\": \"A2\",\n        \"kind\": \"always\",\n        \"clocking\": \"seq\",\n        \"writes\": [\n          \"Bd_isr_enable_reg\",\n          \"Bd_isr_reset\",\n          \"argument_reg\",\n          \"bd_high_word\",\n          \"bd_state\",\n          \"clock_divider\",\n          \"cmd_int_busy\",\n          \"cmd_setting_reg\",\n          \"dat_in_m_rx_bd\",\n          \"dat_in_m_tx_bd\",\n          \"error_int_signal_enable_reg\",\n          \"error_isr_reset\",\n          \"int_ack\",\n          \"int_busy\",\n          \"new_cmd\",\n          \"normal_int_signal_enable_reg\",\n          \"normal_isr_reset\",\n          \"software_reset_reg\",\n          \"time_out_reg\",\n          \"wb_ack_o\",\n          \"wb_dat_o\",\n          \"we_ack\",\n          \"we_m_rx_bd\",\n          \"we_m_tx_bd\"\n        ],\n        \"start_line\": 299,\n        \"end_line\": 355\n      }\n    ],\n    \"timing_hints\": null,\n    \"alignment_diagnosis\": null\n  },\n  \"last_divergence_summary\": {\n    \"status\": null,\n    \"sampling_mode\": null,\n    \"edge\": null,\n    \"driver_assignment_kind\": null,\n    \"first_divergence\": null,\n    \"candidate_signals\": null,\n    \"ignored_tb_metrics\": null,\n    \"suspect\": {\n      \"driver_blocks\": [],\n      \"signals\": [],\n      \"hint\": null\n    }\n  },\n  \"repair_ledger\": [\n    {\n      \"step\": 2,\n      \"action_type\": \"apply_patch\",\n      \"block_id\": null,\n      \"target\": {\n        \"path\": \"/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv\",\n        \"start_line\": 227,\n        \"end_line\": 233\n      },\n      \"affected_signals\": [\n        \"time_out_reg_next\"\n      ],\n      \"effect\": \"improved\",\n      \"metric_delta\": {\n        \"total_samples_mismatch\": \"9390 -> 9340\",\n        \"per_signal\": {\n          \"Bd_isr_enable_reg\": {\n            \"before\": 830,\n            \"after\": 830,\n            \"first_time_before\": 4420,\n            \"first_time_after\": 4420,\n            \"direction\": \"unchanged\"\n          },\n          \"Bd_isr_reset\": {\n            \"before\": 154,\n            \"after\": 154,\n            \"first_time_before\": 5450,\n            \"first_time_after\": 5450,\n            \"direction\": \"unchanged\"\n          },\n          \"argument_reg\": {\n            \"before\": 3564,\n            \"after\": 3564,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"unchanged\"\n          },\n          \"clock_divider\": {\n            \"before\": 1290,\n            \"after\": 1290,\n            \"first_time_before\": 430,\n            \"first_time_after\": 430,\n            \"direction\": \"unchanged\"\n          },\n          \"cmd_int_busy\": {\n            \"before\": 1880,\n            \"after\": 1880,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"unchanged\"\n          },\n          \"cmd_setting_reg\": {\n            \"before\": 3522,\n            \"after\": 3522,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"unchanged\"\n          },\n          \"dat_in_m_rx_bd\": {\n            \"before\": 572,\n            \"after\": 572,\n            \"first_time_before\": 470,\n            \"first_time_after\": 470,\n            \"direction\": \"unchanged\"\n          },\n          \"dat_in_m_tx_bd\": {\n            \"before\": 940,\n            \"after\": 940,\n            \"first_time_before\": 480,\n            \"first_time_after\": 480,\n            \"direction\": \"unchanged\"\n          },\n          \"error_int_signal_enable_reg\": {\n            \"before\": 1872,\n            \"after\": 1872,\n            \"first_time_before\": 410,\n            \"first_time_after\": 410,\n            \"direction\": \"unchanged\"\n          },\n          \"error_isr_reset\": {\n            \"before\": 142,\n            \"after\": 142,\n            \"first_time_before\": 12520,\n            \"first_time_after\": 12520,\n            \"direction\": \"unchanged\"\n          },\n          \"int_ack\": {\n            \"before\": 72,\n            \"after\": 72,\n            \"first_time_before\": 480,\n            \"first_time_after\": 480,\n            \"direction\": \"unchanged\"\n          },\n          \"int_busy\": {\n            \"before\": 192,\n            \"after\": 192,\n            \"first_time_before\": 4400,\n            \"first_time_after\": 4400,\n            \"direction\": \"unchanged\"\n          },\n          \"new_cmd\": {\n            \"before\": 2962,\n            \"after\": 2962,\n            \"first_time_before\": 820,\n            \"first_time_after\": 820,\n            \"direction\": \"unchanged\"\n          },\n          \"normal_int_signal_enable_reg\": {\n            \"before\": 1824,\n            \"after\": 1824,\n            \"first_time_before\": 400,\n            \"first_time_after\": 400,\n            \"direction\": \"unchanged\"\n          },\n          \"normal_isr_reset\": {\n            \"before\": 124,\n            \"after\": 124,\n            \"first_time_before\": 3790,\n            \"first_time_after\": 3790,\n            \"direction\": \"unchanged\"\n          },\n          \"software_reset_reg\": {\n            \"before\": 670,\n            \"after\": 670,\n            \"first_time_before\": 4280,\n            \"first_time_after\": 4280,\n            \"direction\": \"unchanged\"\n          },\n          \"time_out_reg\": {\n            \"before\": 1860,\n            \"after\": 580,\n            \"first_time_before\": 370,\n            \"first_time_after\": 8580,\n            \"direction\": \"improved\"\n          },\n          \"wb_ack_o\": {\n            \"before\": 44,\n            \"after\": 44,\n            \"first_time_before\": 480,\n            \"first_time_after\": 480,\n            \"direction\": \"unchanged\"\n          },\n          \"wb_dat_o\": {\n            \"before\": 5278,\n            \"after\": 5266,\n            \"first_time_before\": 570,\n            \"first_time_after\": 600,\n            \"direction\": \"improved\"\n          },\n          \"we_ack\": {\n            \"before\": 1880,\n            \"after\": 1880,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"unchanged\"\n          },\n          \"we_m_rx_bd\": {\n            \"before\": 114,\n            \"after\": 114,\n            \"first_time_before\": 470,\n            \"first_time_after\": 470,\n            \"direction\": \"unchanged\"\n          },\n          \"we_m_tx_bd\": {\n            \"before\": 142,\n            \"after\": 142,\n            \"first_time_before\": 480,\n            \"first_time_after\": 480,\n            \"direction\": \"unchanged\"\n          }\n        }\n      },\n      \"lesson\": \"Patch improved mismatch count or first fail time; continue from this direction.\",\n      \"hypothesis\": \"Causal diagnosis: the timeout register write path incorrectly applies wb_sel_i byte enables even though the spec says wb_sel_i is not used by this module's register writes and the reference captures the full low 16 bits. At t=365 an active write to 8'h2c with wb_dat_i[15:0]=16'h3bfd leaves DUT low byte stale at 0 because wb_sel_i[0] is not asserted, producing 16'h3b00 instead of the reference 16'h3bfd. Expected effect: time_out_reg should update to 16'h3bfd on the t=365 timeout write, removing the current first divergence while preserving other register/control behavior.\",\n      \"patch_summary\": \"end else if (addr_timeout) begin time_out_reg_next = wb_dat_i[15:0];\",\n      \"protect\": [\n        \"Preserve improved behavior for signals: time_out_reg_next.\"\n      ]\n    },\n    {\n      \"step\": 3,\n      \"action_type\": \"apply_patch\",\n      \"block_id\": null,\n      \"target\": {\n        \"path\": \"/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv\",\n        \"start_line\": 233,\n        \"end_line\": 239\n      },\n      \"affected_signals\": [\n        \"normal_int_signal_enable_reg_next\"\n      ],\n      \"effect\": \"improved\",\n      \"metric_delta\": {\n        \"total_samples_mismatch\": \"9340 -> 9276\",\n        \"per_signal\": {\n          \"Bd_isr_enable_reg\": {\n            \"before\": 830,\n            \"after\": 830,\n            \"first_time_before\": 4420,\n            \"first_time_after\": 4420,\n            \"direction\": \"unchanged\"\n          },\n          \"Bd_isr_reset\": {\n            \"before\": 154,\n            \"after\": 154,\n            \"first_time_before\": 5450,\n            \"first_time_after\": 5450,\n            \"direction\": \"unchanged\"\n          },\n          \"argument_reg\": {\n            \"before\": 3564,\n            \"after\": 3564,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"unchanged\"\n          },\n          \"clock_divider\": {\n            \"before\": 1290,\n            \"after\": 1290,\n            \"first_time_before\": 430,\n            \"first_time_after\": 430,\n            \"direction\": \"unchanged\"\n          },\n          \"cmd_int_busy\": {\n            \"before\": 1880,\n            \"after\": 1880,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"unchanged\"\n          },\n          \"cmd_setting_reg\": {\n            \"before\": 3522,\n            \"after\": 3522,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"unchanged\"\n          },\n          \"dat_in_m_rx_bd\": {\n            \"before\": 572,\n            \"after\": 572,\n            \"first_time_before\": 470,\n            \"first_time_after\": 470,\n            \"direction\": \"unchanged\"\n          },\n          \"dat_in_m_tx_bd\": {\n            \"before\": 940,\n            \"after\": 940,\n            \"first_time_before\": 480,\n            \"first_time_after\": 480,\n            \"direction\": \"unchanged\"\n          },\n          \"error_int_signal_enable_reg\": {\n            \"before\": 1872,\n            \"after\": 1872,\n            \"first_time_before\": 410,\n            \"first_time_after\": 410,\n            \"direction\": \"unchanged\"\n          },\n          \"error_isr_reset\": {\n            \"before\": 142,\n            \"after\": 142,\n            \"first_time_before\": 12520,\n            \"first_time_after\": 12520,\n            \"direction\": \"unchanged\"\n          },\n          \"int_ack\": {\n            \"before\": 72,\n            \"after\": 72,\n            \"first_time_before\": 480,\n            \"first_time_after\": 480,\n            \"direction\": \"unchanged\"\n          },\n          \"int_busy\": {\n            \"before\": 192,\n            \"after\": 192,\n            \"first_time_before\": 4400,\n            \"first_time_after\": 4400,\n            \"direction\": \"unchanged\"\n          },\n          \"new_cmd\": {\n            \"before\": 2962,\n            \"after\": 2962,\n            \"first_time_before\": 820,\n            \"first_time_after\": 820,\n            \"direction\": \"unchanged\"\n          },\n          \"normal_int_signal_enable_reg\": {\n            \"before\": 1824,\n            \"after\": 462,\n            \"first_time_before\": 400,\n            \"first_time_after\": 7310,\n            \"direction\": \"improved\"\n          },\n          \"normal_isr_reset\": {\n            \"before\": 124,\n            \"after\": 124,\n            \"first_time_before\": 3790,\n            \"first_time_after\": 3790,\n            \"direction\": \"unchanged\"\n          },\n          \"software_reset_reg\": {\n            \"before\": 670,\n            \"after\": 670,\n            \"first_time_before\": 4280,\n            \"first_time_after\": 4280,\n            \"direction\": \"unchanged\"\n          },\n          \"time_out_reg\": {\n            \"before\": 580,\n            \"after\": 580,\n            \"first_time_before\": 8580,\n            \"first_time_after\": 8580,\n            \"direction\": \"unchanged\"\n          },\n          \"wb_ack_o\": {\n            \"before\": 44,\n            \"after\": 44,\n            \"first_time_before\": 480,\n            \"first_time_after\": 480,\n            \"direction\": \"unchanged\"\n          },\n          \"wb_dat_o\": {\n            \"before\": 5266,\n            \"after\": 5256,\n            \"first_time_before\": 600,\n            \"first_time_after\": 610,\n            \"direction\": \"improved\"\n          },\n          \"we_ack\": {\n            \"before\": 1880,\n            \"after\": 1880,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"unchanged\"\n          },\n          \"we_m_rx_bd\": {\n            \"before\": 114,\n            \"after\": 114,\n            \"first_time_before\": 470,\n            \"first_time_after\": 470,\n            \"direction\": \"unchanged\"\n          },\n          \"we_m_tx_bd\": {\n            \"before\": 142,\n            \"after\": 142,\n            \"first_time_before\": 480,\n            \"first_time_after\": 480,\n            \"direction\": \"unchanged\"\n          }\n        }\n      },\n      \"lesson\": \"Patch improved mismatch count or first fail time; continue from this direction.\",\n      \"hypothesis\": \"Causal diagnosis: normal_int_signal_enable_reg is late/wrong because the write branch incorrectly honors wb_sel_i. At t=395 an active write to 8'h38 with wb_dat_i[15:0]=16'h851e and wb_sel_i=4'b1100 is ignored by the DUT's wb_sel_i[1:0] gates, while the reference/spec captures the full 16-bit register value. Expected effect: normal_int_signal_enable_reg should update to 16'h851e on the t=395 write, eliminating the current first divergence without altering other registers or control strobes.\",\n      \"patch_summary\": \"end else if (addr_normal_int_enable) begin normal_int_signal_enable_reg_next = wb_dat_i[15:0];\",\n      \"protect\": [\n        \"Preserve improved behavior for signals: normal_int_signal_enable_reg_next.\"\n      ]\n    },\n    {\n      \"step\": 4,\n      \"action_type\": \"apply_patch\",\n      \"block_id\": null,\n      \"target\": {\n        \"path\": \"/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv\",\n        \"start_line\": 235,\n        \"end_line\": 241\n      },\n      \"affected_signals\": [\n        \"error_int_signal_enable_reg_next\"\n      ],\n      \"effect\": \"improved\",\n      \"metric_delta\": {\n        \"total_samples_mismatch\": \"9276 -> 9236\",\n        \"per_signal\": {\n          \"Bd_isr_enable_reg\": {\n            \"before\": 830,\n            \"after\": 830,\n            \"first_time_before\": 4420,\n            \"first_time_after\": 4420,\n            \"direction\": \"unchanged\"\n          },\n          \"Bd_isr_reset\": {\n            \"before\": 154,\n            \"after\": 154,\n            \"first_time_before\": 5450,\n            \"first_time_after\": 5450,\n            \"direction\": \"unchanged\"\n          },\n          \"argument_reg\": {\n            \"before\": 3564,\n            \"after\": 3564,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"unchanged\"\n          },\n          \"clock_divider\": {\n            \"before\": 1290,\n            \"after\": 1290,\n            \"first_time_before\": 430,\n            \"first_time_after\": 430,\n            \"direction\": \"unchanged\"\n          },\n          \"cmd_int_busy\": {\n            \"before\": 1880,\n            \"after\": 1880,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"unchanged\"\n          },\n          \"cmd_setting_reg\": {\n            \"before\": 3522,\n            \"after\": 3522,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"unchanged\"\n          },\n          \"dat_in_m_rx_bd\": {\n            \"before\": 572,\n            \"after\": 572,\n            \"first_time_before\": 470,\n            \"first_time_after\": 470,\n            \"direction\": \"unchanged\"\n          },\n          \"dat_in_m_tx_bd\": {\n            \"before\": 940,\n            \"after\": 940,\n            \"first_time_before\": 480,\n            \"first_time_after\": 480,\n            \"direction\": \"unchanged\"\n          },\n          \"error_int_signal_enable_reg\": {\n            \"before\": 1872,\n            \"after\": 526,\n            \"first_time_before\": 410,\n            \"first_time_after\": 3620,\n            \"direction\": \"improved\"\n          },\n          \"error_isr_reset\": {\n            \"before\": 142,\n            \"after\": 142,\n            \"first_time_before\": 12520,\n            \"first_time_after\": 12520,\n            \"direction\": \"unchanged\"\n          },\n          \"int_ack\": {\n            \"before\": 72,\n            \"after\": 72,\n            \"first_time_before\": 480,\n            \"first_time_after\": 480,\n            \"direction\": \"unchanged\"\n          },\n          \"int_busy\": {\n            \"before\": 192,\n            \"after\": 192,\n            \"first_time_before\": 4400,\n            \"first_time_after\": 4400,\n            \"direction\": \"unchanged\"\n          },\n          \"new_cmd\": {\n            \"before\": 2962,\n            \"after\": 2962,\n            \"first_time_before\": 820,\n            \"first_time_after\": 820,\n            \"direction\": \"unchanged\"\n          },\n          \"normal_int_signal_enable_reg\": {\n            \"before\": 462,\n            \"after\": 462,\n            \"first_time_before\": 7310,\n            \"first_time_after\": 7310,\n            \"direction\": \"unchanged\"\n          },\n          \"normal_isr_reset\": {\n            \"before\": 124,\n            \"after\": 124,\n            \"first_time_before\": 3790,\n            \"first_time_after\": 3790,\n            \"direction\": \"unchanged\"\n          },\n          \"software_reset_reg\": {\n            \"before\": 670,\n            \"after\": 670,\n            \"first_time_before\": 4280,\n            \"first_time_after\": 4280,\n            \"direction\": \"unchanged\"\n          },\n          \"time_out_reg\": {\n            \"before\": 580,\n            \"after\": 580,\n            \"first_time_before\": 8580,\n            \"first_time_after\": 8580,\n            \"direction\": \"unchanged\"\n          },\n          \"wb_ack_o\": {\n            \"before\": 44,\n            \"after\": 44,\n            \"first_time_before\": 480,\n            \"first_time_after\": 480,\n            \"direction\": \"unchanged\"\n          },\n          \"wb_dat_o\": {\n            \"before\": 5256,\n            \"after\": 5246,\n            \"first_time_before\": 610,\n            \"first_time_after\": 630,\n            \"direction\": \"improved\"\n          },\n          \"we_ack\": {\n            \"before\": 1880,\n            \"after\": 1880,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"unchanged\"\n          },\n          \"we_m_rx_bd\": {\n            \"before\": 114,\n            \"after\": 114,\n            \"first_time_before\": 470,\n            \"first_time_after\": 470,\n            \"direction\": \"unchanged\"\n          },\n          \"we_m_tx_bd\": {\n            \"before\": 142,\n            \"after\": 142,\n            \"first_time_before\": 480,\n            \"first_time_after\": 480,\n            \"direction\": \"unchanged\"\n          }\n        }\n      },\n      \"lesson\": \"Patch improved mismatch count or first fail time; continue from this direction.\",\n      \"hypothesis\": \"Causal diagnosis: error_int_signal_enable_reg is wrong because the write branch incorrectly honors wb_sel_i. At t=405 an active write to 8'h3c with wb_dat_i[15:0]=16'h999e and wb_sel_i=4'b1110 updates only the high byte in the DUT, while the reference/spec captures the full 16-bit value. Expected effect: error_int_signal_enable_reg should update to 16'h999e on the t=405 write, removing the current first divergence without changing other register or control behavior.\",\n      \"patch_summary\": \"end else if (addr_error_int_enable) begin error_int_signal_enable_reg_next = wb_dat_i[15:0];\",\n      \"protect\": [\n        \"Preserve improved behavior for signals: error_int_signal_enable_reg_next.\"\n      ]\n    },\n    {\n      \"step\": 5,\n      \"action_type\": \"apply_patch\",\n      \"block_id\": null,\n      \"target\": {\n        \"path\": \"/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv\",\n        \"start_line\": 237,\n        \"end_line\": 240\n      },\n      \"affected_signals\": [\n        \"clock_divider_next\"\n      ],\n      \"effect\": \"improved\",\n      \"metric_delta\": {\n        \"total_samples_mismatch\": \"9236 -> 9154\",\n        \"per_signal\": {\n          \"Bd_isr_enable_reg\": {\n            \"before\": 830,\n            \"after\": 830,\n            \"first_time_before\": 4420,\n            \"first_time_after\": 4420,\n            \"direction\": \"unchanged\"\n          },\n          \"Bd_isr_reset\": {\n            \"before\": 154,\n            \"after\": 154,\n            \"first_time_before\": 5450,\n            \"first_time_after\": 5450,\n            \"direction\": \"unchanged\"\n          },\n          \"argument_reg\": {\n            \"before\": 3564,\n            \"after\": 3564,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"unchanged\"\n          },\n          \"clock_divider\": {\n            \"before\": 1290,\n            \"after\": 422,\n            \"first_time_before\": 430,\n            \"first_time_after\": 3180,\n            \"direction\": \"improved\"\n          },\n          \"cmd_int_busy\": {\n            \"before\": 1880,\n            \"after\": 1880,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"unchanged\"\n          },\n          \"cmd_setting_reg\": {\n            \"before\": 3522,\n            \"after\": 3522,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"unchanged\"\n          },\n          \"dat_in_m_rx_bd\": {\n            \"before\": 572,\n            \"after\": 572,\n            \"first_time_before\": 470,\n            \"first_time_after\": 470,\n            \"direction\": \"unchanged\"\n          },\n          \"dat_in_m_tx_bd\": {\n            \"before\": 940,\n            \"after\": 940,\n            \"first_time_before\": 480,\n            \"first_time_after\": 480,\n            \"direction\": \"unchanged\"\n          },\n          \"error_int_signal_enable_reg\": {\n            \"before\": 526,\n            \"after\": 526,\n            \"first_time_before\": 3620,\n            \"first_time_after\": 3620,\n            \"direction\": \"unchanged\"\n          },\n          \"error_isr_reset\": {\n            \"before\": 142,\n            \"after\": 142,\n            \"first_time_before\": 12520,\n            \"first_time_after\": 12520,\n            \"direction\": \"unchanged\"\n          },\n          \"int_ack\": {\n            \"before\": 72,\n            \"after\": 72,\n            \"first_time_before\": 480,\n            \"first_time_after\": 480,\n            \"direction\": \"unchanged\"\n          },\n          \"int_busy\": {\n            \"before\": 192,\n            \"after\": 192,\n            \"first_time_before\": 4400,\n            \"first_time_after\": 4400,\n            \"direction\": \"unchanged\"\n          },\n          \"new_cmd\": {\n            \"before\": 2962,\n            \"after\": 2962,\n            \"first_time_before\": 820,\n            \"first_time_after\": 820,\n            \"direction\": \"unchanged\"\n          },\n          \"normal_int_signal_enable_reg\": {\n            \"before\": 462,\n            \"after\": 462,\n            \"first_time_before\": 7310,\n            \"first_time_after\": 7310,\n            \"direction\": \"unchanged\"\n          },\n          \"normal_isr_reset\": {\n            \"before\": 124,\n            \"after\": 124,\n            \"first_time_before\": 3790,\n            \"first_time_after\": 3790,\n            \"direction\": \"unchanged\"\n          },\n          \"software_reset_reg\": {\n            \"before\": 670,\n            \"after\": 670,\n            \"first_time_before\": 4280,\n            \"first_time_after\": 4280,\n            \"direction\": \"unchanged\"\n          },\n          \"time_out_reg\": {\n            \"before\": 580,\n            \"after\": 580,\n            \"first_time_before\": 8580,\n            \"first_time_after\": 8580,\n            \"direction\": \"unchanged\"\n          },\n          \"wb_ack_o\": {\n            \"before\": 44,\n            \"after\": 44,\n            \"first_time_before\": 480,\n            \"first_time_after\": 480,\n            \"direction\": \"unchanged\"\n          },\n          \"wb_dat_o\": {\n            \"before\": 5246,\n            \"after\": 5236,\n            \"first_time_before\": 630,\n            \"first_time_after\": 670,\n            \"direction\": \"improved\"\n          },\n          \"we_ack\": {\n            \"before\": 1880,\n            \"after\": 1880,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"unchanged\"\n          },\n          \"we_m_rx_bd\": {\n            \"before\": 114,\n            \"after\": 114,\n            \"first_time_before\": 470,\n            \"first_time_after\": 470,\n            \"direction\": \"unchanged\"\n          },\n          \"we_m_tx_bd\": {\n            \"before\": 142,\n            \"after\": 142,\n            \"first_time_before\": 480,\n            \"first_time_after\": 480,\n            \"direction\": \"unchanged\"\n          }\n        }\n      },\n      \"lesson\": \"Patch improved mismatch count or first fail time; continue from this direction.\",\n      \"hypothesis\": \"Causal diagnosis: the current first divergence is caused by the clock divider write branch still honoring wb_sel_i[0]. The RealBench reference captures wb_dat_i[7:0]=8'h63 at t=425 on an active write to 8'h4c, while the DUT remains at reset because wb_sel_i[0] blocks the update. Spec S005 defines Clock Divider as an 8-bit RW register at 0x4c, and previous successful repairs established full write semantics for similar registers. Expected effect: At t=425 clock_divider_next should become 8'h63 and the registered clock_divider should match the reference, removing the current first divergence and reducing clock_divider/wb_dat_o mismatches without affecting other register/control paths.\",\n      \"patch_summary\": \"end else if (addr_clock_divider) begin clock_divider_next = wb_dat_i[7:0];\",\n      \"protect\": [\n        \"Preserve improved behavior for signals: clock_divider_next.\"\n      ]\n    },\n    {\n      \"step\": 6,\n      \"action_type\": \"apply_patch\",\n      \"block_id\": null,\n      \"target\": {\n        \"path\": \"/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv\",\n        \"start_line\": 248,\n        \"end_line\": 275\n      },\n      \"affected_signals\": [\n        \"bd_high_word_next\",\n        \"bd_state_next\",\n        \"dat_in_m_rx_bd_next\",\n        \"dat_in_m_tx_bd_next\",\n        \"int_ack_next\",\n        \"we_m_rx_bd_next\",\n        \"we_m_tx_bd_next\"\n      ],\n      \"effect\": \"improved\",\n      \"metric_delta\": {\n        \"total_samples_mismatch\": \"9154 -> 9138\",\n        \"per_signal\": {\n          \"Bd_isr_enable_reg\": {\n            \"before\": 830,\n            \"after\": 830,\n            \"first_time_before\": 4420,\n            \"first_time_after\": 4420,\n            \"direction\": \"unchanged\"\n          },\n          \"Bd_isr_reset\": {\n            \"before\": 154,\n            \"after\": 154,\n            \"first_time_before\": 5450,\n            \"first_time_after\": 5450,\n            \"direction\": \"unchanged\"\n          },\n          \"argument_reg\": {\n            \"before\": 3564,\n            \"after\": 3564,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"unchanged\"\n          },\n          \"clock_divider\": {\n            \"before\": 422,\n            \"after\": 422,\n            \"first_time_before\": 3180,\n            \"first_time_after\": 3180,\n            \"direction\": \"unchanged\"\n          },\n          \"cmd_int_busy\": {\n            \"before\": 1880,\n            \"after\": 1880,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"unchanged\"\n          },\n          \"cmd_setting_reg\": {\n            \"before\": 3522,\n            \"after\": 3522,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"unchanged\"\n          },\n          \"dat_in_m_rx_bd\": {\n            \"before\": 572,\n            \"after\": 496,\n            \"first_time_before\": 470,\n            \"first_time_after\": 3010,\n            \"direction\": \"improved\"\n          },\n          \"dat_in_m_tx_bd\": {\n            \"before\": 940,\n            \"after\": 818,\n            \"first_time_before\": 480,\n            \"first_time_after\": 490,\n            \"direction\": \"improved\"\n          },\n          \"error_int_signal_enable_reg\": {\n            \"before\": 526,\n            \"after\": 526,\n            \"first_time_before\": 3620,\n            \"first_time_after\": 3620,\n            \"direction\": \"unchanged\"\n          },\n          \"error_isr_reset\": {\n            \"before\": 142,\n            \"after\": 142,\n            \"first_time_before\": 12520,\n            \"first_time_after\": 12520,\n            \"direction\": \"unchanged\"\n          },\n          \"int_ack\": {\n            \"before\": 72,\n            \"after\": 70,\n            \"first_time_before\": 480,\n            \"first_time_after\": 3260,\n            \"direction\": \"improved\"\n          },\n          \"int_busy\": {\n            \"before\": 192,\n            \"after\": 192,\n            \"first_time_before\": 4400,\n            \"first_time_after\": 4400,\n            \"direction\": \"unchanged\"\n          },\n          \"new_cmd\": {\n            \"before\": 2962,\n            \"after\": 2962,\n            \"first_time_before\": 820,\n            \"first_time_after\": 820,\n            \"direction\": \"unchanged\"\n          },\n          \"normal_int_signal_enable_reg\": {\n            \"before\": 462,\n            \"after\": 462,\n            \"first_time_before\": 7310,\n            \"first_time_after\": 7310,\n            \"direction\": \"unchanged\"\n          },\n          \"normal_isr_reset\": {\n            \"before\": 124,\n            \"after\": 124,\n            \"first_time_before\": 3790,\n            \"first_time_after\": 3790,\n            \"direction\": \"unchanged\"\n          },\n          \"software_reset_reg\": {\n            \"before\": 670,\n            \"after\": 670,\n            \"first_time_before\": 4280,\n            \"first_time_after\": 4280,\n            \"direction\": \"unchanged\"\n          },\n          \"time_out_reg\": {\n            \"before\": 580,\n            \"after\": 580,\n            \"first_time_before\": 8580,\n            \"first_time_after\": 8580,\n            \"direction\": \"unchanged\"\n          },\n          \"wb_ack_o\": {\n            \"before\": 44,\n            \"after\": 2,\n            \"first_time_before\": 480,\n            \"first_time_after\": 29330,\n            \"direction\": \"improved\"\n          },\n          \"wb_dat_o\": {\n            \"before\": 5236,\n            \"after\": 5236,\n            \"first_time_before\": 670,\n            \"first_time_after\": 670,\n            \"direction\": \"unchanged\"\n          },\n          \"we_ack\": {\n            \"before\": 1880,\n            \"after\": 1880,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"unchanged\"\n          },\n          \"we_m_rx_bd\": {\n            \"before\": 114,\n            \"after\": 24,\n            \"first_time_before\": 470,\n            \"first_time_after\": 3310,\n            \"direction\": \"improved\"\n          },\n          \"we_m_tx_bd\": {\n            \"before\": 142,\n            \"after\": 12,\n            \"first_time_before\": 480,\n            \"first_time_after\": 4670,\n            \"direction\": \"improved\"\n          }\n        }\n      },\n      \"lesson\": \"Patch improved mismatch count or first fail time; continue from this direction.\",\n      \"hypothesis\": \"Causal diagnosis: the BD RX/TX state machine is using a transaction-type state and emits data/strobe on the first BD write, but the RealBench reference uses a shared 2-bit phase counter for RAM_MEM_WIDTH_16. On phase 00 it suppresses we_m_* and data while holding int_ack low; on phase 01 it writes current wb_dat_i[15:0]; on phase 10 it writes current wb_dat_i[31:16]; on phase 11 it releases int_ac\\n...<snip>...\\n DUT drove dat_in_m_rx_bd=16'hbe6f and we_m_rx_bd=1 while the reference kept both inactive. Expected effect: The first BD RX access at t=465 should no longer drive dat_in_m_rx_bd/we_m_rx_bd, matching the reference. Subsequent BD accesses should use the current address and phase to drive low/high words, improving dat_in_m_rx_bd/we_m_rx_bd/we_m_tx_bd timing without changing non-BD register behavior.\",\n      \"patch_summary\": \"if (wb_write_access && (addr_bd_rx || addr_bd_tx)) begin bd_state_next = bd_state + 2'b01;\\n...<snip>...\\ndr_bd_rx) begin we_m_rx_bd_next = 1'b0; end else begin we_m_tx_bd_next = 1'b0; end end end\",\n      \"protect\": [\n        \"Preserve improved behavior for signals: bd_high_word_next, bd_state_next, dat_in_m_rx_bd_next, dat_in_m_tx_bd_next, int_ack_next, we_m_rx_bd_next, we_m_tx_bd_next.\"\n      ]\n    },\n    {\n      \"step\": 7,\n      \"action_type\": \"apply_patch\",\n      \"block_id\": null,\n      \"target\": {\n        \"path\": \"/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv\",\n        \"start_line\": 168,\n        \"end_line\": 169\n      },\n      \"affected_signals\": [\n        \"dat_in_m_rx_bd_next\",\n        \"dat_in_m_tx_bd_next\"\n      ],\n      \"effect\": \"improved\",\n      \"metric_delta\": {\n        \"total_samples_mismatch\": \"9138 -> 8920\",\n        \"per_signal\": {\n          \"Bd_isr_enable_reg\": {\n            \"before\": 830,\n            \"after\": 830,\n            \"first_time_before\": 4420,\n            \"first_time_after\": 4420,\n            \"direction\": \"unchanged\"\n          },\n          \"Bd_isr_reset\": {\n            \"before\": 154,\n            \"after\": 154,\n            \"first_time_before\": 5450,\n            \"first_time_after\": 5450,\n            \"direction\": \"unchanged\"\n          },\n          \"argument_reg\": {\n            \"before\": 3564,\n            \"after\": 3564,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"unchanged\"\n          },\n          \"clock_divider\": {\n            \"before\": 422,\n            \"after\": 422,\n            \"first_time_before\": 3180,\n            \"first_time_after\": 3180,\n            \"direction\": \"unchanged\"\n          },\n          \"cmd_int_busy\": {\n            \"before\": 1880,\n            \"after\": 1880,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"unchanged\"\n          },\n          \"cmd_setting_reg\": {\n            \"before\": 3522,\n            \"after\": 3522,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"unchanged\"\n          },\n          \"dat_in_m_rx_bd\": {\n            \"before\": 496,\n            \"after\": 462,\n            \"first_time_before\": 3010,\n            \"first_time_after\": 3310,\n            \"direction\": \"improved\"\n          },\n          \"dat_in_m_tx_bd\": {\n            \"before\": 818,\n            \"after\": 206,\n            \"first_time_before\": 490,\n            \"first_time_after\": 4670,\n            \"direction\": \"improved\"\n          },\n          \"error_int_signal_enable_reg\": {\n            \"before\": 526,\n            \"after\": 526,\n            \"first_time_before\": 3620,\n            \"first_time_after\": 3620,\n            \"direction\": \"unchanged\"\n          },\n          \"error_isr_reset\": {\n            \"before\": 142,\n            \"after\": 142,\n            \"first_time_before\": 12520,\n            \"first_time_after\": 12520,\n            \"direction\": \"unchanged\"\n          },\n          \"int_ack\": {\n            \"before\": 70,\n            \"after\": 70,\n            \"first_time_before\": 3260,\n            \"first_time_after\": 3260,\n            \"direction\": \"unchanged\"\n          },\n          \"int_busy\": {\n            \"before\": 192,\n            \"after\": 192,\n            \"first_time_before\": 4400,\n            \"first_time_after\": 4400,\n            \"direction\": \"unchanged\"\n          },\n          \"new_cmd\": {\n            \"before\": 2962,\n            \"after\": 2962,\n            \"first_time_before\": 820,\n            \"first_time_after\": 820,\n            \"direction\": \"unchanged\"\n          },\n          \"normal_int_signal_enable_reg\": {\n            \"before\": 462,\n            \"after\": 462,\n            \"first_time_before\": 7310,\n            \"first_time_after\": 7310,\n            \"direction\": \"unchanged\"\n          },\n          \"normal_isr_reset\": {\n            \"before\": 124,\n            \"after\": 124,\n            \"first_time_before\": 3790,\n            \"first_time_after\": 3790,\n            \"direction\": \"unchanged\"\n          },\n          \"software_reset_reg\": {\n            \"before\": 670,\n            \"after\": 670,\n            \"first_time_before\": 4280,\n            \"first_time_after\": 4280,\n            \"direction\": \"unchanged\"\n          },\n          \"time_out_reg\": {\n            \"before\": 580,\n            \"after\": 580,\n            \"first_time_before\": 8580,\n            \"first_time_after\": 8580,\n            \"direction\": \"unchanged\"\n          },\n          \"wb_ack_o\": {\n            \"before\": 2,\n            \"after\": 2,\n            \"first_time_before\": 29330,\n            \"first_time_after\": 29330,\n            \"direction\": \"unchanged\"\n          },\n          \"wb_dat_o\": {\n            \"before\": 5236,\n            \"after\": 5236,\n            \"first_time_before\": 670,\n            \"first_time_after\": 670,\n            \"direction\": \"unchanged\"\n          },\n          \"we_ack\": {\n            \"before\": 1880,\n            \"after\": 1880,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"unchanged\"\n          },\n          \"we_m_rx_bd\": {\n            \"before\": 24,\n            \"after\": 24,\n            \"first_time_before\": 3310,\n            \"first_time_after\": 3310,\n            \"direction\": \"unchanged\"\n          },\n          \"we_m_tx_bd\": {\n            \"before\": 12,\n            \"after\": 12,\n            \"first_time_before\": 4670,\n            \"first_time_after\": 4670,\n            \"direction\": \"unchanged\"\n          }\n        }\n      },\n      \"lesson\": \"Patch improved mismatch count or first fail time; continue from this direction.\",\n      \"hypothesis\": \"Causal diagnosis: dat_in_m_tx_bd is being cleared by the combinational default on every non-BD cycle. The first divergence after the BD phase repair is at t=485, where the reference holds the last BD TX data word 16'hfef7 after the strobe deasserts, but the DUT has advanced dat_in_m_tx_bd_next=0 from the default and registers zero. The reference support only resets dat_in_m_* on wb_rst_i and otherwise leaves them unchanged when no BD data assignment occurs. Expected effect: dat_in_m_tx_bd should hold 16'hfef7 after the t=475 BD TX write, removing the t=485 divergence. dat_in_m_rx_bd should similarly hold its last descriptor word. Strobes we_m_rx_bd/we_m_tx_bd remain one-cycle/default-low according to the existing BD phase repair.\",\n      \"patch_summary\": \"dat_in_m_tx_bd_next               = dat_in_m_tx_bd; dat_in_m_rx_bd_next               = dat_in_m_rx_bd;\",\n      \"protect\": [\n        \"Preserve improved behavior for signals: dat_in_m_rx_bd_next, dat_in_m_tx_bd_next.\"\n      ]\n    },\n    {\n      \"step\": 8,\n      \"action_type\": \"apply_patch\",\n      \"block_id\": null,\n      \"target\": {\n        \"path\": \"/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv\",\n        \"start_line\": 143,\n        \"end_line\": 156\n      },\n      \"affected_signals\": [\n        \"wb_dat_o_next\"\n      ],\n      \"effect\": \"improved\",\n      \"metric_delta\": {\n        \"total_samples_mismatch\": \"8920 -> 7686\",\n        \"per_signal\": {\n          \"Bd_isr_enable_reg\": {\n            \"before\": 830,\n            \"after\": 830,\n            \"first_time_before\": 4420,\n            \"first_time_after\": 4420,\n            \"direction\": \"unchanged\"\n          },\n          \"Bd_isr_reset\": {\n            \"before\": 154,\n            \"after\": 154,\n            \"first_time_before\": 5450,\n            \"first_time_after\": 5450,\n            \"direction\": \"unchanged\"\n          },\n          \"argument_reg\": {\n            \"before\": 3564,\n            \"after\": 3564,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"unchanged\"\n          },\n          \"clock_divider\": {\n            \"before\": 422,\n            \"after\": 422,\n            \"first_time_before\": 3180,\n            \"first_time_after\": 3180,\n            \"direction\": \"unchanged\"\n          },\n          \"cmd_int_busy\": {\n            \"before\": 1880,\n            \"after\": 1880,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"unchanged\"\n          },\n          \"cmd_setting_reg\": {\n            \"before\": 3522,\n            \"after\": 3522,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"unchanged\"\n          },\n          \"dat_in_m_rx_bd\": {\n            \"before\": 462,\n            \"after\": 462,\n            \"first_time_before\": 3310,\n            \"first_time_after\": 3310,\n            \"direction\": \"unchanged\"\n          },\n          \"dat_in_m_tx_bd\": {\n            \"before\": 206,\n            \"after\": 206,\n            \"first_time_before\": 4670,\n            \"first_time_after\": 4670,\n            \"direction\": \"unchanged\"\n          },\n          \"error_int_signal_enable_reg\": {\n            \"before\": 526,\n            \"after\": 526,\n            \"first_time_before\": 3620,\n            \"first_time_after\": 3620,\n            \"direction\": \"unchanged\"\n          },\n          \"error_isr_reset\": {\n            \"before\": 142,\n            \"after\": 142,\n            \"first_time_before\": 12520,\n            \"first_time_after\": 12520,\n            \"direction\": \"unchanged\"\n          },\n          \"int_ack\": {\n            \"before\": 70,\n            \"after\": 70,\n            \"first_time_before\": 3260,\n            \"first_time_after\": 3260,\n            \"direction\": \"unchanged\"\n          },\n          \"int_busy\": {\n            \"before\": 192,\n            \"after\": 192,\n            \"first_time_before\": 4400,\n            \"first_time_after\": 4400,\n            \"direction\": \"unchanged\"\n          },\n          \"new_cmd\": {\n            \"before\": 2962,\n            \"after\": 2962,\n            \"first_time_before\": 820,\n            \"first_time_after\": 820,\n            \"direction\": \"unchanged\"\n          },\n          \"normal_int_signal_enable_reg\": {\n            \"before\": 462,\n            \"after\": 462,\n            \"first_time_before\": 7310,\n            \"first_time_after\": 7310,\n            \"direction\": \"unchanged\"\n          },\n          \"normal_isr_reset\": {\n            \"before\": 124,\n            \"after\": 124,\n            \"first_time_before\": 3790,\n            \"first_time_after\": 3790,\n            \"direction\": \"unchanged\"\n          },\n          \"software_reset_reg\": {\n            \"before\": 670,\n            \"after\": 670,\n            \"first_time_before\": 4280,\n            \"first_time_after\": 4280,\n            \"direction\": \"unchanged\"\n          },\n          \"time_out_reg\": {\n            \"before\": 580,\n            \"after\": 580,\n            \"first_time_before\": 8580,\n            \"first_time_after\": 8580,\n            \"direction\": \"unchanged\"\n          },\n          \"wb_ack_o\": {\n            \"before\": 2,\n            \"after\": 2,\n            \"first_time_before\": 29330,\n            \"first_time_after\": 29330,\n            \"direction\": \"unchanged\"\n          },\n          \"wb_dat_o\": {\n            \"before\": 5236,\n            \"after\": 768,\n            \"first_time_before\": 670,\n            \"first_time_after\": 3640,\n            \"direction\": \"improved\"\n          },\n          \"we_ack\": {\n            \"before\": 1880,\n            \"after\": 1880,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"unchanged\"\n          },\n          \"we_m_rx_bd\": {\n            \"before\": 24,\n            \"after\": 24,\n            \"first_time_before\": 3310,\n            \"first_time_after\": 3310,\n            \"direction\": \"unchanged\"\n          },\n          \"we_m_tx_bd\": {\n            \"before\": 12,\n            \"after\": 12,\n            \"first_time_before\": 4670,\n            \"first_time_after\": 4670,\n            \"direction\": \"unchanged\"\n          }\n        }\n      },\n      \"lesson\": \"Patch improved mismatch count or first fail time; continue from this direction.\",\n      \"hypothesis\": \"Causal diagnosis: wb_dat_o is incorrectly cleared for unhandled/no-readback addresses because A1 defaults wb_dat_o_next to zero. The reference read-output always block has no default assignment and therefore holds the previous readback value when the address is BD RX/TX or when no decoded readback case applies. At t=665 the previous readback is 32'h63, but DUT drives 0 from the default. Since the new default depends on wb_dat_o, the combinational block must use complete sensitivity. Expected effect: At t=665, wb_dat_o_next should retain the previous 32'h00000063 on the BD RX access, so registered wb_dat_o matches the reference. This should reduce wb_dat_o mismatches without changing decoded readback values, reset branch behavior, register writes, or BD strobe/data timing.\",\n      \"patch_summary\": \"always @(*) begin; wb_dat_o_next                     = wb_dat_o;\",\n      \"protect\": [\n        \"Preserve improved behavior for signals: wb_dat_o_next.\"\n      ]\n    },\n    {\n      \"step\": 9,\n      \"action_type\": \"apply_patch\",\n      \"block_id\": null,\n      \"target\": {\n        \"path\": \"/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv\",\n        \"start_line\": 211,\n        \"end_line\": 214\n      },\n      \"affected_signals\": [\n        \"argument_reg_next\",\n        \"cmd_setting_reg_next\",\n        \"new_cmd_next\"\n      ],\n      \"effect\": \"improved\",\n      \"metric_delta\": {\n        \"total_samples_mismatch\": \"7686 -> 5906\",\n        \"per_signal\": {\n          \"Bd_isr_enable_reg\": {\n            \"before\": 830,\n            \"after\": 830,\n            \"first_time_before\": 4420,\n            \"first_time_after\": 4420,\n            \"direction\": \"unchanged\"\n          },\n          \"Bd_isr_reset\": {\n            \"before\": 154,\n            \"after\": 154,\n            \"first_time_before\": 5450,\n            \"first_time_after\": 5450,\n            \"direction\": \"unchanged\"\n          },\n          \"argument_reg\": {\n            \"before\": 3564,\n            \"after\": 3564,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"unchanged\"\n          },\n          \"clock_divider\": {\n            \"before\": 422,\n            \"after\": 422,\n            \"first_time_before\": 3180,\n            \"first_time_after\": 3180,\n            \"direction\": \"unchanged\"\n          },\n          \"cmd_int_busy\": {\n            \"before\": 1880,\n            \"after\": 1880,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"unchanged\"\n          },\n          \"cmd_setting_reg\": {\n            \"before\": 3522,\n            \"after\": 3522,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"unchanged\"\n          },\n          \"dat_in_m_rx_bd\": {\n            \"before\": 462,\n            \"after\": 462,\n            \"first_time_before\": 3310,\n            \"first_time_after\": 3310,\n            \"direction\": \"unchanged\"\n          },\n          \"dat_in_m_tx_bd\": {\n            \"before\": 206,\n            \"after\": 206,\n            \"first_time_before\": 4670,\n            \"first_time_after\": 4670,\n            \"direction\": \"unchanged\"\n          },\n          \"error_int_signal_enable_reg\": {\n            \"before\": 526,\n            \"after\": 526,\n            \"first_time_before\": 3620,\n            \"first_time_after\": 3620,\n            \"direction\": \"unchanged\"\n          },\n          \"error_isr_reset\": {\n            \"before\": 142,\n            \"after\": 142,\n            \"first_time_before\": 12520,\n            \"first_time_after\": 12520,\n            \"direction\": \"unchanged\"\n          },\n          \"int_ack\": {\n            \"before\": 70,\n            \"after\": 70,\n            \"first_time_before\": 3260,\n            \"first_time_after\": 3260,\n            \"direction\": \"unchanged\"\n          },\n          \"int_busy\": {\n            \"before\": 192,\n            \"after\": 192,\n            \"first_time_before\": 4400,\n            \"first_time_after\": 4400,\n            \"direction\": \"unchanged\"\n          },\n          \"new_cmd\": {\n            \"before\": 2962,\n            \"after\": 1846,\n            \"first_time_before\": 820,\n            \"first_time_after\": 2610,\n            \"direction\": \"improved\"\n          },\n          \"normal_int_signal_enable_reg\": {\n            \"before\": 462,\n            \"after\": 462,\n            \"first_time_before\": 7310,\n            \"first_time_after\": 7310,\n            \"direction\": \"unchanged\"\n          },\n          \"normal_isr_reset\": {\n            \"before\": 124,\n            \"after\": 124,\n            \"first_time_before\": 3790,\n            \"first_time_after\": 3790,\n            \"direction\": \"unchanged\"\n          },\n          \"software_reset_reg\": {\n            \"before\": 670,\n            \"after\": 670,\n            \"first_time_before\": 4280,\n            \"first_time_after\": 4280,\n            \"direction\": \"unchanged\"\n          },\n          \"time_out_reg\": {\n            \"before\": 580,\n            \"after\": 580,\n            \"first_time_before\": 8580,\n            \"first_time_after\": 8580,\n            \"direction\": \"unchanged\"\n          },\n          \"wb_ack_o\": {\n            \"before\": 2,\n            \"after\": 2,\n            \"first_time_before\": 29330,\n            \"first_time_after\": 29330,\n            \"direction\": \"unchanged\"\n          },\n          \"wb_dat_o\": {\n            \"before\": 768,\n            \"after\": 768,\n            \"first_time_before\": 3640,\n            \"first_time_after\": 3640,\n            \"direction\": \"unchanged\"\n          },\n          \"we_ack\": {\n            \"before\": 1880,\n            \"after\": 1880,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"unchanged\"\n          },\n          \"we_m_rx_bd\": {\n            \"before\": 24,\n            \"after\": 24,\n            \"first_time_before\": 3310,\n            \"first_time_after\": 3310,\n            \"direction\": \"unchanged\"\n          },\n          \"we_m_tx_bd\": {\n            \"before\": 12,\n            \"after\": 12,\n            \"first_time_before\": 4670,\n            \"first_time_after\": 4670,\n            \"direction\": \"unchanged\"\n          }\n        }\n      },\n      \"lesson\": \"Patch improved mismatch count or first fail time; continue from this direction.\",\n      \"hypothesis\": \"Causal diagnosis: the current first divergence is new_cmd at t=815. During a write_req_s command handoff, the reference asserts new_cmd along with we_ack/cmd_int_busy and updates argument_reg/cmd_setting_reg. The DUT already matches we_ack and cmd_int_busy via defaults and updates argument/cmd settings, but leaves new_cmd_next at its default 0 because the write_req_s block omits the new_cmd assertion. Expected effect: At t=815, new_cmd_next should assert with write_req_s so registered new_cmd matches the reference. This should remove the current first divergence without changing Wishbone argument-write new_cmd behavior, command-setting int_busy behavior, readback/BD fixes, or reset behavior.\",\n      \"patch_summary\": \"if (write_req_s) begin argument_reg_next    = cmd_arg_s; cmd_setting_reg_next = cmd_set_s; new_cmd_next         = 1'b1; end\",\n      \"protect\": [\n        \"Preserve New_CMD sampling/reset-release timing behavior.\"\n      ]\n    },\n    {\n      \"step\": 10,\n      \"action_type\": \"apply_patch\",\n      \"block_id\": null,\n      \"target\": {\n        \"path\": \"/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv\",\n        \"start_line\": 217,\n        \"end_line\": 217\n      },\n      \"affected_signals\": [],\n      \"effect\": \"improved\",\n      \"metric_delta\": {\n        \"total_samples_mismatch\": \"5906 -> 4982\",\n        \"per_signal\": {\n          \"Bd_isr_enable_reg\": {\n            \"before\": 830,\n            \"after\": 628,\n            \"first_time_before\": 4420,\n            \"first_time_after\": 9080,\n            \"direction\": \"improved\"\n          },\n          \"Bd_isr_reset\": {\n            \"before\": 154,\n            \"after\": 112,\n            \"first_time_before\": 5450,\n            \"first_time_after\": 5460,\n            \"direction\": \"improved\"\n          },\n          \"argument_reg\": {\n            \"before\": 3564,\n            \"after\": 3504,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"improved\"\n          },\n          \"clock_divider\": {\n            \"before\": 422,\n            \"after\": null,\n            \"first_time_before\": 3180,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"cmd_int_busy\": {\n            \"before\": 1880,\n            \"after\": 1880,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"unchanged\"\n          },\n          \"cmd_setting_reg\": {\n            \"before\": 3522,\n            \"after\": 3484,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"improved\"\n          },\n          \"dat_in_m_rx_bd\": {\n            \"before\": 462,\n            \"after\": 462,\n            \"first_time_before\": 3310,\n            \"first_time_after\": 3310,\n            \"direction\": \"unchanged\"\n          },\n          \"dat_in_m_tx_bd\": {\n            \"before\": 206,\n            \"after\": 206,\n            \"first_time_before\": 4670,\n            \"first_time_after\": 4670,\n            \"direction\": \"unchanged\"\n          },\n          \"error_int_signal_enable_reg\": {\n            \"before\": 526,\n            \"after\": null,\n            \"first_time_before\": 3620,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"error_isr_reset\": {\n            \"before\": 142,\n            \"after\": 112,\n            \"first_time_before\": 12520,\n            \"first_time_after\": 17290,\n            \"direction\": \"improved\"\n          },\n          \"int_ack\": {\n            \"before\": 70,\n            \"after\": 70,\n            \"first_time_before\": 3260,\n            \"first_time_after\": 3260,\n            \"direction\": \"unchanged\"\n          },\n          \"int_busy\": {\n            \"before\": 192,\n            \"after\": null,\n            \"first_time_before\": 4400,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"new_cmd\": {\n            \"before\": 1846,\n            \"after\": 1826,\n            \"first_time_before\": 2610,\n            \"first_time_after\": 2880,\n            \"direction\": \"improved\"\n          },\n          \"normal_int_signal_enable_reg\": {\n            \"before\": 462,\n            \"after\": null,\n            \"first_time_before\": 7310,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"normal_isr_reset\": {\n            \"before\": 124,\n            \"after\": 94,\n            \"first_time_before\": 3790,\n            \"first_time_after\": 3800,\n            \"direction\": \"improved\"\n          },\n          \"software_reset_reg\": {\n            \"before\": 670,\n            \"after\": 620,\n            \"first_time_before\": 4280,\n            \"first_time_after\": 4280,\n            \"direction\": \"improved\"\n          },\n          \"time_out_reg\": {\n            \"before\": 580,\n            \"after\": 26,\n            \"first_time_before\": 8580,\n            \"first_time_after\": 12670,\n            \"direction\": \"improved\"\n          },\n          \"wb_ack_o\": {\n            \"before\": 2,\n            \"after\": 2,\n            \"first_time_before\": 29330,\n            \"first_time_after\": 29330,\n            \"direction\": \"unchanged\"\n          },\n          \"wb_dat_o\": {\n            \"before\": 768,\n            \"after\": 546,\n            \"first_time_before\": 3640,\n            \"first_time_after\": 3900,\n            \"direction\": \"improved\"\n          },\n          \"we_ack\": {\n            \"before\": 1880,\n            \"after\": 1880,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 2880,\n            \"direction\": \"unchanged\"\n          },\n          \"we_m_rx_bd\": {\n            \"before\": 24,\n            \"after\": 24,\n            \"first_time_before\": 3310,\n            \"first_time_after\": 3310,\n            \"direction\": \"unchanged\"\n          },\n          \"we_m_tx_bd\": {\n            \"before\": 12,\n            \"after\": 12,\n            \"first_time_before\": 4670,\n            \"first_time_after\": 4670,\n            \"direction\": \"unchanged\"\n          }\n        }\n      },\n      \"lesson\": \"Patch improved mismatch count or first fail time; continue from this direction.\",\n      \"hypothesis\": \"Causal diagnosis: the normal Wishbone write decode misses the reference's ack-tail semantics. The reference support wraps write cases in `if ((wb_stb_i & wb_cyc_i) || wb_ack_o)` and then tests `wb_we_i`, so an argument write reasserts new_cmd for the cycle after wb_ack_o was high. The DUT gates writes only with current `wb_write_access`, so at t=2605 after an argument write it clears new_cmd while the reference still asserts it. Expected effect: The argument write branch should execute on the wb_ack_o tail cycle, keeping new_cmd high at t=2605 like the reference. Other normal register writes should also match the reference's ack-tail update semantics, while int_ack continues to block writes during BD delayed-ack sequences.\",\n      \"patch_summary\": \"if (((wb_access || wb_ack_o) && wb_we_i) && int_ack) begin\",\n      \"protect\": [\n        \"Preserve New_CMD sampling/reset-release timing behavior.\"\n      ]\n    },\n    {\n      \"step\": 11,\n      \"action_type\": \"apply_patch\",\n      \"block_id\": null,\n      \"target\": {\n        \"path\": \"/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv\",\n        \"start_line\": 161,\n        \"end_line\": 215\n      },\n      \"affected_signals\": [\n        \"argument_reg_next\",\n        \"cmd_int_busy_next\",\n        \"cmd_setting_reg_next\",\n        \"int_ack_next\",\n        \"new_cmd_next\",\n        \"we_ack_next\"\n      ],\n      \"effect\": \"improved\",\n      \"metric_delta\": {\n        \"total_samples_mismatch\": \"4982 -> 2052\",\n        \"per_signal\": {\n          \"Bd_isr_enable_reg\": {\n            \"before\": 628,\n            \"after\": 628,\n            \"first_time_before\": 9080,\n            \"first_time_after\": 9080,\n            \"direction\": \"unchanged\"\n          },\n          \"Bd_isr_reset\": {\n            \"before\": 112,\n            \"after\": 112,\n            \"first_time_before\": 5460,\n            \"first_time_after\": 5460,\n            \"direction\": \"unchanged\"\n          },\n          \"argument_reg\": {\n            \"before\": 3504,\n            \"after\": 2,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 29340,\n            \"direction\": \"improved\"\n          },\n          \"cmd_int_busy\": {\n            \"before\": 1880,\n            \"after\": 2,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 29340,\n            \"direction\": \"improved\"\n          },\n          \"cmd_setting_reg\": {\n            \"before\": 3484,\n            \"after\": 2,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 29340,\n            \"direction\": \"improved\"\n          },\n          \"dat_in_m_rx_bd\": {\n            \"before\": 462,\n            \"after\": 462,\n            \"first_time_before\": 3310,\n            \"first_time_after\": 3310,\n            \"direction\": \"unchanged\"\n          },\n          \"dat_in_m_tx_bd\": {\n            \"before\": 206,\n            \"after\": 206,\n            \"first_time_before\": 4670,\n            \"first_time_after\": 4670,\n            \"direction\": \"unchanged\"\n          },\n          \"error_isr_reset\": {\n            \"before\": 112,\n            \"after\": 112,\n            \"first_time_before\": 17290,\n            \"first_time_after\": 17290,\n            \"direction\": \"unchanged\"\n          },\n          \"int_ack\": {\n            \"before\": 70,\n            \"after\": 70,\n            \"first_time_before\": 3260,\n            \"first_time_after\": 3260,\n            \"direction\": \"unchanged\"\n          },\n          \"new_cmd\": {\n            \"before\": 1826,\n            \"after\": 2,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 29340,\n            \"direction\": \"improved\"\n          },\n          \"normal_isr_reset\": {\n            \"before\": 94,\n            \"after\": 94,\n            \"first_time_before\": 3800,\n            \"first_time_after\": 3800,\n            \"direction\": \"unchanged\"\n          },\n          \"software_reset_reg\": {\n            \"before\": 620,\n            \"after\": 620,\n            \"first_time_before\": 4280,\n            \"first_time_after\": 4280,\n            \"direction\": \"unchanged\"\n          },\n          \"time_out_reg\": {\n            \"before\": 26,\n            \"after\": 26,\n            \"first_time_before\": 12670,\n            \"first_time_after\": 12670,\n            \"direction\": \"unchanged\"\n          },\n          \"wb_ack_o\": {\n            \"before\": 2,\n            \"after\": 2,\n            \"first_time_before\": 29330,\n            \"first_time_after\": 29330,\n            \"direction\": \"unchanged\"\n          },\n          \"wb_dat_o\": {\n            \"before\": 546,\n            \"after\": 162,\n            \"first_time_before\": 3900,\n            \"first_time_after\": 12050,\n            \"direction\": \"improved\"\n          },\n          \"we_ack\": {\n            \"before\": 1880,\n            \"after\": 2,\n            \"first_time_before\": 2880,\n            \"first_time_after\": 29340,\n            \"direction\": \"improved\"\n          },\n          \"we_m_rx_bd\": {\n            \"before\": 24,\n            \"after\": 24,\n            \"first_time_before\": 3310,\n            \"first_time_after\": 3310,\n            \"direction\": \"unchanged\"\n          },\n          \"we_m_tx_bd\": {\n            \"before\": 12,\n            \"after\": 12,\n            \"first_time_before\": 4670,\n            \"first_time_after\": 4670,\n            \"direction\": \"unchanged\"\n          }\n        }\n      },\n      \"lesson\": \"Patch improved mismatch count or first fail time; continue from this direction.\",\n      \"hypothesis\": \"Causal diagnosis: after fixing ack-tail writes, the current first divergence at t=2875 is caused by the write_req_s path running during an active Wishbone bus cycle. The reference support handles write_req_s only in an `else if` after `if ((wb_stb_i & wb_cyc_i) || wb_ack_o)`, so command-side updates/new_cmd/we_ack/cmd_int_busy are suppressed whenever bus access or ack-tail handling is active. Curr\\n...<snip>...\\nting in the write_req_s block, so it incorrectly overwrites the prior command at t=2875. Expected effect: At t=2875, with wb_access active, write_req_s should be ignored so argument_reg/cmd_setting_reg hold the reference values and new_cmd/we_ack/cmd_int_busy deassert. Idle write_req_s cycles such as the prior t=815 case should still assert new_cmd/we_ack/cmd_int_busy and load cmd_arg_s/cmd_set_s.\",\n      \"patch_summary\": \"we_ack_next                       = 1'b0; int_ack_next                      = 1'b1; cmd_int_busy_next                 = 1'b0;; if (write_req_s && !(wb_access || wb_ack_o)) begin argument_reg_next    = cmd_arg_s; cmd_s\\n...<snip>...\\nnew_cmd_next         = 1'b1; we_ack_next          = 1'b1; cmd_int_busy_next    = 1'b1; end\",\n      \"protect\": [\n        \"Preserve New_CMD sampling/reset-release timing behavior.\"\n      ]\n    }\n  ],\n  \"protected_invariants\": [\n    \"Preserve New_CMD sampling/reset-release timing behavior.\",\n    \"Do not reintroduce STATUS_REG[6:5] mirror/leak from internal status.\",\n    \"Preserve improved behavior for signals: wb_dat_o.\",\n    \"Preserve improved behavior for signals: cmd_setting_reg_next, int_busy_next.\",\n    \"Preserve improved behavior for signals: CONTROLLER_SETTING_RESET.\",\n    \"Preserve improved behavior for signals: time_out_reg_next.\",\n    \"Preserve improved behavior for signals: normal_int_signal_enable_reg_next.\",\n    \"Preserve improved behavior for signals: error_int_signal_enable_reg_next.\",\n    \"Preserve improved behavior for signals: clock_divider_next.\",\n    \"Preserve improved behavior for signals: bd_high_word_next, bd_state_next, dat_in_m_rx_bd_next, dat_in_m_tx_bd_next, int_ack_next, we_m_rx_bd_next, we_m_tx_bd_next.\",\n    \"Preserve improved behavior for signals: dat_in_m_rx_bd_next, dat_in_m_tx_bd_next.\",\n    \"Preserve improved behavior for signals: wb_dat_o_next.\"\n  ],\n  \"unsafe_directions\": [\n    \"Regressed direction at step 2 changed ['int_busy_next']: int_busy_next                     = int_busy;\",\n    \"Regressed direction at step 5 changed ['wb_dat_o']: wb_dat_o                     <= wb_access ? wb_dat_o : 32'h00000000;\",\n    \"Syntax-failed direction at step 7: if (addr_argument) begin argument_reg_next = wb_dat_i; new_cmd_next      = 1'b1; end else \\n...<snip>...\\n= 1'b1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i[7:0]; end\"\n  ],\n  \"next_local_target\": {\n    \"signal\": null,\n    \"time\": null,\n    \"sampling_mode\": null,\n    \"status\": null,\n    \"classification\": null,\n    \"ref\": null,\n    \"dut\": null,\n    \"symptom\": \"No current DUT/ref divergence target available.\",\n    \"suspect_blocks\": [],\n    \"must_preserve\": [\n      \"Preserve New_CMD sampling/reset-release timing behavior.\",\n      \"Do not reintroduce STATUS_REG[6:5] mirror/leak from internal status.\",\n      \"Preserve improved behavior for signals: wb_dat_o.\",\n      \"Preserve improved behavior for signals: cmd_setting_reg_next, int_busy_next.\",\n      \"Preserve improved behavior for signals: CONTROLLER_SETTING_RESET.\",\n      \"Preserve improved behavior for signals: time_out_reg_next.\",\n      \"Preserve improved behavior for signals: normal_int_signal_enable_reg_next.\",\n      \"Preserve improved behavior for signals: error_int_signal_enable_reg_next.\"\n    ]\n  },\n  \"high_coupling_blocks\": [\n    {\n      \"block_id\": \"A1\",\n      \"signals\": [\n        \"Bd_isr_enable_reg_next\",\n        \"Bd_isr_reset_next\",\n        \"argument_reg_next\",\n        \"bd_high_word_next\",\n        \"bd_state_next\",\n        \"clock_divider_next\",\n        \"cmd_int_busy_next\",\n        \"cmd_setting_reg_next\",\n        \"dat_in_m_rx_bd_next\",\n        \"dat_in_m_tx_bd_next\",\n        \"error_int_signal_enable_reg_next\",\n        \"error_isr_reset_next\",\n        \"int_ack_next\",\n        \"int_busy_next\",\n        \"new_cmd_next\",\n        \"normal_int_signal_enable_reg_next\",\n        \"normal_isr_reset_next\",\n        \"software_reset_reg_next\",\n        \"time_out_reg_next\",\n        \"wb_ack_o_next\"\n      ],\n      \"regressed_replace\": false,\n      \"target\": {\n        \"path\": \"/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv\",\n        \"start_line\": 143,\n        \"end_line\": 313,\n        \"block_id\": \"A1\"\n      },\n      \"guidance\": \"Choose edit scope from the current diagnosis; for high-coupling edits, preserve already-improved invariants.\",\n      \"lessons\": [\n        \"Patch improved mismatch count or first fail time; continue from this direction.\"\n      ]\n    }\n  ],\n  \"known_planning_corrections\": [\n    {\n      \"step\": 0,\n      \"module\": \"sd_controller_wb\",\n      \"correction_type\": \"wrong_contract\",\n      \"original_artifact\": \"sd_controller_wb.md / spec_blocks.json Controller settings reset field\",\n      \"problem\": \"The spec/stage contract says the readable Controller Setting register at 0x1c is reset/not-in-use value 0, but the fixed RealBench oracle returns 16'h0002 for address 0x1c. The generated RTL chose 16'h0000, causing the current first wb_dat_o divergence.\",\n      \"evidence\": [\n        \"first_divergence reports wb_dat_o at t=325 for wb_adr_i=8'h1c: ref=32'h00000002, dut=32'h00000000.\",\n        \"VCD probe at t=325 shows wb_cyc_i=1, wb_stb_i=1, wb_we_i=1, wb_adr_i=8'h1c, and wb_dat_o_ref=32'h2 while DUT is 0.\",\n        \"RTL line 181 decodes addr_controller_setting by returning {16'h0, CONTROLLER_SETTING_RESET}, and line 50 defines that constant as 16'h0000.\",\n        \"merge_child_context_json/sdc_controller.json includes original interface text with parameter controll_setting_reg =16'b0000_0000_0000_0010, conflicting with the zero parameter/spec detail.\"\n      ],\n      \"override\": {\n        \"controller_setting_read_value\": \"16'h0002\",\n        \"scope\": \"When sd_controller_wb decodes address 8'h1c, wb_dat_o should return 32'h00000002 for the fixed oracle, despite the spec reset-text conflict.\",\n        \"preserve\": \"Do not alter address decode, reset sequencing, write decode, ack/int_ack/new_cmd, or other readable constants.\"\n      }\n    }\n  ],\n  \"action_calls\": 0,\n  \"max_steps\": 15\n}\n</repo_react_memory_brief_json>\n\nStart by observing with read_context, read_spec, retrieve_spec_block, search_context, query_rtl_kg, run_check, read_memory, list_vcd_signals, or probe_vcd. In functional repair, first establish semantic intent with read_spec/retrieve_spec_block or a relevant stage_artifact, then localize with trace/VCD. For functional repair, run run_check(mode=\"first_divergence\") before apply_patch/replace_block and use the returned real DUT/ref output mismatch as the root evidence. If it returns stable_values_match_but_tb_edge_mismatch, reason about active-region edge sampling and blocking/nonblocking behavior. Patch only after you have enough evidence. Choose the edit scope from the diagnosis: a single-line edit, several coordinated line ranges, or a complete always/assign replacement are all acceptable when they directly fit the root cause. Do not split a coherent semantic fix merely to reduce patch size. If causal memory lists protected_invariants or unsafe_directions, explicitly check them and include protected_invariants_checked/preserve_plan in write-tool arguments when relevant. In syntax repair mode, focus on lint errors, support.sv interfaces, missing macros, declarations, and Verilator diagnostics; lint pass is the success condition.",
+  "trace_summary": {
+    "fail_time": 3260,
+    "total_mismatches": 2052,
+    "first_failure": {
+      "signal": "int_ack",
+      "time": 3255,
+      "ref": "0",
+      "dut": "1",
+      "classification": "dut_late",
+      "ref_path": "tb.int_ack_ref",
+      "dut_path": "tb.int_ack_dut",
+      "sampling_mode": "stable",
+      "edge": null,
+      "driver_assignment_kind": "nonblocking",
+      "active_region_model": "settled VCD ref/dut values at sample/change times"
+    },
+    "root_failure": {
+      "signal": "int_ack",
+      "time": 3255,
+      "ref": "0",
+      "dut": "1",
+      "classification": "dut_late",
+      "ref_path": "tb.int_ack_ref",
+      "dut_path": "tb.int_ack_dut",
+      "sampling_mode": "stable",
+      "edge": null,
+      "driver_assignment_kind": "nonblocking",
+      "active_region_model": "settled VCD ref/dut values at sample/change times"
+    },
+    "first_divergence": {
+      "status": "ok",
+      "sampling_mode": "stable",
+      "edge": null,
+      "driver_assignment_kind": "nonblocking",
+      "active_region_model": "settled VCD ref/dut values at sample/change times",
+      "first_divergence": {
+        "signal": "int_ack",
+        "time": 3255,
+        "ref": "0",
+        "dut": "1",
+        "classification": "dut_late",
+        "ref_path": "tb.int_ack_ref",
+        "dut_path": "tb.int_ack_dut",
+        "sampling_mode": "stable",
+        "edge": null,
+        "driver_assignment_kind": "nonblocking",
+        "active_region_model": "settled VCD ref/dut values at sample/change times"
+      },
+      "nearby": {
+        "times": [
+          3240,
+          3245,
+          3250,
+          3255,
+          3260,
+          3265,
+          3270
+        ],
+        "rows": [
+          {
+            "t": 3240,
+            "Bd_Status_reg": "0010111010000000",
+            "Bd_isr_reg": "01100110",
+            "cmd_arg_s": "11011001010101000000000011000010",
+            "cmd_resp_1": "00000110101010010001111000101111",
+            "cmd_set_s": "1100000101000000",
+            "error_int_status_reg": "0011110111110001",
+            "normal_int_status_reg": "0010100100101001",
+            "status_reg": "1110001111110011",
+            "wb_adr_i": "01001100",
+            "wb_clk_i": "0",
+            "wb_cyc_i": "0",
+            "wb_dat_i": "01010000101111001111111100101011",
+            "int_ack_ref": "1",
+            "int_ack_dut": "1",
+            "wb_dat_o_ref": "00000110101010010001111000101111",
+            "wb_dat_o_dut": "00000110101010010001111000101111",
+            "wb_ack_o_ref": "0",
+            "wb_ack_o_dut": "0",
+            "we_m_tx_bd_ref": "0",
+            "we_m_tx_bd_dut": "0",
+            "new_cmd_ref": "0",
+            "new_cmd_dut": "0",
+            "we_ack_ref": "0",
+            "we_ack_dut": "0",
+            "cmd_int_busy_ref": "0",
+            "cmd_int_busy_dut": "0",
+            "we_m_rx_bd_ref": "0",
+            "we_m_rx_bd_dut": "0"
+          },
+          {
+            "t": 3245,
+            "Bd_Status_reg": "0010111010000000",
+            "Bd_isr_reg": "01100110",
+            "cmd_arg_s": "11100001001101010110110111011011",
+            "cmd_resp_1": "00000110101010010001111000101111",
+            "cmd_set_s": "0100011011111110",
+            "error_int_status_reg": "0011110111110001",
+            "normal_int_status_reg": "0010100100101001",
+            "status_reg": "1110001111110011",
+            "wb_adr_i": "00001000",
+            "wb_clk_i": "1",
+            "wb_cyc_i": "1",
+            "wb_dat_i": "11010110101000110101110100000011",
+            "int_ack_ref": "1",
+            "int_ack_dut": "1",
+            "wb_dat_o_ref": "00000000000000001110001111110011",
+            "wb_dat_o_dut": "00000000000000001110001111110011",
+            "wb_ack_o_ref": "1",
+            "wb_ack_o_dut": "1",
+            "we_m_tx_bd_ref": "0",
+            "we_m_tx_bd_dut": "0",
+            "new_cmd_ref": "0",
+            "new_cmd_dut": "0",
+            "we_ack_ref": "0",
+            "we_ack_dut": "0",
+            "cmd_int_busy_ref": "0",
+            "cmd_int_busy_dut": "0",
+            "we_m_rx_bd_ref": "0",
+            "we_m_rx_bd_dut": "0"
+          },
+          {
+            "t": 3250,
+            "Bd_Status_reg": "0010111010000000",
+            "Bd_isr_reg": "01100110",
+            "cmd_arg_s": "11100001001101010110110111011011",
+            "cmd_resp_1": "00000110101010010001111000101111",
+            "cmd_set_s": "0100011011111110",
+            "error_int_status_reg": "0011110111110001",
+            "normal_int_status_reg": "0010100100101001",
+            "status_reg": "1110001111110011",
+            "wb_adr_i": "00001000",
+            "wb_clk_i": "0",
+            "wb_cyc_i": "1",
+            "wb_dat_i": "11010110101000110101110100000011",
+            "int_ack_ref": "1",
+            "int_ack_dut": "1",
+            "wb_dat_o_ref": "00000000000000001110001111110011",
+            "wb_dat_o_dut": "00000000000000001110001111110011",
+            "wb_ack_o_ref": "1",
+            "wb_ack_o_dut": "1",
+            "we_m_tx_bd_ref": "0",
+            "we_m_tx_bd_dut": "0",
+            "new_cmd_ref": "0",
+            "new_cmd_dut": "0",
+            "we_ack_ref": "0",
+            "we_ack_dut": "0",
+            "cmd_int_busy_ref": "0",
+            "cmd_int_busy_dut": "0",
+            "we_m_rx_bd_ref": "0",
+            "we_m_rx_bd_dut": "0"
+          },
+          {
+            "t": 3255,
+            "Bd_Status_reg": "1010011110011011",
+            "Bd_isr_reg": "11000110",
+            "cmd_arg_s": "10001111000001111101100011111111",
+            "cmd_resp_1": "01000110111000101011100000110000",
+            "cmd_set_s": "0001110000001110",
+            "error_int_status_reg": "0010100101000111",
+            "normal_int_status_reg": "0010111110011010",
+            "status_reg": "0111110100010011",
+            "wb_adr_i": "10000000",
+            "wb_clk_i": "1",
+            "wb_cyc_i": "1",
+            "wb_dat_i": "11010000000100110011010111110110",
+            "int_ack_ref": "0",
+            "int_ack_dut": "1",
+            "wb_dat_o_ref": "00000000000000001110001111110011",
+            "wb_dat_o_dut": "00000000000000001110001111110011",
+            "wb_ack_o_ref": "0",
+            "wb_ack_o_dut": "0",
+            "we_m_tx_bd_ref": "0",
+            "we_m_tx_bd_dut": "0",
+            "new_cmd_ref": "0",
+            "new_cmd_dut": "0",
+            "we_ack_ref": "0",
+            "we_ack_dut": "0",
+            "cmd_int_busy_ref": "0",
+            "cmd_int_busy_dut": "0",
+            "we_m_rx_bd_ref": "0",
+            "we_m_rx_bd_dut": "0"
+          },
+          {
+            "t": 3260,
+            "Bd_Status_reg": "1010011110011011",
+            "Bd_isr_reg": "11000110",
+            "cmd_arg_s": "10001111000001111101100011111111",
+            "cmd_resp_1": "01000110111000101011100000110000",
+            "cmd_set_s": "0001110000001110",
+            "error_int_status_reg": "0010100101000111",
+            "normal_int_status_reg": "0010111110011010",
+            "status_reg": "0111110100010011",
+            "wb_adr_i": "10000000",
+            "wb_clk_i": "0",
+            "wb_cyc_i": "1",
+            "wb_dat_i": "11010000000100110011010111110110",
+            "int_ack_ref": "0",
+            "int_ack_dut": "1",
+            "wb_dat_o_ref": "00000000000000001110001111110011",
+            "wb_dat_o_dut": "00000000000000001110001111110011",
+            "wb_ack_o_ref": "0",
+            "wb_ack_o_dut": "0",
+            "we_m_tx_bd_ref": "0",
+            "we_m_tx_bd_dut": "0",
+            "new_cmd_ref": "0",
+            "new_cmd_dut": "0",
+            "we_ack_ref": "0",
+            "we_ack_dut": "0",
+            "cmd_int_busy_ref": "0",
+            "cmd_int_busy_dut": "0",
+            "we_m_rx_bd_ref": "0",
+            "we_m_rx_bd_dut": "0"
+          },
+          {
+            "t": 3265,
+            "Bd_Status_reg": "1010011110011011",
+            "Bd_isr_reg": "11000110",
+            "cmd_arg_s": "10010100101100100101111100111111",
+            "cmd_resp_1": "01000110111000101011100000110000",
+            "cmd_set_s": "1111000011010110",
+            "error_int_status_reg": "0010100101000111",
+            "normal_int_status_reg": "0010111110011010",
+            "status_reg": "0111110100010011",
+            "wb_adr_i": "01010000",
+            "wb_clk_i": "1",
+            "wb_cyc_i": "1",
+            "wb_dat_i": "00111100100011101011011001111111",
+            "int_ack_ref": "1",
+            "int_ack_dut": "1",
+            "wb_dat_o_ref": "00000000000000001110001111110011",
+            "wb_dat_o_dut": "00000000000000001110001111110011",
+            "wb_ack_o_ref": "0",
+            "wb_ack_o_dut": "0",
+            "we_m_tx_bd_ref": "0",
+            "we_m_tx_bd_dut": "0",
+            "new_cmd_ref": "1",
+            "new_cmd_dut": "1",
+            "we_ack_ref": "1",
+            "we_ack_dut": "1",
+            "cmd_int_busy_ref": "1",
+            "cmd_int_busy_dut": "1",
+            "we_m_rx_bd_ref": "0",
+            "we_m_rx_bd_dut": "0"
+          },
+          {
+            "t": 3270,
+            "Bd_Status_reg": "1010011110011011",
+            "Bd_isr_reg": "11000110",
+            "cmd_arg_s": "10010100101100100101111100111111",
+            "cmd_resp_1": "01000110111000101011100000110000",
+            "cmd_set_s": "1111000011010110",
+            "error_int_status_reg": "0010100101000111",
+            "normal_int_status_reg": "0010111110011010",
+            "status_reg": "0111110100010011",
+            "wb_adr_i": "01010000",
+            "wb_clk_i": "0",
+            "wb_cyc_i": "1",
+            "wb_dat_i": "00111100100011101011011001111111",
+            "int_ack_ref": "1",
+            "int_ack_dut": "1",
+            "wb_dat_o_ref": "00000000000000001110001111110011",
+            "wb_dat_o_dut": "00000000000000001110001111110011",
+            "wb_ack_o_ref": "0",
+            "wb_ack_o_dut": "0",
+            "we_m_tx_bd_ref": "0",
+            "we_m_tx_bd_dut": "0",
+            "new_cmd_ref": "1",
+            "new_cmd_dut": "1",
+            "we_ack_ref": "1",
+            "we_ack_dut": "1",
+            "cmd_int_busy_ref": "1",
+            "cmd_int_busy_dut": "1",
+            "we_m_rx_bd_ref": "0",
+            "we_m_rx_bd_dut": "0"
+          }
+        ]
+      },
+      "suspect": {
+        "driver_blocks": [
+          {
+            "id": "A2",
+            "kind": "always",
+            "clocking": "seq",
+            "writes": [
+              "Bd_isr_enable_reg",
+              "Bd_isr_reset",
+              "argument_reg",
+              "bd_high_word",
+              "bd_state",
+              "clock_divider",
+              "cmd_int_busy",
+              "cmd_setting_reg",
+              "dat_in_m_rx_bd",
+              "dat_in_m_tx_bd",
+              "error_int_signal_enable_reg",
+              "error_isr_reset",
+              "int_ack",
+              "int_busy",
+              "new_cmd",
+              "normal_int_signal_enable_reg",
+              "normal_isr_reset",
+              "software_reset_reg",
+              "time_out_reg",
+              "wb_ack_o",
+              "wb_dat_o",
+              "we_ack",
+              "we_m_rx_bd",
+              "we_m_tx_bd"
+            ],
+            "start_line": 299,
+            "end_line": 355
+          },
+          {
+            "id": "A1",
+            "kind": "always",
+            "clocking": "comb",
+            "writes": [
+              "Bd_isr_enable_reg_next",
+              "Bd_isr_reset_next",
+              "argument_reg_next",
+              "bd_high_word_next",
+              "bd_state_next",
+              "clock_divider_next",
+              "cmd_int_busy_next",
+              "cmd_setting_reg_next",
+              "dat_in_m_rx_bd_next",
+              "dat_in_m_tx_bd_next",
+              "error_int_signal_enable_reg_next",
+              "error_isr_reset_next",
+              "int_ack_next",
+              "int_busy_next",
+              "new_cmd_next",
+              "normal_int_signal_enable_reg_next",
+              "normal_isr_reset_next",
+              "software_reset_reg_next",
+              "time_out_reg_next",
+              "wb_ack_o_next",
+              "wb_dat_o_next",
+              "we_ack_next",
+              "we_m_rx_bd_next",
+              "we_m_tx_bd_next"
+            ],
+            "start_line": 143,
+            "end_line": 297
+          },
+          {
+            "id": "C8",
+            "kind": "assign",
+            "clocking": "comb",
+            "writes": [
+              "addr_controller_setting"
+            ],
+            "start_line": 126,
+            "end_line": 126
+          },
+          {
+            "id": "C22",
+            "kind": "assign",
+            "clocking": "comb",
+            "writes": [
+              "addr_bd_rx"
+            ],
+            "start_line": 140,
+            "end_line": 140
+          },
+          {
+            "id": "C10",
+            "kind": "assign",
+            "clocking": "comb",
+            "writes": [
+              "addr_power_control"
+            ],
+            "start_line": 128,
+            "end_line": 128
+          },
+          {
+            "id": "C1",
+            "kind": "assign",
+            "clocking": "comb",
+            "writes": [
+              "wb_access"
+            ],
+            "start_line": 118,
+            "end_line": 118
+          },
+          {
+            "id": "C13",
+            "kind": "assign",
+            "clocking": "comb",
+            "writes": [
+              "addr_normal_int_status"
+            ],
+            "start_line": 131,
+            "end_line": 131
+          },
+          {
+            "id": "C2",
+            "kind": "assign",
+            "clocking": "comb",
+            "writes": [
+              "wb_write_access"
+            ],
+            "start_line": 119,
+            "end_line": 119
+          }
+        ],
+        "signals": [
+          "cmd_int_busy",
+          "int_ack",
+          "new_cmd",
+          "wb_ack_o",
+          "wb_dat_o",
+          "we_ack",
+          "we_m_rx_bd",
+          "we_m_tx_bd"
+        ],
+        "hint": "First real DUT/ref output divergence; use this instead of testbench metric counters."
+      },
+      "candidate_signals": [
+        "Bd_isr_enable_reg",
+        "Bd_isr_reset",
+        "argument_reg",
+        "clock_divider",
+        "cmd_int_busy",
+        "cmd_setting_reg",
+        "dat_in_m_rx_bd",
+        "dat_in_m_tx_bd",
+        "error_int_signal_enable_reg",
+        "error_isr_reset",
+        "int_ack",
+        "int_busy",
+        "new_cmd",
+        "normal_int_signal_enable_reg",
+        "normal_isr_reset",
+        "software_reset_reg",
+        "time_out_reg",
+        "wb_ack_o",
+        "wb_dat_o",
+        "we_ack",
+        "we_m_rx_bd",
+        "we_m_tx_bd"
+      ],
+      "ignored_tb_metrics": [],
+      "raw_fail_outputs": [
+        {
+          "sig": "wb_dat_o",
+          "mismatches": 162,
+          "time": 12050
+        },
+        {
+          "sig": "wb_ack_o",
+          "mismatches": 2,
+          "time": 29330
+        },
+        {
+          "sig": "we_m_tx_bd",
+          "mismatches": 12,
+          "time": 4670
+        },
+        {
+          "sig": "new_cmd",
+          "mismatches": 2,
+          "time": 29340
+        },
+        {
+          "sig": "we_ack",
+          "mismatches": 2,
+          "time": 29340
+        },
+        {
+          "sig": "int_ack",
+          "mismatches": 70,
+          "time": 3260
+        },
+        {
+          "sig": "cmd_int_busy",
+          "mismatches": 2,
+          "time": 29340
+        },
+        {
+          "sig": "we_m_rx_bd",
+          "mismatches": 24,
+          "time": 3310
+        },
+        {
+          "sig": "argument_reg",
+          "mismatches": 2,
+          "time": 29340
+        },
+        {
+          "sig": "cmd_setting_reg",
+          "mismatches": 2,
+          "time": 29340
+        },
+        {
+          "sig": "software_reset_reg",
+          "mismatches": 620,
+          "time": 4280
+        },
+        {
+          "sig": "time_out_reg",
+          "mismatches": 26,
+          "time": 12670
+        },
+        {
+          "sig": "Bd_isr_enable_reg",
+          "mismatches": 628,
+          "time": 9080
+        },
+        {
+          "sig": "Bd_isr_reset",
+          "mismatches": 112,
+          "time": 5460
+        },
+        {
+          "sig": "normal_isr_reset",
+          "mismatches": 94,
+          "time": 3800
+        },
+        {
+          "sig": "error_isr_reset",
+          "mismatches": 112,
+          "time": 17290
+        },
+        {
+          "sig": "dat_in_m_rx_bd",
+          "mismatches": 462,
+          "time": 3310
+        },
+        {
+          "sig": "dat_in_m_tx_bd",
+          "mismatches": 206,
+          "time": 4670
+        }
+      ],
+      "dut_instance": "top_module1",
+      "ref_instance": "good1"
+    },
+    "required_next_tool": null,
+    "ignored_tb_metrics": [],
+    "raw_fail_outputs": [
+      {
+        "sig": "wb_dat_o",
+        "mismatches": 162,
+        "time": 12050
+      },
+      {
+        "sig": "wb_ack_o",
+        "mismatches": 2,
+        "time": 29330
+      },
+      {
+        "sig": "we_m_tx_bd",
+        "mismatches": 12,
+        "time": 4670
+      },
+      {
+        "sig": "new_cmd",
+        "mismatches": 2,
+        "time": 29340
+      },
+      {
+        "sig": "we_ack",
+        "mismatches": 2,
+        "time": 29340
+      },
+      {
+        "sig": "int_ack",
+        "mismatches": 70,
+        "time": 3260
+      },
+      {
+        "sig": "cmd_int_busy",
+        "mismatches": 2,
+        "time": 29340
+      },
+      {
+        "sig": "we_m_rx_bd",
+        "mismatches": 24,
+        "time": 3310
+      },
+      {
+        "sig": "argument_reg",
+        "mismatches": 2,
+        "time": 29340
+      },
+      {
+        "sig": "cmd_setting_reg",
+        "mismatches": 2,
+        "time": 29340
+      },
+      {
+        "sig": "software_reset_reg",
+        "mismatches": 620,
+        "time": 4280
+      },
+      {
+        "sig": "time_out_reg",
+        "mismatches": 26,
+        "time": 12670
+      },
+      {
+        "sig": "Bd_isr_enable_reg",
+        "mismatches": 628,
+        "time": 9080
+      },
+      {
+        "sig": "Bd_isr_reset",
+        "mismatches": 112,
+        "time": 5460
+      },
+      {
+        "sig": "normal_isr_reset",
+        "mismatches": 94,
+        "time": 3800
+      },
+      {
+        "sig": "error_isr_reset",
+        "mismatches": 112,
+        "time": 17290
+      },
+      {
+        "sig": "dat_in_m_rx_bd",
+        "mismatches": 462,
+        "time": 3310
+      },
+      {
+        "sig": "dat_in_m_tx_bd",
+        "mismatches": 206,
+        "time": 4670
+      }
+    ],
+    "top_diagnosis": "FIRST FAILURE: int_ack failed: expected=0, actual=1. Direct driver A2 classified as condition_blocks_update: Observed condition values appear to block this assignment update.",
+    "suspect_blocks": [
+      {
+        "id": "A2",
+        "kind": "always",
+        "clocking": "seq",
+        "writes": [
+          "Bd_isr_enable_reg",
+          "Bd_isr_reset",
+          "argument_reg",
+          "bd_high_word",
+          "bd_state",
+          "clock_divider",
+          "cmd_int_busy",
+          "cmd_setting_reg",
+          "dat_in_m_rx_bd",
+          "dat_in_m_tx_bd",
+          "error_int_signal_enable_reg",
+          "error_isr_reset",
+          "int_ack",
+          "int_busy",
+          "new_cmd",
+          "normal_int_signal_enable_reg",
+          "normal_isr_reset",
+          "software_reset_reg",
+          "time_out_reg",
+          "wb_ack_o",
+          "wb_dat_o",
+          "we_ack",
+          "we_m_rx_bd",
+          "we_m_tx_bd"
+        ],
+        "start_line": 299,
+        "end_line": 355
+      }
+    ],
+    "value_backtrace_summary": [
+      {
+        "sig": "int_ack",
+        "expected": "0",
+        "actual": "1",
+        "steps": [
+          {
+            "signal": "int_ack",
+            "driver_block_id": "A2",
+            "classification": "condition_blocks_update",
+            "reason": "Observed condition values appear to block this assignment update."
+          }
+        ]
+      },
+      {
+        "sig": "wb_dat_o",
+        "expected": "00000000000000001110001111110011",
+        "actual": "00000000000000001110001111110011",
+        "steps": [
+          {
+            "signal": "wb_dat_o",
+            "driver_block_id": "A2",
+            "classification": "condition_blocks_update",
+            "reason": "Observed condition values appear to block this assignment update."
+          }
+        ]
+      },
+      {
+        "sig": "wb_ack_o",
+        "expected": "0",
+        "actual": "0",
+        "steps": [
+          {
+            "signal": "wb_ack_o",
+            "driver_block_id": "A2",
+            "classification": "condition_blocks_update",
+            "reason": "Observed condition values appear to block this assignment update."
+          }
+        ]
+      }
+    ],
+    "vcd_available": true,
+    "trace_error": null
+  }
+}

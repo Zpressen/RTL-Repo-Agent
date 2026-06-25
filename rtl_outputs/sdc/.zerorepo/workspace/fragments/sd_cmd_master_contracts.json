@@ -1,0 +1,566 @@
+{
+  "schema_version": "stage5_fragment_contracts_v1",
+  "module": "sd_cmd_master",
+  "contracts": [
+    {
+      "subtask_id": "B1_main_declarations",
+      "target": "<block: B1 – main declarations>",
+      "spec_refs": [
+        "S002",
+        "S004",
+        "S005",
+        "S006",
+        "S008"
+      ],
+      "contract": {
+        "writes": [
+          "CARD_INSERT_INT",
+          "CARD_REMOVE_INT",
+          "CC",
+          "CCRCE",
+          "CICE",
+          "CICMD",
+          "CIE",
+          "CMDI",
+          "CRCE",
+          "CRC_VALID_BIT",
+          "CTE",
+          "DAT_AVA_BIT",
+          "EI",
+          "EXECUTE",
+          "IDLE",
+          "RTS",
+          "SETUP",
+          "WORD_SELECT",
+          "big_rsp",
+          "command_index_mismatch",
+          "crc_valid",
+          "dat_ava",
+          "response_present",
+          "small_rsp",
+          "timeout_expired"
+        ],
+        "reads": [
+          "ARG_REG",
+          "CLK_PAD_IO",
+          "CMD_SET_REG",
+          "CRC_check_enable",
+          "ERR_INT_REG",
+          "ERR_INT_RST",
+          "NORMAL_INT_REG",
+          "NORMAL_INT_RST",
+          "New_CMD",
+          "RESP_1_REG",
+          "RST_PAD_I",
+          "STATUS_REG",
+          "TIMEOUT_REG",
+          "Watchdog_Cnt",
+          "ack_in",
+          "ack_in_int",
+          "ack_out",
+          "ack_q",
+          "b0000000",
+          "b001",
+          "b010",
+          "b0101000",
+          "b100",
+          "b1111111",
+          "card_detect",
+          "card_present",
+          "cmd_in",
+          "cmd_out",
+          "complete",
+          "data_read",
+          "data_write",
+          "debounce",
+          "go_idle_o",
+          "index_check_enable",
+          "next_state",
+          "req_in",
+          "req_in_int",
+          "req_out",
+          "req_q",
+          "response_size",
+          "serial_status",
+          "settings",
+          "state",
+          "status"
+        ],
+        "clocking": "declarations",
+        "reset_behavior": "none",
+        "hold_behavior": "No procedural state updates are performed in this fragment; declared registers are driven by later sequential fragments.",
+        "latency": "combinational",
+        "assumptions": [
+          "The enclosing module header contains the listed port identifiers in its port list.",
+          "Later FSM logic drives next_state as a continuous combinational signal or the merge stage may adjust next_state to a procedural reg if needed.",
+          "Later reset and per-state sequential fragments drive the declared state, output, interrupt, synchronizer, watchdog, debounce, and response registers."
+        ]
+      },
+      "analysis": {
+        "extracted_writes": [
+          "CARD_INSERT_INT",
+          "CARD_REMOVE_INT",
+          "CC",
+          "CCRCE",
+          "CICE",
+          "CICMD",
+          "CIE",
+          "CMDI",
+          "CRCE",
+          "CRC_VALID_BIT",
+          "CTE",
+          "DAT_AVA_BIT",
+          "EI",
+          "EXECUTE",
+          "IDLE",
+          "RTS",
+          "SETUP",
+          "WORD_SELECT",
+          "big_rsp",
+          "command_index_mismatch",
+          "crc_valid",
+          "dat_ava",
+          "response_present",
+          "small_rsp",
+          "timeout_expired"
+        ],
+        "extracted_reads": [
+          "ARG_REG",
+          "CLK_PAD_IO",
+          "CMD_SET_REG",
+          "CRC_check_enable",
+          "ERR_INT_REG",
+          "ERR_INT_RST",
+          "NORMAL_INT_REG",
+          "NORMAL_INT_RST",
+          "New_CMD",
+          "RESP_1_REG",
+          "RST_PAD_I",
+          "STATUS_REG",
+          "TIMEOUT_REG",
+          "Watchdog_Cnt",
+          "ack_in",
+          "ack_in_int",
+          "ack_out",
+          "ack_q",
+          "b0000000",
+          "b001",
+          "b010",
+          "b0101000",
+          "b100",
+          "b1111111",
+          "card_detect",
+          "card_present",
+          "cmd_in",
+          "cmd_out",
+          "complete",
+          "data_read",
+          "data_write",
+          "debounce",
+          "go_idle_o",
+          "index_check_enable",
+          "next_state",
+          "req_in",
+          "req_in_int",
+          "req_out",
+          "req_q",
+          "response_size",
+          "serial_status",
+          "settings",
+          "state",
+          "status"
+        ]
+      }
+    },
+    {
+      "subtask_id": "B2_comb_next_state",
+      "target": "<block: comb_next_state>",
+      "spec_refs": [
+        "S007"
+      ],
+      "contract": {
+        "writes": [
+          "next_state"
+        ],
+        "reads": [
+          "EXECUTE",
+          "IDLE",
+          "New_CMD",
+          "SETUP",
+          "ack_in_int",
+          "complete",
+          "default",
+          "or",
+          "state"
+        ],
+        "clocking": "combinational",
+        "reset_behavior": "none",
+        "hold_behavior": "none; next_state is assigned on every combinational path and defaults to IDLE",
+        "latency": "combinational",
+        "assumptions": [
+          "IDLE, SETUP, and EXECUTE state encodings are declared in an earlier declarations block.",
+          "next_state is integrated as a procedural combinational target, or the merge stage provides an equivalent reg-backed implementation if it was initially declared as a wire."
+        ]
+      },
+      "analysis": {
+        "extracted_writes": [
+          "next_state"
+        ],
+        "extracted_reads": [
+          "EXECUTE",
+          "IDLE",
+          "New_CMD",
+          "SETUP",
+          "ack_in_int",
+          "complete",
+          "default",
+          "or",
+          "state"
+        ]
+      }
+    },
+    {
+      "subtask_id": "B3_seq_state_register",
+      "target": "<block: seq_state_register>",
+      "spec_refs": [
+        "S007",
+        "S004"
+      ],
+      "contract": {
+        "writes": [
+          "state"
+        ],
+        "reads": [
+          "CLK_PAD_IO",
+          "IDLE",
+          "RST_PAD_I",
+          "next_state",
+          "or"
+        ],
+        "clocking": "posedge CLK_PAD_IO",
+        "reset_behavior": "Asynchronous active-high reset via RST_PAD_I sets state to IDLE (3'b001).",
+        "hold_behavior": "state does not hold outside reset; on every rising CLK_PAD_IO edge it updates to next_state.",
+        "latency": "one-cycle",
+        "assumptions": [
+          "IDLE is declared as 3'b001 in an earlier declaration block.",
+          "state is a 3-bit register declared in an earlier declaration block.",
+          "next_state is driven by the combinational next-state logic."
+        ]
+      },
+      "analysis": {
+        "extracted_writes": [
+          "state"
+        ],
+        "extracted_reads": [
+          "CLK_PAD_IO",
+          "IDLE",
+          "RST_PAD_I",
+          "next_state",
+          "or"
+        ]
+      }
+    },
+    {
+      "subtask_id": "B4_comb_cmd_settings_assembly",
+      "target": "<block: comb_cmd_settings_assembly>",
+      "spec_refs": [
+        "S008",
+        "S004"
+      ],
+      "contract": {
+        "writes": [
+          "next_cmd_out",
+          "next_settings",
+          "response_size"
+        ],
+        "reads": [
+          "ARG_REG",
+          "CMD_SET_REG",
+          "b0",
+          "b0000000",
+          "b01",
+          "b10",
+          "b11",
+          "b111",
+          "big_rsp",
+          "data_read",
+          "data_write",
+          "default",
+          "or",
+          "small_rsp"
+        ],
+        "clocking": "combinational",
+        "reset_behavior": "none",
+        "hold_behavior": "none; response_size, next_cmd_out, and next_settings are assigned on every evaluation of the combinational block",
+        "latency": "combinational",
+        "assumptions": [
+          "next_cmd_out and next_settings are combinational pre-register signals consumed by later state/output logic.",
+          "next_settings[15] is driven to 1'b0 because the specified field mapping defines bits [14:0].",
+          "If strict Verilog declaration ordering is required, the merge stage should place next_cmd_out and next_settings declarations in the module declaration region."
+        ]
+      },
+      "analysis": {
+        "extracted_writes": [
+          "next_cmd_out",
+          "next_settings",
+          "response_size"
+        ],
+        "extracted_reads": [
+          "ARG_REG",
+          "CMD_SET_REG",
+          "b0",
+          "b0000000",
+          "b01",
+          "b10",
+          "b11",
+          "b111",
+          "big_rsp",
+          "data_read",
+          "data_write",
+          "default",
+          "or",
+          "small_rsp"
+        ]
+      }
+    },
+    {
+      "subtask_id": "B5_seq_debounce_logic",
+      "target": "<block: seq_debounce_logic>",
+      "spec_refs": [
+        "S005"
+      ],
+      "contract": {
+        "writes": [
+          "card_present",
+          "debounce"
+        ],
+        "reads": [
+          "CLK_PAD_IO",
+          "RST_PAD_I",
+          "b0",
+          "b0000",
+          "b0001",
+          "b1",
+          "b1110",
+          "b1111",
+          "card_detect",
+          "or"
+        ],
+        "clocking": "posedge CLK_PAD_IO",
+        "reset_behavior": "asynchronous active-high reset via RST_PAD_I clears debounce to 4'b0000 and card_present to 1'b0",
+        "hold_behavior": "debounce saturates and holds at 4'b1111 while card_detect remains low after saturation; card_present holds asserted while debounce is saturated and card_detect remains low",
+        "latency": "one-cycle",
+        "assumptions": [
+          "debounce is a 4-bit register declared elsewhere",
+          "card_present is a 1-bit register declared elsewhere",
+          "card_detect low indicates card present"
+        ]
+      },
+      "analysis": {
+        "extracted_writes": [
+          "card_present",
+          "debounce"
+        ],
+        "extracted_reads": [
+          "CLK_PAD_IO",
+          "RST_PAD_I",
+          "b0",
+          "b0000",
+          "b0001",
+          "b1",
+          "b1110",
+          "b1111",
+          "card_detect",
+          "or"
+        ]
+      }
+    },
+    {
+      "subtask_id": "B6_seq_synchronisers",
+      "target": "<block: seq_synchronisers>",
+      "spec_refs": [
+        "S006"
+      ],
+      "contract": {
+        "writes": [
+          "ack_in_int",
+          "ack_q",
+          "req_in_int",
+          "req_q"
+        ],
+        "reads": [
+          "CLK_PAD_IO",
+          "RST_PAD_I",
+          "ack_in",
+          "b0",
+          "or",
+          "req_in"
+        ],
+        "clocking": "posedge CLK_PAD_IO",
+        "reset_behavior": "Asynchronous active-high reset RST_PAD_I clears req_q, req_in_int, ack_q, and ack_in_int to 0.",
+        "hold_behavior": "No hold condition in normal operation; all written synchronizer stages update on every rising edge of CLK_PAD_IO when reset is low.",
+        "latency": "two-stage synchronization; internal outputs reflect synchronized inputs after two clock edges",
+        "assumptions": [
+          "req_q, req_in_int, ack_q, and ack_in_int are declared as single-bit registers in an earlier declaration block.",
+          "req_in and ack_in may be asynchronous to CLK_PAD_IO and are sampled only by this synchronizer block."
+        ]
+      },
+      "analysis": {
+        "extracted_writes": [
+          "ack_in_int",
+          "ack_q",
+          "req_in_int",
+          "req_q"
+        ],
+        "extracted_reads": [
+          "CLK_PAD_IO",
+          "RST_PAD_I",
+          "ack_in",
+          "b0",
+          "or",
+          "req_in"
+        ]
+      }
+    },
+    {
+      "subtask_id": "B7_seq_fsm_state_operations",
+      "target": "<block: seq_fsm_state_operations>",
+      "spec_refs": [
+        "S008",
+        "S004"
+      ],
+      "contract": {
+        "writes": [
+          "CRC_check_enable",
+          "ERR_INT_REG",
+          "NORMAL_INT_REG",
+          "RESP_1_REG",
+          "STATUS_REG",
+          "Watchdog_Cnt",
+          "ack_out",
+          "cmd_out",
+          "complete",
+          "go_idle_o",
+          "index_check_enable",
+          "req_out",
+          "response_size",
+          "settings",
+          "status"
+        ],
+        "reads": [
+          "CARD_INSERT_INT",
+          "CARD_REMOVE_INT",
+          "CC",
+          "CCRCE",
+          "CICE",
+          "CICMD",
+          "CIE",
+          "CLK_PAD_IO",
+          "CRCE",
+          "CRC_VALID_BIT",
+          "CTE",
+          "DAT_AVA_BIT",
+          "EI",
+          "EXECUTE",
+          "IDLE",
+          "RST_PAD_I",
+          "SETUP",
+          "ack_in",
+          "ack_in_int",
+          "b0",
+          "b00000",
+          "b0000000",
+          "b00000000",
+          "b0000000000000000",
+          "b00000000000000000000000000000000",
+          "b0000000000000000000000000000000000000000",
+          "b0000000000000001",
+          "b1",
+          "card_present",
+          "cmd_in",
+          "command_index_mismatch",
+          "default",
+          "next_cmd_out",
+          "next_settings",
+          "or",
+          "req_in_int",
+          "response_present",
+          "serial_status",
+          "state",
+          "timeout_expired"
+        ],
+        "clocking": "posedge CLK_PAD_IO",
+        "reset_behavior": "Asynchronous active-high RST_PAD_I clears command outputs, interrupt/status registers, response register, handshake outputs, watchdog, completion flag, response_size, and check-enable flags.",
+        "hold_behavior": "Registers not assigned in a given state branch retain their previous values. complete is cleared on every non-reset clock before state-specific completion events. NORMAL_INT_REG card-present bits are updated every non-reset clock unless overwritten by a full-register state assignment.",
+        "latency": "one-cycle",
+        "assumptions": [
+          "IDLE, SETUP, EXECUTE, bit-index localparams, and helper wires such as timeout_expired, command_index_mismatch, and response_present are declared in earlier fragments.",
+          "next_cmd_out and next_settings are stable combinational values for the current command during SETUP.",
+          "response_size is intended to be the latched response length used during EXECUTE.",
+          "serial_status bits DAT_AVA_BIT and CRC_VALID_BIT represent the incoming status associated with req_in_int."
+        ]
+      },
+      "analysis": {
+        "extracted_writes": [
+          "CRC_check_enable",
+          "ERR_INT_REG",
+          "NORMAL_INT_REG",
+          "RESP_1_REG",
+          "STATUS_REG",
+          "Watchdog_Cnt",
+          "ack_out",
+          "cmd_out",
+          "complete",
+          "go_idle_o",
+          "index_check_enable",
+          "req_out",
+          "response_size",
+          "settings",
+          "status"
+        ],
+        "extracted_reads": [
+          "CARD_INSERT_INT",
+          "CARD_REMOVE_INT",
+          "CC",
+          "CCRCE",
+          "CICE",
+          "CICMD",
+          "CIE",
+          "CLK_PAD_IO",
+          "CRCE",
+          "CRC_VALID_BIT",
+          "CTE",
+          "DAT_AVA_BIT",
+          "EI",
+          "EXECUTE",
+          "IDLE",
+          "RST_PAD_I",
+          "SETUP",
+          "ack_in",
+          "ack_in_int",
+          "b0",
+          "b00000",
+          "b0000000",
+          "b00000000",
+          "b0000000000000000",
+          "b00000000000000000000000000000000",
+          "b0000000000000000000000000000000000000000",
+          "b0000000000000001",
+          "b1",
+          "card_present",
+          "cmd_in",
+          "command_index_mismatch",
+          "default",
+          "next_cmd_out",
+          "next_settings",
+          "or",
+          "req_in_int",
+          "response_present",
+          "serial_status",
+          "state",
+          "timeout_expired"
+        ]
+      }
+    }
+  ]
+}

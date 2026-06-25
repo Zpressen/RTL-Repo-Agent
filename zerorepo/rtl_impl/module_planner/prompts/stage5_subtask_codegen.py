@@ -27,7 +27,16 @@ Return JSON only with this schema:
   "subtask_id": "<current subtask id>",
   "target": "<current subtask target>",
   "spec_refs": ["Sxxx"],
-  "code": "<Verilog fragment for only this subtask>"
+  "code": "<Verilog fragment for only this subtask>",
+  "contract": {
+    "writes": ["signals written by this fragment"],
+    "reads": ["signals read by this fragment"],
+    "clocking": "combinational | posedge <clk> | negedge <clk> | declarations | unknown",
+    "reset_behavior": "reset behavior owned by this fragment, or none",
+    "hold_behavior": "which written signals hold previous values outside this fragment's active condition",
+    "latency": "same-cycle / one-cycle / combinational / unknown",
+    "assumptions": ["local assumptions needed by merge"]
+  }
 }
 
 Core rules:
@@ -37,17 +46,20 @@ Core rules:
 4. The module boundary is owned by the skeleton/merge stage. 
 5. Treat CURRENT_SUBTASK as an anchor-level task. The code should fit inside the assigned skeleton region, not define the whole module.
 6. Use SELECTED_SPEC_BLOCKS as the main behavior evidence.
-7. Use MODULE_INTERFACE_SPEC_BLOCKS only to keep signal names, directions, and widths consistent. Do not recreate the module interface unless this is a module_header task.
-8. Treat PREVIOUS_MODULE_SNIPPETS as already generated context. You may reference symbols they define, but do not duplicate their code.
-9. Do not implement later subtasks. If the current fragment depends on later logic, leave that dependency to the later subtask.
-10. Prefer Verilog-compatible constructs when the spec does not require SystemVerilog features.
-11. Do not declare unpacked arrays or multidimensional arrays. Forbidden examples: `reg [7:0] a [0:3]`, `wire [7:0] a [0:3][0:3]`, `integer idx [0:3]`.
-12. Do not reference multidimensional signals such as `a[i][j]`. Flatten matrix-like objects into scalar names such as `a_00`, `a_01`, `a_10`, `a_11`.
-13. Do not use `generate`, `endgenerate`, or `genvar`. Explicitly unroll repeated assigns and child module instances inside the fragment.
-14. Do not introduce wildcard sensitivity lists. Prefer explicit sensitivity lists when writing combinational `always` blocks.
-15. If a fragment needs repeated child instances, write each instance explicitly with scalar signal connections.
-16. Prefer semantic correctness over perfect local syntax. The merge stage will repair integration details, declarations, and final syntax.
-17. Do not include Markdown fences.
+7. Use MODULE_INTERFACE_SPEC_BLOCKS only to keep signal names, directions, and widths consistent. They may be used only for module boundary facts. Do not recreate the module interface unless this is a module_header task.
+8. Use GLOBAL_DEFINES_CONTEXT as authoritative compile-time context. Prefer the official macro names and values over inventing local parameters or numeric constants.
+9. Do not redefine or rewrite global macros from GLOBAL_DEFINES_CONTEXT. The merge stage owns final include directive placement.
+10. Treat PREVIOUS_MODULE_SNIPPETS as already generated context. You may reference symbols they define, but do not duplicate their code.
+11. Do not implement later subtasks. If the current fragment depends on later logic, leave that dependency to the later subtask.
+12. Prefer Verilog-compatible constructs when the spec does not require SystemVerilog features.
+13. Do not declare unpacked arrays or multidimensional arrays. Forbidden examples: `reg [7:0] a [0:3]`, `wire [7:0] a [0:3][0:3]`, `integer idx [0:3]`.
+14. Do not reference multidimensional signals such as `a[i][j]`. Flatten matrix-like objects into scalar names such as `a_00`, `a_01`, `a_10`, `a_11`.
+15. Do not use `generate`, `endgenerate`, or `genvar`. Explicitly unroll repeated assigns and child module instances inside the fragment.
+16. Do not introduce wildcard sensitivity lists. Prefer explicit sensitivity lists when writing combinational `always` blocks.
+17. If a fragment needs repeated child instances, write each instance explicitly with scalar signal connections.
+18. Prefer semantic correctness over perfect local syntax. The merge stage will repair integration details, declarations, and final syntax.
+19. Do not include Markdown fences.
+20. Fill contract from the code you generate. If unsure, use "unknown" but still list obvious writes and reads.
 """.strip()
 
 
@@ -60,6 +72,7 @@ def build_prompt(
     selected_spec_blocks: str,
     module_interface_spec_blocks: str,
     previous_module_snippets: str,
+    global_defines_context: str = "",
     stage_context: str = "",
 ) -> str:
     return f"""
@@ -82,6 +95,9 @@ def build_prompt(
 
 [MODULE_INTERFACE_SPEC_BLOCKS]
 {module_interface_spec_blocks or "None"}
+
+[GLOBAL_DEFINES_CONTEXT]
+{global_defines_context or "None"}
 
 [PREVIOUS_MODULE_SNIPPETS]
 {previous_module_snippets or "None"}

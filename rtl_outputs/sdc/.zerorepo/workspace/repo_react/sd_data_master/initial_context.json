@@ -1,0 +1,610 @@
+{
+  "prompt": "Begin repository-level RTL repair.\n\n<module_name>\nsd_data_master\n</module_name>\n\n<repair_mode>\nfunctional\n</repair_mode>\n\n<current_debug_rtl_path>\n/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_master/rtl.sv\n</current_debug_rtl_path>\n\n<merged_rtl_path>\n/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_data_master.v\n</merged_rtl_path>\n\n<source_of_truth>\nThe visible testbench and original module specification are authoritative for this repair session.\n</source_of_truth>\n\n<spec_excerpt>\n# sd_data_master design specification\n\nStarts to check if there are any new BD thats need to be processed if so the module generate a command by setting up the command and argument register. It then set up the DMA in the FIFO filer to read/write to correct address. If the command line is free the module send the command and wait fore response. If response is valid the module starts the DMA if not valid the CMD is resent again.\n\nDuring transmission the module keep track for FIFO buffet underflow or overflows, when the transmission is completed it check for valid CRC. If anything goes wrong during a transmission a stop command is sent and the module try to restart the transmission n times before giving up.\n\n## Introduction\n\n### Module Function\n\nThe `sd_data_master` module manages data transfer between the SD card and the host system. It performs three primary functions:\n\n1. **Transmit and Receive Data**: It coordinates the transfer of data to and from the SD card by interfacing with the Tx (transmit) and Rx (receive) buffers. It retrieves buffer descriptors for both transmission and reception, managing the flow of data through FIFOs.\n   \n2. **Execute SD Commands**: The module sends various SD card commands (e.g., CMD17, CMD24, CMD12) for reading, writing, and stopping data transfers. It manages the command sequence, handling responses from the SD card and ensuring proper command execution through retries in case of errors.\n\n3. **Track Transfer Status**: It monitors the status of the data transmission and reception, including error detection (e.g., CRC errors), buffer fullness, and command completion. The module sets status flags to inform the host system of successful transfers or failures, ensuring reliable communication with the SD card.\n\n### Design Overview\n\nThe `sd_data_master` module operates as a finite state machine (FSM) with several key states, including `IDLE`, `GET_TX_BD`, `GET_RX_BD`, `SEND_CMD`, `RECIVE_CMD`, and `DATA_TRANSFER`. These states control the progression of data transfers and command execution. The module interfaces with several key control signals and buffers to facilitate data flow, command execution, and status monitoring.\n\n1. **FSM Control**: The module transitions between states based on the availability of data in Tx and Rx buffers, command completion, and error conditions. It handles data transfers in `DATA_TRANSFER` state and executes commands in `SEND_CMD` state.\n   \n2. **Retry and Error Handling**: The module includes a retry mechanism (`resend_try_cnt`) to handle failed transfers. It tracks command execution through flags like `cmd_busy` and error indicators such as `crc_ok`. Errors trigger transitions to recovery states `STOP_SEND`.\n\n3. **Status Updates**: The module continuously monitors the status of the SD card's data lines, transfer completion, and FIFO buffers. It updates the `Dat_Int_Status` register to notify the host system of the current state, errors, or transfer completions.\n\n## Interface\n### Input Ports\n\n| Name            | Width                        | Description                                                      |\n|-----------------|------------------------------|------------------------------------------------------------------|\n| `clk`           | 1 bit                        | System clock signal                                              |\n| `rst`           | 1 bit                        | Reset signal (active high)                                       |\n| `dat_in_tx`     | `RAM_MEM_WIDTH-1:0`          | Data in from Tx BD                      |\n| `free_tx_bd`    | `BD_WIDTH-1:0`               | Number of Free Tx BD                              |\n| `ack_i_s_tx`    | 1 bit                        | ACK in Read request                                 |\n| `dat_in_rx`     | `RAM_MEM_WIDTH-1:0`          | Data in from Rx BD                         |\n| `free_rx_bd`    | `BD_WIDTH-1:0`               | Number of Free Rx BD                              |\n| `ack_i_s_rx`    | 1 bit                        | ACK in Read request                                 |\n| `cmd_busy`      | 1 bit                        | CMD Busy state        |\n| `we_ack`        | 1 bit                        | Access granted                              |\n| `cmd_tsf_err`   | 1 bit                        | Error status of sent cmd                                    |\n| `card_status`   | 5 bits                       | Status of card after response                                            |\n| `tx_empt`       | 1 bit                        | Tx Fifo empty flag                                |\n| `tx_full`       | 1 bit                        | Tx Fifo full flag                                 |\n| `rx_full`       | 1 bit                        | Rx Fifo full flag                                 |\n| `busy_n`        | 1 bit                        | Data Busy                           |\n| `transm_complete` | 1 bit                      | Transmission complete                        |\n| `crc_ok`        | 1 bit                        | Crc status                                      |\n| `Dat_Int_Status_rst` | 1 bit                   | Reset Dat_Int_Status                             |\n| `transfer_type` | 2 bits                       | Indicates the type of data transfer (single block, multiple block, etc.) |\n\n### Output Ports\n\n| Name               | Width           | Description                                                      |\n|--------------------|-----------------|------------------------------------------------------------------|\n| `re_s_tx`          | 1 bit           | Read Tx BD                                 |\n| `a_cmp_tx`         | 1 bit           | Free a Tx BD                                      |\n| `re_s_rx`          | 1 bit           | Read Rx BD                                 |\n| `a_cmp_rx`         | 1 bit           | Free a Rx BD                                      |\n| `we_req`           | 1 bit           | Request access to CMD registers                 \n</spec_excerpt>\n\n<contract_json_diagnostic_only>\n{\n  \"module_name\": \"sd_data_master\",\n  \"io\": [\n    {\n      \"name\": \"clk\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"System clock signal\"\n    },\n    {\n      \"name\": \"rst\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Reset signal (active high)\"\n    },\n    {\n      \"name\": \"dat_in_tx\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"RAM_MEM_WIDTH-1:0\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Data in from Tx BD\"\n    },\n    {\n      \"name\": \"free_tx_bd\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"BD_WIDTH-1:0\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Number of Free Tx BD\"\n    },\n    {\n      \"name\": \"ack_i_s_tx\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"ACK in Read request\"\n    },\n    {\n      \"name\": \"dat_in_rx\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"RAM_MEM_WIDTH-1:0\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Data in from Rx BD\"\n    },\n    {\n      \"name\": \"free_rx_bd\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"BD_WIDTH-1:0\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Number of Free Rx BD\"\n    },\n    {\n      \"name\": \"ack_i_s_rx\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"ACK in Read request\"\n    },\n    {\n      \"name\": \"cmd_busy\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"CMD Busy state\"\n    },\n    {\n      \"name\": \"we_ack\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Access granted\"\n    },\n    {\n      \"name\": \"cmd_tsf_err\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Error status of sent cmd\"\n    },\n    {\n      \"name\": \"card_status\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"5\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Status of card after response\"\n    },\n    {\n      \"name\": \"tx_empt\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Tx Fifo empty flag\"\n    },\n    {\n      \"name\": \"tx_full\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Tx Fifo full flag\"\n    },\n    {\n      \"name\": \"rx_full\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Rx Fifo full flag\"\n    },\n    {\n      \"name\": \"busy_n\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Data Busy\"\n    },\n    {\n      \"name\": \"transm_complete\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Transmission complete\"\n    },\n    {\n      \"name\": \"crc_ok\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Crc status\"\n    },\n    {\n      \"name\": \"Dat_Int_Status_rst\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Reset Dat_Int_Status\"\n    },\n    {\n      \"name\": \"transfer_type\",\n      \"dir\": \"input\",\n      \"direction\": \"input\",\n      \"width\": \"2\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Indicates the type of data transfer (single block, multiple block, etc.)\"\n    },\n    {\n      \"name\": \"re_s_tx\",\n      \"dir\": \"output\",\n      \"direction\": \"output\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Read Tx BD\"\n    },\n    {\n      \"name\": \"a_cmp_tx\",\n      \"dir\": \"output\",\n      \"direction\": \"output\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Free a Tx BD\"\n    },\n    {\n      \"name\": \"re_s_rx\",\n      \"dir\": \"output\",\n      \"direction\": \"output\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Read Rx BD\"\n    },\n    {\n      \"name\": \"a_cmp_rx\",\n      \"dir\": \"output\",\n      \"direction\": \"output\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Free a Rx BD\"\n    },\n    {\n      \"name\": \"we_req\",\n      \"dir\": \"output\",\n      \"direction\": \"output\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Request access to CMD registers\"\n    },\n    {\n      \"name\": \"d_write\",\n      \"dir\": \"output\",\n      \"direction\": \"output\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Block write command\"\n    },\n    {\n      \"name\": \"d_read\",\n      \"dir\": \"output\",\n      \"direction\": \"output\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Block read command\"\n    },\n    {\n      \"name\": \"cmd_arg\",\n      \"dir\": \"output\",\n      \"direction\": \"output\",\n      \"width\": \"32\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Cmd argument out\"\n    },\n    {\n      \"name\": \"cmd_set\",\n      \"dir\": \"output\",\n      \"direction\": \"output\",\n      \"width\": \"16\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Cmd setting out\"\n    },\n    {\n      \"name\": \"start_tx_fifo\",\n      \"dir\": \"output\",\n      \"direction\": \"output\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Start the Tx Fifo Filler\"\n    },\n    {\n      \"name\": \"start_rx_fifo\",\n      \"dir\": \"output\",\n      \"direction\": \"output\",\n      \"width\": \"1\",\n      \"role\": \"\",\n      \"active\": \"\",\n      \"meaning\": \"Start the Rx Fifo Filler\"\n    },\n    {\n      \"name\": \"sys_adr\",\n      \"dir\": \"output\",\n      \"di\n</contract_json_diagnostic_only>\n\n<initial_sim_failure_excerpt>\nHint: Output 're_s_tx' has 46 mismatches. First mismatch occurred at time 319940.\nHint: Output 'a_cmp_tx' has no mismatches.\nHint: Output 're_s_rx' has 71 mismatches. First mismatch occurred at time 127300.\nHint: Output 'a_cmp_rx' has 82 mismatches. First mismatch occurred at time 43260.\nHint: Output 'we_req' has 786 mismatches. First mismatch occurred at time 32640.\nHint: Output 'd_write' has 192 mismatches. First mismatch occurred at time 32630.\nHint: Output 'd_read' has 223 mismatches. First mismatch occurred at time 32630.\nHint: Output 'cmd_arg' has 82 mismatches. First mismatch occurred at time 278780.\nHint: Output 'cmd_set' has no mismatches.\nHint: Output 'start_tx_fifo' has 76 mismatches. First mismatch occurred at time 32630.\nHint: Output 'start_rx_fifo' has 355 mismatches. First mismatch occurred at time 58890.\nHint: Output 'sys_adr' has 159 mismatches. First mismatch occurred at time 127290.\nHint: Output 'ack_transfer' has 305 mismatches. First mismatch occurred at time 32600.\nHint: Output 'Dat_Int_Status' has 24 mismatches. First mismatch occurred at time 43250.\nHint: Output 'CIDAT' has 33047 mismatches. First mismatch occurred at time 52280.\nHint: Total mismatched samples is 33894 out of 90449 samples\nMismatches: 33894 in 90449 samples\n  224 |   if (stats1.errors_re_s_tx) $display(\"Hint: Output '%s' has %0d mismatches. First mismatch occurred at time %0d.\", \"re_s_tx\", stats1.errors_re_s_tx, stats1.errortime_re_s_tx);\n  226 |   if (stats1.errors_a_cmp_tx) $display(\"Hint: Output '%s' has %0d mismatches. First mismatch occurred at time %0d.\", \"a_cmp_tx\", stats1.errors_a_cmp_tx, stats1.errortime_a_cmp_tx);\n  228 |   if (stats1.errors_re_s_rx) $display(\"Hint: Output '%s' has %0d mismatches. First mismatch occurred at time %0d.\", \"re_s_rx\", stats1.errors_re_s_rx, stats1.errortime_re_s_rx);\n  230 |   if (stats1.errors_a_cmp_rx) $display(\"Hint: Output '%s' has %0d mismatches. First mismatch occurred at time %0d.\", \"a_cmp_rx\", stats1.errors_a_cmp_rx, stats1.error\n...<snip>...\ne %0d.\", \"we_req\", stats1.errors_we_req, stats1.errortime_we_req);\n  234 |   if (stats1.errors_d_write) $display(\"Hint: Output '%s' has %0d mismatches. First mismatch occurred at time %0d.\", \"d_write\", stats1.errors_d_write, stats1.errortime_d_write);\n  236 |   if (stats1.errors_d_read) $display(\"Hint: Output '%s' has %0d mismatches. First mismatch occurred at time %0d.\", \"d_read\", stats1.errors_d_read, stats1.errortime_d_read);\n  238 |   if (stats1.errors_cmd_arg) $display(\"Hint: Output '%s' has %0d mismatches. First mismatch occurred at time %0d.\", \"cmd_arg\", stats1.errors_cmd_arg, stats1.errortime_cmd_arg);\n  240 |   if (stats1.errors_cmd_set) $display(\"Hint: Output '%s' has %0d mismatches. First mismatch occurred at time %0d.\", \"cmd_set\", stats1.errors_cmd_set, stats1.errortime_cmd_set);\n  242 |   if (stats1.errors_start_tx_fifo) $display(\"Hint: Output '%s' has %0d mismatches. First mismatch occurred at time %0d.\", \"start_tx_fifo\", stats1.errors_start_tx_fifo, stats1.errortime_start_tx_fifo);\n  244 |   if (stats1.errors_start_rx_fifo) $display(\"Hint: Output '%s' has %0d mismatches. First mismatch occurred at time %0d.\", \"start_rx_fifo\", stats1.errors_start_rx_fifo, stats1.errortime_start_rx_fifo);\n  246 |   if (stats1.errors_sys_adr) $display(\"Hint: Output '%s' has %0d mismatches. First mismatch occurred at time %0d.\", \"sys_adr\", stats1.errors_sys_adr, stats1.errortime_sys_adr);\n  248 |   if (stats1.errors_ack_transfer) $display(\"Hint: Output '%s' has %0d mismatches. First mismatch occurred at time %0d.\", \"ack_transfer\", stats1.errors_ack_transfer, stats1.errortime_ack_transfer);\n  250 |   if (stats1.errors_Dat_Int_Status) $display(\"Hint: Output '%s' has %0d mismatches. First mismatch occurred at time %0d.\", \"Dat_Int_Status\", stats1.errors_Dat_Int_Status, stats1.errortime_Dat_Int_Status);\n  252 |   if (stats1.errors_CIDAT) $display(\"Hint: Output '%s' has %0d mismatches. First mismatch occurred at time %0d.\", \"CIDAT\", stats1.errors_CIDAT, stats1.errortime_CIDAT);\n</initial_sim_failure_excerpt>\n\n<initial_trace_summary_json>\n{\n  \"fail_time\": 32600,\n  \"total_mismatches\": 33894,\n  \"first_failure\": {\n    \"signal\": \"ack_transfer\",\n    \"time\": 32595,\n    \"ref\": \"1\",\n    \"dut\": \"0\",\n    \"classification\": \"dut_late\",\n    \"ref_path\": \"tb.ack_transfer_ref\",\n    \"dut_path\": \"tb.ack_transfer_dut\",\n    \"sampling_mode\": \"stable\",\n    \"edge\": null,\n    \"driver_assignment_kind\": \"nonblocking\",\n    \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"\n  },\n  \"root_failure\": {\n    \"signal\": \"ack_transfer\",\n    \"time\": 32595,\n    \"ref\": \"1\",\n    \"dut\": \"0\",\n    \"classification\": \"dut_late\",\n    \"ref_path\": \"tb.ack_transfer_ref\",\n    \"dut_path\": \"tb.ack_transfer_dut\",\n    \"sampling_mode\": \"stable\",\n    \"edge\": null,\n    \"driver_assignment_kind\": \"nonblocking\",\n    \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"\n  },\n  \"first_divergence\": {\n    \"status\": \"ok\",\n    \"sampling_mode\": \"stable\",\n    \"edge\": null,\n    \"driver_assignment_kind\": \"nonblocking\",\n    \"active_region_model\": \"settled VCD ref/dut values at sample/change times\",\n    \"first_divergence\": {\n      \"signal\": \"ack_transfer\",\n      \"time\": 32595,\n      \"ref\": \"1\",\n      \"dut\": \"0\",\n      \"classification\": \"dut_late\",\n      \"ref_path\": \"tb.ack_transfer_ref\",\n      \"dut_path\": \"tb.ack_transfer_dut\",\n      \"sampling_mode\": \"stable\",\n      \"edge\": null,\n      \"driver_assignment_kind\": \"nonblocking\",\n      \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"\n    },\n    \"nearby\": {\n      \"times\": [\n        32580,\n        32585,\n        32590,\n        32595,\n        32600,\n        32605,\n        32610\n      ],\n      \"rows\": [\n        {\n          \"t\": 32580,\n          \"Dat_Int_Status_rst\": \"0\",\n          \"ack_i_s_rx\": \"1\",\n          \"ack_i_s_tx\": \"1\",\n          \"busy_n\": \"0\",\n          \"card_status\": \"01100\",\n          \"clk\": \"0\",\n          \"cmd_busy\": \"0\",\n          \"cmd_tsf_err\": \"0\",\n          \"crc_ok\": \"1\",\n          \"dat_in_rx\": \"0100010111010110\",\n          \"dat_in_tx\": \"0100010111101101\",\n          \"free_rx_bd\": \"01010\",\n          \"ref_state\": \"000100000\",\n          \"dut_state\": \"000100000\",\n          \"ref_next_state\": \"000100000\",\n          \"dut_next_state\": \"000100000\",\n          \"ack_transfer_ref\": \"0\",\n          \"ack_transfer_dut\": \"0\",\n          \"re_s_tx_ref\": \"0\",\n          \"re_s_tx_dut\": \"0\",\n          \"re_s_rx_ref\": \"0\",\n          \"re_s_rx_dut\": \"0\",\n          \"a_cmp_rx_ref\": \"0\",\n          \"a_cmp_rx_dut\": \"0\",\n          \"we_req_ref\": \"0\",\n          \"we_req_dut\": \"0\",\n          \"d_write_ref\": \"0\",\n          \"d_write_dut\": \"0\",\n          \"d_read_ref\": \"0\",\n          \"d_read_dut\": \"0\",\n          \"cmd_arg_ref\": \"0\",\n          \"cmd_arg_dut\": \"0\"\n        },\n        {\n          \"t\": 32585,\n          \"Dat_Int_Status_rst\": \"0\",\n          \"ack_i_s_rx\": \"0\",\n          \"ack_i_s_tx\": \"1\",\n          \"busy_n\": \"0\",\n          \"card_status\": \"01100\",\n          \"clk\": \"1\",\n          \"cmd_busy\": \"1\",\n          \"cmd_tsf_err\": \"0\",\n          \"crc_ok\": \"1\",\n          \"dat_in_rx\": \"1110100000011101\",\n          \"dat_in_tx\": \"0111010000011010\",\n          \"free_rx_bd\": \"00111\",\n          \"ref_state\": \"000100000\",\n          \"dut_state\": \"000100000\",\n          \"ref_next_state\": \"000100000\",\n          \"dut_next_state\": \"000100000\",\n          \"ack_transfer_ref\": \"0\",\n          \"ack_transfer_dut\": \"0\",\n          \"re_s_tx_ref\": \"0\",\n          \"re_s_tx_dut\": \"0\",\n          \"re_s_rx_ref\": \"0\",\n          \"re_s_rx_dut\": \"0\",\n          \"a_cmp_rx_ref\": \"0\",\n          \"a_cmp_rx_dut\": \"0\",\n          \"we_req_ref\": \"0\",\n          \"we_req_dut\": \"0\",\n          \"d_write_ref\": \"0\",\n          \"d_write_dut\": \"0\",\n          \"d_read_ref\": \"0\",\n          \"d_read_dut\": \"0\",\n          \"cmd_arg_ref\": \"0\",\n          \"cmd_arg_dut\": \"0\"\n        },\n        {\n          \"t\": 32590,\n          \"Dat_Int_Status_rst\": \"1\",\n          \"ack_i_s_rx\": \"1\",\n          \"ack_i_s_tx\": \"1\",\n          \"busy_n\": \"0\",\n          \"card_status\": \"11101\",\n          \"clk\": \"0\",\n          \"cmd_busy\": \"0\",\n          \"cmd_tsf_err\": \"1\",\n          \"crc_ok\": \"0\",\n          \"dat_in_rx\": \"0100011111011100\",\n          \"dat_in_tx\": \"0110100101011100\",\n          \"free_rx_bd\": \"01011\",\n          \"ref_state\": \"000100000\",\n          \"dut_state\": \"000100000\",\n          \"ref_next_state\": \"000100000\",\n          \"dut_next_state\": \"000100000\",\n          \"ack_transfer_ref\": \"0\",\n          \"ack_transfer_dut\": \"0\",\n          \"re_s_tx_ref\": \"0\",\n          \"re_s_tx_dut\": \"0\",\n          \"re_s_rx_ref\": \"0\",\n          \"re_s_rx_dut\": \"0\",\n          \"a_cmp_rx_ref\": \"0\",\n          \"a_cmp_rx_dut\": \"0\",\n          \"we_req_ref\": \"0\",\n          \"we_req_dut\": \"0\",\n          \"d_write_ref\": \"0\",\n          \"d_write_dut\": \"0\",\n          \"d_read_ref\": \"0\",\n          \"d_read_dut\": \"0\",\n          \"cmd_arg_ref\": \"0\",\n          \"cmd_arg_dut\": \"0\"\n        },\n        {\n          \"t\": 32595,\n          \"Dat_Int_Status_rst\": \"0\",\n          \"ack_i_s_rx\": \"0\",\n          \"ack_i_s_tx\": \"0\",\n          \"busy_n\": \"0\",\n          \"card_status\": \"11101\",\n          \"clk\": \"1\",\n          \"cmd_busy\": \"0\",\n          \"cmd_tsf_err\": \"1\",\n          \"crc_ok\": \"0\",\n          \"dat_in_rx\": \"1101111010010000\",\n          \"dat_in_tx\": \"1101011011001011\",\n          \"free_rx_bd\": \"00100\",\n          \"ref_state\": \"000100000\",\n          \"dut_state\": \"000100000\",\n          \"ref_next_state\": \"000100000\",\n          \"dut_next_state\": \"000100000\",\n          \"ack_transfer_ref\": \"1\",\n          \"ack_transfer_dut\": \"0\",\n          \"re_s_tx_ref\": \"0\",\n          \"re_s_tx_dut\": \"0\",\n          \"re_s_rx_ref\": \"0\",\n          \"re_s_rx_dut\": \"0\",\n          \"a_cmp_rx_ref\": \"0\",\n          \"a_cmp_rx_dut\": \"0\",\n          \"we_req_ref\": \"0\",\n          \"we_req_dut\": \"0\",\n          \"d_write_ref\": \"0\",\n          \"d_write_dut\": \"0\",\n          \"d_read_ref\": \"0\",\n          \"d_read_dut\": \"0\",\n          \"cmd_arg_ref\": \"0\",\n          \"cmd_arg_dut\": \"0\"\n        },\n        {\n          \"t\": 32600,\n          \"Dat_Int_Status_rst\": \"0\",\n          \"ack_i_s_rx\": \"0\",\n          \"ack_i_s_tx\": \"1\",\n          \"busy_n\": \"1\",\n          \"card_status\": \"01001\",\n          \"clk\": \"0\",\n          \"cmd_busy\": \"1\",\n          \"cmd_tsf_err\": \"0\",\n          \"crc_ok\": \"1\",\n          \"dat_in_rx\": \"0111101101100011\",\n          \"dat_in_tx\": \"0111000000110001\",\n          \"free_rx_bd\": \"10101\",\n          \"ref_state\": \"000100000\",\n          \"dut_state\": \"000100000\",\n          \"ref_next_state\": \"000100000\",\n          \"dut_next_state\": \"000100000\",\n          \"ack_transfer_ref\": \"1\",\n          \"ack_transfer_dut\": \"0\",\n          \"re_s_tx_ref\": \"0\",\n          \"re_s_tx_dut\": \"0\",\n          \"re_s_rx_ref\": \"0\",\n          \"re_s_rx_dut\": \"0\",\n          \"a_cmp_rx_ref\": \"0\",\n          \"a_cmp_rx_dut\": \"0\",\n          \"we_req_ref\": \"0\",\n          \"we_req_dut\": \"0\",\n          \"d_write_ref\": \"0\",\n          \"d_write_dut\": \"0\",\n          \"d_read_ref\": \"0\",\n          \"d_read_dut\": \"0\",\n          \"cmd_arg_ref\": \"0\",\n          \"cmd_arg_dut\": \"0\"\n        },\n        {\n          \"t\": 32605,\n          \"Dat_Int_Status_rst\": \"1\",\n          \"ack_i_s_rx\": \"0\",\n          \"ack_i_s_tx\": \"1\",\n          \"busy_n\": \"1\",\n          \"card_status\": \"11111\",\n          \"clk\": \"1\",\n          \"cmd_busy\": \"0\",\n          \"cmd_tsf_err\": \"0\",\n          \"crc_ok\": \"0\",\n          \"dat_in_rx\": \"1111101111000101\",\n          \"dat_in_tx\": \"0110110000101010\",\n          \"free_rx_bd\": \"10100\",\n          \"ref_state\": \"000100000\",\n          \"dut_state\": \"000100000\",\n          \"ref_next_state\": \"000100000\",\n          \"dut_next_state\": \"001000000\",\n          \"ack_transfer_ref\": \"1\",\n          \"ack_transfer_dut\": \"0\",\n          \"re_s_tx_ref\": \"0\",\n          \"re_s_tx_dut\": \"0\",\n          \"re_s_rx_ref\": \"0\",\n          \"re_s_rx_dut\": \"0\",\n          \"a_cmp_rx_ref\": \"0\",\n          \"a_cmp_rx_dut\": \"0\",\n          \"we_req_ref\": \"0\",\n          \"we_req_dut\": \"0\",\n          \"d_write_ref\": \"0\",\n          \"d_write_dut\": \"0\",\n          \"d_read_ref\": \"0\",\n          \"d_read_dut\": \"0\",\n          \"cmd_arg_ref\": \"0\",\n          \"cmd_arg_dut\": \"0\"\n        },\n        {\n          \"t\": 32610,\n          \"Dat_Int_Status_rst\": \"0\",\n          \"ack_i_s_rx\": \"1\",\n          \"ack_i_s_tx\": \"0\",\n          \"busy_n\": \"1\",\n          \"card_status\": \"00111\",\n          \"clk\": \"0\",\n          \"cmd_busy\": \"0\",\n          \"cmd_tsf_err\": \"1\",\n          \"crc_ok\": \"1\",\n          \"dat_in_rx\": \"0010111111100100\",\n          \"dat_in_tx\": \"0010101010000111\",\n          \"free_rx_bd\": \"00001\",\n          \"ref_state\": \"000100000\",\n          \"dut_state\": \"000100000\",\n          \"ref_next_state\": \"000100000\",\n          \"dut_next_state\": \"001000000\",\n          \"ack_transfer_ref\": \"1\",\n          \"ack_transfer_dut\": \"0\",\n          \"re_s_tx_ref\": \"0\",\n          \"re_s_tx_dut\": \"0\",\n          \"re_s_rx_ref\": \"0\",\n          \"re_s_rx_dut\": \"0\",\n          \"a_cmp_rx_ref\": \"0\",\n          \"a_cmp_rx_dut\": \"0\",\n          \"we_req_ref\": \"0\",\n          \"we_req_dut\": \"0\",\n          \"d_write_ref\": \"0\",\n          \"d_write_dut\": \"0\",\n          \"d_read_ref\": \"0\",\n          \"d_read_dut\": \"0\",\n          \"cmd_arg_ref\": \"0\",\n          \"cmd_arg_dut\": \"0\"\n        }\n      ]\n    },\n    \"suspect\": {\n      \"driver_blocks\": [\n        {\n          \"id\": \"A2\",\n          \"kind\": \"always\",\n          \"clocking\": \"seq\",\n          \"writes\": [\n            \"CIDAT\",\n            \"Dat_Int_Status\",\n            \"a_cmp_rx\",\n            \"a_cmp_tx\",\n            \"ack_transfer\",\n            \"bd_cnt\",\n            \"cmd_arg\",\n            \"cmd_set\",\n            \"d_read\",\n            \"d_write\",\n            \"internal_transm_complete\",\n            \"re_s_rx\",\n            \"re_s_tx\",\n            \"rec_done\",\n            \"rec_failed\",\n            \"resend_try_cnt\",\n            \"rx_cycle\",\n            \"send_done\",\n            \"start_rx_fifo\",\n            \"start_tx_fifo\",\n            \"state\",\n            \"sys_adr\",\n            \"trans_done\",\n            \"trans_failed\",\n            \"transm_complete_q\",\n            \"tx_cycle\",\n            \"we_req\"\n          ],\n          \"start_line\": 186,\n          \"end_line\": 459\n        },\n        {\n          \"id\": \"A1\",\n          \"kind\": \"always\",\n          \"clocking\": \"unknown\",\n          \"writes\": [\n            \"next_state\"\n          ],\n          \"start_line\": 110,\n          \"end_line\": 184\n        }\n      ],\n      \"signals\": [\n        \"a_cmp_rx\",\n        \"ack_transfer\",\n        \"cmd_arg\",\n        \"d_read\",\n        \"d_write\",\n        \"re_s_rx\",\n        \"re_s_tx\",\n        \"we_req\"\n      ],\n      \"hint\": \"First real DUT/ref output divergence; use this instead of testbench metric counters.\"\n    },\n    \"candidate_signals\": [\n      \"CIDAT\",\n      \"Dat_Int_Status\",\n      \"a_cmp_rx\",\n      \"a_cmp_tx\",\n      \"ack_transfer\",\n      \"cmd_arg\",\n      \"cmd_set\",\n      \"d_read\",\n      \"d_write\",\n      \"re_s_rx\",\n      \"re_s_tx\",\n      \"start_rx_fifo\",\n      \"start_tx_fifo\",\n      \"sys_adr\",\n      \"we_req\"\n    ],\n    \"ignored_tb_metrics\": [],\n    \"raw_fail_outputs\": [\n      {\n        \"sig\": \"re_s_tx\",\n        \"mismatches\": 46,\n        \"time\": 319940\n      },\n      {\n        \"sig\": \"re_s_rx\",\n        \"mismatches\": 71,\n        \"time\": 127300\n      },\n      {\n        \"sig\": \"a_cmp_rx\",\n        \"mismatches\": 82,\n        \"time\": 43260\n      },\n      {\n        \"sig\": \"we_req\",\n        \"mismatches\": 786,\n        \"time\": 32640\n      },\n      {\n        \"sig\": \"d_write\",\n        \"mismatches\": 192,\n        \"time\": 32630\n      },\n      {\n        \"sig\": \"d_read\",\n        \"mismatches\": 223,\n        \"time\": 32630\n      },\n      {\n        \"sig\": \"cmd_arg\",\n        \"mismatches\": 82,\n        \"time\": 278780\n      },\n      {\n        \"sig\": \"start_tx_fifo\",\n        \"mismatches\": 76,\n        \"time\": 32630\n      },\n      {\n        \"sig\": \"start_rx_fifo\",\n        \"mismatches\": 355,\n        \"time\": 58890\n      },\n      {\n        \"sig\": \"sys_adr\",\n        \"mismatches\": 159,\n        \"time\": 127290\n      },\n      {\n        \"sig\": \"ack_transfer\",\n        \"mismatches\": 305,\n        \"time\": 32600\n      },\n      {\n        \"sig\": \"Dat_Int_Status\",\n        \"mismatches\": 24,\n        \"time\": 43250\n      },\n      {\n        \"sig\": \"CIDAT\",\n        \"mismatches\": 33047,\n        \"time\": 52280\n      }\n    ],\n    \"dut_instance\": \"top_module1\",\n    \"ref_instance\": \"good1\"\n  },\n  \"required_next_tool\": null,\n  \"ignored_tb_metrics\": [],\n  \"raw_fail_outputs\": [\n    {\n      \"sig\": \"re_s_tx\",\n      \"mismatches\": 46,\n      \"time\": 319940\n    },\n    {\n      \"sig\": \"re_s_rx\",\n      \"mismatches\": 71,\n      \"time\": 127300\n    },\n    {\n      \"sig\": \"a_cmp_rx\",\n      \"mismatches\": 82,\n      \"time\": 43260\n    },\n    {\n      \"sig\": \"we_req\",\n      \"mismatches\": 786,\n      \"time\": 32640\n    },\n    {\n      \"sig\": \"d_write\",\n      \"mismatches\": 192,\n      \"time\": 32630\n    },\n    {\n      \"sig\": \"d_read\",\n      \"mismatches\": 223,\n      \"time\": 32630\n    },\n    {\n      \"sig\": \"cmd_arg\",\n      \"mismatches\": 82,\n      \"time\": 278780\n    },\n    {\n      \"sig\": \"start_tx_fifo\",\n      \"mismatches\": 76,\n      \"time\": 32630\n    },\n    {\n      \"sig\": \"start_rx_fifo\",\n      \"mismatches\": 355,\n      \"time\": 58890\n    },\n    {\n      \"sig\": \"sys_adr\",\n      \"mismatches\": 159,\n      \"time\": 127290\n    },\n    {\n      \"sig\": \"ack_transfer\",\n      \"mismatches\": 305,\n      \"time\": 32600\n    },\n    {\n      \"sig\": \"Dat_Int_Status\",\n      \"mismatches\": 24,\n      \"time\": 43250\n    },\n    {\n      \"sig\": \"CIDAT\",\n      \"mismatches\": 33047,\n      \"time\": 52280\n    }\n  ],\n  \"top_diagnosis\": \"FIRST FAILURE: ack_transfer failed: expected=1, actual=0. Direct driver A2 classified as condition_blocks_update: Observed condition values appear to block this assignment update.\",\n  \"suspect_blocks\": [\n    {\n      \"id\": \"A2\",\n      \"kind\": \"always\",\n      \"clocking\": \"seq\",\n      \"writes\": [\n        \"CIDAT\",\n        \"Dat_Int_Status\",\n        \"a_cmp_rx\",\n        \"a_cmp_tx\",\n        \"ack_transfer\",\n        \"bd_cnt\",\n        \"cmd_arg\",\n        \"cmd_set\",\n        \"d_read\",\n        \"d_write\",\n        \"internal_transm_complete\",\n        \"re_s_rx\",\n        \"re_s_tx\",\n        \"rec_done\",\n        \"rec_failed\",\n        \"resend_try_cnt\",\n        \"rx_cycle\",\n        \"send_done\",\n        \"start_rx_fifo\",\n        \"start_tx_fifo\",\n        \"state\",\n        \"sys_adr\",\n        \"trans_done\",\n        \"trans_failed\",\n        \"transm_complete_q\",\n        \"tx_cycle\",\n        \"we_req\"\n      ],\n      \"start_line\": 186,\n      \"end_line\": 459\n    }\n  ],\n  \"value_backtrace_summary\": [\n    {\n      \"sig\": \"ack_transfer\",\n      \"expected\": \"1\",\n      \"actual\": \"0\",\n      \"steps\": [\n        {\n          \"signal\": \"ack_transfer\",\n          \"driver_block_id\": \"A2\",\n          \"classification\": \"condition_blocks_update\",\n          \"reason\": \"Observed condition values appear to block this assignment update.\"\n        }\n      ]\n    },\n    {\n      \"sig\": \"re_s_tx\",\n      \"expected\": \"0\",\n      \"actual\": \"0\",\n      \"steps\": [\n        {\n          \"signal\": \"re_s_tx\",\n          \"driver_block_id\": \"A2\",\n          \"classification\": \"condition_blocks_update\",\n          \"reason\": \"Observed condition values appear to block this assignment update.\"\n        }\n      ]\n    },\n    {\n      \"sig\": \"re_s_rx\",\n      \"expected\": \"0\",\n      \"actual\": \"0\",\n      \"steps\": [\n        {\n          \"signal\": \"re_s_rx\",\n          \"driver_block_id\": \"A2\",\n          \"classification\": \"condition_blocks_update\",\n          \"reason\": \"Observed condition values appear to block this assignment update.\"\n        }\n      ]\n    }\n  ],\n  \"vcd_available\": true,\n  \"trace_error\": null\n}\n</initial_trace_summary_json>\n\n<known_planning_corrections_json>\n[\n  {\n    \"step\": 7,\n    \"module\": \"sd_data_master\",\n    \"correction_type\": \"wrong_timing\",\n    \"original_artifact\": \"stage5_codegen B5_comb_output_assign\",\n    \"problem\": \"The generated RTL uses registered outputs with default-zero assignments (lines 171-181) that clear every output each cycle before the state case. The reference design (ref_sd_data_master in support.sv) does NOT use defaults; instead, outputs retain their values across states unless explicitly changed. This causes systematic mismatches for all signals that should persist across state transitions (cmd_set, cmd_arg, sys_adr, tx_cycle, rx_cycle, start_tx_fifo, start_rx_fifo, a_cmp_tx, a_cmp_rx, ack_transfer, CIDAT, we_req, d_read, d_write, re_s_tx, re_s_rx, etc.). Each state must explicitly assign only the signals that change, and all others must retain their previous value.\",\n    \"evidence\": [\n      \"Trace shows start_tx_fifo expected=1 actual=0 at time 2370 because default clears it after GET_TX_BD sets it to 1\",\n      \"re_s_tx mismatch at time 2310 (original) because re_s_tx not explicitly cleared in GET_TX_BD for bd_cnt>=2\",\n      \"Multiple signals show one-cycle lag pattern (match_rate_dut_lag1 ~0.98) indicating the reference retains values while DUT clears them\",\n      \"Reference support.sv lines 252-509 show no default assignments; each state case only sets signals that need to change\"\n    ],\n    \"override\": {\n      \"action\": \"Remove default-zero assignments (lines 171-181). Ensure every state explicitly sets all signals that need to change in that state. Let all other signals retain their previous values. Match reference output logic exactly: IDLE clears all control signals; GET_TX_BD/GET_RX_BD set BD read signals and retain others; SEND_CMD clears re_s_tx/re_s_rx/start_rx_fifo and sets d_read/d_write/we_req; RECIVE_CMD clears we_req/d_read/d_write and sets start_rx_fifo; DATA_TRANSFER sets CIDAT=1 and manages transfer completion; STOP/STOP_SEND manage their signals.\"\n    }\n  },\n  {\n    \"step\": 1,\n    \"module\": \"sd_data_master\",\n    \"correction_type\": \"wrong_interface\",\n    \"original_artifact\": \"stage5_codegen B5_comb_output_assign\",\n    \"problem\": \"The GET_RX_BD transition condition uses '>' (bd_cnt > READ_CYCLE-1) but the reference uses '>=' (bd_cnt >= READ_CYCLE-1). With READ_CYCLE=4, DUT transitions at bd_cnt>3 (bd_cnt>=4) while reference transitions at bd_cnt>=3, causing a one-cycle lag in the RX path. Additionally, the reference uses separate FSM_SEQ and output logic always blocks with NO default-zero assignments; each state only sets signals that need to change. The DUT has default-zero assignments that clear all outputs every cycle, preventing signals from persisting across states.\",\n    \"evidence\": [\n      \"Reference support.sv FSM_COMBO: GET_RX_BD uses bd_cnt >= (READ_CYCLE-1)\",\n      \"DUT uses bd_cnt > (READ_CYCLE - 1) for both GET_TX_BD and GET_RX_BD\",\n      \"Alignment diagnosis shows we_req best_alignment is dut_lag1 with match_rate 1.0\",\n      \"Known planning correction states reference does NOT use default-zero assignments\"\n    ],\n    \"override\": {\n      \"action\": \"1) Fix GET_RX_BD transition: change bd_cnt > (READ_CYCLE-1) to bd_cnt >= (READ_CYCLE-1). 2) Remove ALL default-zero assignments and instead explicitly set every signal that needs to change in each state, matching the reference output logic exactly. The IDLE state clears all signals; other states only set what they need. 3) Ensure signals that should persist (cmd_set, cmd_arg, sys_adr, tx_cycle, rx_cycle, etc.) are not cleared in states where they should hold.\"\n    }\n  }\n]\n</known_planning_corrections_json>\n\n<repo_react_memory_brief_json>\n{\n  \"schema\": \"repo_react_memory_brief.v1\",\n  \"module\": \"sd_data_master\",\n  \"current_rtl_hash\": \"e18c2955ecdfc3b9343eacc15830099dcacd24a2e8caf114ef32dc4b3660a897\",\n  \"last_sim\": {\n    \"is_pass\": false,\n    \"mismatch_count\": 35448,\n    \"first_fail_time\": 32600,\n    \"sim_output_path\": \"/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_master/initial_sim_output.json\"\n  },\n  \"latest_trace_summary\": {\n    \"fail_time\": 32600,\n    \"total_mismatches\": 33894,\n    \"root_failure\": {\n      \"signal\": \"ack_transfer\",\n      \"time\": 32595,\n      \"ref\": \"1\",\n      \"dut\": \"0\",\n      \"classification\": \"dut_late\",\n      \"ref_path\": \"tb.ack_transfer_ref\",\n      \"dut_path\": \"tb.ack_transfer_dut\",\n      \"sampling_mode\": \"stable\",\n      \"edge\": null,\n      \"driver_assignment_kind\": \"nonblocking\",\n      \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"\n    },\n    \"edge_active_failure\": null,\n    \"required_next_tool\": null,\n    \"suspect_blocks\": [\n      {\n        \"id\": \"A2\",\n        \"kind\": \"always\",\n        \"clocking\": \"seq\",\n        \"writes\": [\n          \"CIDAT\",\n          \"Dat_Int_Status\",\n          \"a_cmp_rx\",\n          \"a_cmp_tx\",\n          \"ack_transfer\",\n          \"bd_cnt\",\n          \"cmd_arg\",\n          \"cmd_set\",\n          \"d_read\",\n          \"d_write\",\n          \"internal_transm_complete\",\n          \"re_s_rx\",\n          \"re_s_tx\",\n          \"rec_done\",\n          \"rec_failed\",\n          \"resend_try_cnt\",\n          \"rx_cycle\",\n          \"send_done\",\n          \"start_rx_fifo\",\n          \"start_tx_fifo\",\n          \"state\",\n          \"sys_adr\",\n          \"trans_done\",\n          \"trans_failed\",\n          \"transm_complete_q\",\n          \"tx_cycle\",\n          \"we_req\"\n        ],\n        \"start_line\": 186,\n        \"end_line\": 459\n      }\n    ],\n    \"timing_hints\": null,\n    \"alignment_diagnosis\": null\n  },\n  \"last_divergence_summary\": {\n    \"status\": null,\n    \"sampling_mode\": null,\n    \"edge\": null,\n    \"driver_assignment_kind\": null,\n    \"first_divergence\": null,\n    \"candidate_signals\": null,\n    \"ignored_tb_metrics\": null,\n    \"suspect\": {\n      \"driver_blocks\": [],\n      \"signals\": [],\n      \"hint\": null\n    }\n  },\n  \"repair_ledger\": [\n    {\n      \"step\": 6,\n      \"action_type\": \"apply_patch\",\n      \"block_id\": null,\n      \"target\": {\n        \"path\": \"/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_master/rtl.sv\",\n        \"start_line\": 377,\n        \"end_line\": 417\n      },\n      \"affected_signals\": [\n        \"CIDAT\",\n        \"ack_transfer\",\n        \"d_write\"\n      ],\n      \"effect\": \"improved\",\n      \"metric_delta\": {\n        \"total_samples_mismatch\": \"33948 -> 33955\",\n        \"per_signal\": {\n          \"CIDAT\": {\n            \"before\": 33057,\n            \"after\": 33057,\n            \"first_time_before\": 52280,\n            \"first_time_after\": 52280,\n            \"direction\": \"unchanged\"\n          },\n          \"Dat_Int_Status\": {\n            \"before\": 24,\n            \"after\": 24,\n            \"first_time_before\": 43250,\n            \"first_time_after\": 43250,\n            \"direction\": \"unchanged\"\n          },\n          \"a_cmp_rx\": {\n            \"before\": 100,\n            \"after\": 100,\n            \"first_time_before\": 32590,\n            \"first_time_after\": 32590,\n            \"direction\": \"unchanged\"\n          },\n          \"ack_transfer\": {\n            \"before\": 430,\n            \"after\": 427,\n            \"first_time_before\": 22080,\n            \"first_time_after\": 32590,\n            \"direction\": \"improved\"\n          },\n          \"cmd_arg\": {\n            \"before\": 225,\n            \"after\": 225,\n            \"first_time_before\": 32710,\n            \"first_time_after\": 32710,\n            \"direction\": \"unchanged\"\n          },\n          \"d_read\": {\n            \"before\": 257,\n            \"after\": 257,\n            \"first_time_before\": 32640,\n            \"first_time_after\": 32640,\n            \"direction\": \"unchanged\"\n          },\n          \"d_write\": {\n            \"before\": 282,\n            \"after\": 282,\n            \"first_time_before\": 32640,\n            \"first_time_after\": 32640,\n            \"direction\": \"unchanged\"\n          },\n          \"re_s_rx\": {\n            \"before\": 105,\n            \"after\": 105,\n            \"first_time_before\": 97540,\n            \"first_time_after\": 97540,\n            \"direction\": \"unchanged\"\n          },\n          \"re_s_tx\": {\n            \"before\": 90,\n            \"after\": 90,\n            \"first_time_before\": 32620,\n            \"first_time_after\": 32620,\n            \"direction\": \"unchanged\"\n          },\n          \"start_rx_fifo\": {\n            \"before\": 335,\n            \"after\": 335,\n            \"first_time_before\": 58890,\n            \"first_time_after\": 58890,\n            \"direction\": \"unchanged\"\n          },\n          \"start_tx_fifo\": {\n            \"before\": 130,\n            \"after\": 130,\n            \"first_time_before\": 32590,\n            \"first_time_after\": 32590,\n            \"direction\": \"unchanged\"\n          },\n          \"sys_adr\": {\n            \"before\": 275,\n            \"after\": 275,\n            \"first_time_before\": 32610,\n            \"first_time_after\": 32610,\n            \"direction\": \"unchanged\"\n          },\n          \"we_req\": {\n            \"before\": 820,\n            \"after\": 820,\n            \"first_time_before\": 22130,\n            \"first_time_after\": 22130,\n            \"direction\": \"unchanged\"\n          }\n        }\n      },\n      \"lesson\": \"Patch improved mismatch count or first fail time; continue from this direction.\",\n      \"hypothesis\": \"Causal diagnosis: the remaining early ack_transfer drop occurs after the transfer-failure event has asserted ack_transfer, while the FSM is still in DATA_TRANSFER/entering STOP_SEND. The global default clear removes the acknowledgment on cycles where no new event branch fires. A previous global self-hold regressed by retaining ack_transfer outside the transfer/stop flow, so the repair must be scoped to the transfer and stop states. Expected effect: ack_transfer should stay high from the DATA_TRANSFER failure/completion event through DATA_TRANSFER/STOP/STOP_SEND, matching the reference at t=22075 and t=22080, while still being cleared by the existing global default in unrelated states.\",\n      \"patch_summary\": \"CIDAT <= 1'b1; ack_transfer <= ack_transfer;; ack_transfer <= ack_transfer; end; d_write <= 1'b1; ack_transfer <= ack_transfer;\",\n      \"protect\": [\n        \"Preserve improved behavior for signals: CIDAT, ack_transfer, d_write.\"\n      ]\n    },\n    {\n      \"step\": 7,\n      \"action_type\": \"apply_patch\",\n      \"block_id\": null,\n      \"target\": {\n        \"path\": \"/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_master/rtl.sv\",\n        \"start_line\": 246,\n        \"end_line\": 246\n      },\n      \"affected_signals\": [\n        \"CIDAT\",\n        \"we_req\"\n      ],\n      \"effect\": \"improved\",\n      \"metric_delta\": {\n        \"total_samples_mismatch\": \"33955 -> 33923\",\n        \"per_signal\": {\n          \"CIDAT\": {\n            \"before\": 33057,\n            \"after\": 33057,\n            \"first_time_before\": 52280,\n            \"first_time_after\": 52280,\n            \"direction\": \"unchanged\"\n          },\n          \"Dat_Int_Status\": {\n            \"before\": 24,\n            \"after\": 24,\n            \"first_time_before\": 43250,\n            \"first_time_after\": 43250,\n            \"direction\": \"unchanged\"\n          },\n          \"a_cmp_rx\": {\n            \"before\": 100,\n            \"after\": 100,\n            \"first_time_before\": 32590,\n            \"first_time_after\": 32590,\n            \"direction\": \"unchanged\"\n          },\n          \"ack_transfer\": {\n            \"before\": 427,\n            \"after\": 427,\n            \"first_time_before\": 32590,\n            \"first_time_after\": 32590,\n            \"direction\": \"unchanged\"\n          },\n          \"cmd_arg\": {\n            \"before\": 225,\n            \"after\": 225,\n            \"first_time_before\": 32710,\n            \"first_time_after\": 32710,\n            \"direction\": \"unchanged\"\n          },\n          \"d_read\": {\n            \"before\": 257,\n            \"after\": 257,\n            \"first_time_before\": 32640,\n            \"first_time_after\": 32640,\n            \"direction\": \"unchanged\"\n          },\n          \"d_write\": {\n            \"before\": 282,\n            \"after\": 282,\n            \"first_time_before\": 32640,\n            \"first_time_after\": 32640,\n            \"direction\": \"unchanged\"\n          },\n          \"re_s_rx\": {\n            \"before\": 105,\n            \"after\": 105,\n            \"first_time_before\": 97540,\n            \"first_time_after\": 97540,\n            \"direction\": \"unchanged\"\n          },\n          \"re_s_tx\": {\n            \"before\": 90,\n            \"after\": 90,\n            \"first_time_before\": 32620,\n            \"first_time_after\": 32620,\n            \"direction\": \"unchanged\"\n          },\n          \"start_rx_fifo\": {\n            \"before\": 335,\n            \"after\": 335,\n            \"first_time_before\": 58890,\n            \"first_time_after\": 58890,\n            \"direction\": \"unchanged\"\n          },\n          \"start_tx_fifo\": {\n            \"before\": 130,\n            \"after\": 130,\n            \"first_time_before\": 32590,\n            \"first_time_after\": 32590,\n            \"direction\": \"unchanged\"\n          },\n          \"sys_adr\": {\n            \"before\": 275,\n            \"after\": 275,\n            \"first_time_before\": 32610,\n            \"first_time_after\": 32610,\n            \"direction\": \"unchanged\"\n          },\n          \"we_req\": {\n            \"before\": 820,\n            \"after\": 800,\n            \"first_time_before\": 22130,\n            \"first_time_after\": 32680,\n            \"direction\": \"improved\"\n          }\n        }\n      },\n      \"lesson\": \"Patch improved mismatch count or first fail time; continue from this direction.\",\n      \"hypothesis\": \"Causal diagnosis: current first real divergence is we_req dropping in IDLE immediately after STOP_SEND asserted the stop-command request. The global default clears we_req and IDLE does not override it, while the reference holds we_req through the post-stop IDLE sample and clears it when the next descriptor state begins. Expected effect: we_req should remain high at t=22125/t=22130 while state is IDLE, matching the reference, and still clear when the FSM advances into GET_TX_BD because the global default remains active there.\",\n      \"patch_summary\": \"CIDAT <= CIDAT; we_req <= we_req;\",\n      \"protect\": [\n        \"Preserve improved behavior for signals: CIDAT, we_req.\"\n      ]\n    },\n    {\n      \"step\": 8,\n      \"action_type\": \"apply_patch\",\n      \"block_id\": null,\n      \"target\": {\n        \"path\": \"/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_master/rtl.sv\",\n        \"start_line\": 386,\n        \"end_line\": 399\n      },\n      \"affected_signals\": [\n        \"a_cmp_rx\",\n        \"a_cmp_tx\",\n        \"ack_transfer\",\n        \"trans_done\",\n        \"trans_failed\"\n      ],\n      \"effect\": \"syntax_failed\",\n      \"metric_delta\": {\n        \"total_samples_mismatch\": \"33923 -> None\",\n        \"per_signal\": {\n          \"CIDAT\": {\n            \"before\": 33057,\n            \"after\": null,\n            \"first_time_before\": 52280,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"Dat_Int_Status\": {\n            \"before\": 24,\n            \"after\": null,\n            \"first_time_before\": 43250,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"a_cmp_rx\": {\n            \"before\": 100,\n            \"after\": null,\n            \"first_time_before\": 32590,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"ack_transfer\": {\n            \"before\": 427,\n            \"after\": null,\n            \"first_time_before\": 32590,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"cmd_arg\": {\n            \"before\": 225,\n            \"after\": null,\n            \"first_time_before\": 32710,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"d_read\": {\n            \"before\": 257,\n            \"after\": null,\n            \"first_time_before\": 32640,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"d_write\": {\n            \"before\": 282,\n            \"after\": null,\n            \"first_time_before\": 32640,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"re_s_rx\": {\n            \"before\": 105,\n            \"after\": null,\n            \"first_time_before\": 97540,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"re_s_tx\": {\n            \"before\": 90,\n            \"after\": null,\n            \"first_time_before\": 32620,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"start_rx_fifo\": {\n            \"before\": 335,\n            \"after\": null,\n            \"first_time_before\": 58890,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"start_tx_fifo\": {\n            \"before\": 130,\n            \"after\": null,\n            \"first_time_before\": 32590,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"sys_adr\": {\n            \"before\": 275,\n            \"after\": null,\n            \"first_time_before\": 32610,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"we_req\": {\n            \"before\": 800,\n            \"after\": null,\n            \"first_time_before\": 32680,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          }\n        }\n      },\n      \"lesson\": \"Patch failed lint and was rolled back; fix syntax before retrying this idea.\",\n      \"hypothesis\": \"Causal diagnosis: at t=32585 both DUT and reference are in DATA_TRANSFER, but busy_n=0. The reference DATA_TRANSFER code only treats internal_transm_complete as successful when crc_ok && busy_n, so it keeps a_cmp_rx=0 and remains in DATA_TRANSFER. Current RTL ignores busy_n and asserts trans_done/a_cmp_rx/ack_transfer on internal_transm_complete && crc_ok, causing the DUT to complete one cycle early. Expected effect: Prevent DATA_TRANSFER success/failure completion while the data line is still busy; a_cmp_rx and trans_done should stay low at t=32585 and next_state should remain DATA_TRANSFER, preserving earlier failure-branch ack behavior and output holds.\",\n      \"patch_summary\": \"end else if (internal_transm_complete) begin if (crc_ok && busy_n) begin trans_done <= 1'b\\n...<snip>...\\negin a_cmp_rx <= 1'b1; end end else if (!crc_ok && busy_n) begin trans_failed <= 1'b1; end\",\n      \"protect\": []\n    },\n    {\n      \"step\": 9,\n      \"action_type\": \"apply_patch\",\n      \"block_id\": null,\n      \"target\": {\n        \"path\": \"/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_master/rtl.sv\",\n        \"start_line\": 386,\n        \"end_line\": 400\n      },\n      \"affected_signals\": [\n        \"a_cmp_rx\",\n        \"a_cmp_tx\",\n        \"ack_transfer\",\n        \"trans_done\",\n        \"trans_failed\"\n      ],\n      \"effect\": \"syntax_failed\",\n      \"metric_delta\": {\n        \"total_samples_mismatch\": \"33923 -> None\",\n        \"per_signal\": {\n          \"CIDAT\": {\n            \"before\": 33057,\n            \"after\": null,\n            \"first_time_before\": 52280,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"Dat_Int_Status\": {\n            \"before\": 24,\n            \"after\": null,\n            \"first_time_before\": 43250,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"a_cmp_rx\": {\n            \"before\": 100,\n            \"after\": null,\n            \"first_time_before\": 32590,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"ack_transfer\": {\n            \"before\": 427,\n            \"after\": null,\n            \"first_time_before\": 32590,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"cmd_arg\": {\n            \"before\": 225,\n            \"after\": null,\n            \"first_time_before\": 32710,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"d_read\": {\n            \"before\": 257,\n            \"after\": null,\n            \"first_time_before\": 32640,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"d_write\": {\n            \"before\": 282,\n            \"after\": null,\n            \"first_time_before\": 32640,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"re_s_rx\": {\n            \"before\": 105,\n            \"after\": null,\n            \"first_time_before\": 97540,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"re_s_tx\": {\n            \"before\": 90,\n            \"after\": null,\n            \"first_time_before\": 32620,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"start_rx_fifo\": {\n            \"before\": 335,\n            \"after\": null,\n            \"first_time_before\": 58890,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"start_tx_fifo\": {\n            \"before\": 130,\n            \"after\": null,\n            \"first_time_before\": 32590,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"sys_adr\": {\n            \"before\": 275,\n            \"after\": null,\n            \"first_time_before\": 32610,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"we_req\": {\n            \"before\": 800,\n            \"after\": null,\n            \"first_time_before\": 32680,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          }\n        }\n      },\n      \"lesson\": \"Patch failed lint and was rolled back; fix syntax before retrying this idea.\",\n      \"hypothesis\": \"Causal diagnosis: current RTL treats crc_ok alone as sufficient to complete DATA_TRANSFER, so at t=32585 it asserts a_cmp_rx/trans_done while busy_n=0. Reference support.sv gates both CRC success and CRC failure handling with busy_n, keeping the transfer active until the data line is free. Expected effect: a_cmp_rx and trans_done should remain low at t=32585 while busy_n=0, so DUT next_state should stay DATA_TRANSFER like the reference. CRC success/failure should still be acted on once busy_n is high.\",\n      \"patch_summary\": \"end else if (internal_transm_complete) begin if (crc_ok && busy_n) begin trans_done <= 1'b\\n...<snip>...\\n a_cmp_rx <= 1'b1; end end else if (!crc_ok && busy_n) begin trans_failed <= 1'b1; end end\",\n      \"protect\": []\n    },\n    {\n      \"step\": 10,\n      \"action_type\": \"apply_patch\",\n      \"block_id\": null,\n      \"target\": {\n        \"path\": \"/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_master/rtl.sv\",\n        \"start_line\": 386,\n        \"end_line\": 401\n      },\n      \"affected_signals\": [\n        \"a_cmp_rx\",\n        \"a_cmp_tx\",\n        \"ack_transfer\",\n        \"trans_done\",\n        \"trans_failed\"\n      ],\n      \"effect\": \"improved\",\n      \"metric_delta\": {\n        \"total_samples_mismatch\": \"33923 -> 33953\",\n        \"per_signal\": {\n          \"CIDAT\": {\n            \"before\": 33057,\n            \"after\": 33053,\n            \"first_time_before\": 52280,\n            \"first_time_after\": 52280,\n            \"direction\": \"improved\"\n          },\n          \"Dat_Int_Status\": {\n            \"before\": 24,\n            \"after\": 24,\n            \"first_time_before\": 43250,\n            \"first_time_after\": 43250,\n            \"direction\": \"unchanged\"\n          },\n          \"a_cmp_rx\": {\n            \"before\": 100,\n            \"after\": 98,\n            \"first_time_before\": 32590,\n            \"first_time_after\": 43250,\n            \"direction\": \"improved\"\n          },\n          \"ack_transfer\": {\n            \"before\": 427,\n            \"after\": 429,\n            \"first_time_before\": 32590,\n            \"first_time_after\": 32600,\n            \"direction\": \"regressed\"\n          },\n          \"cmd_arg\": {\n            \"before\": 225,\n            \"after\": 179,\n            \"first_time_before\": 32710,\n            \"first_time_after\": 135700,\n            \"direction\": \"improved\"\n          },\n          \"d_read\": {\n            \"before\": 257,\n            \"after\": 279,\n            \"first_time_before\": 32640,\n            \"first_time_after\": 72020,\n            \"direction\": \"regressed\"\n          },\n          \"d_write\": {\n            \"before\": 282,\n            \"after\": 270,\n            \"first_time_before\": 32640,\n            \"first_time_after\": 121280,\n            \"direction\": \"improved\"\n          },\n          \"re_s_rx\": {\n            \"before\": 105,\n            \"after\": 125,\n            \"first_time_before\": 97540,\n            \"first_time_after\": 97540,\n            \"direction\": \"regressed\"\n          },\n          \"re_s_tx\": {\n            \"before\": 90,\n            \"after\": 60,\n            \"first_time_before\": 32620,\n            \"first_time_after\": 319940,\n            \"direction\": \"improved\"\n          },\n          \"start_rx_fifo\": {\n            \"before\": 335,\n            \"after\": 349,\n            \"first_time_before\": 58890,\n            \"first_time_after\": 58890,\n            \"direction\": \"regressed\"\n          },\n          \"start_tx_fifo\": {\n            \"before\": 130,\n            \"after\": 118,\n            \"first_time_before\": 32590,\n            \"first_time_after\": 32590,\n            \"direction\": \"improved\"\n          },\n          \"sys_adr\": {\n            \"before\": 275,\n            \"after\": 255,\n            \"first_time_before\": 32610,\n            \"first_time_after\": 97530,\n            \"direction\": \"improved\"\n          },\n          \"we_req\": {\n            \"before\": 800,\n            \"after\": 822,\n            \"first_time_before\": 32680,\n            \"first_time_after\": 32700,\n            \"direction\": \"regressed\"\n          }\n        }\n      },\n      \"lesson\": \"Patch improved mismatch count or first fail time; continue from this direction.\",\n      \"hypothesis\": \"Causal diagnosis: current RTL treats crc_ok alone as sufficient to complete DATA_TRANSFER, so at t=32585 it asserts a_cmp_rx/trans_done while busy_n=0. Reference support.sv gates both CRC success and CRC failure handling with busy_n, keeping transfer active until the data line is free. This patch includes the original closing end to avoid the prior lint-only failure. Expected effect: a_cmp_rx and trans_done should remain low at t=32585 while busy_n=0, so DUT next_state should stay DATA_TRANSFER like the reference; CRC success/failure should still be handled when busy_n is high.\",\n      \"patch_summary\": \"end else if (internal_transm_complete) begin if (crc_ok && busy_n) begin trans_done <= 1'b\\n...<snip>...\\n a_cmp_rx <= 1'b1; end end else if (!crc_ok && busy_n) begin trans_failed <= 1'b1; end end\",\n      \"protect\": [\n        \"Preserve improved behavior for signals: a_cmp_rx, a_cmp_tx, ack_transfer, trans_done, trans_failed.\"\n      ]\n    },\n    {\n      \"step\": 11,\n      \"action_type\": \"apply_patch\",\n      \"block_id\": null,\n      \"target\": {\n        \"path\": \"/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_master/rtl.sv\",\n        \"start_line\": 379,\n        \"end_line\": 379\n      },\n      \"affected_signals\": [\n        \"ack_transfer\",\n        \"start_tx_fifo\"\n      ],\n      \"effect\": \"improved\",\n      \"metric_delta\": {\n        \"total_samples_mismatch\": \"33953 -> 33949\",\n        \"per_signal\": {\n          \"CIDAT\": {\n            \"before\": 33053,\n            \"after\": 33053,\n            \"first_time_before\": 52280,\n            \"first_time_after\": 52280,\n            \"direction\": \"unchanged\"\n          },\n          \"Dat_Int_Status\": {\n            \"before\": 24,\n            \"after\": 24,\n            \"first_time_before\": 43250,\n            \"first_time_after\": 43250,\n            \"direction\": \"unchanged\"\n          },\n          \"a_cmp_rx\": {\n            \"before\": 98,\n            \"after\": 98,\n            \"first_time_before\": 43250,\n            \"first_time_after\": 43250,\n            \"direction\": \"unchanged\"\n          },\n          \"ack_transfer\": {\n            \"before\": 429,\n            \"after\": 429,\n            \"first_time_before\": 32600,\n            \"first_time_after\": 32600,\n            \"direction\": \"unchanged\"\n          },\n          \"cmd_arg\": {\n            \"before\": 179,\n            \"after\": 179,\n            \"first_time_before\": 135700,\n            \"first_time_after\": 135700,\n            \"direction\": \"unchanged\"\n          },\n          \"d_read\": {\n            \"before\": 279,\n            \"after\": 279,\n            \"first_time_before\": 72020,\n            \"first_time_after\": 72020,\n            \"direction\": \"unchanged\"\n          },\n          \"d_write\": {\n            \"before\": 270,\n            \"after\": 270,\n            \"first_time_before\": 121280,\n            \"first_time_after\": 121280,\n            \"direction\": \"unchanged\"\n          },\n          \"re_s_rx\": {\n            \"before\": 125,\n            \"after\": 125,\n            \"first_time_before\": 97540,\n            \"first_time_after\": 97540,\n            \"direction\": \"unchanged\"\n          },\n          \"re_s_tx\": {\n            \"before\": 60,\n            \"after\": 60,\n            \"first_time_before\": 319940,\n            \"first_time_after\": 319940,\n            \"direction\": \"unchanged\"\n          },\n          \"start_rx_fifo\": {\n            \"before\": 349,\n            \"after\": 349,\n            \"first_time_before\": 58890,\n            \"first_time_after\": 58890,\n            \"direction\": \"unchanged\"\n          },\n          \"start_tx_fifo\": {\n            \"before\": 118,\n            \"after\": 84,\n            \"first_time_before\": 32590,\n            \"first_time_after\": 309210,\n            \"direction\": \"improved\"\n          },\n          \"sys_adr\": {\n            \"before\": 255,\n            \"after\": 255,\n            \"first_time_before\": 97530,\n            \"first_time_after\": 97530,\n            \"direction\": \"unchanged\"\n          },\n          \"we_req\": {\n            \"before\": 822,\n            \"after\": 822,\n            \"first_time_before\": 32700,\n            \"first_time_after\": 32700,\n            \"direction\": \"unchanged\"\n          }\n        }\n      },\n      \"lesson\": \"Patch improved mismatch count or first fail time; continue from this direction.\",\n      \"hypothesis\": \"Causal diagnosis: current first divergence is start_tx_fifo dropping in DATA_TRANSFER. Reference DATA_TRANSFER retains start_tx_fifo because it does not assign it there, while current RTL's global default clears it each cycle unless a state overrides it. The failed prior directions were global hold or broad SEND/RECIVE reassertion; this is the distinguished DATA_TRANSFER-local hold. Expected effect: start_tx_fifo should remain high during DATA_TRANSFER at t=32585 and subsequent transfer cycles, matching the reference, while still clearing in STOP/IDLE and other states as currently implemented.\",\n      \"patch_summary\": \"ack_transfer <= ack_transfer; start_tx_fifo <= start_tx_fifo;\",\n      \"protect\": [\n        \"Preserve improved behavior for signals: ack_transfer, start_tx_fifo.\"\n      ]\n    },\n    {\n      \"step\": 12,\n      \"action_type\": \"apply_patch\",\n      \"block_id\": null,\n      \"target\": {\n        \"path\": \"/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_master/rtl.sv\",\n        \"start_line\": 386,\n        \"end_line\": 387\n      },\n      \"affected_signals\": [\n        \"ack_transfer\"\n      ],\n      \"effect\": \"syntax_failed\",\n      \"metric_delta\": {\n        \"total_samples_mismatch\": \"33949 -> None\",\n        \"per_signal\": {\n          \"CIDAT\": {\n            \"before\": 33053,\n            \"after\": null,\n            \"first_time_before\": 52280,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"Dat_Int_Status\": {\n            \"before\": 24,\n            \"after\": null,\n            \"first_time_before\": 43250,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"a_cmp_rx\": {\n            \"before\": 98,\n            \"after\": null,\n            \"first_time_before\": 43250,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"ack_transfer\": {\n            \"before\": 429,\n            \"after\": null,\n            \"first_time_before\": 32600,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"cmd_arg\": {\n            \"before\": 179,\n            \"after\": null,\n            \"first_time_before\": 135700,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"d_read\": {\n            \"before\": 279,\n            \"after\": null,\n            \"first_time_before\": 72020,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"d_write\": {\n            \"before\": 270,\n            \"after\": null,\n            \"first_time_before\": 121280,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"re_s_rx\": {\n            \"before\": 125,\n            \"after\": null,\n            \"first_time_before\": 97540,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"re_s_tx\": {\n            \"before\": 60,\n            \"after\": null,\n            \"first_time_before\": 319940,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"start_rx_fifo\": {\n            \"before\": 349,\n            \"after\": null,\n            \"first_time_before\": 58890,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"start_tx_fifo\": {\n            \"before\": 84,\n            \"after\": null,\n            \"first_time_before\": 309210,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"sys_adr\": {\n            \"before\": 255,\n            \"after\": null,\n            \"first_time_before\": 97530,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          },\n          \"we_req\": {\n            \"before\": 822,\n            \"after\": null,\n            \"first_time_before\": 32700,\n            \"first_time_after\": null,\n            \"direction\": \"unknown\"\n          }\n        }\n      },\n      \"lesson\": \"Patch failed lint and was rolled back; fix syntax before retrying this idea.\",\n      \"hypothesis\": \"Causal diagnosis: after correcting DATA_TRANSFER completion to wait for busy_n before trans_done/trans_failed, ack_transfer is now late at t=32595. The reference asserts ack_transfer whenever internal_transm_complete is observed, independent of busy_n, while only status/done/fail are busy_n-gated. Expected effect: ack_transfer should assert at the t=32595 internal transfer-complete observation even while busy_n is low, matching the reference, without prematurely asserting trans_done/trans_failed or a_cmp_rx.\",\n      \"patch_summary\": \"end else if (internal_transm_complete) begin ack_transfer <= 1'b1; if (crc_ok && busy_n) begin\",\n      \"protect\": []\n    },\n    {\n      \"step\": 13,\n      \"action_type\": \"apply_patch\",\n      \"block_id\": null,\n      \"target\": {\n        \"path\": \"/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_master/rtl.sv\",\n        \"start_line\": 377,\n        \"end_line\": 403\n      },\n      \"affected_signals\": [\n        \"CIDAT\",\n        \"a_cmp_rx\",\n        \"a_cmp_tx\",\n        \"ack_transfer\",\n        \"start_tx_fifo\",\n        \"trans_done\",\n        \"trans_failed\"\n      ],\n      \"effect\": \"regressed\",\n      \"metric_delta\": {\n        \"total_samples_mismatch\": \"33949 -> 33953\",\n        \"per_signal\": {\n          \"CIDAT\": {\n            \"before\": 33053,\n            \"after\": 33053,\n            \"first_time_before\": 52280,\n            \"first_time_after\": 52280,\n            \"direction\": \"unchanged\"\n          },\n          \"Dat_Int_Status\": {\n            \"before\": 24,\n            \"after\": 24,\n            \"first_time_before\": 43250,\n            \"first_time_after\": 43250,\n            \"direction\": \"unchanged\"\n          },\n          \"a_cmp_rx\": {\n            \"before\": 98,\n            \"after\": 98,\n            \"first_time_before\": 43250,\n            \"first_time_after\": 43250,\n            \"direction\": \"unchanged\"\n          },\n          \"ack_transfer\": {\n            \"before\": 429,\n            \"after\": 409,\n            \"first_time_before\": 32600,\n            \"first_time_after\": 32590,\n            \"direction\": \"improved\"\n          },\n          \"cmd_arg\": {\n            \"before\": 179,\n            \"after\": 179,\n            \"first_time_before\": 135700,\n            \"first_time_after\": 135700,\n            \"direction\": \"unchanged\"\n          },\n          \"d_read\": {\n            \"before\": 279,\n            \"after\": 279,\n            \"first_time_before\": 72020,\n            \"first_time_after\": 72020,\n            \"direction\": \"unchanged\"\n          },\n          \"d_write\": {\n            \"before\": 270,\n            \"after\": 270,\n            \"first_time_before\": 121280,\n            \"first_time_after\": 121280,\n            \"direction\": \"unchanged\"\n          },\n          \"re_s_rx\": {\n            \"before\": 125,\n            \"after\": 125,\n            \"first_time_before\": 97540,\n            \"first_time_after\": 97540,\n            \"direction\": \"unchanged\"\n          },\n          \"re_s_tx\": {\n            \"before\": 60,\n            \"after\": 60,\n            \"first_time_before\": 319940,\n            \"first_time_after\": 319940,\n            \"direction\": \"unchanged\"\n          },\n          \"start_rx_fifo\": {\n            \"before\": 349,\n            \"after\": 349,\n            \"first_time_before\": 58890,\n            \"first_time_after\": 58890,\n            \"direction\": \"unchanged\"\n          },\n          \"start_tx_fifo\": {\n            \"before\": 84,\n            \"after\": 84,\n            \"first_time_before\": 309210,\n            \"first_time_after\": 309210,\n            \"direction\": \"unchanged\"\n          },\n          \"sys_adr\": {\n            \"before\": 255,\n            \"after\": 255,\n            \"first_time_before\": 97530,\n            \"first_time_after\": 97530,\n            \"direction\": \"unchanged\"\n          },\n          \"we_req\": {\n            \"before\": 822,\n            \"after\": 822,\n            \"first_time_before\": 32700,\n            \"first_time_after\": 32700,\n            \"direction\": \"unchanged\"\n          }\n        }\n      },\n      \"lesson\": \"Patch worsened mismatch count or first fail time and was rolled back.\",\n      \"hypothesis\": \"Causal diagnosis: after busy_n-gating DATA_TRANSFER done/fail, ack_transfer is late at t=32595. Reference DATA_TRANSFER asserts ack_transfer immediately on internal_transm_complete, while still gating trans_done/trans_failed/a_cmp on busy_n and crc_ok. Prior two-line insertion failed only due splice syntax, so replace the full DATA_TRANSFER case body to keep the structure balanced. Expected effect: ack_transfer should assert at the internal_transm_complete event even before busy_n rises, matching the reference at t=32595, while trans_done/a_cmp_rx remain delayed until crc_ok && busy_n.\",\n      \"patch_summary\": \"DATA_TRANSFER: begin CIDAT <= 1'b1; ack_transfer <= ack_transfer; start_tx_fifo <= start_t\\n...<snip>...\\nmp_rx <= 1'b1; end end else if (!crc_ok && busy_n) begin trans_failed <= 1'b1; end end end\",\n      \"protect\": []\n    },\n    {\n      \"step\": 14,\n      \"action_type\": \"apply_patch\",\n      \"block_id\": null,\n      \"target\": {\n        \"path\": \"/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_master/rtl.sv\",\n        \"start_line\": 381,\n        \"end_line\": 387\n      },\n      \"affected_signals\": [\n        \"ack_transfer\",\n        \"trans_failed\"\n      ],\n      \"effect\": \"regressed\",\n      \"metric_delta\": {\n        \"total_samples_mismatch\": \"33949 -> 33997\",\n        \"per_signal\": {\n          \"CIDAT\": {\n            \"before\": 33053,\n            \"after\": 33053,\n            \"first_time_before\": 52280,\n            \"first_time_after\": 52280,\n            \"direction\": \"unchanged\"\n          },\n          \"Dat_Int_Status\": {\n            \"before\": 24,\n            \"after\": 24,\n            \"first_time_before\": 43250,\n            \"first_time_after\": 43250,\n            \"direction\": \"unchanged\"\n          },\n          \"a_cmp_rx\": {\n            \"before\": 98,\n            \"after\": 98,\n            \"first_time_before\": 43250,\n            \"first_time_after\": 43250,\n            \"direction\": \"unchanged\"\n          },\n          \"ack_transfer\": {\n            \"before\": 429,\n            \"after\": 457,\n            \"first_time_before\": 32600,\n            \"first_time_after\": 22070,\n            \"direction\": \"regressed\"\n          },\n          \"cmd_arg\": {\n            \"before\": 179,\n            \"after\": 179,\n            \"first_time_before\": 135700,\n            \"first_time_after\": 135700,\n            \"direction\": \"unchanged\"\n          },\n          \"d_read\": {\n            \"before\": 279,\n            \"after\": 279,\n            \"first_time_before\": 72020,\n            \"first_time_after\": 72020,\n            \"direction\": \"unchanged\"\n          },\n          \"d_write\": {\n            \"before\": 270,\n            \"after\": 270,\n            \"first_time_before\": 121280,\n            \"first_time_after\": 121280,\n            \"direction\": \"unchanged\"\n          },\n          \"re_s_rx\": {\n            \"before\": 125,\n            \"after\": 125,\n            \"first_time_before\": 97540,\n            \"first_time_after\": 97540,\n            \"direction\": \"unchanged\"\n          },\n          \"re_s_tx\": {\n            \"before\": 60,\n            \"after\": 60,\n            \"first_time_before\": 319940,\n            \"first_time_after\": 319940,\n            \"direction\": \"unchanged\"\n          },\n          \"start_rx_fifo\": {\n            \"before\": 349,\n            \"after\": 349,\n            \"first_time_before\": 58890,\n            \"first_time_after\": 58890,\n            \"direction\": \"unchanged\"\n          },\n          \"start_tx_fifo\": {\n            \"before\": 84,\n            \"after\": 84,\n            \"first_time_before\": 309210,\n            \"first_time_after\": 309210,\n            \"direction\": \"unchanged\"\n          },\n          \"sys_adr\": {\n            \"before\": 255,\n            \"after\": 255,\n            \"first_time_before\": 97530,\n            \"first_time_after\": 97530,\n            \"direction\": \"unchanged\"\n          },\n          \"we_req\": {\n            \"before\": 822,\n            \"after\": 822,\n            \"first_time_before\": 32700,\n            \"first_time_after\": 32700,\n            \"direction\": \"unchanged\"\n          }\n        }\n      },\n      \"lesson\": \"Patch worsened mismatch count or first fail time and was rolled back.\",\n      \"hypothesis\": \"Causal diagnosis: the first real divergence is ack_transfer asserting early in DATA_TRANSFER. The generated RTL acknowledges FIFO underflow/full failure branches, but the reference support.sv marks those branches as failures/status only and reserves ack_transfer for internal_transm_complete. This causes DUT ack_transfer to rise before the reference at t=32585. Expected effect: ack_transfer should stay low during FIFO underflow/full failure detection and no longer assert early at t=32585; existing trans_failed behavior and transfer-complete ack behavior should be preserved.\",\n      \"patch_summary\": \"if (tx_cycle && tx_empt) begin trans_failed <= 1'b1; end else if (rx_cycle && rx_full) begin trans_failed <= 1'b1; end else if (internal_transm_complete) begin\",\n      \"protect\": []\n    },\n    {\n      \"step\": 15,\n      \"action_type\": \"apply_patch\",\n      \"block_id\": null,\n      \"target\": {\n        \"path\": \"/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_master/rtl.sv\",\n        \"start_line\": 217,\n        \"end_line\": 218\n      },\n      \"affected_signals\": [\n        \"internal_transm_complete\",\n        \"transm_complete_q\"\n      ],\n      \"effect\": \"improved\",\n      \"metric_delta\": {\n        \"total_samples_mismatch\": \"33949 -> 33894\",\n        \"per_signal\": {\n          \"CIDAT\": {\n            \"before\": 33053,\n            \"after\": 33047,\n            \"first_time_before\": 52280,\n            \"first_time_after\": 52280,\n            \"direction\": \"improved\"\n          },\n          \"Dat_Int_Status\": {\n            \"before\": 24,\n            \"after\": 24,\n            \"first_time_before\": 43250,\n            \"first_time_after\": 43250,\n            \"direction\": \"unchanged\"\n          },\n          \"a_cmp_rx\": {\n            \"before\": 98,\n            \"after\": 82,\n            \"first_time_before\": 43250,\n            \"first_time_after\": 43260,\n            \"direction\": \"improved\"\n          },\n          \"ack_transfer\": {\n            \"before\": 429,\n            \"after\": 305,\n            \"first_time_before\": 32600,\n            \"first_time_after\": 32600,\n            \"direction\": \"improved\"\n          },\n          \"cmd_arg\": {\n            \"before\": 179,\n            \"after\": 82,\n            \"first_time_before\": 135700,\n            \"first_time_after\": 278780,\n            \"direction\": \"improved\"\n          },\n          \"d_read\": {\n            \"before\": 279,\n            \"after\": 223,\n            \"first_time_before\": 72020,\n            \"first_time_after\": 32630,\n            \"direction\": \"improved\"\n          },\n          \"d_write\": {\n            \"before\": 270,\n            \"after\": 192,\n            \"first_time_before\": 121280,\n            \"first_time_after\": 32630,\n            \"direction\": \"improved\"\n          },\n          \"re_s_rx\": {\n            \"before\": 125,\n            \"after\": 71,\n            \"first_time_before\": 97540,\n            \"first_time_after\": 127300,\n            \"direction\": \"improved\"\n          },\n          \"re_s_tx\": {\n            \"before\": 60,\n            \"after\": 46,\n            \"first_time_before\": 319940,\n            \"first_time_after\": 319940,\n            \"direction\": \"improved\"\n          },\n          \"start_rx_fifo\": {\n            \"before\": 349,\n            \"after\": 355,\n            \"first_time_before\": 58890,\n            \"first_time_after\": 58890,\n            \"direction\": \"regressed\"\n          },\n          \"start_tx_fifo\": {\n            \"before\": 84,\n            \"after\": 76,\n            \"first_time_before\": 309210,\n            \"first_time_after\": 32630,\n            \"direction\": \"improved\"\n          },\n          \"sys_adr\": {\n            \"before\": 255,\n            \"after\": 159,\n            \"first_time_before\": 97530,\n            \"first_time_after\": 127290,\n            \"direction\": \"improved\"\n          },\n          \"we_req\": {\n            \"before\": 822,\n            \"after\": 786,\n            \"first_time_before\": 32700,\n            \"first_time_after\": 32640,\n            \"direction\": \"improved\"\n          }\n        }\n      },\n      \"lesson\": \"Patch improved mismatch count or first fail time; continue from this direction.\",\n      \"hypothesis\": \"Causal diagnosis: the first real divergence is ack_transfer late after transfer completion. VCD shows the reference keeps internal_transm_complete high through the later busy_n/crc_ok decision window, while the DUT's internal_transm_complete has already dropped because rtl.sv implements it as a one-cycle edge pulse. The reference DATA_TRANSFER code asserts ack_transfer whenever internal_transm_com\\n...<snip>...\\nses busy_n/crc_ok for done/fail status, so the completion indication must persist until acknowledged. Expected effect: internal_transm_complete should remain asserted from a transm_complete rising edge until ack_transfer is observed, allowing DATA_TRANSFER to assert ack_transfer during the CRC-failure/data-line-free window at 22065/32595 without changing descriptor, command, FIFO, or status logic.\",\n      \"patch_summary\": \"transm_complete_q <= transm_complete; if (ack_transfer) begin internal_transm_complete <= \\n...<snip>...\\ncomplete <= 1'b1; end else begin internal_transm_complete <= internal_transm_complete; end\",\n      \"protect\": [\n        \"Preserve improved behavior for signals: internal_transm_complete, transm_complete_q.\"\n      ]\n    }\n  ],\n  \"protected_invariants\": [\n    \"Preserve improved behavior for signals: CIDAT, bd_cnt, cmd_arg, cmd_set, re_s_rx, rx_cycle, start_tx_fifo, sys_adr.\",\n    \"Preserve improved behavior for signals: CIDAT, bd_cnt, cmd_arg, cmd_set, re_s_rx, re_s_tx, rx_cycle, start_tx_fifo.\",\n    \"Preserve improved behavior for signals: state.\",\n    \"Preserve improved behavior for signals: bd_cnt, cmd_arg, cmd_set, re_s_tx, rx_cycle, start_tx_fifo, sys_adr, tx_cycle.\",\n    \"Preserve improved behavior for signals: Dat_Int_Status, rec_done, rec_failed, start_tx_fifo.\",\n    \"Preserve improved behavior for signals: d_read, d_write, send_done, start_rx_fifo, start_tx_fifo, we_req.\",\n    \"Preserve improved behavior for signals: rec_done, rec_failed, send_done.\",\n    \"Preserve improved behavior for signals: d_read, d_write.\",\n    \"Preserve improved behavior for signals: rec_done, we_req.\",\n    \"Preserve improved behavior for signals: send_done, we_req.\",\n    \"Preserve improved behavior for signals: CIDAT.\",\n    \"Preserve improved behavior for signals: ack_transfer, trans_failed.\"\n  ],\n  \"unsafe_directions\": [\n    \"Syntax-failed direction at step 2: end else if (bd_cnt == 3'd2) begin cmd_arg[15:0] <= dat_in_tx; re_s_tx <= 1'b0; bd_cnt <= \\n...<snip>...\\n_cnt == 3'd3) begin cmd_arg[31:16] <= dat_in_rx; re_s_rx <= 1'b0; bd_cnt <= bd_cnt + 3'd1;\",\n    \"Regressed direction at step 6 changed ['start_tx_fifo']: // start_tx_fifo intentionally retains its value until an explicit state assignment changes it.\",\n    \"Regressed direction at step 8 changed ['d_read', 'd_write', 'send_done', 'start_rx_fifo', 'start_tx_fifo', 'we_req']: SEND_CMD: begin if (tx_cycle) begin d_write <= 1'b1; d_read <= 1'b0; start_tx_fifo <= 1'b1\\n...<snip>...\\n(tx_cycle) begin start_tx_fifo <= 1'b1; end if (rx_cycle) begin start_rx_fifo <= 1'b1; end\",\n    \"replace_block of A1 regressed mismatch 33463 -> 34352; do not repeat this block-level edit without new evidence and a preservation plan.\",\n    \"Regressed direction at step 15 changed ['CIDAT', 'Dat_Int_Status', 'a_cmp_rx', 'a_cmp_tx', 'ack_transfer', 'trans_done', 'trans_failed']: DATA_TRANSFER: begin CIDAT <= 1'b1; if (tx_cycle && tx_empt) begin Dat_Int_Status[2] <= 1'\\n...<snip>...\\nb1; if (free_rx_bd == (BD_EMPTY - 1)) begin Dat_Int_Status[0] <= 1'b1; end end end end end\",\n    \"Regressed direction at step 2 changed ['ack_transfer', 'trans_done', 'trans_failed']: end else if (internal_transm_complete) begin ack_transfer <= 1'b1; if (crc_ok) begin trans_done <= 1'b1; ack_transfer <= 1'b1;\",\n    \"Regressed direction at step 4 changed ['ack_transfer']: ack_transfer <= ack_transfer;\",\n    \"Syntax-failed direction at step 8: end else if (internal_transm_complete) begin if (crc_ok && busy_n) begin trans_done <= 1'b\\n...<snip>...\\negin a_cmp_rx <= 1'b1; end end else if (!crc_ok && busy_n) begin trans_failed <= 1'b1; end\"\n  ],\n  \"next_local_target\": {\n    \"signal\": null,\n    \"time\": null,\n    \"sampling_mode\": null,\n    \"status\": null,\n    \"classification\": null,\n    \"ref\": null,\n    \"dut\": null,\n    \"symptom\": \"No current DUT/ref divergence target available.\",\n    \"suspect_blocks\": [],\n    \"must_preserve\": [\n      \"Preserve improved behavior for signals: CIDAT, bd_cnt, cmd_arg, cmd_set, re_s_rx, rx_cycle, start_tx_fifo, sys_adr.\",\n      \"Preserve improved behavior for signals: CIDAT, bd_cnt, cmd_arg, cmd_set, re_s_rx, re_s_tx, rx_cycle, start_tx_fifo.\",\n      \"Preserve improved behavior for signals: state.\",\n      \"Preserve improved behavior for signals: bd_cnt, cmd_arg, cmd_set, re_s_tx, rx_cycle, start_tx_fifo, sys_adr, tx_cycle.\",\n      \"Preserve improved behavior for signals: Dat_Int_Status, rec_done, rec_failed, start_tx_fifo.\",\n      \"Preserve improved behavior for signals: d_read, d_write, send_done, start_rx_fifo, start_tx_fifo, we_req.\",\n      \"Preserve improved behavior for signals: rec_done, rec_failed, send_done.\",\n      \"Preserve improved behavior for signals: d_read, d_write.\"\n    ]\n  },\n  \"high_coupling_blocks\": [],\n  \"known_planning_corrections\": [\n    {\n      \"step\": 7,\n      \"module\": \"sd_data_master\",\n      \"correction_type\": \"wrong_timing\",\n      \"original_artifact\": \"stage5_codegen B5_comb_output_assign\",\n      \"problem\": \"The generated RTL uses registered outputs with default-zero assignments (lines 171-181) that clear every output each cycle before the state case. The reference design (ref_sd_data_master in support.sv) does NOT use defaults; instead, outputs retain their values across states unless explicitly changed. This causes systematic mismatches for all signals that should persist across state transitions (cmd_set, cmd_arg, sys_adr, tx_cycle, rx_cycle, start_tx_fifo, start_rx_fifo, a_cmp_tx, a_cmp_rx, ack_transfer, CIDAT, we_req, d_read, d_write, re_s_tx, re_s_rx, etc.). Each state must explicitly assign only the signals that change, and all others must retain their previous value.\",\n      \"evidence\": [\n        \"Trace shows start_tx_fifo expected=1 actual=0 at time 2370 because default clears it after GET_TX_BD sets it to 1\",\n        \"re_s_tx mismatch at time 2310 (original) because re_s_tx not explicitly cleared in GET_TX_BD for bd_cnt>=2\",\n        \"Multiple signals show one-cycle lag pattern (match_rate_dut_lag1 ~0.98) indicating the reference retains values while DUT clears them\",\n        \"Reference support.sv lines 252-509 show no default assignments; each state case only sets signals that need to change\"\n      ],\n      \"override\": {\n        \"action\": \"Remove default-zero assignments (lines 171-181). Ensure every state explicitly sets all signals that need to change in that state. Let all other signals retain their previous values. Match reference output logic exactly: IDLE clears all control signals; GET_TX_BD/GET_RX_BD set BD read signals and retain others; SEND_CMD clears re_s_tx/re_s_rx/start_rx_fifo and sets d_read/d_write/we_req; RECIVE_CMD clears we_req/d_read/d_write and sets start_rx_fifo; DATA_TRANSFER sets CIDAT=1 and manages transfer completion; STOP/STOP_SEND manage their signals.\"\n      }\n    },\n    {\n      \"step\": 1,\n      \"module\": \"sd_data_master\",\n      \"correction_type\": \"wrong_interface\",\n      \"original_artifact\": \"stage5_codegen B5_comb_output_assign\",\n      \"problem\": \"The GET_RX_BD transition condition uses '>' (bd_cnt > READ_CYCLE-1) but the reference uses '>=' (bd_cnt >= READ_CYCLE-1). With READ_CYCLE=4, DUT transitions at bd_cnt>3 (bd_cnt>=4) while reference transitions at bd_cnt>=3, causing a one-cycle lag in the RX path. Additionally, the reference uses separate FSM_SEQ and output logic always blocks with NO default-zero assignments; each state only sets signals that need to change. The DUT has default-zero assignments that clear all outputs every cycle, preventing signals from persisting across states.\",\n      \"evidence\": [\n        \"Reference support.sv FSM_COMBO: GET_RX_BD uses bd_cnt >= (READ_CYCLE-1)\",\n        \"DUT uses bd_cnt > (READ_CYCLE - 1) for both GET_TX_BD and GET_RX_BD\",\n        \"Alignment diagnosis shows we_req best_alignment is dut_lag1 with match_rate 1.0\",\n        \"Known planning correction states reference does NOT use default-zero assignments\"\n      ],\n      \"override\": {\n        \"action\": \"1) Fix GET_RX_BD transition: change bd_cnt > (READ_CYCLE-1) to bd_cnt >= (READ_CYCLE-1). 2) Remove ALL default-zero assignments and instead explicitly set every signal that needs to change in each state, matching the reference output logic exactly. The IDLE state clears all signals; other states only set what they need. 3) Ensure signals that should persist (cmd_set, cmd_arg, sys_adr, tx_cycle, rx_cycle, etc.) are not cleared in states where they should hold.\"\n      }\n    }\n  ],\n  \"action_calls\": 0,\n  \"max_steps\": 15\n}\n</repo_react_memory_brief_json>\n\nStart by observing with read_context, read_spec, retrieve_spec_block, search_context, query_rtl_kg, run_check, read_memory, list_vcd_signals, or probe_vcd. In functional repair, first establish semantic intent with read_spec/retrieve_spec_block or a relevant stage_artifact, then localize with trace/VCD. For functional repair, run run_check(mode=\"first_divergence\") before apply_patch/replace_block and use the returned real DUT/ref output mismatch as the root evidence. If it returns stable_values_match_but_tb_edge_mismatch, reason about active-region edge sampling and blocking/nonblocking behavior. Patch only after you have enough evidence. Choose the edit scope from the diagnosis: a single-line edit, several coordinated line ranges, or a complete always/assign replacement are all acceptable when they directly fit the root cause. Do not split a coherent semantic fix merely to reduce patch size. If causal memory lists protected_invariants or unsafe_directions, explicitly check them and include protected_invariants_checked/preserve_plan in write-tool arguments when relevant. In syntax repair mode, focus on lint errors, support.sv interfaces, missing macros, declarations, and Verilator diagnostics; lint pass is the success condition.",
+  "trace_summary": {
+    "fail_time": 32600,
+    "total_mismatches": 33894,
+    "first_failure": {
+      "signal": "ack_transfer",
+      "time": 32595,
+      "ref": "1",
+      "dut": "0",
+      "classification": "dut_late",
+      "ref_path": "tb.ack_transfer_ref",
+      "dut_path": "tb.ack_transfer_dut",
+      "sampling_mode": "stable",
+      "edge": null,
+      "driver_assignment_kind": "nonblocking",
+      "active_region_model": "settled VCD ref/dut values at sample/change times"
+    },
+    "root_failure": {
+      "signal": "ack_transfer",
+      "time": 32595,
+      "ref": "1",
+      "dut": "0",
+      "classification": "dut_late",
+      "ref_path": "tb.ack_transfer_ref",
+      "dut_path": "tb.ack_transfer_dut",
+      "sampling_mode": "stable",
+      "edge": null,
+      "driver_assignment_kind": "nonblocking",
+      "active_region_model": "settled VCD ref/dut values at sample/change times"
+    },
+    "first_divergence": {
+      "status": "ok",
+      "sampling_mode": "stable",
+      "edge": null,
+      "driver_assignment_kind": "nonblocking",
+      "active_region_model": "settled VCD ref/dut values at sample/change times",
+      "first_divergence": {
+        "signal": "ack_transfer",
+        "time": 32595,
+        "ref": "1",
+        "dut": "0",
+        "classification": "dut_late",
+        "ref_path": "tb.ack_transfer_ref",
+        "dut_path": "tb.ack_transfer_dut",
+        "sampling_mode": "stable",
+        "edge": null,
+        "driver_assignment_kind": "nonblocking",
+        "active_region_model": "settled VCD ref/dut values at sample/change times"
+      },
+      "nearby": {
+        "times": [
+          32580,
+          32585,
+          32590,
+          32595,
+          32600,
+          32605,
+          32610
+        ],
+        "rows": [
+          {
+            "t": 32580,
+            "Dat_Int_Status_rst": "0",
+            "ack_i_s_rx": "1",
+            "ack_i_s_tx": "1",
+            "busy_n": "0",
+            "card_status": "01100",
+            "clk": "0",
+            "cmd_busy": "0",
+            "cmd_tsf_err": "0",
+            "crc_ok": "1",
+            "dat_in_rx": "0100010111010110",
+            "dat_in_tx": "0100010111101101",
+            "free_rx_bd": "01010",
+            "ref_state": "000100000",
+            "dut_state": "000100000",
+            "ref_next_state": "000100000",
+            "dut_next_state": "000100000",
+            "ack_transfer_ref": "0",
+            "ack_transfer_dut": "0",
+            "re_s_tx_ref": "0",
+            "re_s_tx_dut": "0",
+            "re_s_rx_ref": "0",
+            "re_s_rx_dut": "0",
+            "a_cmp_rx_ref": "0",
+            "a_cmp_rx_dut": "0",
+            "we_req_ref": "0",
+            "we_req_dut": "0",
+            "d_write_ref": "0",
+            "d_write_dut": "0",
+            "d_read_ref": "0",
+            "d_read_dut": "0",
+            "cmd_arg_ref": "0",
+            "cmd_arg_dut": "0"
+          },
+          {
+            "t": 32585,
+            "Dat_Int_Status_rst": "0",
+            "ack_i_s_rx": "0",
+            "ack_i_s_tx": "1",
+            "busy_n": "0",
+            "card_status": "01100",
+            "clk": "1",
+            "cmd_busy": "1",
+            "cmd_tsf_err": "0",
+            "crc_ok": "1",
+            "dat_in_rx": "1110100000011101",
+            "dat_in_tx": "0111010000011010",
+            "free_rx_bd": "00111",
+            "ref_state": "000100000",
+            "dut_state": "000100000",
+            "ref_next_state": "000100000",
+            "dut_next_state": "000100000",
+            "ack_transfer_ref": "0",
+            "ack_transfer_dut": "0",
+            "re_s_tx_ref": "0",
+            "re_s_tx_dut": "0",
+            "re_s_rx_ref": "0",
+            "re_s_rx_dut": "0",
+            "a_cmp_rx_ref": "0",
+            "a_cmp_rx_dut": "0",
+            "we_req_ref": "0",
+            "we_req_dut": "0",
+            "d_write_ref": "0",
+            "d_write_dut": "0",
+            "d_read_ref": "0",
+            "d_read_dut": "0",
+            "cmd_arg_ref": "0",
+            "cmd_arg_dut": "0"
+          },
+          {
+            "t": 32590,
+            "Dat_Int_Status_rst": "1",
+            "ack_i_s_rx": "1",
+            "ack_i_s_tx": "1",
+            "busy_n": "0",
+            "card_status": "11101",
+            "clk": "0",
+            "cmd_busy": "0",
+            "cmd_tsf_err": "1",
+            "crc_ok": "0",
+            "dat_in_rx": "0100011111011100",
+            "dat_in_tx": "0110100101011100",
+            "free_rx_bd": "01011",
+            "ref_state": "000100000",
+            "dut_state": "000100000",
+            "ref_next_state": "000100000",
+            "dut_next_state": "000100000",
+            "ack_transfer_ref": "0",
+            "ack_transfer_dut": "0",
+            "re_s_tx_ref": "0",
+            "re_s_tx_dut": "0",
+            "re_s_rx_ref": "0",
+            "re_s_rx_dut": "0",
+            "a_cmp_rx_ref": "0",
+            "a_cmp_rx_dut": "0",
+            "we_req_ref": "0",
+            "we_req_dut": "0",
+            "d_write_ref": "0",
+            "d_write_dut": "0",
+            "d_read_ref": "0",
+            "d_read_dut": "0",
+            "cmd_arg_ref": "0",
+            "cmd_arg_dut": "0"
+          },
+          {
+            "t": 32595,
+            "Dat_Int_Status_rst": "0",
+            "ack_i_s_rx": "0",
+            "ack_i_s_tx": "0",
+            "busy_n": "0",
+            "card_status": "11101",
+            "clk": "1",
+            "cmd_busy": "0",
+            "cmd_tsf_err": "1",
+            "crc_ok": "0",
+            "dat_in_rx": "1101111010010000",
+            "dat_in_tx": "1101011011001011",
+            "free_rx_bd": "00100",
+            "ref_state": "000100000",
+            "dut_state": "000100000",
+            "ref_next_state": "000100000",
+            "dut_next_state": "000100000",
+            "ack_transfer_ref": "1",
+            "ack_transfer_dut": "0",
+            "re_s_tx_ref": "0",
+            "re_s_tx_dut": "0",
+            "re_s_rx_ref": "0",
+            "re_s_rx_dut": "0",
+            "a_cmp_rx_ref": "0",
+            "a_cmp_rx_dut": "0",
+            "we_req_ref": "0",
+            "we_req_dut": "0",
+            "d_write_ref": "0",
+            "d_write_dut": "0",
+            "d_read_ref": "0",
+            "d_read_dut": "0",
+            "cmd_arg_ref": "0",
+            "cmd_arg_dut": "0"
+          },
+          {
+            "t": 32600,
+            "Dat_Int_Status_rst": "0",
+            "ack_i_s_rx": "0",
+            "ack_i_s_tx": "1",
+            "busy_n": "1",
+            "card_status": "01001",
+            "clk": "0",
+            "cmd_busy": "1",
+            "cmd_tsf_err": "0",
+            "crc_ok": "1",
+            "dat_in_rx": "0111101101100011",
+            "dat_in_tx": "0111000000110001",
+            "free_rx_bd": "10101",
+            "ref_state": "000100000",
+            "dut_state": "000100000",
+            "ref_next_state": "000100000",
+            "dut_next_state": "000100000",
+            "ack_transfer_ref": "1",
+            "ack_transfer_dut": "0",
+            "re_s_tx_ref": "0",
+            "re_s_tx_dut": "0",
+            "re_s_rx_ref": "0",
+            "re_s_rx_dut": "0",
+            "a_cmp_rx_ref": "0",
+            "a_cmp_rx_dut": "0",
+            "we_req_ref": "0",
+            "we_req_dut": "0",
+            "d_write_ref": "0",
+            "d_write_dut": "0",
+            "d_read_ref": "0",
+            "d_read_dut": "0",
+            "cmd_arg_ref": "0",
+            "cmd_arg_dut": "0"
+          },
+          {
+            "t": 32605,
+            "Dat_Int_Status_rst": "1",
+            "ack_i_s_rx": "0",
+            "ack_i_s_tx": "1",
+            "busy_n": "1",
+            "card_status": "11111",
+            "clk": "1",
+            "cmd_busy": "0",
+            "cmd_tsf_err": "0",
+            "crc_ok": "0",
+            "dat_in_rx": "1111101111000101",
+            "dat_in_tx": "0110110000101010",
+            "free_rx_bd": "10100",
+            "ref_state": "000100000",
+            "dut_state": "000100000",
+            "ref_next_state": "000100000",
+            "dut_next_state": "001000000",
+            "ack_transfer_ref": "1",
+            "ack_transfer_dut": "0",
+            "re_s_tx_ref": "0",
+            "re_s_tx_dut": "0",
+            "re_s_rx_ref": "0",
+            "re_s_rx_dut": "0",
+            "a_cmp_rx_ref": "0",
+            "a_cmp_rx_dut": "0",
+            "we_req_ref": "0",
+            "we_req_dut": "0",
+            "d_write_ref": "0",
+            "d_write_dut": "0",
+            "d_read_ref": "0",
+            "d_read_dut": "0",
+            "cmd_arg_ref": "0",
+            "cmd_arg_dut": "0"
+          },
+          {
+            "t": 32610,
+            "Dat_Int_Status_rst": "0",
+            "ack_i_s_rx": "1",
+            "ack_i_s_tx": "0",
+            "busy_n": "1",
+            "card_status": "00111",
+            "clk": "0",
+            "cmd_busy": "0",
+            "cmd_tsf_err": "1",
+            "crc_ok": "1",
+            "dat_in_rx": "0010111111100100",
+            "dat_in_tx": "0010101010000111",
+            "free_rx_bd": "00001",
+            "ref_state": "000100000",
+            "dut_state": "000100000",
+            "ref_next_state": "000100000",
+            "dut_next_state": "001000000",
+            "ack_transfer_ref": "1",
+            "ack_transfer_dut": "0",
+            "re_s_tx_ref": "0",
+            "re_s_tx_dut": "0",
+            "re_s_rx_ref": "0",
+            "re_s_rx_dut": "0",
+            "a_cmp_rx_ref": "0",
+            "a_cmp_rx_dut": "0",
+            "we_req_ref": "0",
+            "we_req_dut": "0",
+            "d_write_ref": "0",
+            "d_write_dut": "0",
+            "d_read_ref": "0",
+            "d_read_dut": "0",
+            "cmd_arg_ref": "0",
+            "cmd_arg_dut": "0"
+          }
+        ]
+      },
+      "suspect": {
+        "driver_blocks": [
+          {
+            "id": "A2",
+            "kind": "always",
+            "clocking": "seq",
+            "writes": [
+              "CIDAT",
+              "Dat_Int_Status",
+              "a_cmp_rx",
+              "a_cmp_tx",
+              "ack_transfer",
+              "bd_cnt",
+              "cmd_arg",
+              "cmd_set",
+              "d_read",
+              "d_write",
+              "internal_transm_complete",
+              "re_s_rx",
+              "re_s_tx",
+              "rec_done",
+              "rec_failed",
+              "resend_try_cnt",
+              "rx_cycle",
+              "send_done",
+              "start_rx_fifo",
+              "start_tx_fifo",
+              "state",
+              "sys_adr",
+              "trans_done",
+              "trans_failed",
+              "transm_complete_q",
+              "tx_cycle",
+              "we_req"
+            ],
+            "start_line": 186,
+            "end_line": 459
+          },
+          {
+            "id": "A1",
+            "kind": "always",
+            "clocking": "unknown",
+            "writes": [
+              "next_state"
+            ],
+            "start_line": 110,
+            "end_line": 184
+          }
+        ],
+        "signals": [
+          "a_cmp_rx",
+          "ack_transfer",
+          "cmd_arg",
+          "d_read",
+          "d_write",
+          "re_s_rx",
+          "re_s_tx",
+          "we_req"
+        ],
+        "hint": "First real DUT/ref output divergence; use this instead of testbench metric counters."
+      },
+      "candidate_signals": [
+        "CIDAT",
+        "Dat_Int_Status",
+        "a_cmp_rx",
+        "a_cmp_tx",
+        "ack_transfer",
+        "cmd_arg",
+        "cmd_set",
+        "d_read",
+        "d_write",
+        "re_s_rx",
+        "re_s_tx",
+        "start_rx_fifo",
+        "start_tx_fifo",
+        "sys_adr",
+        "we_req"
+      ],
+      "ignored_tb_metrics": [],
+      "raw_fail_outputs": [
+        {
+          "sig": "re_s_tx",
+          "mismatches": 46,
+          "time": 319940
+        },
+        {
+          "sig": "re_s_rx",
+          "mismatches": 71,
+          "time": 127300
+        },
+        {
+          "sig": "a_cmp_rx",
+          "mismatches": 82,
+          "time": 43260
+        },
+        {
+          "sig": "we_req",
+          "mismatches": 786,
+          "time": 32640
+        },
+        {
+          "sig": "d_write",
+          "mismatches": 192,
+          "time": 32630
+        },
+        {
+          "sig": "d_read",
+          "mismatches": 223,
+          "time": 32630
+        },
+        {
+          "sig": "cmd_arg",
+          "mismatches": 82,
+          "time": 278780
+        },
+        {
+          "sig": "start_tx_fifo",
+          "mismatches": 76,
+          "time": 32630
+        },
+        {
+          "sig": "start_rx_fifo",
+          "mismatches": 355,
+          "time": 58890
+        },
+        {
+          "sig": "sys_adr",
+          "mismatches": 159,
+          "time": 127290
+        },
+        {
+          "sig": "ack_transfer",
+          "mismatches": 305,
+          "time": 32600
+        },
+        {
+          "sig": "Dat_Int_Status",
+          "mismatches": 24,
+          "time": 43250
+        },
+        {
+          "sig": "CIDAT",
+          "mismatches": 33047,
+          "time": 52280
+        }
+      ],
+      "dut_instance": "top_module1",
+      "ref_instance": "good1"
+    },
+    "required_next_tool": null,
+    "ignored_tb_metrics": [],
+    "raw_fail_outputs": [
+      {
+        "sig": "re_s_tx",
+        "mismatches": 46,
+        "time": 319940
+      },
+      {
+        "sig": "re_s_rx",
+        "mismatches": 71,
+        "time": 127300
+      },
+      {
+        "sig": "a_cmp_rx",
+        "mismatches": 82,
+        "time": 43260
+      },
+      {
+        "sig": "we_req",
+        "mismatches": 786,
+        "time": 32640
+      },
+      {
+        "sig": "d_write",
+        "mismatches": 192,
+        "time": 32630
+      },
+      {
+        "sig": "d_read",
+        "mismatches": 223,
+        "time": 32630
+      },
+      {
+        "sig": "cmd_arg",
+        "mismatches": 82,
+        "time": 278780
+      },
+      {
+        "sig": "start_tx_fifo",
+        "mismatches": 76,
+        "time": 32630
+      },
+      {
+        "sig": "start_rx_fifo",
+        "mismatches": 355,
+        "time": 58890
+      },
+      {
+        "sig": "sys_adr",
+        "mismatches": 159,
+        "time": 127290
+      },
+      {
+        "sig": "ack_transfer",
+        "mismatches": 305,
+        "time": 32600
+      },
+      {
+        "sig": "Dat_Int_Status",
+        "mismatches": 24,
+        "time": 43250
+      },
+      {
+        "sig": "CIDAT",
+        "mismatches": 33047,
+        "time": 52280
+      }
+    ],
+    "top_diagnosis": "FIRST FAILURE: ack_transfer failed: expected=1, actual=0. Direct driver A2 classified as condition_blocks_update: Observed condition values appear to block this assignment update.",
+    "suspect_blocks": [
+      {
+        "id": "A2",
+        "kind": "always",
+        "clocking": "seq",
+        "writes": [
+          "CIDAT",
+          "Dat_Int_Status",
+          "a_cmp_rx",
+          "a_cmp_tx",
+          "ack_transfer",
+          "bd_cnt",
+          "cmd_arg",
+          "cmd_set",
+          "d_read",
+          "d_write",
+          "internal_transm_complete",
+          "re_s_rx",
+          "re_s_tx",
+          "rec_done",
+          "rec_failed",
+          "resend_try_cnt",
+          "rx_cycle",
+          "send_done",
+          "start_rx_fifo",
+          "start_tx_fifo",
+          "state",
+          "sys_adr",
+          "trans_done",
+          "trans_failed",
+          "transm_complete_q",
+          "tx_cycle",
+          "we_req"
+        ],
+        "start_line": 186,
+        "end_line": 459
+      }
+    ],
+    "value_backtrace_summary": [
+      {
+        "sig": "ack_transfer",
+        "expected": "1",
+        "actual": "0",
+        "steps": [
+          {
+            "signal": "ack_transfer",
+            "driver_block_id": "A2",
+            "classification": "condition_blocks_update",
+            "reason": "Observed condition values appear to block this assignment update."
+          }
+        ]
+      },
+      {
+        "sig": "re_s_tx",
+        "expected": "0",
+        "actual": "0",
+        "steps": [
+          {
+            "signal": "re_s_tx",
+            "driver_block_id": "A2",
+            "classification": "condition_blocks_update",
+            "reason": "Observed condition values appear to block this assignment update."
+          }
+        ]
+      },
+      {
+        "sig": "re_s_rx",
+        "expected": "0",
+        "actual": "0",
+        "steps": [
+          {
+            "signal": "re_s_rx",
+            "driver_block_id": "A2",
+            "classification": "condition_blocks_update",
+            "reason": "Observed condition values appear to block this assignment update."
+          }
+        ]
+      }
+    ],
+    "vcd_available": true,
+    "trace_error": null
+  }
+}

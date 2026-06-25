@@ -1,28 +1,28 @@
 // STAGE5_SUBTASK_BEGIN B1_main_declarations: Declare all internal wires, registers, and constants: state register, next_state wire, Watchdog_Cnt, debounce counter, c
-input         CLK_PAD_IO;
-    input         RST_PAD_I;
-    input         New_CMD;
-    input         data_write;
-    input         data_read;
-    input  [31:0] ARG_REG;
-    input  [13:0] CMD_SET_REG;
-    input  [15:0] TIMEOUT_REG;
-    output [15:0] STATUS_REG;
-    output [31:0] RESP_1_REG;
-    output [4:0]  ERR_INT_REG;
-    output [15:0] NORMAL_INT_REG;
-    input         ERR_INT_RST;
-    input         NORMAL_INT_RST;
-    output [15:0] settings;
-    output        go_idle_o;
-    output [39:0] cmd_out;
-    output        req_out;
-    output        ack_out;
-    input         req_in;
-    input         ack_in;
-    input  [39:0] cmd_in;
-    input  [7:0]  serial_status;
-    input         card_detect;
+input CLK_PAD_IO;
+    input RST_PAD_I;
+    input New_CMD;
+    input data_write;
+    input data_read;
+    input [31:0] ARG_REG;
+    input [13:0] CMD_SET_REG;
+    input [15:0] TIMEOUT_REG;
+    output reg [15:0] STATUS_REG;
+    output reg [31:0] RESP_1_REG;
+    output reg [4:0] ERR_INT_REG;
+    output reg [15:0] NORMAL_INT_REG;
+    input ERR_INT_RST;
+    input NORMAL_INT_RST;
+    output reg [15:0] settings;
+    output reg go_idle_o;
+    output reg [39:0] cmd_out;
+    output reg req_out;
+    output reg ack_out;
+    input req_in;
+    input ack_in;
+    input [39:0] cmd_in;
+    input [7:0] serial_status;
+    input card_detect;
 
     localparam [2:0] IDLE    = 3'b001;
     localparam [2:0] SETUP   = 3'b010;
@@ -31,58 +31,63 @@ input         CLK_PAD_IO;
     localparam [6:0] small_rsp = 7'b0101000;
     localparam [6:0] big_rsp   = 7'b1111111;
 
-    reg  [2:0]  state;
-    reg  [2:0]  next_state;
-    reg  [15:0] Watchdog_Cnt;
-    reg  [3:0]  debounce;
-    reg         card_present;
+    localparam CICMD = 0;
+    localparam CTE   = 0;
+    localparam CCRCE = 1;
+    localparam CIE   = 3;
+    localparam CC    = 0;
+    localparam EI    = 15;
+    localparam CARD_INSERT_INT = 1;
+    localparam CARD_REMOVE_INT = 2;
+    localparam DAT_AVA_BIT     = 6;
+    localparam CRC_VALID_BIT   = 5;
 
-    reg         req_q;
-    reg         ack_q;
-    reg         req_in_int;
-    reg         ack_in_int;
+    reg [2:0] state;
+    wire [2:0] next_state;
 
-    reg         complete;
-    reg         CRC_check_enable;
-    reg         index_check_enable;
-    reg  [6:0]  response_size;
-    reg  [7:0]  status;
+    reg [15:0] Watchdog_Cnt;
+    reg [3:0] debounce;
+    reg card_present;
 
-    reg  [31:0] RESP_1_REG;
-    reg  [15:0] STATUS_REG;
-    reg  [15:0] NORMAL_INT_REG;
-    reg  [4:0]  ERR_INT_REG;
-    reg  [39:0] cmd_out;
-    reg  [15:0] settings;
-    reg         go_idle_o;
-    reg         req_out;
-    reg         ack_out;
+    reg req_q;
+    reg ack_q;
+    reg req_in_int;
+    reg ack_in_int;
 
-    wire [5:0]  CMDI;
-    wire [1:0]  WORD_SELECT;
-    wire        CICE;
-    wire        CRCE;
-    wire [1:0]  RTS;
-    wire        dat_ava;
-    wire        crc_valid;
-    wire        command_index_error;
-    wire        watchdog_timeout;
+    reg complete;
+    reg CRC_check_enable;
+    reg index_check_enable;
+    reg [6:0] response_size;
+    reg [7:0] status;
+
+    wire [5:0] CMDI;
+    wire [1:0] WORD_SELECT;
+    wire CICE;
+    wire CRCE;
+    wire [1:0] RTS;
+
+    wire dat_ava;
+    wire crc_valid;
+    wire command_index_mismatch;
+    wire timeout_expired;
+    wire response_present;
 
     assign CMDI = CMD_SET_REG[13:8];
     assign WORD_SELECT = CMD_SET_REG[7:6];
     assign CICE = CMD_SET_REG[4];
     assign CRCE = CMD_SET_REG[3];
     assign RTS = CMD_SET_REG[1:0];
-    assign dat_ava = status[6];
-    assign crc_valid = status[5];
-    assign command_index_error = (cmd_out[37:32] != cmd_in[37:32]);
-    assign watchdog_timeout = (Watchdog_Cnt > TIMEOUT_REG);
+
+    assign dat_ava = status[DAT_AVA_BIT];
+    assign crc_valid = status[CRC_VALID_BIT];
+    assign command_index_mismatch = (cmd_out[37:32] != cmd_in[37:32]);
+    assign timeout_expired = (Watchdog_Cnt > TIMEOUT_REG);
+    assign response_present = (response_size != 7'b0000000);
 // STAGE5_SUBTASK_END B1_main_declarations
 
 // STAGE5_SUBTASK_BEGIN B2_comb_next_state: Pure combinational always block computing next_state from current state, New_CMD, ack_in_int, and complete using the sta
 always @(state or New_CMD or ack_in_int or complete) begin
     next_state = IDLE;
-
     case (state)
         IDLE: begin
             if (New_CMD) begin
@@ -159,16 +164,17 @@ always @(posedge CLK_PAD_IO or posedge RST_PAD_I) begin
         if (!card_detect) begin
             if (debounce != 4'b1111) begin
                 debounce <= debounce + 4'b0001;
+                if (debounce == 4'b1110) begin
+                    card_present <= 1'b1;
+                end else begin
+                    card_present <= 1'b0;
+                end
             end else begin
                 debounce <= 4'b1111;
+                card_present <= 1'b1;
             end
         end else begin
             debounce <= 4'b0000;
-        end
-
-        if (debounce == 4'b1111) begin
-            card_present <= 1'b1;
-        end else begin
             card_present <= 1'b0;
         end
     end
@@ -196,22 +202,22 @@ always @(posedge CLK_PAD_IO or posedge RST_PAD_I) begin
     if (RST_PAD_I) begin
         CRC_check_enable <= 1'b0;
         complete <= 1'b0;
-        RESP_1_REG <= 32'b0;
-        ERR_INT_REG <= 5'b0;
-        NORMAL_INT_REG <= 16'b0;
-        STATUS_REG <= 16'b0;
-        status <= 8'b0;
-        cmd_out <= 40'b0;
-        settings <= 16'b0;
-        response_size <= 7'b0;
+        RESP_1_REG <= 32'b00000000000000000000000000000000;
+        ERR_INT_REG <= 5'b00000;
+        NORMAL_INT_REG <= 16'b0000000000000000;
+        STATUS_REG <= 16'b0000000000000000;
+        status <= 8'b00000000;
+        cmd_out <= 40'b0000000000000000000000000000000000000000;
+        settings <= 16'b0000000000000000;
+        response_size <= 7'b0000000;
         req_out <= 1'b0;
         index_check_enable <= 1'b0;
         ack_out <= 1'b0;
-        Watchdog_Cnt <= 16'b0;
+        Watchdog_Cnt <= 16'b0000000000000000;
         go_idle_o <= 1'b0;
     end else begin
-        NORMAL_INT_REG[1] <= card_present;
-        NORMAL_INT_REG[2] <= ~card_present;
+        NORMAL_INT_REG[CARD_INSERT_INT] <= card_present;
+        NORMAL_INT_REG[CARD_REMOVE_INT] <= ~card_present;
         complete <= 1'b0;
 
         case (state)
@@ -219,82 +225,62 @@ always @(posedge CLK_PAD_IO or posedge RST_PAD_I) begin
                 go_idle_o <= 1'b0;
                 req_out <= 1'b0;
                 ack_out <= 1'b0;
-                STATUS_REG[0] <= 1'b0;
+                STATUS_REG[CICMD] <= 1'b0;
 
                 if (req_in_int) begin
                     status <= serial_status;
-                    STATUS_REG[7:0] <= serial_status;
                     ack_out <= 1'b1;
                 end
             end
 
             SETUP: begin
-                NORMAL_INT_REG <= 16'b0;
-                ERR_INT_REG <= 5'b0;
-                STATUS_REG <= 16'b0;
+                NORMAL_INT_REG <= 16'b0000000000000000;
+                ERR_INT_REG <= 5'b00000;
+                STATUS_REG <= 16'b0000000000000000;
+                STATUS_REG[CICMD] <= 1'b1;
+
                 index_check_enable <= CICE;
                 CRC_check_enable <= CRCE;
+                response_size <= next_settings[6:0];
                 cmd_out <= next_cmd_out;
                 settings <= next_settings;
-
-                case (RTS)
-                    2'b10: begin
-                        response_size <= small_rsp;
-                    end
-                    2'b11: begin
-                        response_size <= small_rsp;
-                    end
-                    2'b01: begin
-                        response_size <= big_rsp;
-                    end
-                    default: begin
-                        response_size <= 7'b0000000;
-                    end
-                endcase
-
-                Watchdog_Cnt <= 16'b0;
-                go_idle_o <= 1'b0;
-                req_out <= 1'b0;
-                ack_out <= 1'b0;
-                STATUS_REG[0] <= 1'b1;
+                Watchdog_Cnt <= 16'b0000000000000000;
             end
 
             EXECUTE: begin
                 Watchdog_Cnt <= Watchdog_Cnt + 16'b0000000000000001;
-                ack_out <= 1'b0;
 
-                if (watchdog_timeout) begin
-                    ERR_INT_REG[0] <= 1'b1;
-                    NORMAL_INT_REG[15] <= 1'b1;
+                if (timeout_expired) begin
+                    ERR_INT_REG[CTE] <= 1'b1;
+                    NORMAL_INT_REG[EI] <= 1'b1;
+                    go_idle_o <= 1'b1;
                     if (ack_in) begin
                         complete <= 1'b1;
                     end
-                    go_idle_o <= 1'b1;
                 end else begin
                     if (ack_in_int) begin
                         req_out <= 1'b1;
                     end else if (req_in_int) begin
                         status <= serial_status;
-                        STATUS_REG[7:0] <= serial_status;
                         ack_out <= 1'b1;
 
-                        if (serial_status[6]) begin
+                        if (serial_status[DAT_AVA_BIT]) begin
                             complete <= 1'b1;
-                            NORMAL_INT_REG[15] <= 1'b0;
+                            NORMAL_INT_REG[EI] <= 1'b0;
 
-                            if (CRC_check_enable && !serial_status[5]) begin
-                                ERR_INT_REG[1] <= 1'b1;
-                                NORMAL_INT_REG[15] <= 1'b1;
+                            if (CRC_check_enable && !serial_status[CRC_VALID_BIT]) begin
+                                ERR_INT_REG[CCRCE] <= 1'b1;
+                                NORMAL_INT_REG[EI] <= 1'b1;
                             end
 
-                            if (index_check_enable && command_index_error) begin
-                                ERR_INT_REG[3] <= 1'b1;
-                                NORMAL_INT_REG[15] <= 1'b1;
+                            if (index_check_enable && command_index_mismatch) begin
+                                ERR_INT_REG[CIE] <= 1'b1;
+                                NORMAL_INT_REG[EI] <= 1'b1;
                             end
 
-                            NORMAL_INT_REG[0] <= 1'b1;
+                            NORMAL_INT_REG[CC] <= 1'b1;
 
-                            if (response_size != 7'b0000000) begin
+                            if (response_present) begin
                                 RESP_1_REG <= cmd_in[31:0];
                             end
                         end

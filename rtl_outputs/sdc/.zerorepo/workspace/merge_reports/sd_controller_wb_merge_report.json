@@ -1,0 +1,1004 @@
+{
+  "schema_version": "stage6_semantic_merge_report_v2",
+  "module": "sd_controller_wb",
+  "required_includes": [
+    "sd_defines.v"
+  ],
+  "signal_ownership": {
+    "wb_access": {
+      "drivers": [
+        "C1"
+      ],
+      "owner_block": "C1"
+    },
+    "wb_write_access": {
+      "drivers": [
+        "C2"
+      ],
+      "owner_block": "C2"
+    },
+    "wb_read_access": {
+      "drivers": [
+        "C3"
+      ],
+      "owner_block": "C3"
+    },
+    "wb_addr": {
+      "drivers": [
+        "C4"
+      ],
+      "owner_block": "C4"
+    },
+    "wb_sel_byte0": {
+      "drivers": [
+        "C5"
+      ],
+      "owner_block": "C5"
+    },
+    "wb_sel_byte1": {
+      "drivers": [
+        "C6"
+      ],
+      "owner_block": "C6"
+    },
+    "wb_sel_byte2": {
+      "drivers": [
+        "C7"
+      ],
+      "owner_block": "C7"
+    },
+    "wb_sel_byte3": {
+      "drivers": [
+        "C8"
+      ],
+      "owner_block": "C8"
+    },
+    "addr_argument": {
+      "drivers": [
+        "C9"
+      ],
+      "owner_block": "C9"
+    },
+    "addr_cmd_setting": {
+      "drivers": [
+        "C10"
+      ],
+      "owner_block": "C10"
+    },
+    "addr_card_status": {
+      "drivers": [
+        "C11"
+      ],
+      "owner_block": "C11"
+    },
+    "addr_response": {
+      "drivers": [
+        "C12"
+      ],
+      "owner_block": "C12"
+    },
+    "addr_controller_setting": {
+      "drivers": [
+        "C13"
+      ],
+      "owner_block": "C13"
+    },
+    "addr_block_size": {
+      "drivers": [
+        "C14"
+      ],
+      "owner_block": "C14"
+    },
+    "addr_power_control": {
+      "drivers": [
+        "C15"
+      ],
+      "owner_block": "C15"
+    },
+    "addr_software_reset": {
+      "drivers": [
+        "C16"
+      ],
+      "owner_block": "C16"
+    },
+    "addr_timeout": {
+      "drivers": [
+        "C17"
+      ],
+      "owner_block": "C17"
+    },
+    "addr_normal_int_status": {
+      "drivers": [
+        "C18"
+      ],
+      "owner_block": "C18"
+    },
+    "addr_error_int_status": {
+      "drivers": [
+        "C19"
+      ],
+      "owner_block": "C19"
+    },
+    "addr_normal_int_enable": {
+      "drivers": [
+        "C20"
+      ],
+      "owner_block": "C20"
+    },
+    "addr_error_int_enable": {
+      "drivers": [
+        "C21"
+      ],
+      "owner_block": "C21"
+    },
+    "addr_capability": {
+      "drivers": [
+        "C22"
+      ],
+      "owner_block": "C22"
+    },
+    "addr_clock_divider": {
+      "drivers": [
+        "C23"
+      ],
+      "owner_block": "C23"
+    },
+    "addr_bd_status": {
+      "drivers": [
+        "C24"
+      ],
+      "owner_block": "C24"
+    },
+    "addr_bd_isr_status": {
+      "drivers": [
+        "C25"
+      ],
+      "owner_block": "C25"
+    },
+    "addr_bd_isr_enable": {
+      "drivers": [
+        "C26"
+      ],
+      "owner_block": "C26"
+    },
+    "addr_bd_rx": {
+      "drivers": [
+        "C27"
+      ],
+      "owner_block": "C27"
+    },
+    "addr_bd_tx": {
+      "drivers": [
+        "C28"
+      ],
+      "owner_block": "C28"
+    },
+    "controller_setting_value": {
+      "drivers": [
+        "C29"
+      ],
+      "owner_block": "C29"
+    },
+    "block_size_value": {
+      "drivers": [
+        "C30"
+      ],
+      "owner_block": "C30"
+    },
+    "power_control_value": {
+      "drivers": [
+        "C31"
+      ],
+      "owner_block": "C31"
+    },
+    "capability_value": {
+      "drivers": [
+        "C32"
+      ],
+      "owner_block": "C32"
+    },
+    "normal_int_status_value": {
+      "drivers": [
+        "C33"
+      ],
+      "owner_block": "C33"
+    },
+    "error_int_status_value": {
+      "drivers": [
+        "C34"
+      ],
+      "owner_block": "C34"
+    },
+    "bd_status_value": {
+      "drivers": [
+        "C35"
+      ],
+      "owner_block": "C35"
+    },
+    "bd_isr_status_value": {
+      "drivers": [
+        "C36"
+      ],
+      "owner_block": "C36"
+    },
+    "argument_write_pulse": {
+      "drivers": [
+        "C37"
+      ],
+      "owner_block": "C37"
+    },
+    "command_write_pulse": {
+      "drivers": [
+        "C38"
+      ],
+      "owner_block": "C38"
+    },
+    "normal_isr_clear_pulse": {
+      "drivers": [
+        "C39"
+      ],
+      "owner_block": "C39"
+    },
+    "error_isr_clear_pulse": {
+      "drivers": [
+        "C40"
+      ],
+      "owner_block": "C40"
+    },
+    "bd_isr_clear_pulse": {
+      "drivers": [
+        "C41"
+      ],
+      "owner_block": "C41"
+    },
+    "bd_rx_write_pulse": {
+      "drivers": [
+        "C42"
+      ],
+      "owner_block": "C42"
+    },
+    "bd_tx_write_pulse": {
+      "drivers": [
+        "C43"
+      ],
+      "owner_block": "C43"
+    },
+    "Bd_isr_enable_reg_next": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "Bd_isr_reset_next": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "argument_reg_next": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "bd_fsm_state_next": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "bd_rx_high_word_next": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "bd_rx_low_word_next": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "bd_tx_high_word_next": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "bd_tx_low_word_next": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "clock_divider_next": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "cmd_int_busy_next": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "cmd_setting_reg_next": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "dat_in_m_rx_bd_next": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "dat_in_m_tx_bd_next": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "error_int_signal_enable_reg_next": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "error_isr_reset_next": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "int_ack_next": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "int_busy_next": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "new_cmd_next": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "normal_int_signal_enable_reg_next": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "normal_isr_reset_next": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "software_reset_reg_next": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "time_out_reg_next": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "wb_ack_o_next": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "wb_dat_o_next": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "we_ack_next": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "we_m_rx_bd_next": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "we_m_tx_bd_next": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    }
+  },
+  "always_block_responsibility": [
+    {
+      "id": "C1",
+      "kind": "assign",
+      "start_line": 155,
+      "end_line": 155,
+      "writes": [
+        "wb_access"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C2",
+      "kind": "assign",
+      "start_line": 156,
+      "end_line": 156,
+      "writes": [
+        "wb_write_access"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C3",
+      "kind": "assign",
+      "start_line": 157,
+      "end_line": 157,
+      "writes": [
+        "wb_read_access"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C4",
+      "kind": "assign",
+      "start_line": 158,
+      "end_line": 158,
+      "writes": [
+        "wb_addr"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C5",
+      "kind": "assign",
+      "start_line": 159,
+      "end_line": 159,
+      "writes": [
+        "wb_sel_byte0"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C6",
+      "kind": "assign",
+      "start_line": 160,
+      "end_line": 160,
+      "writes": [
+        "wb_sel_byte1"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C7",
+      "kind": "assign",
+      "start_line": 161,
+      "end_line": 161,
+      "writes": [
+        "wb_sel_byte2"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C8",
+      "kind": "assign",
+      "start_line": 162,
+      "end_line": 162,
+      "writes": [
+        "wb_sel_byte3"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C9",
+      "kind": "assign",
+      "start_line": 164,
+      "end_line": 164,
+      "writes": [
+        "addr_argument"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C10",
+      "kind": "assign",
+      "start_line": 165,
+      "end_line": 165,
+      "writes": [
+        "addr_cmd_setting"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C11",
+      "kind": "assign",
+      "start_line": 166,
+      "end_line": 166,
+      "writes": [
+        "addr_card_status"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C12",
+      "kind": "assign",
+      "start_line": 167,
+      "end_line": 167,
+      "writes": [
+        "addr_response"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C13",
+      "kind": "assign",
+      "start_line": 168,
+      "end_line": 168,
+      "writes": [
+        "addr_controller_setting"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C14",
+      "kind": "assign",
+      "start_line": 169,
+      "end_line": 169,
+      "writes": [
+        "addr_block_size"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C15",
+      "kind": "assign",
+      "start_line": 170,
+      "end_line": 170,
+      "writes": [
+        "addr_power_control"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C16",
+      "kind": "assign",
+      "start_line": 171,
+      "end_line": 171,
+      "writes": [
+        "addr_software_reset"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C17",
+      "kind": "assign",
+      "start_line": 172,
+      "end_line": 172,
+      "writes": [
+        "addr_timeout"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C18",
+      "kind": "assign",
+      "start_line": 173,
+      "end_line": 173,
+      "writes": [
+        "addr_normal_int_status"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C19",
+      "kind": "assign",
+      "start_line": 174,
+      "end_line": 174,
+      "writes": [
+        "addr_error_int_status"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C20",
+      "kind": "assign",
+      "start_line": 175,
+      "end_line": 175,
+      "writes": [
+        "addr_normal_int_enable"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C21",
+      "kind": "assign",
+      "start_line": 176,
+      "end_line": 176,
+      "writes": [
+        "addr_error_int_enable"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C22",
+      "kind": "assign",
+      "start_line": 177,
+      "end_line": 177,
+      "writes": [
+        "addr_capability"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C23",
+      "kind": "assign",
+      "start_line": 178,
+      "end_line": 178,
+      "writes": [
+        "addr_clock_divider"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C24",
+      "kind": "assign",
+      "start_line": 179,
+      "end_line": 179,
+      "writes": [
+        "addr_bd_status"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C25",
+      "kind": "assign",
+      "start_line": 180,
+      "end_line": 180,
+      "writes": [
+        "addr_bd_isr_status"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C26",
+      "kind": "assign",
+      "start_line": 181,
+      "end_line": 181,
+      "writes": [
+        "addr_bd_isr_enable"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C27",
+      "kind": "assign",
+      "start_line": 182,
+      "end_line": 182,
+      "writes": [
+        "addr_bd_rx"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C28",
+      "kind": "assign",
+      "start_line": 183,
+      "end_line": 183,
+      "writes": [
+        "addr_bd_tx"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C29",
+      "kind": "assign",
+      "start_line": 185,
+      "end_line": 185,
+      "writes": [
+        "controller_setting_value"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C30",
+      "kind": "assign",
+      "start_line": 186,
+      "end_line": 186,
+      "writes": [
+        "block_size_value"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C31",
+      "kind": "assign",
+      "start_line": 187,
+      "end_line": 187,
+      "writes": [
+        "power_control_value"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C32",
+      "kind": "assign",
+      "start_line": 188,
+      "end_line": 188,
+      "writes": [
+        "capability_value"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C33",
+      "kind": "assign",
+      "start_line": 189,
+      "end_line": 189,
+      "writes": [
+        "normal_int_status_value"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C34",
+      "kind": "assign",
+      "start_line": 190,
+      "end_line": 190,
+      "writes": [
+        "error_int_status_value"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C35",
+      "kind": "assign",
+      "start_line": 191,
+      "end_line": 191,
+      "writes": [
+        "bd_status_value"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C36",
+      "kind": "assign",
+      "start_line": 192,
+      "end_line": 192,
+      "writes": [
+        "bd_isr_status_value"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C37",
+      "kind": "assign",
+      "start_line": 194,
+      "end_line": 194,
+      "writes": [
+        "argument_write_pulse"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C38",
+      "kind": "assign",
+      "start_line": 195,
+      "end_line": 195,
+      "writes": [
+        "command_write_pulse"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C39",
+      "kind": "assign",
+      "start_line": 196,
+      "end_line": 196,
+      "writes": [
+        "normal_isr_clear_pulse"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C40",
+      "kind": "assign",
+      "start_line": 197,
+      "end_line": 197,
+      "writes": [
+        "error_isr_clear_pulse"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C41",
+      "kind": "assign",
+      "start_line": 198,
+      "end_line": 198,
+      "writes": [
+        "bd_isr_clear_pulse"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C42",
+      "kind": "assign",
+      "start_line": 199,
+      "end_line": 199,
+      "writes": [
+        "bd_rx_write_pulse"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "C43",
+      "kind": "assign",
+      "start_line": 200,
+      "end_line": 200,
+      "writes": [
+        "bd_tx_write_pulse"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    },
+    {
+      "id": "A1",
+      "kind": "always",
+      "start_line": 202,
+      "end_line": 317,
+      "writes": [
+        "Bd_isr_enable_reg_next",
+        "Bd_isr_reset_next",
+        "argument_reg_next",
+        "bd_fsm_state_next",
+        "bd_rx_high_word_next",
+        "bd_rx_low_word_next",
+        "bd_tx_high_word_next",
+        "bd_tx_low_word_next",
+        "clock_divider_next",
+        "cmd_int_busy_next",
+        "cmd_setting_reg_next",
+        "dat_in_m_rx_bd_next",
+        "dat_in_m_tx_bd_next",
+        "error_int_signal_enable_reg_next",
+        "error_isr_reset_next",
+        "int_ack_next",
+        "int_busy_next",
+        "new_cmd_next",
+        "normal_int_signal_enable_reg_next",
+        "normal_isr_reset_next",
+        "software_reset_reg_next",
+        "time_out_reg_next",
+        "wb_ack_o_next",
+        "wb_dat_o_next",
+        "we_ack_next",
+        "we_m_rx_bd_next",
+        "we_m_tx_bd_next"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    }
+  ],
+  "static_check_summary": {
+    "status": "pass",
+    "errors": [],
+    "warnings": [
+      "Output Bd_isr_enable_reg is not visibly driven by parsed always/assign blocks.",
+      "Output Bd_isr_reset is not visibly driven by parsed always/assign blocks.",
+      "Output argument_reg is not visibly driven by parsed always/assign blocks.",
+      "Output clock_divider is not visibly driven by parsed always/assign blocks.",
+      "Output cmd_int_busy is not visibly driven by parsed always/assign blocks.",
+      "Output cmd_setting_reg is not visibly driven by parsed always/assign blocks.",
+      "Output dat_in_m_rx_bd is not visibly driven by parsed always/assign blocks.",
+      "Output dat_in_m_tx_bd is not visibly driven by parsed always/assign blocks.",
+      "Output error_int_signal_enable_reg is not visibly driven by parsed always/assign blocks.",
+      "Output error_isr_reset is not visibly driven by parsed always/assign blocks.",
+      "Output int_ack is not visibly driven by parsed always/assign blocks.",
+      "Output int_busy is not visibly driven by parsed always/assign blocks.",
+      "Output new_cmd is not visibly driven by parsed always/assign blocks.",
+      "Output normal_int_signal_enable_reg is not visibly driven by parsed always/assign blocks.",
+      "Output normal_isr_reset is not visibly driven by parsed always/assign blocks.",
+      "Output s is not visibly driven by parsed always/assign blocks.",
+      "Output software_reset_reg is not visibly driven by parsed always/assign blocks.",
+      "Output time_out_reg is not visibly driven by parsed always/assign blocks.",
+      "Output wb_ack_o is not visibly driven by parsed always/assign blocks.",
+      "Output wb_dat_o is not visibly driven by parsed always/assign blocks.",
+      "Output we_ack is not visibly driven by parsed always/assign blocks.",
+      "Output we_m_rx_bd is not visibly driven by parsed always/assign blocks.",
+      "Output we_m_tx_bd is not visibly driven by parsed always/assign blocks.",
+      "Stage5 contracts have multiple writers for Bd_isr_enable_reg_next: ['B1_decl_core', 'B2_comb_decode_and_control'].",
+      "Stage5 contracts have multiple writers for Bd_isr_reset_next: ['B1_decl_core', 'B2_comb_decode_and_control'].",
+      "Stage5 contracts have multiple writers for addr_argument: ['B1_decl_core', 'B2_comb_decode_and_control'].",
+      "Stage5 contracts have multiple writers for addr_bd_isr_enable: ['B1_decl_core', 'B2_comb_decode_and_control'].",
+      "Stage5 contracts have multiple writers for addr_bd_isr_status: ['B1_decl_core', 'B2_comb_decode_and_control'].",
+      "Stage5 contracts have multiple writers for addr_bd_rx: ['B1_decl_core', 'B2_comb_decode_and_control'].",
+      "Stage5 contracts have multiple writers for addr_bd_status: ['B1_decl_core', 'B2_comb_decode_and_control'].",
+      "Stage5 contracts have multiple writers for addr_bd_tx: ['B1_decl_core', 'B2_comb_decode_and_control'].",
+      "Stage5 contracts have multiple writers for addr_block_size: ['B1_decl_core', 'B2_comb_decode_and_control'].",
+      "Stage5 contracts have multiple writers for addr_capability: ['B1_decl_core', 'B2_comb_decode_and_control'].",
+      "Stage5 contracts have multiple writers for addr_card_status: ['B1_decl_core', 'B2_comb_decode_and_control'].",
+      "Stage5 contracts have multiple writers for addr_clock_divider: ['B1_decl_core', 'B2_comb_decode_and_control'].",
+      "Stage5 contracts have multiple writers for addr_cmd_setting: ['B1_decl_core', 'B2_comb_decode_and_control'].",
+      "Stage5 contracts have multiple writers for addr_controller_setting: ['B1_decl_core', 'B2_comb_decode_and_control'].",
+      "Stage5 contracts have multiple writers for addr_error_int_enable: ['B1_decl_core', 'B2_comb_decode_and_control'].",
+      "Stage5 contracts have multiple writers for addr_error_int_status: ['B1_decl_core', 'B2_comb_decode_and_control'].",
+      "Stage5 contracts have multiple writers for addr_normal_int_enable: ['B1_decl_core', 'B2_comb_decode_and_control'].",
+      "Stage5 contracts have multiple writers for addr_normal_int_status: ['B1_decl_core', 'B2_comb_decode_and_control'].",
+      "Stage5 contracts have multiple writers for addr_power_control: ['B1_decl_core', 'B2_comb_decode_and_control'].",
+      "Stage5 contracts have multiple writers for addr_response: ['B1_decl_core', 'B2_comb_decode_and_control'].",
+      "Stage5 contracts have multiple writers for addr_software_reset: ['B1_decl_core', 'B2_comb_decode_and_control'].",
+      "Stage5 contracts have multiple writers for addr_timeout: ['B1_decl_core', 'B2_comb_decode_and_control'].",
+      "Stage5 contracts have multiple writers for argument_reg_next: ['B1_decl_core', 'B2_comb_decode_and_control'].",
+      "Stage5 contracts have multiple writers for argument_write_pulse: ['B1_decl_core', 'B2_comb_decode_and_control'].",
+      "Stage5 contracts have multiple writers for bd_fsm_state: ['B1_decl_core', 'B3_seq_all_clocked'].",
+      "Stage5 contracts have multiple writers for bd_fsm_state_next: ['B1_decl_core', 'B2_comb_decode_and_control'].",
+      "Stage5 contracts have multiple writers for bd_isr_clear_pulse: ['B1_decl_core', 'B2_comb_decode_and_control']."
+    ]
+  },
+  "lint_summary": {
+    "status": "ok",
+    "is_pass": true,
+    "output_excerpt": "{\n    \"stdout\": \"- V e r i l a t i o n   R e p o r t: Verilator 5.044 2026-01-01 rev conda-forge build 0\\n- Verilator: Built from 0.057 MB sources in 2 modules, into 0.063 MB in 3 C++ files needing 0.000 MB\\n- Verilator: Walltime 0.016 s (elab=0.001, cvt=0.008, bld=0.000); cpu 0.017 s on 1 threads; alloced 22.969 MB\\n\",\n    \"stderr\": \"%Warning-DECLFILENAME: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merge_drafts/sd_controller_wb_draft.v:3:8: Filename 'sd_controller_wb_draft' does not match MODULE name: 'sd_controller_wb'\\n    3 | module sd_controller_wb (\\n      |        ^~~~~~~~~~~~~~~~\\n                       ... For warning description see https://verilator.org/warn/DECLFILENAME?v=5.044\\n                       ... Use \\\"/* verilator lint_off DECLFILENAME */\\\" and lint_on around source to disable this message.\\n%Warning-UNUSEDSIGNAL: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merge_drafts/sd_controller_wb_draft.v:46:29: Bits of signal are not used: 'normal_int_status_reg'[16]\\n                                                                                                                                : ... note: In instance 'sd_controller_wb'\\n   46 |     input  wire [16:0]      normal_int_status_reg,\\n      |                             ^~~~~~~~~~~~~~~~~~~~~\\n                       ... For warning description see https://verilator.org/warn/UNUSEDSIGNAL?v=5.044\\n                       ... Use \\\"/* verilator lint_off UNUSEDSIGNAL */\\\" and lint_on around source to disable this message.\\n%Warning-UNUSEDSIGNAL: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merge_drafts/sd_controller_wb_draft.v:47:29: Bits of signal are not used: 'error_int_status_reg'[16]\\n                                                                                                                                : ... note: In instance 'sd_controller_wb'\\n   47 |     input  wire [16:0]      error_int_status_reg,\\n      |                             ^~~~~~~~~~~~~~~~~~~~\\n%Warning-UNUSEDSIGNAL: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merge_drafts/sd_controller_wb_draft.v:48:29: Bits of signal are not used: 'Bd_Status_reg'[16]\\n                                                                                                                                : ... note: In instance 'sd_controller_wb'\\n   48 |     input  wire [16:0]      Bd_Status_reg,\\n      |                             ^~~~~~~~~~~~~\\n%Warning-UNUSEDPA\n...<snip>...\nb'\\n   69 | localparam [1:0]  BD_FSM_RX_LOW                       = 2'b01;\\n      |                   ^~~~~~~~~~~~~\\n                      ... For warning description see https://verilator.org/warn/UNUSEDPARAM?v=5.044\\n                      ... Use \\\"/* verilator lint_off UNUSEDPARAM */\\\" and lint_on around source to disable this message.\\n%Warning-UNUSEDSIGNAL: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merge_drafts/sd_controller_wb_draft.v:147:12: Signal is not used: 'command_write_pulse'\\n                                                                                                                                 : ... note: In instance 'sd_controller_wb'\\n  147 | wire       command_write_pulse;\\n      |            ^~~~~~~~~~~~~~~~~~~\\n%Warning-UNUSEDSIGNAL: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merge_drafts/sd_controller_wb_draft.v:148:12: Signal is not used: 'argument_write_pulse'\\n                                                                                                                                 : ... note: In instance 'sd_controller_wb'\\n  148 | wire       argument_write_pulse;\\n      |            ^~~~~~~~~~~~~~~~~~~~\\n%Warning-UNUSEDSIGNAL: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merge_drafts/sd_controller_wb_draft.v:149:12: Signal is not used: 'normal_isr_clear_pulse'\\n                                                                                                                                 : ... note: In instance 'sd_controller_wb'\\n  149 | wire       normal_isr_clear_pulse;\\n      |            ^~~~~~~~~~~~~~~~~~~~~~\\n%Warning-UNUSEDSIGNAL: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merge_drafts/sd_controller_wb_draft.v:150:12: Signal is not used: 'error_isr_clear_pulse'\\n                                                                                                                                 : ... note: In instance 'sd_controller_wb'\\n  150 | wire       error_isr_clear_pulse;\\n      |            ^~~~~~~~~~~~~~~~~~~~~\\n%Warning-UNUSEDSIGNAL: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merge_drafts/sd_controller_wb_draft.v:151:12: Signal is not used: 'bd_isr_clear_pulse'\\n                                                                                                                                 : ... note: In instance 'sd_controller_wb'\\n  151 | wire       bd_isr_clear_pulse;\\n      |            ^~~~~~~~~~~~~~~~~~\\n\"\n}"
+  },
+  "draft_committed": false,
+  "total_action_calls": 0
+}
