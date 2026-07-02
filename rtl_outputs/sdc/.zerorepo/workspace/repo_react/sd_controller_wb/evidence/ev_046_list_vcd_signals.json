@@ -1,0 +1,9 @@
+{
+  "status": "ok",
+  "signals": [
+    "tb.top_module1.CONTROLLER_SETTING_RESET[15:0]"
+  ],
+  "count": 1,
+  "truncated": false,
+  "total_in_vcd": 280
+}

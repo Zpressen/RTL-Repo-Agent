@@ -1,0 +1,217 @@
+{
+  "status": "ok",
+  "sampling_mode": "stable",
+  "edge": null,
+  "driver_assignment_kind": "blocking",
+  "active_region_model": "settled VCD ref/dut values at sample/change times",
+  "first_divergence": {
+    "signal": "dat_out_s",
+    "time": 155,
+    "ref": "0000000000000000",
+    "dut": "0101110110011100",
+    "classification": "dut_early",
+    "ref_path": "tb_sd_bd.dat_out_s_ref[15:0]",
+    "dut_path": "tb_sd_bd.dat_out_s_dut[15:0]",
+    "sampling_mode": "stable",
+    "edge": null,
+    "driver_assignment_kind": "blocking",
+    "active_region_model": "settled VCD ref/dut values at sample/change times"
+  },
+  "nearby": {
+    "times": [
+      140,
+      145,
+      150,
+      155,
+      160,
+      165,
+      170
+    ],
+    "rows": [
+      {
+        "t": 140,
+        "a_cmp": "0",
+        "clk": "0",
+        "dat_in_m": "0000000000000000",
+        "re_s": "0",
+        "rst": "0",
+        "we_m": "0",
+        "dat_out_s_ref": "0000000000000000",
+        "dat_out_s_dut": "0000000000000000",
+        "free_bd_ref": "01000",
+        "free_bd_dut": "01000",
+        "ack_o_s_ref": "0",
+        "ack_o_s_dut": "0"
+      },
+      {
+        "t": 145,
+        "a_cmp": "0",
+        "clk": "1",
+        "dat_in_m": "0111001111000100",
+        "re_s": "0",
+        "rst": "0",
+        "we_m": "1",
+        "dat_out_s_ref": "0000000000000000",
+        "dat_out_s_dut": "0000000000000000",
+        "free_bd_ref": "01000",
+        "free_bd_dut": "01000",
+        "ack_o_s_ref": "0",
+        "ack_o_s_dut": "0"
+      },
+      {
+        "t": 150,
+        "a_cmp": "0",
+        "clk": "0",
+        "dat_in_m": "0111001111000100",
+        "re_s": "0",
+        "rst": "0",
+        "we_m": "1",
+        "dat_out_s_ref": "0000000000000000",
+        "dat_out_s_dut": "0000000000000000",
+        "free_bd_ref": "01000",
+        "free_bd_dut": "01000",
+        "ack_o_s_ref": "0",
+        "ack_o_s_dut": "0"
+      },
+      {
+        "t": 155,
+        "a_cmp": "0",
+        "clk": "1",
+        "dat_in_m": "0101110110011100",
+        "re_s": "0",
+        "rst": "0",
+        "we_m": "1",
+        "dat_out_s_ref": "0000000000000000",
+        "dat_out_s_dut": "0101110110011100",
+        "free_bd_ref": "01000",
+        "free_bd_dut": "01000",
+        "ack_o_s_ref": "0",
+        "ack_o_s_dut": "0"
+      },
+      {
+        "t": 160,
+        "a_cmp": "0",
+        "clk": "0",
+        "dat_in_m": "0101110110011100",
+        "re_s": "0",
+        "rst": "0",
+        "we_m": "1",
+        "dat_out_s_ref": "0000000000000000",
+        "dat_out_s_dut": "0101110110011100",
+        "free_bd_ref": "01000",
+        "free_bd_dut": "01000",
+        "ack_o_s_ref": "0",
+        "ack_o_s_dut": "0"
+      },
+      {
+        "t": 165,
+        "a_cmp": "0",
+        "clk": "1",
+        "dat_in_m": "0101110110011100",
+        "re_s": "0",
+        "rst": "0",
+        "we_m": "1",
+        "dat_out_s_ref": "0000000000000000",
+        "dat_out_s_dut": "0101110110011100",
+        "free_bd_ref": "01000",
+        "free_bd_dut": "01000",
+        "ack_o_s_ref": "0",
+        "ack_o_s_dut": "0"
+      },
+      {
+        "t": 170,
+        "a_cmp": "0",
+        "clk": "0",
+        "dat_in_m": "0101110110011100",
+        "re_s": "0",
+        "rst": "0",
+        "we_m": "1",
+        "dat_out_s_ref": "0000000000000000",
+        "dat_out_s_dut": "0101110110011100",
+        "free_bd_ref": "01000",
+        "free_bd_dut": "01000",
+        "ack_o_s_ref": "0",
+        "ack_o_s_dut": "0"
+      }
+    ]
+  },
+  "suspect": {
+    "driver_blocks": [
+      {
+        "id": "A3",
+        "kind": "always",
+        "clocking": "unknown",
+        "writes": [
+          "ack_o_s",
+          "dat_out_s"
+        ],
+        "start_line": 131,
+        "end_line": 149
+      },
+      {
+        "id": "A1",
+        "kind": "always",
+        "clocking": "seq",
+        "writes": [
+          "bd_mem_0",
+          "bd_mem_1",
+          "bd_mem_2",
+          "bd_mem_3",
+          "bd_mem_4",
+          "bd_mem_5",
+          "bd_mem_6",
+          "bd_mem_7",
+          "free_bd",
+          "last_a_cmp",
+          "m_wr_pnt",
+          "new_bw",
+          "wr_cnt"
+        ],
+        "start_line": 43,
+        "end_line": 98
+      },
+      {
+        "id": "A2",
+        "kind": "always",
+        "clocking": "seq",
+        "writes": [
+          "rd_cnt",
+          "s_rd_pnt"
+        ],
+        "start_line": 101,
+        "end_line": 128
+      }
+    ],
+    "signals": [
+      "ack_o_s",
+      "dat_out_s",
+      "free_bd"
+    ],
+    "hint": "First real DUT/ref output divergence; use this instead of testbench metric counters."
+  },
+  "candidate_signals": [
+    "ack_o_s",
+    "dat_out_s",
+    "free_bd"
+  ],
+  "ignored_tb_metrics": [],
+  "raw_fail_outputs": [
+    {
+      "sig": "free_bd",
+      "mismatches": 1490,
+      "time": 195
+    },
+    {
+      "sig": "ack_o_s",
+      "mismatches": 18,
+      "time": 16855
+    },
+    {
+      "sig": "dat_out_s",
+      "mismatches": 3056,
+      "time": 165
+    }
+  ],
+  "dut_instance": "top_module1",
+  "ref_instance": "good1"
+}

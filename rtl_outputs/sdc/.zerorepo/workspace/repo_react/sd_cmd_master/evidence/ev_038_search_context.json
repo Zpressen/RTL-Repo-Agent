@@ -1,0 +1,38 @@
+{
+  "status": "ok",
+  "pattern": "timeout_expired",
+  "scope": "rtl",
+  "results": [
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_cmd_master/rtl.sv",
+      "line": 101,
+      "excerpt": "99:     wire crc_valid;\n100:     wire command_index_mismatch;\n101:     wire timeout_expired;\n102:     wire response_present;\n103: "
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_cmd_master/rtl.sv",
+      "line": 113,
+      "excerpt": "111:     assign crc_valid              = status[CRC_VALID_BIT];\n112:     assign command_index_mismatch = (cmd_out[37:32] != cmd_in[37:32]);\n113:     assign timeout_expired        = (Watchdog_Cnt >= TIMEOUT_REG);\n114:     assign response_present       = (response_size != 7'b0000000);\n115: "
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_cmd_master/rtl.sv",
+      "line": 289,
+      "excerpt": "287:                     Watchdog_Cnt <= Watchdog_Cnt + 16'b0000000000000001;\n288: \n289:                     if (timeout_expired) begin\n290:                         ERR_INT_REG[CTE] = 1'b1;\n291:                         NORMAL_INT_REG[EI] = 1'b1;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_cmd_master.v",
+      "line": 101,
+      "excerpt": "99:     wire crc_valid;\n100:     wire command_index_mismatch;\n101:     wire timeout_expired;\n102:     wire response_present;\n103: "
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_cmd_master.v",
+      "line": 113,
+      "excerpt": "111:     assign crc_valid              = status[CRC_VALID_BIT];\n112:     assign command_index_mismatch = (cmd_out[37:32] != cmd_in[37:32]);\n113:     assign timeout_expired        = (Watchdog_Cnt >= TIMEOUT_REG);\n114:     assign response_present       = (response_size != 7'b0000000);\n115: "
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_cmd_master.v",
+      "line": 289,
+      "excerpt": "287:                     Watchdog_Cnt <= Watchdog_Cnt + 16'b0000000000000001;\n288: \n289:                     if (timeout_expired) begin\n290:                         ERR_INT_REG[CTE] = 1'b1;\n291:                         NORMAL_INT_REG[EI] = 1'b1;"
+    }
+  ],
+  "truncated": false
+}

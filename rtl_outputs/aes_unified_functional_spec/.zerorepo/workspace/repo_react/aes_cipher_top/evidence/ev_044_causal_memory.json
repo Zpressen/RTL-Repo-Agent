@@ -1,0 +1,94 @@
+{
+  "repair_ledger": [
+    {
+      "step": 1,
+      "action_type": "apply_patch",
+      "block_id": null,
+      "target": {
+        "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_cipher_top/rtl.sv",
+        "start_line": 387,
+        "end_line": 597
+      },
+      "affected_signals": [
+        "aes_state",
+        "aes_state_next",
+        "dcnt_next_mux",
+        "mixcolumns_bypass",
+        "round_data_bus",
+        "sa_00",
+        "sa_01",
+        "sa_02",
+        "sa_03",
+        "sa_10",
+        "sa_11",
+        "sa_12",
+        "sa_13",
+        "sa_20",
+        "sa_21",
+        "sa_22",
+        "sa_23",
+        "sa_30",
+        "sa_31",
+        "sa_32",
+        "sa_33",
+        "text_out_next"
+      ],
+      "effect": "improved",
+      "metric_delta": {
+        "total_samples_mismatch": null,
+        "per_signal": {}
+      },
+      "lesson": "Patch improved mismatch count or first fail time; continue from this direction.",
+      "hypothesis": "The DUT FSM is stuck in IDLE because ld is never asserted while rst=0. The reference model free-runs without FSM gates. Per planning corrections: (1) FSM resets to ROUND_OP, (2) IDLE auto-advances to ROUND_OP without ld check, (3) ROUND_OP stays in ROUND_OP continuously, (4) text_out_next always uses final_data_bus, (5) MixColumns bypass uses dcnt==1 instead of final_cycle, (6) A3 always block updates sa every cycle (ld_r for initial load, else sa_next_bus). Expected effect: DUT text_out should now update every clock cycle matching the reference model's free-running AES computation. text_out at time 5 should be 0x63...63 (matching reference).",
+      "patch_summary": "// FSM state register. Reset returns the controller to ROUND_OP for free-running operation\n...<snip>...\n1) begin aes_state <= AES_ST_ROUND_OP; end else begin aes_state <= aes_state_next; end end; AES_ST_IDLE: begin dcnt_next_mux = 4'h0; aes_state_nex\n...<snip>...\nixcolumns_bus;; assign text_out_next = final_data_bus;; if (ld_r == 1'b1) begin sa_00 <= text_in_r[127:120] ^ round_key_bus[127:120]; sa_10 <= tex\n...<snip>...\n]; sa_13 <= sa_next_bus[23:16]; sa_23 <= sa_next_bus[15:8]; sa_33 <= sa_next_bus[7:0]; end",
+      "protect": [
+        "Preserve improved behavior for signals: aes_state, aes_state_next, dcnt_next_mux, mixcolumns_bypass, round_data_bus, sa_00, sa_01, sa_02."
+      ]
+    },
+    {
+      "step": 2,
+      "action_type": "apply_patch",
+      "block_id": null,
+      "target": {
+        "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_cipher_top/rtl.sv",
+        "start_line": 512,
+        "end_line": 577
+      },
+      "affected_signals": [
+        "dcnt",
+        "ld_r",
+        "sa_00",
+        "sa_01",
+        "sa_02",
+        "sa_03",
+        "sa_10",
+        "sa_11",
+        "sa_12",
+        "sa_13",
+        "sa_20",
+        "sa_21",
+        "sa_22",
+        "sa_23",
+        "sa_30",
+        "sa_31",
+        "sa_32",
+        "sa_33",
+        "text_in_r",
+        "text_out"
+      ],
+      "effect": "neutral",
+      "metric_delta": {
+        "total_samples_mismatch": null,
+        "per_signal": {}
+      },
+      "lesson": "Patch was accepted but did not clearly improve tracked metrics.",
+      "hypothesis": "The async reset (posedge rst) in A3 was clearing text_out and sa registers when rst=1, but the reference model only resets dcnt/ld_r and never clears data-path registers. Changed to sync reset (posedge clk only) that resets only control signals (dcnt, ld_r) while preserving text_out, sa, and text_in_r values through reset, matching reference behavior. Expected effect: text_out should no longer reset to 0 at time 50. Should reduce mismatches and may help with the time-35 divergence if it was related to reset-induced register clearing.",
+      "patch_summary": "always @(posedge clk) begin if (rst == 1'b1) begin dcnt <= 4'h0; ld_r <= 1'b0; end else be\n...<snip>...\n <= sa_next_bus[23:16]; sa_23 <= sa_next_bus[15:8]; sa_33 <= sa_next_bus[7:0]; end end end",
+      "protect": []
+    }
+  ],
+  "protected_invariants": [
+    "Preserve improved behavior for signals: aes_state, aes_state_next, dcnt_next_mux, mixcolumns_bypass, round_data_bus, sa_00, sa_01, sa_02."
+  ],
+  "unsafe_directions": []
+}

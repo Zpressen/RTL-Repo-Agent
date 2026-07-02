@@ -1,0 +1,58 @@
+{
+  "status": "ok",
+  "pattern": "text_out",
+  "scope": "rtl",
+  "results": [
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_cipher_top/rtl.sv",
+      "line": 8,
+      "excerpt": "6:     input  [127:0]  key,\n7:     input  [127:0]  text_in,\n8:     output reg [127:0] text_out\n9: );\n10: "
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_cipher_top/rtl.sv",
+      "line": 50,
+      "excerpt": "48: wire [127:0] sa_next_bus;\n49: wire [127:0] text_in_r_next;\n50: wire [127:0] text_out_next;\n51: \n52: // Flattened SubBytes byte outputs"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_cipher_top/rtl.sv",
+      "line": 508,
+      "excerpt": "506: \n507: assign text_in_r_next = load_cycle ? text_in : text_in_r;\n508: assign text_out_next = final_data_bus;\n509: \n510: // Registered data/control commit. The done output is driven from the DONE state"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_cipher_top/rtl.sv",
+      "line": 517,
+      "excerpt": "515:         dcnt <= 4'h0;\n516:         ld_r <= 1'b0;\n517:         text_out <= 128'h00000000000000000000000000000000;\n518: \n519:         sa_00 <= 8'h00;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_cipher_top/rtl.sv",
+      "line": 539,
+      "excerpt": "537:         dcnt <= dcnt_next;\n538:         text_in_r <= text_in_r_next;\n539:         text_out <= text_out_next;\n540: \n541:         if (ld_r == 1'b1) begin"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/merged/aes_cipher_top.v",
+      "line": 8,
+      "excerpt": "6:     input  [127:0]  key,\n7:     input  [127:0]  text_in,\n8:     output reg [127:0] text_out\n9: );\n10: "
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/merged/aes_cipher_top.v",
+      "line": 50,
+      "excerpt": "48: wire [127:0] sa_next_bus;\n49: wire [127:0] text_in_r_next;\n50: wire [127:0] text_out_next;\n51: \n52: // Flattened SubBytes byte outputs"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/merged/aes_cipher_top.v",
+      "line": 513,
+      "excerpt": "511: \n512: assign text_in_r_next = load_cycle ? text_in : text_in_r;\n513: assign text_out_next = final_cycle ? final_data_bus : text_out;\n514: \n515: // Registered data/control commit. The done output is driven from the DONE state"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/merged/aes_cipher_top.v",
+      "line": 522,
+      "excerpt": "520:         dcnt <= 4'h0;\n521:         ld_r <= 1'b0;\n522:         text_out <= 128'h00000000000000000000000000000000;\n523: \n524:         sa_00 <= 8'h00;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/merged/aes_cipher_top.v",
+      "line": 544,
+      "excerpt": "542:         dcnt <= dcnt_next;\n543:         text_in_r <= text_in_r_next;\n544:         text_out <= text_out_next;\n545: \n546:         if (load_cycle == 1'b1) begin"
+    }
+  ],
+  "truncated": false
+}

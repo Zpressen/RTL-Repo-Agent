@@ -15,6 +15,13 @@ FailureType = Literal[
 ]
 NextAction = Literal["patch", "read_more", "record_correction", "stop"]
 RepoReActStatus = Literal["pass", "fail", "give_up", "max_steps_exceeded", "error"]
+DebugContextGoal = Literal[
+    "initial_triage",
+    "before_patch",
+    "after_patch",
+    "compact_resume",
+    "specific_question",
+]
 
 
 class Patch(BaseModel):
@@ -65,6 +72,58 @@ class SimSnapshot(BaseModel):
     sim_output_path: str = ""
 
 
+class RawArtifactRef(BaseModel):
+    kind: str
+    path: str = ""
+    artifact_id: str = ""
+    description: str = ""
+
+
+class EvidenceItem(BaseModel):
+    evidence_id: str
+    kind: str
+    summary: str
+    artifact_ref: RawArtifactRef
+    why_selected: str = ""
+    salient: dict[str, Any] = Field(default_factory=dict)
+
+
+class TimingEvidence(BaseModel):
+    signal: str = ""
+    time: int | None = None
+    edge: str = ""
+    sampling_mode: str = ""
+    ref: str = ""
+    dut: str = ""
+    driver_assignment_kind: str = ""
+    block_id: str = ""
+    line_range: list[int] = Field(default_factory=list)
+
+
+class DebugContextPack(BaseModel):
+    schema_version: str = "debug_context_pack_v1"
+    goal: DebugContextGoal = "initial_triage"
+    module: str
+    repair_mode: Literal["syntax", "functional"] = "functional"
+    pack_path: str = ""
+    task_frame: dict[str, Any] = Field(default_factory=dict)
+    evidence_pack: list[EvidenceItem] = Field(default_factory=list)
+    active_working_set: dict[str, Any] = Field(default_factory=dict)
+    causal_memory: dict[str, Any] = Field(default_factory=dict)
+    raw_artifacts: dict[str, RawArtifactRef] = Field(default_factory=dict)
+    timing_evidence: TimingEvidence = Field(default_factory=TimingEvidence)
+    fallback_used: bool = False
+    fallback_reason: str = ""
+
+
+class DebugContextRouterInput(BaseModel):
+    goal: DebugContextGoal = "initial_triage"
+    focus_signals: list[str] = Field(default_factory=list)
+    focus_blocks: list[str] = Field(default_factory=list)
+    missing_evidence: list[str] = Field(default_factory=list)
+    max_items: int = Field(default=5, ge=1, le=10)
+
+
 class RepoReActInput(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -85,6 +144,8 @@ class RepoReActInput(BaseModel):
     max_steps: int = 30
     kg_hop_depth: int = 3
     stage_artifacts: dict[str, str] = Field(default_factory=dict)
+    context_pack_path: str = ""
+    context_pack_json: dict[str, Any] = Field(default_factory=dict)
 
 
 class RepoReActResult(BaseModel):

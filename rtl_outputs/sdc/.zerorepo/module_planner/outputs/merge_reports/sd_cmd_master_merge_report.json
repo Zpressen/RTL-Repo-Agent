@@ -83,13 +83,13 @@
       ],
       "owner_block": "A3"
     },
-    "next_response_size": {
+    "next_settings": {
       "drivers": [
         "A3"
       ],
       "owner_block": "A3"
     },
-    "next_settings": {
+    "response_size_comb": {
       "drivers": [
         "A3"
       ],
@@ -226,8 +226,8 @@
     {
       "id": "C1",
       "kind": "assign",
-      "start_line": 106,
-      "end_line": 106,
+      "start_line": 104,
+      "end_line": 104,
       "writes": [
         "CMDI"
       ],
@@ -237,8 +237,8 @@
     {
       "id": "C2",
       "kind": "assign",
-      "start_line": 107,
-      "end_line": 107,
+      "start_line": 105,
+      "end_line": 105,
       "writes": [
         "WORD_SELECT"
       ],
@@ -248,8 +248,8 @@
     {
       "id": "C3",
       "kind": "assign",
-      "start_line": 108,
-      "end_line": 108,
+      "start_line": 106,
+      "end_line": 106,
       "writes": [
         "CICE"
       ],
@@ -259,8 +259,8 @@
     {
       "id": "C4",
       "kind": "assign",
-      "start_line": 109,
-      "end_line": 109,
+      "start_line": 107,
+      "end_line": 107,
       "writes": [
         "CRCE"
       ],
@@ -270,8 +270,8 @@
     {
       "id": "C5",
       "kind": "assign",
-      "start_line": 110,
-      "end_line": 110,
+      "start_line": 108,
+      "end_line": 108,
       "writes": [
         "RTS"
       ],
@@ -281,8 +281,8 @@
     {
       "id": "C6",
       "kind": "assign",
-      "start_line": 112,
-      "end_line": 112,
+      "start_line": 110,
+      "end_line": 110,
       "writes": [
         "dat_ava"
       ],
@@ -292,8 +292,8 @@
     {
       "id": "C7",
       "kind": "assign",
-      "start_line": 113,
-      "end_line": 113,
+      "start_line": 111,
+      "end_line": 111,
       "writes": [
         "crc_valid"
       ],
@@ -303,8 +303,8 @@
     {
       "id": "C8",
       "kind": "assign",
-      "start_line": 114,
-      "end_line": 114,
+      "start_line": 112,
+      "end_line": 112,
       "writes": [
         "command_index_mismatch"
       ],
@@ -314,8 +314,8 @@
     {
       "id": "C9",
       "kind": "assign",
-      "start_line": 115,
-      "end_line": 115,
+      "start_line": 113,
+      "end_line": 113,
       "writes": [
         "timeout_expired"
       ],
@@ -325,8 +325,8 @@
     {
       "id": "C10",
       "kind": "assign",
-      "start_line": 116,
-      "end_line": 116,
+      "start_line": 114,
+      "end_line": 114,
       "writes": [
         "response_present"
       ],
@@ -336,8 +336,8 @@
     {
       "id": "A1",
       "kind": "always",
-      "start_line": 118,
-      "end_line": 149,
+      "start_line": 120,
+      "end_line": 151,
       "writes": [
         "next_state"
       ],
@@ -347,8 +347,8 @@
     {
       "id": "A2",
       "kind": "always",
-      "start_line": 151,
-      "end_line": 157,
+      "start_line": 157,
+      "end_line": 163,
       "writes": [
         "state"
       ],
@@ -358,12 +358,12 @@
     {
       "id": "A3",
       "kind": "always",
-      "start_line": 159,
-      "end_line": 177,
+      "start_line": 169,
+      "end_line": 187,
       "writes": [
         "next_cmd_out",
-        "next_response_size",
-        "next_settings"
+        "next_settings",
+        "response_size_comb"
       ],
       "uses_nonblocking": false,
       "uses_blocking": true
@@ -371,8 +371,8 @@
     {
       "id": "A4",
       "kind": "always",
-      "start_line": 179,
-      "end_line": 201,
+      "start_line": 193,
+      "end_line": 215,
       "writes": [
         "card_present",
         "debounce"
@@ -383,8 +383,8 @@
     {
       "id": "A5",
       "kind": "always",
-      "start_line": 203,
-      "end_line": 215,
+      "start_line": 221,
+      "end_line": 233,
       "writes": [
         "ack_in_int",
         "ack_q",
@@ -397,8 +397,8 @@
     {
       "id": "A6",
       "kind": "always",
-      "start_line": 217,
-      "end_line": 327,
+      "start_line": 240,
+      "end_line": 337,
       "writes": [
         "CRC_check_enable",
         "ERR_INT_REG",
@@ -424,6 +424,7 @@
     "status": "pass",
     "errors": [],
     "warnings": [
+      "Output updates is not visibly driven by parsed always/assign blocks.",
       "Stage5 contracts have multiple writers for response_size: ['B4_comb_cmd_settings_assembly', 'B7_seq_fsm_state_operations'].",
       "Block A6 drives outputs (ERR_INT_REG, NORMAL_INT_REG, RESP_1_REG, STATUS_REG, ack_out, cmd_out, go_idle_o, req_out, settings) using only nonblocking assignments. If the reference testbench samples on clock edges, this will cause edge_active sampling mismatches. Consider using blocking assignments (=) for output signals in sequential always blocks."
     ]
@@ -431,7 +432,7 @@
   "lint_summary": {
     "status": "ok",
     "is_pass": true,
-    "output_excerpt": "{\n    \"stdout\": \"- V e r i l a t i o n   R e p o r t: Verilator 5.044 2026-01-01 rev conda-forge build 0\\n- Verilator: Built from 1.304 MB sources in 15 modules, into 0.031 MB in 3 C++ files needing 0.000 MB\\n- Verilator: Walltime 0.026 s (elab=0.003, cvt=0.006, bld=0.000); cpu 0.028 s on 1 threads; alloced 25.711 MB\\n\",\n    \"stderr\": \"%Warning-MODDUP: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_cmd_master_draft.v:3:8: Duplicate declaration of module: 'sd_cmd_master'\\n    3 | module sd_cmd_master (\\n      |        ^~~~~~~~~~~~~\\n                 /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_cmd_master.v:3:8: ... Location of original declaration\\n    3 | module sd_cmd_master (\\n      |        ^~~~~~~~~~~~~\\n                 ... For warning description see https://verilator.org/warn/MODDUP?v=5.044\\n                 ... Use \\\"/* verilator lint_off MODDUP */\\\" and lint_on around source to disable this message.\\n%Warning-PINCONNECTEMPTY: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_fifo_rx_filler.v:50:10: Instance pin connected by name with empty reference: 'mem_empt'\\n   50 |         .mem_empt (),\\n      |          ^~~~~~~~\\n                          ... For warning description see https://verilator.org/warn/PINCONNECTEMPTY?v=5.044\\n                          ... Use \\\"/* verilator lint_off PINCONNECTEMPTY */\\\" and lint_on around source to disable this message.\\n%Warning-PINMISSING: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sdc_controller.v:368:19: Instance has missing pin: 'empty'\\n  368 | sd_fifo_rx_filler u_sd_fifo_rx_filler (\\n      |                   ^~~~~~~~~~~~~~~~~~~\\n                     /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_fifo_rx_filler.v:10:26: ... Location of port declaration\\n   10 |     output wire          empty,\\n      |                          ^~~~~\\n                     ... For warning description see https://verilator.org/warn/PINMISSING?v=5.044\\n                     ... Use \\\"/* verilator lint_off PINMISSING */\\\" and lint_on around source to disable this message.\\n%Warning-UNUSEDSIGNAL: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_cmd_master.v:35:18: Bits of signal are not used: 'CMD_SET_REG'[5,2]\\n                                                                                                                 : ... note: In instance 'sd_cmd_master'\\n   35 |     input [13:0] CMD_SET_REG;\\n      |                  ^~~~~~~~~~~\\n                       ... For warning description see https://verilator.org/warn/UNUSEDSIGNAL?v=5.044\\n                       ... Use \\\"/* verilator lint_off UNUSEDSIGNAL */\\\" and lint_on around source to disable this message.\\n%Warning-UNUSEDSIGNAL: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_cmd_master.v:50:18: Bits of signal are not used: 'cmd_in'[39:38]\\n                                                                                                                 : ... note: In instance 'sd_cmd_master'\\n   50 |     input [39:0] cmd_in;\\n      |                  ^~~~~~\\n%Warning-UNUSEDSIGNAL: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_cmd_master.v:88:15: Signal is not used: 'status'\\n                                                                                                                 : ... note: In instance 'sd_cmd_master'\\n   88 |     reg [7:0] status;\\n      |               ^~~~~~\\n\"\n}"
+    "output_excerpt": "{\n    \"stdout\": \"- V e r i l a t i o n   R e p o r t: Verilator 5.044 2026-01-01 rev conda-forge build 0\\n- Verilator: Built from 0.148 MB sources in 4 modules, into 0.031 MB in 3 C++ files needing 0.000 MB\\n- Verilator: Walltime 0.018 s (elab=0.002, cvt=0.007, bld=0.000); cpu 0.017 s on 1 threads; alloced 23.227 MB\\n\",\n    \"stderr\": \"%Warning-DECLFILENAME: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merge_drafts/sd_bd_draft.v:4:8: Filename 'sd_bd_draft' does not match MODULE name: 'sd_bd'\\n    4 | module sd_bd (\\n      |        ^~~~~\\n                       ... For warning description see https://verilator.org/warn/DECLFILENAME?v=5.044\\n                       ... Use \\\"/* verilator lint_off DECLFILENAME */\\\" and lint_on around source to disable this message.\\n%Warning-DECLFILENAME: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merge_drafts/sd_cmd_master_draft.v:8:8: Filename 'sd_cmd_master_draft' does not match MODULE name: 'sd_cmd_master'\\n    8 | module sd_cmd_master (\\n      |        ^~~~~~~~~~~~~\\n%Warning-DECLFILENAME: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merge_drafts/sd_controller_wb_draft.v:3:8: Filename 'sd_controller_wb_draft' does not match MODULE name: 'sd_controller_wb'\\n    3 | module sd_controller_wb (\\n      |        ^~~~~~~~~~~~~~~~\\n%Warning-UNUSEDSIGNAL: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merge_drafts/sd_cmd_master_draft.v:21:21: Signal is not used: 'ERR_INT_RST'\\n                                                                                                                             : ... note: In instance 'sd_cmd_master'\\n   21 |     input           ERR_INT_RST,\\n      |                     ^~~~~~~~~~~\\n                       ... For warning description see https://verilator.org/warn/UNUSEDSIGNAL?v=5.044\\n                       ... Use \\\"/* verilator lint_off UNUSEDSIGNAL */\\\" and lint_on around source to disable this message.\\n%Warning-UNUSEDSIGNAL: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merge_drafts/sd_cmd_master_draft.v:22:21: Signal is not used: 'NORMAL_INT_RST'\\n                                                                                                                             : ... note: In instance 'sd_cmd_master'\\n   22 |     input           NORMAL_INT_RST,\\n      |                     ^~~~~~~~~~~~~~\\n%Warning-UNUSEDSIGNAL: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merge_drafts/sd_cmd_master_draft.v:30:21: Bits of signal are not used: 'cmd_in'[39:38]\\n                                                                                                                             : ... note: In instance 'sd_cmd_master'\\n   30 |     input  [39:0]   cmd_in,\\n      |                     ^~~~~~\\n%Warning-UNUSEDSIGNAL: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merge_drafts/sd_cmd_master_draft.v:91:16: Signal is not used: 'CMDI'\\n                                                                                                                             : ... note: In instance 'sd_cmd_master'\\n   91 |     wire [5:0] CMDI;\\n      |                ^~~~\\n%Warning-UNUSEDSIGNAL: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merge_drafts/sd_cmd_master_draft.v:92:16: Signal is not used: 'WORD_SELECT'\\n                                                                                                                             : ... note: In instance 'sd_cmd_master'\\n   92 |     wire [1:0] WORD_SELECT;\\n      |                ^~~~~~~~~~~\\n%Warning-UNUSEDSIGNAL: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merge_drafts/sd_cmd_master_draft.v:95:16: Signal is not used: 'RTS'\\n                                                                                                                             : ... note: In instance 'sd_cmd_master'\\n   95 |     wire [1:0] RTS;\\n      |                ^~~\\n%Warning-UNUSEDSIGNAL: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merge_drafts/sd_cmd_master_draft.v:98:10: Signal is not used: 'dat_ava'\\n                                                                                                                             : ... note: In instance 'sd_cmd_master'\\n   98 |     wire dat_ava;\\n      |          ^~~~~~~\\n%Warning-UNUSEDSIGNAL: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merge_drafts/sd_cmd_master_draft.v:99:10: Signal is not used: 'crc_valid'\\n                                                                                                                             : ... note: In instance 'sd_cmd_master'\\n   99 |     wire crc_valid;\\n      |          ^~~~~~~~~\\n\"\n}"
   },
   "draft_committed": true,
   "total_action_calls": 1

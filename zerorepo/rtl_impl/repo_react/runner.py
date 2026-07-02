@@ -17,10 +17,23 @@ from zerorepo.rtl_impl.debug_agent.model import make_formatter, make_openai_mode
 from zerorepo.rtl_impl.debug_agent.sim_reviewer import SimReviewer
 from zerorepo.rtl_impl.debug_agent.trace_report import build_trace_report
 
+from .context import DebugContextRouter
 from .journal import RepoReActJournal
 from .prompt import SYSTEM_PROMPT, build_compact_prompt, build_continue_prompt, build_initial_prompt
-from .schemas import Diagnosis, RepoReActInput, RepoReActResult, SimSnapshot
+from .schemas import DebugContextGoal, Diagnosis, RepoReActInput, RepoReActResult, SimSnapshot
 from .tools import RepoReActToolState, RepoReActTools, _extract_first_fail_time, _summarize_command_json
+
+CompactDecision = Literal["none", "light", "checkpoint", "deep"]
+
+LIGHT_READONLY_CALLS = 8
+LIGHT_TOOL_CHARS = 24_000
+CHECKPOINT_WRITES = 3
+CHECKPOINT_TOOL_CHARS = 96_000
+CHECKPOINT_LIGHTS = 3
+CHECKPOINT_AFTER_LIGHT_CHARS = 64_000
+DEEP_CHECKPOINTS = 2
+DEEP_TOOL_CHARS = 160_000
+DEEP_REMAINING_BUDGET_RATIO = 0.2
 
 
 def _tool_schema(name: str, description: str, properties: dict[str, Any], required: list[str] | None = None) -> dict[str, Any]:
@@ -68,11 +81,19 @@ class RepoReActRunner:
         "query_rtl_kg",
         "read_spec",
         "retrieve_spec_block",
+        "read_long_term_memory",
         "list_vcd_signals",
         "probe_vcd",
         "run_check",
+        "route_debug_context",
     }
     ACTION_TOOLS = {"apply_patch", "replace_block", "record_correction"}
+    ROUTER_FIRST_TOOLS = {
+        "read_context",
+        "search_context",
+        "list_vcd_signals",
+        "probe_vcd",
+    }
 
     def __init__(
         self,
@@ -90,17 +111,26 @@ class RepoReActRunner:
         self.logger = logger
         self._state: RepoReActToolState | None = None
         self._tools: RepoReActTools | None = None
+        self._context_router: DebugContextRouter | None = None
+        self._latest_context_pack: dict[str, Any] = {}
         self._last_compacted_action_calls = 0
+        self._last_checkpoint_action_calls = 0
         self._tool_result_chars_since_compact = 0
+        self._tool_result_chars_since_light = 0
         self._readonly_calls_since_action = 0
+        self._readonly_calls_since_light = 0
+        self._route_calls_since_action = 0
+        self._light_consolidations_since_checkpoint = 0
+        self._checkpoint_count = 0
         self._max_readonly_calls_since_action = int(os.environ.get("ZEROREPO_REACT_READONLY_BUDGET", "16"))
+        self._router_first_enabled = os.environ.get("ZEROREPO_REACT_ROUTER_FIRST", "1").lower() not in {"0", "false", "no"}
 
         toolkit = Toolkit()
         toolkit.register_tool_function(
             self.read_context,
             json_schema=_tool_schema(
                 "read_context",
-                "Read repository tree, files, line ranges, specs, testbench, stage artifacts, trace reports, or journals.",
+                "Read repository tree, files, line ranges, specs, testbench, stage artifacts, trace reports, or journals. Use route_debug_context first in a new observation cycle unless you need one exact cited artifact.",
                 {
                     "kind": {
                         "type": "string",
@@ -128,7 +158,7 @@ class RepoReActRunner:
             self.search_context,
             json_schema=_tool_schema(
                 "search_context",
-                "Search RTL, testbench, spec, or all context with a regex pattern.",
+                "Search RTL, testbench, spec, or all context with a regex pattern. Use route_debug_context first in a new observation cycle.",
                 {
                     "pattern": {"type": "string"},
                     "scope": {"type": "string", "enum": ["rtl", "tb", "spec", "all"]},
@@ -189,10 +219,22 @@ class RepoReActRunner:
             ),
         )
         toolkit.register_tool_function(
+            self.read_long_term_memory,
+            json_schema=_tool_schema(
+                "read_long_term_memory",
+                "Read a selected RTL long-term memory markdown file under workspace rtl_memory. Use this when selected_long_term_memories has a relevant path and the body excerpt is insufficient.",
+                {
+                    "path": {"type": "string"},
+                    "max_chars": {"type": "integer"},
+                },
+                ["path"],
+            ),
+        )
+        toolkit.register_tool_function(
             self.list_vcd_signals,
             json_schema=_tool_schema(
                 "list_vcd_signals",
-                "List VCD signal names matching an optional pattern and scope.",
+                "List VCD signal names matching an optional pattern and scope. Use route_debug_context first in a new observation cycle.",
                 {
                     "pattern": {"type": "string"},
                     "scope": {"type": "string"},
@@ -205,7 +247,7 @@ class RepoReActRunner:
             self.probe_vcd,
             json_schema=_tool_schema(
                 "probe_vcd",
-                "Sample VCD signals at a time or over a time window with optional edge filtering.",
+                "Sample VCD signals at a time or over a time window with optional edge filtering. Use route_debug_context first in a new observation cycle.",
                 {
                     "signals": {"type": "array", "items": {"type": "string"}},
                     "time": {"type": ["integer", "null"]},
@@ -231,30 +273,58 @@ class RepoReActRunner:
                 ["mode"],
             ),
         )
+        # read_memory disabled: context_pack injected into every prompt already provides
+        # the same session-state summary (task_frame, timing_evidence, causal_memory).
+        # Raw read_memory calls returned ~45 KB of redundant JSON and accelerated the
+        # compact checkpoint without adding decision-relevant information.
+        # toolkit.register_tool_function(
+        #     self.read_memory,
+        #     json_schema=_tool_schema(
+        #         "read_memory",
+        #         "Read RepoReAct repair memory, failed directions, promising directions, or full snapshot. Use route_debug_context first for summarized memory selection.",
+        #         {
+        #             "kind": {
+        #                 "type": "string",
+        #                 "enum": [
+        #                     "snapshot",
+        #                     "brief",
+        #                     "repair_journal",
+        #                     "repair_ledger",
+        #                     "protected_invariants",
+        #                     "unsafe_directions",
+        #                     "failed_directions",
+        #                     "promising_directions",
+        #                     "next_target",
+        #                     "raw_snapshot",
+        #                 ],
+        #             },
+        #             "limit": {"type": "integer"},
+        #         },
+        #         [],
+        #     ),
+        # )
         toolkit.register_tool_function(
-            self.read_memory,
+            self.route_debug_context,
             json_schema=_tool_schema(
-                "read_memory",
-                "Read RepoReAct repair memory, failed directions, promising directions, or full snapshot.",
+                "route_debug_context",
+                "Ask the read-only DebugContextRouter subagent for a short context pack with evidence citations.",
                 {
-                    "kind": {
+                    "goal": {
                         "type": "string",
                         "enum": [
-                            "snapshot",
-                            "brief",
-                            "repair_journal",
-                            "repair_ledger",
-                            "protected_invariants",
-                            "unsafe_directions",
-                            "failed_directions",
-                            "promising_directions",
-                            "next_target",
-                            "raw_snapshot",
+                            "initial_triage",
+                            "before_patch",
+                            "after_patch",
+                            "compact_resume",
+                            "specific_question",
                         ],
                     },
-                    "limit": {"type": "integer"},
+                    "focus_signals": {"type": ["array", "null"], "items": {"type": "string"}},
+                    "focus_blocks": {"type": ["array", "null"], "items": {"type": "string"}},
+                    "missing_evidence": {"type": ["array", "null"], "items": {"type": "string"}},
+                    "max_items": {"type": "integer"},
                 },
-                [],
+                ["goal"],
             ),
         )
         toolkit.register_tool_function(
@@ -351,16 +421,24 @@ class RepoReActRunner:
             formatter=make_formatter(cfg.model, cfg.base_url),
             toolkit=toolkit,
             memory=InMemoryMemory(),
-            max_iters=12,
+            max_iters=20,
         )
 
     def reset(self) -> None:
         clear_memory_safely(self._agent)
         self._state = None
         self._tools = None
+        self._context_router = None
+        self._latest_context_pack = {}
         self._last_compacted_action_calls = 0
+        self._last_checkpoint_action_calls = 0
         self._tool_result_chars_since_compact = 0
+        self._tool_result_chars_since_light = 0
         self._readonly_calls_since_action = 0
+        self._readonly_calls_since_light = 0
+        self._route_calls_since_action = 0
+        self._light_consolidations_since_checkpoint = 0
+        self._checkpoint_count = 0
 
     def _tool_response(self, name: str, payload: dict[str, Any]) -> ToolResponse:
         if self._state is not None:
@@ -370,16 +448,28 @@ class RepoReActRunner:
             )
         text = json.dumps(payload, indent=2, ensure_ascii=False)
         self._tool_result_chars_since_compact += len(text)
+        self._tool_result_chars_since_light += len(text)
         if name in self.ACTION_TOOLS:
             self._readonly_calls_since_action = 0
+            self._route_calls_since_action = 0
+        elif name == "route_debug_context":
+            self._route_calls_since_action += 1
+            self._readonly_calls_since_action += 1
+            self._readonly_calls_since_light += 1
         elif name in self.READONLY_TOOLS:
             self._readonly_calls_since_action += 1
+            self._readonly_calls_since_light += 1
         return ToolResponse(content=[{"type": "text", "text": text}])
 
     def _require_tools(self) -> RepoReActTools:
         if self._tools is None:
             raise RuntimeError("RepoReActRunner has no active tool state.")
         return self._tools
+
+    def _require_context_router(self) -> DebugContextRouter:
+        if self._context_router is None:
+            raise RuntimeError("RepoReActRunner has no active context router.")
+        return self._context_router
 
     def _readonly_budget_exceeded_response(self, tool_name: str) -> ToolResponse | None:
         if self._readonly_calls_since_action < self._max_readonly_calls_since_action:
@@ -403,6 +493,36 @@ class RepoReActRunner:
                 pass
         return self._tool_response(tool_name, payload)
 
+    def _router_first_required_response(self, tool_name: str) -> ToolResponse | None:
+        if not self._router_first_enabled:
+            return None
+        if tool_name not in self.ROUTER_FIRST_TOOLS:
+            return None
+        if self._route_calls_since_action > 0:
+            return None
+        pack = self._latest_context_pack or {}
+        task_frame = pack.get("task_frame") if isinstance(pack.get("task_frame"), dict) else {}
+        timing = pack.get("timing_evidence") if isinstance(pack.get("timing_evidence"), dict) else {}
+        payload = {
+            "status": "route_debug_context_required",
+            "tool_name": tool_name,
+            "required_tool": "route_debug_context",
+            "suggested_call": {
+                "goal": "specific_question",
+                "focus_signals": [timing.get("signal")] if timing.get("signal") else [],
+                "focus_blocks": [timing.get("block_id")] if timing.get("block_id") else [],
+                "missing_evidence": [f"Need {tool_name} evidence not covered by current context pack."],
+                "max_items": 5,
+            },
+            "current_context_pack_path": pack.get("pack_path") or "",
+            "task_frame": task_frame,
+            "message": (
+                "Delegate broad context gathering to DebugContextRouter first. "
+                "After route_debug_context returns a focused pack, call this raw read tool only for one cited missing artifact."
+            ),
+        }
+        return self._tool_response(tool_name, payload)
+
     def _memory_summary(self, snapshot: dict[str, Any]) -> dict[str, Any]:
         if isinstance(snapshot.get("causal_memory_brief"), dict):
             return snapshot["causal_memory_brief"]
@@ -422,22 +542,118 @@ class RepoReActRunner:
             "max_steps": snapshot.get("max_steps"),
         }
 
-    def _needs_compact_checkpoint(self) -> bool:
+    def _has_real_divergence_for_checkpoint(self) -> bool:
         if self._state is None:
             return False
-        edit_delta = int(self._state.action_calls) - int(self._last_compacted_action_calls)
-        return edit_delta >= 2 or int(self._tool_result_chars_since_compact) >= 16000
+        if self._state.input.repair_mode != "functional":
+            return True
+        return bool(self._state.observed_real_divergence)
 
-    async def _compact_agent_memory(self) -> None:
+    def _remaining_budget_ratio(self) -> float:
+        if self._state is None:
+            return 1.0
+        max_steps = max(1, int(self._state.input.max_steps or self.max_steps))
+        remaining = max(0, max_steps - int(self._state.action_calls))
+        return remaining / max_steps
+
+    def _compact_decision(self) -> CompactDecision:
+        if self._state is None:
+            return "none"
+        action_calls = int(self._state.action_calls)
+        writes_since_checkpoint = action_calls - int(self._last_checkpoint_action_calls)
+        if action_calls > 0:
+            if (
+                int(self._checkpoint_count) >= DEEP_CHECKPOINTS
+                or self._remaining_budget_ratio() <= DEEP_REMAINING_BUDGET_RATIO
+                or int(self._tool_result_chars_since_compact) >= DEEP_TOOL_CHARS
+            ):
+                return "deep"
+            if self._has_real_divergence_for_checkpoint() and (
+                writes_since_checkpoint >= CHECKPOINT_WRITES
+                or int(self._tool_result_chars_since_compact) >= CHECKPOINT_TOOL_CHARS
+                or (
+                    int(self._light_consolidations_since_checkpoint) >= CHECKPOINT_LIGHTS
+                    and int(self._tool_result_chars_since_compact) >= CHECKPOINT_AFTER_LIGHT_CHARS
+                )
+            ):
+                return "checkpoint"
+        if (
+            self._route_calls_since_action > 0
+            or self._readonly_calls_since_light >= LIGHT_READONLY_CALLS
+            or self._tool_result_chars_since_light >= LIGHT_TOOL_CHARS
+            or (action_calls > 0 and action_calls > int(self._last_compacted_action_calls))
+        ):
+            return "light"
+        return "none"
+
+    def _needs_compact_checkpoint(self) -> bool:
+        return self._compact_decision() in {"checkpoint", "deep"}
+
+    async def _light_consolidate_context(self) -> dict[str, Any]:
+        if self._tools is None or self._state is None:
+            return {}
+        goal: DebugContextGoal = "after_patch" if int(self._state.action_calls) > 0 else "before_patch"
+        pack = await asyncio.to_thread(self._route_context_pack, goal)
+        self._tool_result_chars_since_light = 0
+        self._readonly_calls_since_light = 0
+        self._light_consolidations_since_checkpoint += 1
+        self._last_compacted_action_calls = int(self._state.action_calls)
+        self._route_calls_since_action = 0
+        self._state.journal.append_jsonl(
+            "react_trace.jsonl",
+            {
+                "role": "system",
+                "compact": "light",
+                "context_pack_path": pack.get("pack_path") or "",
+                "action_calls": int(self._state.action_calls),
+            },
+        )
+        return pack
+
+    async def _compact_agent_memory(self, mode: Literal["checkpoint", "deep"] = "checkpoint") -> None:
         if self._tools is None or self._state is None:
             return
-        snapshot = await asyncio.to_thread(self._tools.persist_memory_snapshot)
-        prompt = build_compact_prompt(self._memory_summary(snapshot))
+        context_pack = await asyncio.to_thread(self._route_context_pack, "compact_resume")
+        prompt = build_compact_prompt(context_pack, mode=mode)
         clear_memory_safely(self._agent)
         self._last_compacted_action_calls = int(self._state.action_calls)
+        self._last_checkpoint_action_calls = int(self._state.action_calls)
         self._tool_result_chars_since_compact = 0
-        self._state.journal.append_jsonl("react_trace.jsonl", {"role": "user", "content": prompt, "compact": True})
+        self._tool_result_chars_since_light = 0
+        self._readonly_calls_since_action = 0
+        self._readonly_calls_since_light = 0
+        self._route_calls_since_action = 0
+        self._light_consolidations_since_checkpoint = 0
+        self._checkpoint_count += 1
+        self._state.journal.append_jsonl(
+            "react_trace.jsonl",
+            {"role": "user", "content": prompt, "compact": mode},
+        )
         await self._agent(Msg("user", prompt, role="user"))
+
+    def _route_context_pack(
+        self,
+        goal: DebugContextGoal,
+        focus_signals: list[str] | None = None,
+        focus_blocks: list[str] | None = None,
+        missing_evidence: list[str] | None = None,
+        max_items: int = 5,
+    ) -> dict[str, Any]:
+        pack = self._require_context_router().route(
+            goal=goal,
+            focus_signals=focus_signals,
+            focus_blocks=focus_blocks,
+            missing_evidence=missing_evidence,
+            max_items=max_items,
+        )
+        self._latest_context_pack = pack
+        if self._state is not None:
+            try:
+                self._state.input.context_pack_path = str(pack.get("pack_path") or "")
+                self._state.input.context_pack_json = pack
+            except Exception:  # noqa: BLE001
+                pass
+        return pack
 
     async def read_context(
         self,
@@ -552,6 +768,18 @@ class RepoReActRunner:
         )
         return self._tool_response("retrieve_spec_block", result)
 
+    async def read_long_term_memory(
+        self,
+        path: str,
+        max_chars: int = 8000,
+    ) -> ToolResponse:
+        """Read a selected RTL long-term memory markdown file."""
+        blocked = self._readonly_budget_exceeded_response("read_long_term_memory")
+        if blocked is not None:
+            return blocked
+        result = await asyncio.to_thread(self._require_tools().read_long_term_memory, path, max_chars)
+        return self._tool_response("read_long_term_memory", result)
+
     async def list_vcd_signals(
         self,
         pattern: str = "",
@@ -626,8 +854,41 @@ class RepoReActRunner:
         limit: int = 5,
     ) -> ToolResponse:
         """Read RepoReAct repair memory."""
+        blocked = self._readonly_budget_exceeded_response("read_memory")
+        if blocked is not None:
+            return blocked
+        router_required = self._router_first_required_response("read_memory")
+        if router_required is not None:
+            return router_required
         result = await asyncio.to_thread(self._require_tools().read_memory, kind, limit)
         return self._tool_response("read_memory", result)
+
+    async def route_debug_context(
+        self,
+        goal: DebugContextGoal = "specific_question",
+        focus_signals: list[str] | None = None,
+        focus_blocks: list[str] | None = None,
+        missing_evidence: list[str] | None = None,
+        max_items: int = 5,
+    ) -> ToolResponse:
+        """Ask the read-only DebugContextRouter for a short context pack."""
+        blocked = self._readonly_budget_exceeded_response("route_debug_context")
+        if blocked is not None:
+            return blocked
+        result = await asyncio.to_thread(
+            self._route_context_pack,
+            goal,
+            focus_signals,
+            focus_blocks,
+            missing_evidence,
+            max_items,
+        )
+        # Surface the investigator's analysis at the top level so the main agent
+        # can read it directly without digging through the full pack JSON.
+        analysis = result.get("task_frame", {}).get("router_analysis")
+        if analysis:
+            result["router_analysis"] = analysis
+        return self._tool_response("route_debug_context", result)
 
     async def apply_patch(
         self,
@@ -765,6 +1026,8 @@ class RepoReActRunner:
             sim_reviewer=self.sim_reviewer,
             journal=journal,
             kg_service=self.kg_service,
+            model_cfg=self.cfg,
+            logger=self.logger,
             last_sim=SimSnapshot(
                 is_pass=False,
                 mismatch_count=int(inp.initial_mismatch_count),
@@ -775,12 +1038,19 @@ class RepoReActRunner:
         )
         self._state = state
         self._tools = RepoReActTools(state)
+        self._context_router = DebugContextRouter(cfg=self.cfg, tools=self._tools, logger=self.logger)
         max_steps = max(1, int(inp.max_steps or self.max_steps))
         initial_trace = self._build_initial_trace(inp)
         state.last_trace_summary = initial_trace
+        initial_divergence = initial_trace.get("first_divergence")
+        if isinstance(initial_divergence, dict):
+            state.last_divergence_summary = initial_divergence
+            if initial_divergence.get("status") in {"ok", "stable_values_match_but_tb_edge_mismatch"} and initial_divergence.get("first_divergence"):
+                state.observed_real_divergence = True
         corrections = self._tools.load_known_corrections()
         memory_snapshot = self._tools.persist_memory_snapshot()
         memory_brief = self._memory_summary(memory_snapshot)
+        context_pack = await asyncio.to_thread(self._route_context_pack, "initial_triage")
         first_prompt = build_initial_prompt(
             module_name=inp.module_name,
             repair_mode=inp.repair_mode,
@@ -792,8 +1062,12 @@ class RepoReActRunner:
             trace_summary=initial_trace,
             corrections=corrections,
             memory_snapshot=memory_brief,
+            context_pack=context_pack,
         )
-        journal.write_json("initial_context.json", {"prompt": first_prompt, "trace_summary": initial_trace})
+        journal.write_json(
+            "initial_context.json",
+            {"prompt": first_prompt, "trace_summary": initial_trace, "context_pack": context_pack},
+        )
         journal.append_jsonl("react_trace.jsonl", {"role": "user", "content": first_prompt})
 
         try:
@@ -809,17 +1083,29 @@ class RepoReActRunner:
                     break
                 if int(state.action_calls) >= max_steps:
                     break
-                if self._needs_compact_checkpoint():
-                    await self._compact_agent_memory()
+                compact_decision = self._compact_decision()
+                if compact_decision == "light":
+                    context_pack = await self._light_consolidate_context()
+                elif compact_decision in {"checkpoint", "deep"}:
+                    await self._compact_agent_memory(mode=compact_decision)
                     if state.last_sim.is_pass and state.last_sim.mismatch_count == 0:
                         break
                     if int(state.action_calls) >= max_steps:
                         break
+                    context_pack = self._latest_context_pack
+                else:
+                    context_pack = {}
                 snapshot = await asyncio.to_thread(self._tools.persist_memory_snapshot)
+                if not context_pack:
+                    context_pack = await asyncio.to_thread(
+                        self._route_context_pack,
+                        "after_patch" if int(state.action_calls) > 0 else "before_patch",
+                    )
                 prompt = build_continue_prompt(
                     memory_summary=self._memory_summary(snapshot),
                     readonly_calls_since_action=self._readonly_calls_since_action,
                     max_readonly_calls=self._max_readonly_calls_since_action,
+                    context_pack=context_pack,
                 )
                 journal.append_jsonl("react_trace.jsonl", {"role": "user", "content": prompt, "step": step})
                 msg = await self._agent(Msg("user", prompt, role="user"))

@@ -1,0 +1,13 @@
+{
+  "status": "ok",
+  "signals": [
+    "tb.text_out_ref[127:0]",
+    "tb.text_out_dut[127:0]",
+    "tb.good1.text_out[127:0]",
+    "tb.top_module1.text_out[127:0]",
+    "tb.top_module1.text_out_next[127:0]"
+  ],
+  "count": 5,
+  "truncated": false,
+  "total_in_vcd": 396
+}

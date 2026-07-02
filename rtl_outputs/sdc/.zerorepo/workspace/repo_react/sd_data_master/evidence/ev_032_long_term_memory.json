@@ -1,0 +1,82 @@
+[
+  {
+    "path": "cases/debug_sd_bd_free_bd_pass_5.md",
+    "memory_id": "debug_sd_bd_free_bd_pass_5",
+    "type": "repair_outcome",
+    "stage": "debug",
+    "module": "sd_bd",
+    "signals": [
+      "bd_mem_0",
+      "bd_mem_1",
+      "bd_mem_10",
+      "bd_mem_11",
+      "bd_mem_12",
+      "bd_mem_13",
+      "bd_mem_14",
+      "bd_mem_15",
+      "bd_mem_16",
+      "bd_mem_17",
+      "bd_mem_18",
+      "bd_mem_19"
+    ],
+    "failure_type": "timing_bug",
+    "outcome": "pass",
+    "confidence": 0.9,
+    "description": "sd_bd: free_bd passed; Patch fixed all observed mismatches.",
+    "patch_pattern": "",
+    "anti_trigger": "",
+    "content": "## Problem\n\n`sd_bd` showed a debug failure around `free_bd`.\n\n## Evidence\n\n- Effect: `passed`\n- Before mismatch count: `950`\n- After mismatch count: `0`\n- First divergence: `{\"signal\": \"free_bd\", \"time\": 14755, \"ref\": \"00110\", \"dut\": \"00111\", \"classification\": \"dut_early\", \"ref_path\": \"tb_sd_bd.free_bd_ref[4:0]\", \"dut_path\": \"tb_sd_bd.free_bd_dut[4:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"continuous\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n- Trace root failure: `{\"signal\": \"free_bd\", \"time\": 14755, \"ref\": \"00110\", \"dut\": \"00111\", \"classification\": \"dut_early\", \"ref_path\": \"tb_sd_bd.free_bd_ref[4:0]\", \"dut_path\": \"tb_sd_bd.free_bd_dut[4:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"continuous\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n- Metric delta: `{\"total_samples_mismatch\": null, \"per_signal\": {\"dat_out_s\": {\"before\": 12, \"after\": null, \"first_time_before\": 32215, \"first_time_after\": null, \"direction\": \"unknown\"}, \"free_bd\": {\"before\": 938, \"after\": null, \"first_time_before\": 14765, \"first_time_after\": null, \"direction\": \"unknown\"}}}`\n\n## Patch Summary\n\n// STAGE5_SUBTASK_BEGIN B2_write_sequence_B5_release: Merged sequential block — // write o\n...<snip>...\n begin last_a_cmp <= a_cmp; end end end // STAGE5_SUBTASK_END B2_write_sequence_B5_release\n\n## Lesson\n\nPatch fixed all observed mismatches.\n\n## Reuse Constraints\n\n- Read current RTL/spec evidence before applying a similar patch.\n- Do not reuse if affected signals or timing alignment differ.\n",
+    "body_excerpt": "## Problem\n\n`sd_bd` showed a debug failure around `free_bd`.\n\n## Evidence\n\n- Effect: `passed`\n- Before mismatch count: `950`\n- After mismatch count: `0`\n- First divergence: `{\"signal\": \"free_bd\", \"time\": 14755, \"ref\": \"00110\", \"dut\": \"00111\", \"classification\": \"dut_early\", \"ref_path\": \"tb_sd_bd.free_bd_ref[4:0]\", \"dut_path\": \"tb_sd_bd.free_bd_dut[4:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"continuous\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n- Trace root failure: `{\"signal\": \"free_bd\", \"time\": 14755, \"ref\": \"00110\", \"dut\": \"00111\", \"classification\": \"dut_early\", \"ref_path\": \"tb_sd_bd.free_bd_ref[4:0]\", \"dut_path\": \"tb_sd_bd.free_bd_dut[4:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"continuous\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n- Metric delta: `{\"total_samples_mismatch\": null, \"per_signal\": {\"dat_out_s\": {\"before\": 12, \"after\": null, \"first_time_before\": 32215, \"first_time_after\": null, \"direction\": \"unknown\"}, \"free_bd\": {\"before\": 938, \"after\": null, \"first_time_before\": 14765, \"first_time_after\": null, \"direction\": \"unknown\"}}}`\n\n## Patch Summary\n\n// STAGE5_SUBTASK_BEGIN B2_write_sequence_B5_release: Merged sequential block — // write o\n...<snip>...\n begin last_a_cmp <= a_cmp; end end end // STAGE5_SUBTASK_END B2_write_sequence_B5_release\n\n## Lesson\n\nPatch fixed all observed mismatches.\n\n## Reuse Constraints\n\n- Read current RTL/spec evidence before applying a similar patch.\n- Do not reuse if affected signals or timing alignment differ.\n"
+  },
+  {
+    "path": "cases/debug_sd_bd_free_bd_improved_4.md",
+    "memory_id": "debug_sd_bd_free_bd_improved_4",
+    "type": "repair_outcome",
+    "stage": "debug",
+    "module": "sd_bd",
+    "signals": [
+      "ack_o_s",
+      "dat_out_s",
+      "free_bd",
+      "rd_cnt",
+      "s_rd_pnt"
+    ],
+    "failure_type": "timing_bug",
+    "outcome": "improved",
+    "confidence": 0.72,
+    "description": "sd_bd: free_bd improved; Patch improved mismatch count or first fail time; continue from this direction.",
+    "patch_pattern": "",
+    "anti_trigger": "",
+    "content": "## Problem\n\n`sd_bd` showed a debug failure around `free_bd`.\n\n## Evidence\n\n- Effect: `improved`\n- Before mismatch count: `3568`\n- After mismatch count: `950`\n- First divergence: `{\"signal\": \"free_bd\", \"time\": 14755, \"ref\": \"00110\", \"dut\": \"00111\", \"classification\": \"dut_early\", \"ref_path\": \"tb_sd_bd.free_bd_ref[4:0]\", \"dut_path\": \"tb_sd_bd.free_bd_dut[4:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"continuous\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n- Trace root failure: `{\"signal\": \"free_bd\", \"time\": 14755, \"ref\": \"00110\", \"dut\": \"00111\", \"classification\": \"dut_early\", \"ref_path\": \"tb_sd_bd.free_bd_ref[4:0]\", \"dut_path\": \"tb_sd_bd.free_bd_dut[4:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"continuous\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n- Metric delta: `{\"total_samples_mismatch\": null, \"per_signal\": {\"ack_o_s\": {\"before\": 18, \"after\": null, \"first_time_before\": 16855, \"first_time_after\": null, \"direction\": \"unknown\"}, \"dat_out_s\": {\"before\": 2612, \"after\": 12, \"first_time_before\": 165, \"first_time_after\": 32215, \"direction\": \"improved\"}, \"free_bd\": {\"before\": 938, \"after\": 938, \"first_time_before\": 14765, \"first_time_after\": 14765, \"direction\": \"unchanged\"}}}`\n\n## Patch Summary\n\n// STAGE5_SUBTASK_BEGIN B3_read_sequence: Sequential block for read pointer // management,\n...<snip>...\n4_comb_output: Removed — outputs now registered in B3 // STAGE5_SUBTASK_END B4_comb_output\n\n## Lesson\n\nPatch improved mismatch count or first fail time; continue from this direction.\n\n## Reuse Constraints\n\n- Read current RTL/spec evidence before applying a similar patch.\n- Do not reuse if affected signals or timing alignment differ.\n",
+    "body_excerpt": "## Problem\n\n`sd_bd` showed a debug failure around `free_bd`.\n\n## Evidence\n\n- Effect: `improved`\n- Before mismatch count: `3568`\n- After mismatch count: `950`\n- First divergence: `{\"signal\": \"free_bd\", \"time\": 14755, \"ref\": \"00110\", \"dut\": \"00111\", \"classification\": \"dut_early\", \"ref_path\": \"tb_sd_bd.free_bd_ref[4:0]\", \"dut_path\": \"tb_sd_bd.free_bd_dut[4:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"continuous\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n- Trace root failure: `{\"signal\": \"free_bd\", \"time\": 14755, \"ref\": \"00110\", \"dut\": \"00111\", \"classification\": \"dut_early\", \"ref_path\": \"tb_sd_bd.free_bd_ref[4:0]\", \"dut_path\": \"tb_sd_bd.free_bd_dut[4:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"continuous\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n- Metric delta: `{\"total_samples_mismatch\": null, \"per_signal\": {\"ack_o_s\": {\"before\": 18, \"after\": null, \"first_time_before\": 16855, \"first_time_after\": null, \"direction\": \"unknown\"}, \"dat_out_s\": {\"before\": 2612, \"after\": 12, \"first_time_before\": 165, \"first_time_after\": 32215, \"direction\": \"improved\"}, \"free_bd\": {\"before\": 938, \"after\": 938, \"first_time_before\": 14765, \"first_time_after\": 14765, \"direction\": \"unchanged\"}}}`\n\n## Patch Summary\n\n// STAGE5_SUBTASK_BEGIN B3_read_sequence: Sequential block for read pointer // management,\n...<snip>...\n4_comb_output: Removed — outputs now registered in B3 // STAGE5_SUBTASK_END B4_comb_output\n\n## Lesson\n\nPatch improved mismatch count or first fail time; continue from this direction.\n\n## Reuse Constraints\n\n- Read current RTL/spec evidence before applying a similar patch.\n- Do not reuse if affected signals or timing alignment differ.\n"
+  },
+  {
+    "path": "cases/debug_sd_bd_dat_out_s_improved_3.md",
+    "memory_id": "debug_sd_bd_dat_out_s_improved_3",
+    "type": "repair_outcome",
+    "stage": "debug",
+    "module": "sd_bd",
+    "signals": [
+      "bd_mem_0",
+      "bd_mem_1",
+      "bd_mem_10",
+      "bd_mem_11",
+      "bd_mem_12",
+      "bd_mem_13",
+      "bd_mem_14",
+      "bd_mem_15",
+      "bd_mem_16",
+      "bd_mem_17",
+      "bd_mem_18",
+      "bd_mem_19"
+    ],
+    "failure_type": "timing_bug",
+    "outcome": "improved",
+    "confidence": 0.72,
+    "description": "sd_bd: dat_out_s improved; Patch improved mismatch count or first fail time; continue from this direction.",
+    "patch_pattern": "",
+    "anti_trigger": "",
+    "content": "## Problem\n\n`sd_bd` showed a debug failure around `dat_out_s`.\n\n## Evidence\n\n- Effect: `improved`\n- Before mismatch count: `4075`\n- After mismatch count: `3568`\n- First divergence: `{\"signal\": \"dat_out_s\", \"time\": 155, \"ref\": \"0000000000000000\", \"dut\": \"0101110110011100\", \"classification\": \"dut_early\", \"ref_path\": \"tb_sd_bd.dat_out_s_ref[15:0]\", \"dut_path\": \"tb_sd_bd.dat_out_s_dut[15:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"blocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n- Trace root failure: `{\"signal\": \"dat_out_s\", \"time\": 155, \"ref\": \"0000000000000000\", \"dut\": \"0101110110011100\", \"classification\": \"dut_early\", \"ref_path\": \"tb_sd_bd.dat_out_s_ref[15:0]\", \"dut_path\": \"tb_sd_bd.dat_out_s_dut[15:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"blocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n- Metric delta: `{\"total_samples_mismatch\": null, \"per_signal\": {\"ack_o_s\": {\"before\": 18, \"after\": 18, \"first_time_before\": 16855, \"first_time_after\": 16855, \"direction\": \"unchanged\"}, \"dat_out_s\": {\"before\": 2638, \"after\": 2612, \"first_time_before\": 165, \"first_time_after\": 165, \"direction\": \"improved\"}, \"free_bd\": {\"before\": 1419, \"after\": 938, \"first_time_before\": 195, \"first_time_after\": 14765, \"direction\": \"improved\"}}}`\n\n## Patch Summary\n\n// STAGE5_SUBTASK_BEGIN B2_write_sequence_B5_release: Merged sequential block — // write o\n...<snip>...\n_reg <= free_bd_reg - 1'b1; end end end // STAGE5_SUBTASK_END B2_write_sequence_B5_release\n\n## Lesson\n\nPatch improved mismatch count or first fail time; continue from this direction.\n\n## Reuse Constraints\n\n- Read current RTL/spec evidence before applying a similar patch.\n- Do not reuse if affected signals or timing alignment differ.\n",
+    "body_excerpt": "## Problem\n\n`sd_bd` showed a debug failure around `dat_out_s`.\n\n## Evidence\n\n- Effect: `improved`\n- Before mismatch count: `4075`\n- After mismatch count: `3568`\n- First divergence: `{\"signal\": \"dat_out_s\", \"time\": 155, \"ref\": \"0000000000000000\", \"dut\": \"0101110110011100\", \"classification\": \"dut_early\", \"ref_path\": \"tb_sd_bd.dat_out_s_ref[15:0]\", \"dut_path\": \"tb_sd_bd.dat_out_s_dut[15:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"blocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n- Trace root failure: `{\"signal\": \"dat_out_s\", \"time\": 155, \"ref\": \"0000000000000000\", \"dut\": \"0101110110011100\", \"classification\": \"dut_early\", \"ref_path\": \"tb_sd_bd.dat_out_s_ref[15:0]\", \"dut_path\": \"tb_sd_bd.dat_out_s_dut[15:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"blocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n- Metric delta: `{\"total_samples_mismatch\": null, \"per_signal\": {\"ack_o_s\": {\"before\": 18, \"after\": 18, \"first_time_before\": 16855, \"first_time_after\": 16855, \"direction\": \"unchanged\"}, \"dat_out_s\": {\"before\": 2638, \"after\": 2612, \"first_time_before\": 165, \"first_time_after\": 165, \"direction\": \"improved\"}, \"free_bd\": {\"before\": 1419, \"after\": 938, \"first_time_before\": 195, \"first_time_after\": 14765, \"direction\": \"improved\"}}}`\n\n## Patch Summary\n\n// STAGE5_SUBTASK_BEGIN B2_write_sequence_B5_release: Merged sequential block — // write o\n...<snip>...\n_reg <= free_bd_reg - 1'b1; end end end // STAGE5_SUBTASK_END B2_write_sequence_B5_release\n\n## Lesson\n\nPatch improved mismatch count or first fail time; continue from this direction.\n\n## Reuse Constraints\n\n- Read current RTL/spec evidence before applying a similar patch.\n- Do not reuse if affected signals or timing alignment differ.\n"
+  }
+]

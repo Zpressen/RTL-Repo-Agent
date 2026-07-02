@@ -1,0 +1,38 @@
+{
+  "status": "ok",
+  "pattern": "command_index_mismatch",
+  "scope": "rtl",
+  "results": [
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_cmd_master/rtl.sv",
+      "line": 100,
+      "excerpt": "98:     wire dat_ava;\n99:     wire crc_valid;\n100:     wire command_index_mismatch;\n101:     wire timeout_expired;\n102:     wire response_present;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_cmd_master/rtl.sv",
+      "line": 112,
+      "excerpt": "110:     assign dat_ava                = status[DAT_AVA_BIT];\n111:     assign crc_valid              = status[CRC_VALID_BIT];\n112:     assign command_index_mismatch = (cmd_out[37:32] != cmd_in[37:32]);\n113:     assign timeout_expired        = (Watchdog_Cnt >= TIMEOUT_REG);\n114:     assign response_present       = (response_size != 7'b0000000);"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_cmd_master/rtl.sv",
+      "line": 335,
+      "excerpt": "333:                             end\n334: \n335:                             if (index_check_enable && command_index_mismatch) begin\n336:                                 ERR_INT_REG[CIE] = 1'b1;\n337:                                 NORMAL_INT_REG[EI] = 1'b1;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_cmd_master.v",
+      "line": 100,
+      "excerpt": "98:     wire dat_ava;\n99:     wire crc_valid;\n100:     wire command_index_mismatch;\n101:     wire timeout_expired;\n102:     wire response_present;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_cmd_master.v",
+      "line": 112,
+      "excerpt": "110:     assign dat_ava                = status[DAT_AVA_BIT];\n111:     assign crc_valid              = status[CRC_VALID_BIT];\n112:     assign command_index_mismatch = (cmd_out[37:32] != cmd_in[37:32]);\n113:     assign timeout_expired        = (Watchdog_Cnt >= TIMEOUT_REG);\n114:     assign response_present       = (response_size != 7'b0000000);"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_cmd_master.v",
+      "line": 316,
+      "excerpt": "314:                             end\n315: \n316:                             if (index_check_enable && command_index_mismatch) begin\n317:                                 ERR_INT_REG[CIE] <= 1'b1;\n318:                                 NORMAL_INT_REG[EI] <= 1'b1;"
+    }
+  ],
+  "truncated": false
+}

@@ -1,0 +1,258 @@
+{
+  "status": "ok",
+  "pattern": "A3|condition_blocks_update|text_out",
+  "scope": "all",
+  "results": [
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_cipher_top/rtl.sv",
+      "line": 8,
+      "excerpt": "6:     input  [127:0]  key,\n7:     input  [127:0]  text_in,\n8:     output reg [127:0] text_out\n9: );\n10: "
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_cipher_top/rtl.sv",
+      "line": 50,
+      "excerpt": "48: wire [127:0] sa_next_bus;\n49: wire [127:0] text_in_r_next;\n50: wire [127:0] text_out_next;\n51: \n52: // Flattened SubBytes byte outputs"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_cipher_top/rtl.sv",
+      "line": 508,
+      "excerpt": "506: \n507: assign text_in_r_next = load_cycle ? text_in : text_in_r;\n508: assign text_out_next = final_data_bus;\n509: \n510: // Registered data/control commit. The done output is driven from the DONE state"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_cipher_top/rtl.sv",
+      "line": 520,
+      "excerpt": "518:         dcnt <= dcnt_next;\n519:         text_in_r <= text_in_r_next;\n520:         text_out <= text_out_next;\n521: \n522:         if (ld_r == 1'b1) begin"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/merged/aes_cipher_top.v",
+      "line": 8,
+      "excerpt": "6:     input  [127:0]  key,\n7:     input  [127:0]  text_in,\n8:     output reg [127:0] text_out\n9: );\n10: "
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/merged/aes_cipher_top.v",
+      "line": 50,
+      "excerpt": "48: wire [127:0] sa_next_bus;\n49: wire [127:0] text_in_r_next;\n50: wire [127:0] text_out_next;\n51: \n52: // Flattened SubBytes byte outputs"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/merged/aes_cipher_top.v",
+      "line": 508,
+      "excerpt": "506: \n507: assign text_in_r_next = load_cycle ? text_in : text_in_r;\n508: assign text_out_next = final_data_bus;\n509: \n510: // Registered data/control commit. The done output is driven from the DONE state"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/merged/aes_cipher_top.v",
+      "line": 520,
+      "excerpt": "518:         dcnt <= dcnt_next;\n519:         text_in_r <= text_in_r_next;\n520:         text_out <= text_out_next;\n521: \n522:         if (ld_r == 1'b1) begin"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_cipher_top/tb.sv",
+      "line": 8,
+      "excerpt": "6:         int errors;           // 总错误数\n7:         int errortime;        // 第一次错误发生时间\n8:         int errors_text;      // text_out错误数\n9:         int errortime_text;   // text_out第一次错误时间\n10:         int errors_done;      // done信号错误数"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_cipher_top/tb.sv",
+      "line": 9,
+      "excerpt": "7:         int errortime;        // 第一次错误发生时间\n8:         int errors_text;      // text_out错误数\n9:         int errortime_text;   // text_out第一次错误时间\n10:         int errors_done;      // done信号错误数\n11:         int errortime_done;   // done信号第一次错误时间"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_cipher_top/tb.sv",
+      "line": 26,
+      "excerpt": "24:     logic [127:0] text_in;\n25:     logic done_ref, done_dut;\n26:     logic [127:0] text_out_ref;\n27:     logic [127:0] text_out_dut;\n28:     logic [511:0] wavedrom_title;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_cipher_top/tb.sv",
+      "line": 27,
+      "excerpt": "25:     logic done_ref, done_dut;\n26:     logic [127:0] text_out_ref;\n27:     logic [127:0] text_out_dut;\n28:     logic [511:0] wavedrom_title;\n29:     logic wavedrom_enable;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_cipher_top/tb.sv",
+      "line": 31,
+      "excerpt": "29:     logic wavedrom_enable;\n30:     \n31:     wire tb_match_text = (text_out_ref === (text_out_ref ^ text_out_dut ^ text_out_ref));\n32:     wire tb_match_done = (done_ref === done_dut);\n33:     wire tb_match = tb_match_text & tb_match_done;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_cipher_top/tb.sv",
+      "line": 55,
+      "excerpt": "53:         .key(key),\n54:         .text_in(text_in),\n55:         .text_out(text_out_ref)\n56:     );\n57:     "
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_cipher_top/tb.sv",
+      "line": 66,
+      "excerpt": "64:         .key(key),\n65:         .text_in(text_in),\n66:         .text_out(text_out_dut)\n67:     );\n68:     "
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_cipher_top/tb.sv",
+      "line": 99,
+      "excerpt": "97:         $display(\"\\nTest Results:\");\n98:         if (stats1.errors_text) \n99:             $display(\"Hint: Output text_out has %0d mismatches. First at time %0d\", \n100:                     stats1.errors_text, stats1.errortime_text);\n101:         else "
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/workspace/debug/aes_cipher_top/tb.sv",
+      "line": 102,
+      "excerpt": "100:                     stats1.errors_text, stats1.errortime_text);\n101:         else \n102:             $display(\"Hint: Output 'text_out' has no mismatches.\");\n103:         if (stats1.errors_done) \n104:             $display(\"Hint: Output done signal has %0d mismatches. First at time %0d\", "
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_dataset/ase_cipher/aes_cipher_top.md",
+      "line": 26,
+      "excerpt": "24: | key | input | 128 | Input key |\n25: | text_in | input | 128 | Input plaintext |\n26: | text_out | output | 128 | Output ciphertext |\n27: \n28: **4.Registers**"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_dataset/ase_cipher/aes_cipher_top.md",
+      "line": 36,
+      "excerpt": "34: | dcnt | 4 | Control | 0 | Round counter register for tracking encryption progress, initial value 11 (0xB) for 10 rounds plus initial round |\n35: | ld_r | 1 | Control | 0 | Load operation flag register, synchronizes data loading with clock cycle |\n36: | text_out | 128 | Output Buffer | 0 | Output register storing the final ciphertext result after complete encryption process |\n37: \n38: **5. Operation Principle**"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_dataset/ase_cipher/aes_cipher_top.md",
+      "line": 143,
+      "excerpt": "141: \n142: DONE: Indicates that encryption is complete.Sets the done signal.Holds\n143: the final encryption result at the text_out output port.\n144: \n145: **6.3 Data Loading Operation**"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_dataset/ase_cipher/aes_unified_functional_spec.md",
+      "line": 26,
+      "excerpt": "24: | key | input | 128 | Input key |\n25: | text_in | input | 128 | Input plaintext |\n26: | text_out | output | 128 | Output ciphertext |\n27: \n28: ## 4. Registers"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_dataset/ase_cipher/aes_unified_functional_spec.md",
+      "line": 36,
+      "excerpt": "34: | dcnt | 4 | Control | 0 | Round counter register for tracking encryption progress, initial value 11 (0xB) for 10 rounds plus initial round |\n35: | ld_r | 1 | Control | 0 | Load operation flag register, synchronizes data loading with clock cycle |\n36: | text_out | 128 | Output Buffer | 0 | Output register storing the final ciphertext result after complete encryption process |\n37: \n38: ## 5. Operation Principle"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_dataset/ase_cipher/aes_unified_functional_spec.md",
+      "line": 143,
+      "excerpt": "141: \n142: DONE: Indicates that encryption is complete.Sets the done signal.Holds\n143: the final encryption result at the text_out output port.\n144: \n145: **6.3 Data Loading Operation**"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/module_planner/outputs/contracts.json",
+      "line": 125,
+      "excerpt": "123:         },\n124:         {\n125:           \"name\": \"text_out\",\n126:           \"direction\": \"output\",\n127:           \"width\": \"128\","
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/module_planner/outputs/contracts.json",
+      "line": 313,
+      "excerpt": "311:         },\n312:         {\n313:           \"name\": \"text_out\",\n314:           \"timing_role\": \"Output buffer\",\n315:           \"timing\": \"Holds final result in DONE phase, reset to 0\""
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/module_planner/outputs/contracts.json",
+      "line": 337,
+      "excerpt": "335:         {\n336:           \"phase\": \"DONE\",\n337:           \"timing\": \"Asserts done signal and holds final ciphertext at text_out\"\n338:         }\n339:       ],"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/module_planner/outputs/contracts.json",
+      "line": 537,
+      "excerpt": "535:         },\n536:         {\n537:           \"name\": \"text_out\",\n538:           \"role\": \"Output register storing the final ciphertext result\"\n539:         }"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/module_planner/outputs/contracts.json",
+      "line": 652,
+      "excerpt": "650:         },\n651:         {\n652:           \"name\": \"text_out\",\n653:           \"width\": \"128\",\n654:           \"role\": \"Output register storing the final ciphertext result after complete encryption process\""
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/module_planner/outputs/modules.json",
+      "line": 113,
+      "excerpt": "111:           },\n112:           {\n113:             \"name\": \"text_out\",\n114:             \"direction\": \"output\",\n115:             \"width\": \"128\","
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/module_planner/outputs/modules.json",
+      "line": 164,
+      "excerpt": "162:           },\n163:           {\n164:             \"name\": \"text_out\",\n165:             \"timing_role\": \"Output buffer\",\n166:             \"timing\": \"Holds final result in DONE phase, reset to 0\""
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/module_planner/outputs/modules.json",
+      "line": 188,
+      "excerpt": "186:           {\n187:             \"phase\": \"DONE\",\n188:             \"timing\": \"Asserts done signal and holds final ciphertext at text_out\"\n189:           }\n190:         ],"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/module_planner/outputs/modules.json",
+      "line": 267,
+      "excerpt": "265:           },\n266:           {\n267:             \"name\": \"text_out\",\n268:             \"role\": \"Output register storing the final ciphertext result\"\n269:           }"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/module_planner/outputs/modules.json",
+      "line": 310,
+      "excerpt": "308:           },\n309:           {\n310:             \"name\": \"text_out\",\n311:             \"width\": \"128\",\n312:             \"role\": \"Output register storing the final ciphertext result after complete encryption process\""
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/module_planner/outputs/spec_blocks.json",
+      "line": 195,
+      "excerpt": "193:         {\n194:           \"block_id\": \"S003\",\n195:           \"text\": \"**3. Interface**\\n\\n| **Signal Name** | **Direction** | **Width** | **Description** |\\n| --- | --- | --- | --- |\\n| clk | input | 1 | Clock signal |\\n| rst | input | 1 | Reset signal |\\n| ld | input | 1 | Load enable |\\n| done | output | 1 | Encryption complete |\\n| key | input | 128 | Input key |\\n| text_in | input | 128 | Input plaintext |\\n| text_out | output | 128 | Output ciphertext |\"\n196:         },\n197:         {"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/module_planner/outputs/spec_blocks.json",
+      "line": 199,
+      "excerpt": "197:         {\n198:           \"block_id\": \"S004\",\n199:           \"text\": \"**4.Registers**\\n\\n| **Register Name** | **Width** | **Type** | **Reset Value** | **Description** |\\n| --- | --- | --- | --- | --- |\\n| text_in_r | 128 | Data Buffer | 0 | Temporary storage register for input text during encryption process |\\n| sa[0:3][0:3] | 8 | State Matrix | 0 | 4×4 state matrix registers for storing and processing intermediate encryption results, arranged in column-major order |\\n| dcnt | 4 | Control | 0 | Round counter register for tracking encryption progress, initial value 11 (0xB) for 10 rounds plus initial round |\\n| ld_r | 1 | Control | 0 | Load operation flag register, synchronizes data loading with clock cycle |\\n| text_out | 128 | Output Buffer | 0 | Output register storing the final ciphertext result after complete encryption process |\"\n200:         },\n201:         {"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/module_planner/outputs/spec_blocks.json",
+      "line": 215,
+      "excerpt": "213:         {\n214:           \"block_id\": \"S008\",\n215:           \"text\": \"**6.2 State Transition Diagram**\\n\\n![](./figures/aes_cipher_topstate.png)\\n\\n\\nIDLE: This is the initial reset state, waiting for the load signal ld=1.\\n\\nINIT_ROUND: Loads the input data into the text_in_r register.Performs\\nthe initial round key addition operation.Sets the round counter dcnt=0xB\\n(11), preparing for the following 10 encryption rounds.\\n\\nROUND_OP: Performs the standard round operations (Rounds 1-9).\\n\\nFINAL_ROUND: Executes the final round operation (Round 10). The final\\nround does not include the MixColumns operation.\\n\\nDONE: Indicates that encryption is complete.Sets the done signal.Holds\\nthe final encryption result at the text_out output port.\"\n216:         },\n217:         {"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/module_planner/outputs/planning_corrections/plan_overrides.json",
+      "line": 8,
+      "excerpt": "6:       \"correction_type\": \"wrong_contract\",\n7:       \"original_artifact\": \"FSM state machine spec: IDLE waits for ld=1 before transitioning to INIT_ROUND\",\n8:       \"problem\": \"The reference model (good1) free-runs without requiring ld=1. The DUT's FSM stays in IDLE forever because ld=0 at all times. The reference updates text_out and sa registers every cycle with full AES rounds. The DUT must match this free-running behavior. The FSM must auto-start from IDLE to ROUND_OP without ld, stay in ROUND_OP continuously, and text_out must update every cycle (not gated by final_cycle).\",\n9:       \"evidence\": [\n10:         \"VCD shows DUT aes_state=0 (IDLE) at all times, ld=0 at all times\","
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/module_planner/outputs/planning_corrections/plan_overrides.json",
+      "line": 12,
+      "excerpt": "10:         \"VCD shows DUT aes_state=0 (IDLE) at all times, ld=0 at all times\",\n11:         \"VCD shows reference good1 sa00 updates every cycle: 0->0x63->0x98->0xDC\",\n12:         \"VCD shows reference text_out updates every cycle matching sa00\",\n13:         \"Reference has no aes_state signal - pure datapath without FSM\",\n14:         \"DUT key expansion matches reference exactly\","
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/module_planner/outputs/planning_corrections/plan_overrides.json",
+      "line": 15,
+      "excerpt": "13:         \"Reference has no aes_state signal - pure datapath without FSM\",\n14:         \"DUT key expansion matches reference exactly\",\n15:         \"Sim failure: text_out has 287 mismatches, first at time 15\"\n16:       ],\n17:       \"override\": {"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/module_planner/outputs/planning_corrections/plan_overrides.json",
+      "line": 20,
+      "excerpt": "18:         \"fsm_idle_transition\": \"auto-advance to ROUND_OP without ld check\",\n19:         \"fsm_round_op_transition\": \"stay in ROUND_OP continuously\",\n20:         \"text_out_update\": \"text_out <= final_data_bus every cycle (not gated by final_cycle)\",\n21:         \"fsm_state_reset\": \"async reset to ROUND_OP\"\n22:       }"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/module_planner/outputs/block_spec_retrieval_json/aes_cipher_top.json",
+      "line": 14,
+      "excerpt": "12:       \"selection_reason\": [\n13:         \"S003 provides module interface signal definitions for boundary context\",\n14:         \"S004 specifies all required register declarations (text_in_r, sa, dcnt, ld_r, text_out) with widths and reset values\"\n15:       ]\n16:     },"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/module_planner/outputs/module_skeleton_docs/aes_cipher_top.md",
+      "line": 34,
+      "excerpt": "32: - block_kind: decl\n33: - required: true\n34: - purpose: Declare all storage elements (text_in_r, sa, dcnt, ld_r, text_out), internal combinational signals, and any control flags needed by later blocks.\n35: - code_shape: declaration group\n36: - depends_on: []"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/module_planner/outputs/module_skeleton_docs/aes_cipher_top.md",
+      "line": 40,
+      "excerpt": "38: ```verilog\n39: // skeleton only: declaration cluster\n40: // registers: text_in_r [127:0], sa[0:3][0:3] [7:0], dcnt [3:0], ld_r [0:0], text_out [127:0]\n41: // internal signals: sbox_input_bus, sbox_output_bus, round_key_bus, next_state_matrix_columns, etc.\n42: ```"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/module_planner/outputs/module_skeleton_docs/aes_cipher_top.md",
+      "line": 48,
+      "excerpt": "46:   - dcnt (4-bit)\n47:   - ld_r (1-bit)\n48:   - text_out (128-bit)\n49: - may_appear:\n50:   - intermediate wires for sbox data, round keys, MixColumns partial products, FSM state encodings"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/module_planner/outputs/module_skeleton_docs/aes_cipher_top.md",
+      "line": 161,
+      "excerpt": "159: - block_kind: seq\n160: - required: true\n161: - purpose: On rising clock edge, update all registered objects (text_in_r, sa, dcnt, ld_r, text_out) according to FSM state and the round datapath output. Generate the done signal.\n162: - code_shape: sequential update block (always_ff style placeholder)\n163: - depends_on: [B4, B5]"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/module_planner/outputs/module_skeleton_docs/aes_cipher_top.md",
+      "line": 168,
+      "excerpt": "166: // skeleton only: register commit block\n167: // on positive clk edge or asynchronous reset (rst):\n168: //   text_in_r, sa, dcnt, ld_r, text_out update as dictated by fsm_sequencer and round_datapath\n169: //   done signal asserts in DONE state\n170: //   reset clears all registers to 0"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/module_planner/outputs/module_skeleton_docs/aes_cipher_top.md",
+      "line": 174,
+      "excerpt": "172: - must_appear:\n173:   - synchronous or asynchronous reset to initialise all registers to zero\n174:   - update of sa and text_out with final round result\n175:   - done signal assertion\n176: - may_appear:"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/module_planner/outputs/module_skeleton_docs/aes_cipher_top.md",
+      "line": 200,
+      "excerpt": "198:     representation: 4-bit down-counter\n199:     notes: loaded with 11 in INIT_ROUND, decremented each round; transition from ROUND_OP to FINAL_ROUND depends on its value (exact threshold deferred)\n200:   - object: text_in_r, sa, ld_r, text_out\n201:     storage_kind: registered\n202:     notes: synchronously updated per round; text_out latched in DONE"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/module_planner/outputs/module_skeleton_docs/aes_cipher_top.md",
+      "line": 202,
+      "excerpt": "200:   - object: text_in_r, sa, ld_r, text_out\n201:     storage_kind: registered\n202:     notes: synchronously updated per round; text_out latched in DONE\n203: - global_invariants:\n204:   - One round transformation completed per clock cycle"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/module_planner/outputs/module_skeleton_docs/aes_cipher_top.md",
+      "line": 218,
+      "excerpt": "216:   - None; purely declarative\n217: - touched_objects:\n218:   - text_in_r, sa, dcnt, ld_r, text_out, auxiliary signals\n219: - coupling_rules:\n220:   - All other blocks refer to objects declared here; no forward declarations allowed."
+    }
+  ],
+  "truncated": true
+}

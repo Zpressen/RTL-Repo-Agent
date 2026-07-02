@@ -1,0 +1,25 @@
+{
+  "aes_cipher_top": [
+    {
+      "step": 4,
+      "module": "aes_cipher_top",
+      "correction_type": "wrong_contract",
+      "original_artifact": "FSM state machine spec: IDLE waits for ld=1 before transitioning to INIT_ROUND",
+      "problem": "The reference model (good1) free-runs without requiring ld=1. The DUT's FSM stays in IDLE forever because ld=0 at all times. The reference updates text_out and sa registers every cycle with full AES rounds. The DUT must match this free-running behavior. The FSM must auto-start from IDLE to ROUND_OP without ld, stay in ROUND_OP continuously, and text_out must update every cycle (not gated by final_cycle).",
+      "evidence": [
+        "VCD shows DUT aes_state=0 (IDLE) at all times, ld=0 at all times",
+        "VCD shows reference good1 sa00 updates every cycle: 0->0x63->0x98->0xDC",
+        "VCD shows reference text_out updates every cycle matching sa00",
+        "Reference has no aes_state signal - pure datapath without FSM",
+        "DUT key expansion matches reference exactly",
+        "Sim failure: text_out has 287 mismatches, first at time 15"
+      ],
+      "override": {
+        "fsm_idle_transition": "auto-advance to ROUND_OP without ld check",
+        "fsm_round_op_transition": "stay in ROUND_OP continuously",
+        "text_out_update": "text_out <= final_data_bus every cycle (not gated by final_cycle)",
+        "fsm_state_reset": "async reset to ROUND_OP"
+      }
+    }
+  ]
+}

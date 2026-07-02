@@ -147,17 +147,21 @@ Spec (.md + images)
     │   └── FAIL (has mismatches) → 进入 RepoReActRunner
     │
     ▼
-[RepoReActRunner] ─── 仓库级自主 ReAct 调试环 (NEW)
+[RepoReActRunner] ─── 仓库级自主 ReAct 调试环 (v2)
     │
-    ├── 11 个工具: read_context, search_context, query_rtl_kg,
+    ├── 工具集: read_context, search_context, query_rtl_kg,
     │   read_spec, retrieve_spec_block, list_vcd_signals, probe_vcd,
-    │   run_check, read_memory, apply_patch, record_correction
+    │   run_check, route_debug_context, read_long_term_memory,
+    │   apply_patch, replace_block, record_correction
     │
-    ├── Evidence gate: patch 前必须已观察 RTL + trace/sim + TB/spec/KG
+    ├── 子代理: DebugInvestigator (独立上下文, 只读调查员)
+    │   └── 主代理通过 route_debug_context 启动, 返回 <3000字符分析报告
+    │
+    ├── Evidence gate: patch 前必须满足六道关卡
     ├── apply_patch: 自动 snapshot → lint → sim → trace → 回滚判断
     ├── record_correction: 写 planning_corrections/ overlay, 不改原文件
-    ├── Observation budget: 最多 8 次只读调用后强制行动
-    ├── Compact checkpoint: 每 2 次编辑或 16000 字符后压缩记忆
+    ├── Observation budget: 最多 16 次只读调用后强制行动
+    ├── Three-tier compaction: Light(刷新) → Checkpoint(清空+快照) → Deep(削减)
     │
     ├── PASS → 复制 rtl.sv 到 merged_file, 记录 SIMULATION PASS 到 KG
     └── max_steps_exceeded/give_up/error → 记录失败原因到 KG
@@ -821,10 +825,10 @@ apply_patch 前置条件:
 
 防止 Agent 陷入无限观察循环：
 
-- **预算**: 最多 8 次连续只读工具调用（`_max_readonly_calls_since_action = 8`）
-- **重置**: 每次 `apply_patch` 或 `record_correction` 后重置为 0
-- **超限行为**: 返回 `observation_budget_exhausted` 错误，要求 agent 立即行动或 `generate_response`
-- **渐进施压**: `build_continue_prompt` 在接近预算上限时注入 `ACTION PRESSURE` 提示
+- **预算**: 最多 16 次连续只读工具调用（可通过 `ZEROREPO_REACT_READONLY_BUDGET` 环境变量配置）
+- **重置**: 每次 `apply_patch`、`replace_block` 或 `record_correction` 后重置为 0；Checkpoint Compact 和 Deep Compact 也重置
+- **超限行为**: 返回 `observation_budget_exhausted` 错误，附带当前记忆摘要，强制 agent 立即行动或 `generate_response`
+- **渐进施压**: `build_continue_prompt` 在预算接近上限时注入 `ACTION PRESSURE` 提示
 
 ### 5b.6 回滚规则
 
@@ -838,48 +842,49 @@ apply_patch 前置条件:
 | Pass 且 mismatch=0 | 保留，结束调试 |
 | mismatch 降低 / fail_time 后移 | 保留（improved），继续 ReAct |
 
-### 5b.7 修复记忆系统
+### 5b.7 上下文包与记忆系统
 
-诊断和补丁结果通过三套 JSONL 日志持久化：
+RepoReAct 使用 **上下文包（Context Pack）** 作为 Agent 状态的核心载体：
 
-```
-workspace/repo_react/<module>/
-├── react_trace.jsonl            # 完整 ReAct 对话追踪（user/assistant/tool/error 角色）
-├── patch_journal.jsonl          # 每次 apply_patch 的结构化记录
-│   ├── step, target, patch_count, patch_summary
-│   ├── hypothesis (reason + expected_effect)
-│   ├── evidence (before snapshot + latest_trace_summary)
-│   ├── changed_signals, effect, lesson
-│   └── result (status, mismatch_count, first_fail_time, rollback_reason)
-├── correction_journal.jsonl     # 每次 record_correction 的记录
-├── snapshots/
-│   ├── step_001_before/rtl.sv   # patch 前快照
-│   ├── step_001_after/rtl.sv    # patch 后快照
-│   └── ...
-├── repo_react_memory_snapshot.json  # 结构化记忆快照
-└── initial_context.json         # 初始 prompt + trace_summary
-```
-
-**Memory Snapshot 结构**:
 ```json
 {
-  "schema": "repo_react_memory_snapshot.v1",
-  "module": "fifo_ctrl",
-  "paths": { "rtl": "...", "merged_file": "...", "debug_workdir": "..." },
-  "current_rtl_hash": "abc123...",
-  "latest_trace_summary": { "fail_time": 150, "total_mismatches": 3, ... },
-  "recent_repair_journal": [...],
-  "recent_edited_ranges": [...],
-  "failed_directions": [...],
-  "promising_directions": [...],
-  "known_planning_corrections": [...],
-  "last_sim": { "is_pass": false, "mismatch_count": 3, "first_fail_time": 150 },
-  "action_calls": 3,
-  "max_steps": 10
+  "task_frame": { "current_target", "top_diagnosis", "protected_invariants", "unsafe_directions", "next_action_hint" },
+  "timing_evidence": { "signal", "time", "edge", "ref", "dut", "sampling_mode", "driver_assignment_kind", "block_id", "line_range" },
+  "evidence_pack": [ up to 5 EvidenceItems with short summaries ],
+  "causal_memory": { "repair_ledger_summary", "promising_directions", "protected_invariants", "unsafe_directions", "selected_long_term_memories", "negative_patterns" },
+  "active_working_set": { "active_hypotheses", "pinned_evidence", "pinned_code_slices", "waveform_facts", "rejected_hypotheses", "next_edit_candidates", "missing_evidence" },
+  "raw_artifacts": { file path references }
 }
 ```
 
-### 5b.8 Planning Corrections（规划修正）
+上下文包在每次 Light/Checkpoint/Deep 压缩时自动更新，并在每步 continue prompt 中注入。Agent 可在诊断 JSON 中显式声明工作集内容（假设、证据、候选编辑），系统自动累积到 active_working_set 中。
+
+持久化日志：
+```
+workspace/repo_react/<module>/
+├── react_trace.jsonl            # 完整 ReAct 对话追踪
+├── patch_journal.jsonl          # 每次 patch 的结构化记录（含 per-signal metric delta）
+├── correction_journal.jsonl     # 每次 record_correction 记录
+├── debug_context_pack.json      # 当前上下文包快照
+├── context_packs/pack_NNN.json  # 每轮生成的上下文包归档
+├── evidence/                    # 证据文件目录
+├── snapshots/                   # patch 前后 RTL 快照
+└── initial_context.json         # 初始上下文
+```
+
+### 5b.8 调查子代理 (DebugInvestigator)
+
+主代理可通过 `route_debug_context` 工具启动一个独立的 LLM 调查子代理。子代理在**自己的独立上下文窗口**中调用最多 6 次只读工具，收集定向证据（根据 focus_signals/focus_blocks/missing_evidence 参数），最终返回一份 <3000 字符的纯文本分析报告。
+
+子代理工具权限与主代理观察层相同（12 个只读工具），但有硬性约束：不可提议 patch、不可修改代码。当 LLM 不可用时降级为确定性规则脚本。详见 `repo_react/context.py`。
+
+### 5b.9 长期记忆系统 (RTLMemory)
+
+跨会话的长期记忆以 Markdown 文件形式存储在 `workspace/rtl_memory/` 下，按四种类型分目录：`cases/`（修复案例）、`patterns/`（负面模式）、`corrections/`（规划修正）、`rules/`（合并规则）。每条记忆由 YAML 元数据头（20 个索引字段）和结构化 Markdown 正文组成。`MEMORY.md` 是自动维护的人类可读索引。
+
+写入通过确定性规则蒸馏器（`RTLMemoryDistiller`）在每次 patch/correction/merge 后自动触发。召回采用 LLM 语义选择为主、规则多维打分为降级的双层架构。选中的记忆以摘要形式进入上下文包；Agent 可通过 `read_long_term_memory(path)` 按需获取完整原文。详见 `rtl_memory/` 子系统。
+
+### 5b.10 Planning Corrections（规划修正）
 
 `record_correction` 允许 Agent 在不修改原始 stage artifact 的情况下记录上游规划问题：
 
@@ -902,7 +907,7 @@ output_root/planning_corrections/
 
 已知 corrections 在每轮 ReAct prompt 中自动注入（通过 `load_known_corrections()`）。
 
-### 5b.9 RepoReActRunner 主循环
+### 5b.11 RepoReActRunner 主循环
 
 ```
 chat(inp: RepoReActInput) → RepoReActResult
@@ -936,14 +941,19 @@ chat(inp: RepoReActInput) → RepoReActResult
     └── clear_memory_safely(agent)
 ```
 
-### 5b.10 紧凑检查点 (Compact Checkpoint)
+### 5b.12 三层上下文压缩 (Three-Tier Context Compaction)
 
-与 v1 RTLEditor 类似的机制，参数调整为：
-- **触发条件**: 每 2 次 action call **OR** 工具输出累计 > 16000 字符
-- **快照内容**: 完整 `repo_react_memory_snapshot.json`
-- **恢复 prompt**: `build_compact_prompt()` — 告知 agent 忽略旧对话历史，以 JSON 快照为权威状态
+采用渐进式压缩策略，根据 Agent 的实际状态动态选择压缩强度：
 
-### 5b.11 Diagnosis 结构
+| 层级 | 触发条件 | 操作 | 保留 |
+|------|---------|------|------|
+| **Light Consolidation** | 8次只读调用 或 24K字符 或 新写入 | 不删除对话，仅刷新上下文包 | 全部对话历史 + 最新摘要 |
+| **Checkpoint Compact** | 3次写入 或 96K字符 (需已有真实差异数据) | 清空对话，注入结构化快照 | 任务框架+时序证据+证据摘要+因果记忆+活跃工作集 |
+| **Deep Compact** | 2次Checkpoint已达 或 160K字符 或 预算≤20% | 同Checkpoint但摘要大幅削减 | 仅核心数据，evidence_pack全删，工作集减半 |
+
+**关键守卫**：Checkpoint 需要 Agent 已获取真实 DUT/ref 差异数据才触发，确保 Agent 在形成初步诊断之前不会被强制清除对话历史。Deep 仅在极端困境下启动，强制 Agent 基于有限精选数据做出最终决策。
+
+### 5b.13 Diagnosis 结构
 
 每轮 Agent 应在采取行动前输出结构化 diagnosis：
 
@@ -961,7 +971,7 @@ chat(inp: RepoReActInput) → RepoReActResult
 }
 ```
 
-### 5b.12 与 ModuleDebugRunner 的集成
+### 5b.14 与 ModuleDebugRunner 的集成
 
 `ModuleDebugRunner._run_editor()` 已被替换为 `_run_repo_react()`：
 
@@ -1245,117 +1255,73 @@ Agent call tool → _tool_* handler → _EditSession method → result
 
 ## 9. 上下文管理设计
 
-### 9.1 上下文层次
+### 9.1 三层上下文层次
 
 系统采用 **三层上下文管理** 策略：
 
-```
-┌──────────────────────────────────────────────┐
-│            Layer 1: Pipeline Context          │
-│  stage_context (由 PlanningContextProvider)    │
-│  - 项目类型、历史产物、全局约束                │
-├──────────────────────────────────────────────┤
-│            Layer 2: Stage Context              │
-│  partial_artifacts (所有上游阶段的产物)         │
-│  - contracts, skeletons, plans, spec_blocks   │
-├──────────────────────────────────────────────┤
-│            Layer 3: Agent Context              │
-│  Memory (AgentScope InMemoryMemory)            │
-│  - system_role + conversation history         │
-│  - context_window 限制 (默认 8)                │
-└──────────────────────────────────────────────┘
-```
+| 层次 | 载体 | 生命周期 | 内容 |
+|------|------|---------|------|
+| Pipeline Context | stage_context (PlanningContextProvider) | 管线全局 | 项目类型、历史产物、全局约束 |
+| Stage Context | partial_artifacts | 单阶段 | 所有上游阶段的产物 (contracts, skeletons, plans) |
+| Agent Context | InMemoryMemory + Context Pack | 单次 LLM 调用 | 系统提示 + 对话历史 + 上下文包摘要 |
 
-### 9.2 上下文压缩 (Debug Agent)
+### 9.2 上下文包 (Context Pack)
 
-Debug Agent 实现了创新的 **紧凑检查点 (Compact Checkpoint)** 机制：
+RepoReAct 使用上下文包作为 Agent 状态的核心载体，包含六个部分：任务框架（当前目标、诊断、保护项、禁止方向）、时序证据（第一分歧点的精确记录）、证据摘要（最多 5 条压缩项）、因果记忆摘要（修复账本、有希望方向、长期记忆）、活跃工作集（Agent 声明的假设/证据/候选编辑）、原始 artifact 路径引用。
 
-```
-触发条件: 每 2 次编辑 OR 工具输出 > 12000 字符
-    │
-    ▼
-persist_memory_snapshot()
-    │
-    ├── source_of_truth (权威来源摘要)
-    ├── trace_summary (最新追踪概要)
-    ├── repair_journal (最近 5 条修复记录)
-    ├── recent_edited_ranges (最近修改范围)
-    ├── failed_directions (失败方向)
-    ├── promising_directions (有希望方向)
-    └── action_calls / max_trials (进度)
-    │
-    ▼
-clear_memory_safely(agent)
-    │
-    ▼
-inject compact_continue_prompt (结构化 JSON)
-```
+初始 prompt 故意不注入完整 spec/contract/corrections/memory 原文，仅通过上下文包中的路径引用和结构化摘要呈现。每步 continue prompt 刷新上下文包为最新版本并注入观察预算倒计时。上下文包是上下文压缩后唯一幸存的知识载体。
 
-这确保了即使在长调试循环中，Agent 的对话记忆也不会超出 LLM 上下文窗口。
+### 9.3 三层上下文压缩
 
-### 9.3 KG 上下文注入
+详见 [5b.12 三层上下文压缩](#5b12-三层上下文压缩-three-tier-context-compaction)。
 
-通过 `build_batch_context()` 方法，管道可以在处理每个 batch 时自动注入 KG 查询结果：
-- 文件元数据 (file_kind, implementation_status, responsibility)
-- 模块信息 (module_name, ports)
-- 实例关系 (owner_module → target_module)
+### 9.4 KG 上下文注入
+
+通过 `build_batch_context()` 方法，管道在处理每个 batch 时自动注入 KG 查询结果（文件元数据、模块信息、实例关系）。
 
 ---
 
 ## 10. 记忆系统设计
 
-### 10.1 AgentScope Memory
+### 10.1 短期记忆（Session 级）
 
-每个 ReAct Agent 使用 `InMemoryMemory` 管理对话记忆：
-- `context_window` 限制保留的消息数量
-- 通过 `clear_memory_safely()` 安全清理（兼容 async/sync 实现）
-- 在编辑循环中通过 compact checkpoint 机制重置
+#### AgentScope Memory
+每个 ReAct Agent 使用 `InMemoryMemory` 管理对话记忆，通过 `clear_memory_safely()` 在压缩时重置。
 
-### 10.2 编辑会话记忆 (EditSession)
+#### 上下文包作为工作记忆
+Agent 的修复状态通过上下文包（Context Pack）实时维护：任务框架、时序证据、因果记忆摘要（修复账本、受保护项、禁止方向、有希望方向、长期记忆）、活跃工作集。上下文包在每步循环中刷新，在压缩后作为唯一幸存的信息载体。
 
-`_EditSession` 维护调试状态作为 **结构化工作记忆**：
+#### 短期持久化
+| 存储位置 | 内容 |
+|---------|------|
+| `repo_react/<module>/react_trace.jsonl` | 完整 ReAct 对话追踪 |
+| `repo_react/<module>/patch_journal.jsonl` | 每次 patch 的结构化记录（含 per-signal metric delta） |
+| `repo_react/<module>/correction_journal.jsonl` | 每次 record_correction 记录 |
+| `repo_react/<module>/debug_context_pack.json` | 当前上下文包快照 |
+| `repo_react/<module>/context_packs/` | 每轮生成的上下文包归档 |
+| `repo_react/<module>/evidence/` | 证据文件 + evidence_index.jsonl |
+| `repo_react/<module>/snapshots/` | patch 前后 RTL 文件快照 |
 
-| 状态字段 | 类型 | 描述 |
-|---------|------|------|
-| `trace_report` | Dict | 当前追踪报告 |
-| `blocks_by_id` | Dict[str, RtlBlock] | 可编辑的 RTL 块映射 |
-| `last_mismatch_cnt` | int | 上次不匹配数量 |
-| `last_fail_time` | int | 上次失败时间 |
-| `repair_journal` | List[Dict] | 完整修复日志 |
-| `action_calls` | int | 已执行的编辑次数 |
-| `source_of_truth` | Dict | 当前会话的权威来源摘要 |
+### 10.2 长期记忆（跨 Session 级）
 
-### 10.3 持久化记忆
+RTLMemory 子系统以 Markdown 文件形式存储在 `workspace/rtl_memory/`，按四种类型分目录：
 
-| 存储位置 | 内容 | 格式 |
-|---------|------|------|
-| Neo4j KG | 代码结构 + 仿真结果 | 图数据库 |
-| `rtl_kg_module_statuses.json` | 模块状态汇总 | JSON |
-| `trace_report.json` | 追踪诊断报告 | JSON |
-| `repair_journal.json` | 修复操作日志 | JSON |
-| `debug_memory_snapshot.json` | 调试状态快照 | JSON |
-| `debugger_messages.jsonl` | 调试器对话日志 | JSONL |
+| 类型 | 目录 | 内容 |
+|------|------|------|
+| 修复案例 | `cases/` | improved/passed 的正面经验 |
+| 负面模式 | `patterns/` | regressed/syntax_failed 的失败教训 |
+| 规划修正 | `corrections/` | 上游规划阶段的错误记录 |
+| 合并规则 | `rules/` | Stage6 结构性经验 |
 
-### 10.4 RepoReAct 持久化记忆 (NEW)
+每条记忆由 YAML 元数据头（20 个索引字段：module/signals/failure_type/alignment/confidence/trigger/anti_trigger 等）和结构化 Markdown 正文组成。`MEMORY.md` 是自动维护的人类可读索引。
 
-RepoReAct 子系统新增专门的持久化记忆层：
+**写入**：通过确定性规则蒸馏器（`RTLMemoryDistiller`）在每次 patch/correction/merge 后自动触发。只有 passed/improved/regressed/syntax_failed 写入，neutral 忽略。
 
-| 存储位置 | 内容 | 格式 |
-|---------|------|------|
-| `workspace/repo_react/<module>/react_trace.jsonl` | 完整 ReAct 对话追踪 | JSONL |
-| `workspace/repo_react/<module>/patch_journal.jsonl` | 每次 apply_patch 的结构化记录 | JSONL |
-| `workspace/repo_react/<module>/correction_journal.jsonl` | 每次 record_correction 的记录 | JSONL |
-| `workspace/repo_react/<module>/snapshots/` | patch 前后 RTL 文件快照 | 目录 |
-| `workspace/repo_react/<module>/repo_react_memory_snapshot.json` | 结构化记忆快照 | JSON |
-| `output_root/planning_corrections/correction_journal.jsonl` | 全局规划修正日志 | JSONL |
-| `output_root/planning_corrections/*_overrides.json` | 分类规划修正 overlay | JSON |
+**召回**：采用 LLM 语义选择为主、规则多维打分为降级的双层架构。选中的记忆以摘要形式进入上下文包（body_excerpt 前 2400 字符 + 结构化元数据）；Agent 可通过 `read_long_term_memory(path)` 按需获取完整原文。
 
-### 10.5 跨会话记忆
+### 10.3 跨会话 KG 记忆
 
-通过 Neo4j 图数据库实现跨会话的记忆持久化：
-- `SimulationResult` 节点记录每个模块的仿真历史
-- `DEBUG_READS` 关系记录调试会话中的读依赖
-- `refresh_repo_files()` 在每次模块完成后刷新 KG
+通过 Neo4j 图数据库实现跨会话的知识持久化：SimulationResult 节点记录每个模块的仿真历史，DEBUG_READS 关系记录调试会话中的读依赖。
 
 ---
 

@@ -1,0 +1,445 @@
+{
+  "schema_version": "debug_context_pack_v1",
+  "goal": "before_patch",
+  "module": "sd_cmd_master",
+  "repair_mode": "functional",
+  "pack_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/repo_react/sd_cmd_master/context_packs/pack_002.json",
+  "task_frame": {
+    "current_target": {
+      "signal": "NORMAL_INT_REG",
+      "time": 5,
+      "sampling_mode": "edge_active",
+      "status": "stable_values_match_but_tb_edge_mismatch",
+      "classification": "unknown",
+      "ref": "0000000000000100",
+      "dut": "0000000000000000",
+      "symptom": "DUT/ref match after settling but mismatch at testbench edge-active sampling.",
+      "suspect_blocks": [
+        "A6",
+        "A3",
+        "C8",
+        "A5",
+        "C3",
+        "C10",
+        "A4",
+        "C4"
+      ],
+      "must_preserve": []
+    },
+    "top_diagnosis": "FIRST FAILURE: STATUS_REG failed: expected=0000000000000000, actual=0000000000000000. Direct driver A6 classified as condition_blocks_update: Observed condition values appear to block this assignment update.",
+    "protected_invariants": [],
+    "unsafe_directions": [],
+    "next_action_hint": "patch_when_causal_diagnosis_is_clear",
+    "required_next_tool": null,
+    "router_analysis": "**ANALYSIS REPORT — sd_cmd_master / NORMAL_INT_REG Divergence**\n\n---\n\n### 1. Key Evidence Found\n\n**First Divergence (from run_check inline data):**\n- **Signal:** `NORMAL_INT_REG`\n- **Time:** 5 (posedge clock)\n- **Ref:** `0x0000000000000100`\n- **DUT:** `0x0000000000000000`\n- **Driver assignment:** nonblocking (`<=`)\n- **Status:** `stable_values_match_but_tb_edge_mismatch`\n\n**Edge Sampling Model:**\n- Ref returns the *edge-settled value* (post-update).\n- DUT returns the *pre-edge old value* for nonblocking output drivers.\n- This means at time 5, the ref already sees the updated `0x100`, while DUT still holds the old `0x0`.\n\n**Top Trace Diagnosis (from investigation brief):**\n> \"Direct driver A6 classified as **condition_blocks_update**: Observed condition values appear to block this assignment update.\"\n\nThis is a **stronger signal** than a simple nonblocking edge mismatch — it indicates that the conditional logic in block A6 may be *preventing the assignment from ever executing*, not just delaying it by one delta cycle.\n\n**Cascading failures:** ERR_INT_REG (first at t=755), errors_settings (t=485), errors_cmd_out (t=485), errors_req_out (t=595), ack_out (t=1105) — all downstream from the NORMAL_INT_REG misbehavior.\n\n---\n\n### 2. Most Suspect Blocks/Lines\n\n**Primary suspect: Block A6 (lines 237-344)** — the direct nonblocking driver of NORMAL_INT_REG. I could not retrieve the RTL text due to budget constraints, but the trace engine explicitly flags this block as having \"condition_blocks_update.\" This means one or more condition signals in the `if`/`case` guarding the `<=` assignment are not evaluating as true in the DUT when they should.\n\nThe most likely culprits in block A6:\n- A **reset condition** that is holding the register at `0x0` longer than expected.\n- A **FSM state condition** that hasn't transitioned yet in DUT but has in ref.\n- A **combinational dependency** (e.g., an input or internal signal) that is stale, late, or wrong at the decision point.\n\n---\n\n### 3. Spec vs. RTL Mismatches\n\nThe spec retrieval returned `ok` but the content was not accessible. However, the ref model producing `0x100` at time 5 strongly suggests the spec expects NORMAL_INT_REG to be set to `0x100` very early in simulation (possibly during reset release or initialization). The DUT staying at `0x0` means either:\n- The initialization sequence is mis-ordered in RTL.\n- A condition that should be true (e.g., a reset deassertion flag, a power-on state) is evaluating false.\n\n---\n\n### 4. Recommended Next Investigative Step\n\n**Highest-priority action for the main agent:** Read the exact RTL lines 237-344 (block A6) and identify the conditional tree guarding the `NORMAL_INT_REG <= ...` assignment. Then probe the VCD at time 0-10 for those specific condition signals (e.g., reset, enable, FSM state) to determine *which condition is blocking the update*. The \"condition_blocks_update\" classification means the fix is likely a one-line condition adjustment, not a structural change."
+  },
+  "evidence_pack": [
+    {
+      "evidence_id": "ev_006_initial_trace",
+      "kind": "trace",
+      "summary": "initial_trace: fail_time=5; total_mismatches=2207; top_diagnosis=FIRST FAILURE: STATUS_REG failed: expected=0000000000000000, actual=0000000000000000. Direct driver A6 classified as condition_blocks_update: Observed condition values appear to block this assignment update.; first_failure={'signal': 'NORMAL_INT_REG', 'time': 5, 'ref': '0000000000000100', 'dut': '0000000000000000', 'classification': 'unknown', 'ref_path': 'tb.NORMAL_INT_REG_ref[15:0\n...<snip>...\nERR_INT_REG', 'mismatches': 98, 'time': 755}, {'sig': 'NORMAL_INT_REG', 'mismatches': 1187, 'time': 5}, {'sig': 'errors_settings', 'mismatches': 636, 'time': 485}, {'sig': 'errors_go_idle_o', 'mismatches': 4, 'time': 755}, {'sig': 'errors_cmd_out', 'mismatches': 644, 'time': 485}, {'sig': 'errors_req_out', 'mismatches': 809, 'time': 595}, {'sig': 'ack_out', 'mismatches': 672, 'time': 1105}], 'dut_instance': 'top_module1', 'ref_instance': 'good1'}",
+      "artifact_ref": {
+        "kind": "trace",
+        "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/repo_react/sd_cmd_master/evidence/ev_006_initial_trace.json",
+        "artifact_id": "ev_006_initial_trace",
+        "description": "Full trace report."
+      },
+      "why_selected": "Trace summary anchors the current failure target.",
+      "salient": {
+        "module": "sd_cmd_master",
+        "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_cmd_master/trace_report.json"
+      }
+    },
+    {
+      "evidence_id": "ev_007_first_divergence",
+      "kind": "trace",
+      "summary": "first_divergence: status=stable_values_match_but_tb_edge_mismatch; first_divergence={'signal': 'NORMAL_INT_REG', 'time': 5, 'ref': '0000000000000100', 'dut': '0000000000000000', 'classification': 'unknown', 'ref_path': 'tb.NORMAL_INT_REG_ref[15:0]', 'dut_path': 'tb.NORMAL_INT_REG_dut[15:0]', 'sampling_mode': 'edge_active', 'edge': 'posedge', 'driver_assignment_kind': 'nonblocking', 'active_region_model': 'ref=edge settled value; DUT=pre-edge old value for nonblocking output drivers, edge settled value for blocking/continuous drivers'}",
+      "artifact_ref": {
+        "kind": "trace",
+        "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/repo_react/sd_cmd_master/evidence/ev_007_first_divergence.json",
+        "artifact_id": "ev_007_first_divergence",
+        "description": "Full trace report."
+      },
+      "why_selected": "First divergence preserves timing-sensitive evidence.",
+      "salient": {
+        "module": "sd_cmd_master"
+      }
+    },
+    {
+      "evidence_id": "ev_008_causal_memory",
+      "kind": "memory",
+      "summary": "causal_memory: {\"repair_ledger\": [], \"protected_invariants\": [], \"unsafe_directions\": []}",
+      "artifact_ref": {
+        "kind": "journal",
+        "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/repo_react/sd_cmd_master/evidence/ev_008_causal_memory.json",
+        "artifact_id": "ev_008_causal_memory",
+        "description": "Full patch attempt journal."
+      },
+      "why_selected": "Recent local repair memory helps avoid repeated failures.",
+      "salient": {
+        "module": "sd_cmd_master"
+      }
+    },
+    {
+      "evidence_id": "ev_009_spec_index",
+      "kind": "spec",
+      "summary": "spec_index: {\"path\": \"/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_cmd_master.md\"}",
+      "artifact_ref": {
+        "kind": "spec",
+        "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/repo_react/sd_cmd_master/evidence/ev_009_spec_index.json",
+        "artifact_id": "ev_009_spec_index",
+        "description": "Original spec path or in-memory spec_text fallback."
+      },
+      "why_selected": "Spec path is available for just-in-time requirement lookup.",
+      "salient": {
+        "module": "sd_cmd_master",
+        "path": "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_cmd_master.md"
+      }
+    },
+    {
+      "evidence_id": "ev_010_long_term_memory",
+      "kind": "memory",
+      "summary": "long_term_memory: [{\"path\": \"corrections/correction_sd_cmd_master_wrong_timing.md\", \"memory_id\": \"correction_sd_cmd_master_wrong_timing\", \"type\": \"planning_correction\", \"stage\": \"planning\", \"module\": \"sd_cmd_master\", \"signals\": [], \"failure_type\": \"plan_bug\", \"outcome\": \"correction\", \"confidence\": 0.62, \"description\": \"sd_cmd_master: One unexplored repair direction: perform an exact line-by-line logic comparison between reference A6 and DUT A6, f\n...<snip>...\n\\\"first_time_after\\\": 485, \\\"direction\\\": \\\"unchanged\\\"}}}`\\n\\n## Patch Summary\\n\\nendcase if (ERR_INT_RST) ERR_INT_REG <= 5'b00000; if (NORMAL_INT_RST) NORMAL_INT_REG <= 16'b0000000000000000;\\n\\n## Lesson\\n\\nPatch improved mismatch count or first fail time; continue from this direction.\\n\\n## Reuse Constraints\\n\\n- Read current RTL/spec evidence before applying a similar patch.\\n- Do not reuse if affected signals or timing alignment differ.\\n\"}]",
+      "artifact_ref": {
+        "kind": "memory_index",
+        "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/repo_react/sd_cmd_master/evidence/ev_010_long_term_memory.json",
+        "artifact_id": "ev_010_long_term_memory",
+        "description": "RTL long-term memory index."
+      },
+      "why_selected": "Selected long-term memory files match this module/failure context.",
+      "salient": {
+        "module": "sd_cmd_master",
+        "count": 3
+      }
+    }
+  ],
+  "active_working_set": {
+    "current_failure": {
+      "signal": "NORMAL_INT_REG",
+      "time": 5,
+      "edge": "posedge",
+      "sampling_mode": "edge_active",
+      "ref": "0000000000000100",
+      "dut": "0000000000000000",
+      "driver_assignment_kind": "nonblocking",
+      "block_id": "A6",
+      "line_range": [
+        237,
+        344
+      ],
+      "top_diagnosis": "FIRST FAILURE: STATUS_REG failed: expected=0000000000000000, actual=0000000000000000. Direct driver A6 classified as condition_blocks_update: Observed condition values appear to block this assignment update."
+    },
+    "active_hypotheses": [
+      {
+        "id": "hyp_current_failure",
+        "text": "FIRST FAILURE: STATUS_REG failed: expected=0000000000000000, actual=0000000000000000. Direct driver A6 classified as condition_blocks_update: Observed condition values appear to block this assignment update.",
+        "status": "active",
+        "evidence_ids": [
+          "ev_006_initial_trace",
+          "ev_007_first_divergence",
+          "ev_008_causal_memory"
+        ],
+        "related_blocks": [
+          "A6"
+        ],
+        "related_signals": [
+          "NORMAL_INT_REG"
+        ],
+        "next_check": "",
+        "rejected_reason": ""
+      }
+    ],
+    "pinned_evidence": [
+      {
+        "evidence_id": "ev_006_initial_trace",
+        "kind": "trace",
+        "summary": "initial_trace: fail_time=5; total_mismatches=2207; top_diagnosis=FIRST FAILURE: STATUS_REG failed: expected=0000000000000000, actual=0000000000000000. Direct driver A6 classified as condition_blocks_update: Observed condition values appear to block this assignment update.; first_failure={'signal': 'NORMAL_INT_REG', 'time': 5, 'ref': '0000000000000100', 'dut': '0000000000000000', 'classification': 'unknown', 'ref_path': 'tb.NORMAL_INT_REG_ref[15:0\n...<snip>...\nERR_INT_REG', 'mismatches': 98, 'time': 755}, {'sig': 'NORMAL_INT_REG', 'mismatches': 1187, 'time': 5}, {'sig': 'errors_settings', 'mismatches': 636, 'time': 485}, {'sig': 'errors_go_idle_o', 'mismatches': 4, 'time': 755}, {'sig': 'errors_cmd_out', 'mismatches': 644, 'time': 485}, {'sig': 'errors_req_out', 'mismatches': 809, 'time': 595}, {'sig': 'ack_out', 'mismatches': 672, 'time': 1105}], 'dut_instance': 'top_module1', 'ref_instance': 'good1'}",
+        "artifact_ref": {
+          "kind": "trace",
+          "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/repo_react/sd_cmd_master/evidence/ev_006_initial_trace.json",
+          "artifact_id": "ev_006_initial_trace",
+          "description": "Full trace report."
+        },
+        "why_kept": "Trace summary anchors the current failure target.",
+        "salient": {
+          "module": "sd_cmd_master",
+          "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_cmd_master/trace_report.json"
+        }
+      },
+      {
+        "evidence_id": "ev_007_first_divergence",
+        "kind": "trace",
+        "summary": "first_divergence: status=stable_values_match_but_tb_edge_mismatch; first_divergence={'signal': 'NORMAL_INT_REG', 'time': 5, 'ref': '0000000000000100', 'dut': '0000000000000000', 'classification': 'unknown', 'ref_path': 'tb.NORMAL_INT_REG_ref[15:0]', 'dut_path': 'tb.NORMAL_INT_REG_dut[15:0]', 'sampling_mode': 'edge_active', 'edge': 'posedge', 'driver_assignment_kind': 'nonblocking', 'active_region_model': 'ref=edge settled value; DUT=pre-edge old value for nonblocking output drivers, edge settled value for blocking/continuous drivers'}",
+        "artifact_ref": {
+          "kind": "trace",
+          "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/repo_react/sd_cmd_master/evidence/ev_007_first_divergence.json",
+          "artifact_id": "ev_007_first_divergence",
+          "description": "Full trace report."
+        },
+        "why_kept": "First divergence preserves timing-sensitive evidence.",
+        "salient": {
+          "module": "sd_cmd_master"
+        }
+      },
+      {
+        "evidence_id": "ev_008_causal_memory",
+        "kind": "memory",
+        "summary": "causal_memory: {\"repair_ledger\": [], \"protected_invariants\": [], \"unsafe_directions\": []}",
+        "artifact_ref": {
+          "kind": "journal",
+          "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/repo_react/sd_cmd_master/evidence/ev_008_causal_memory.json",
+          "artifact_id": "ev_008_causal_memory",
+          "description": "Full patch attempt journal."
+        },
+        "why_kept": "Recent local repair memory helps avoid repeated failures.",
+        "salient": {
+          "module": "sd_cmd_master"
+        }
+      },
+      {
+        "evidence_id": "ev_009_spec_index",
+        "kind": "spec",
+        "summary": "spec_index: {\"path\": \"/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_cmd_master.md\"}",
+        "artifact_ref": {
+          "kind": "spec",
+          "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/repo_react/sd_cmd_master/evidence/ev_009_spec_index.json",
+          "artifact_id": "ev_009_spec_index",
+          "description": "Original spec path or in-memory spec_text fallback."
+        },
+        "why_kept": "Spec path is available for just-in-time requirement lookup.",
+        "salient": {
+          "module": "sd_cmd_master",
+          "path": "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_cmd_master.md"
+        }
+      },
+      {
+        "evidence_id": "ev_010_long_term_memory",
+        "kind": "memory",
+        "summary": "long_term_memory: [{\"path\": \"corrections/correction_sd_cmd_master_wrong_timing.md\", \"memory_id\": \"correction_sd_cmd_master_wrong_timing\", \"type\": \"planning_correction\", \"stage\": \"planning\", \"module\": \"sd_cmd_master\", \"signals\": [], \"failure_type\": \"plan_bug\", \"outcome\": \"correction\", \"confidence\": 0.62, \"description\": \"sd_cmd_master: One unexplored repair direction: perform an exact line-by-line logic comparison between reference A6 and DUT A6, f\n...<snip>...\n\\\"first_time_after\\\": 485, \\\"direction\\\": \\\"unchanged\\\"}}}`\\n\\n## Patch Summary\\n\\nendcase if (ERR_INT_RST) ERR_INT_REG <= 5'b00000; if (NORMAL_INT_RST) NORMAL_INT_REG <= 16'b0000000000000000;\\n\\n## Lesson\\n\\nPatch improved mismatch count or first fail time; continue from this direction.\\n\\n## Reuse Constraints\\n\\n- Read current RTL/spec evidence before applying a similar patch.\\n- Do not reuse if affected signals or timing alignment differ.\\n\"}]",
+        "artifact_ref": {
+          "kind": "memory_index",
+          "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/repo_react/sd_cmd_master/evidence/ev_010_long_term_memory.json",
+          "artifact_id": "ev_010_long_term_memory",
+          "description": "RTL long-term memory index."
+        },
+        "why_kept": "Selected long-term memory files match this module/failure context.",
+        "salient": {
+          "module": "sd_cmd_master",
+          "count": 3
+        }
+      }
+    ],
+    "pinned_code_slices": [],
+    "pinned_spec_clauses": [],
+    "waveform_facts": [
+      {
+        "signal": "NORMAL_INT_REG",
+        "time": 5,
+        "edge": "posedge",
+        "ref": "0000000000000100",
+        "dut": "0000000000000000",
+        "classification": "edge_active",
+        "source": "timing_evidence"
+      }
+    ],
+    "accepted_patch_summaries": [],
+    "rejected_hypotheses": [],
+    "next_edit_candidates": [
+      {
+        "block_id": "A6",
+        "line_range": [
+          237,
+          344
+        ],
+        "signals": [
+          "NORMAL_INT_REG"
+        ],
+        "reason": "Primary driver/suspect block for current failure."
+      }
+    ],
+    "missing_evidence": [],
+    "protected_invariants": [],
+    "unsafe_directions": [],
+    "selected_long_term_memories": [
+      {
+        "path": "corrections/correction_sd_cmd_master_wrong_timing.md",
+        "memory_id": "correction_sd_cmd_master_wrong_timing",
+        "type": "planning_correction",
+        "stage": "planning",
+        "module": "sd_cmd_master",
+        "signals": [],
+        "failure_type": "plan_bug",
+        "outcome": "correction",
+        "confidence": 0.62,
+        "description": "sd_cmd_master: One unexplored repair direction: perform an exact line-by-line logic comparison between reference A6 and DUT A6, fix any logic differences f",
+        "patch_pattern": "",
+        "anti_trigger": "",
+        "content": "## Problem\n\nOne unexplored repair direction: perform an exact line-by-line logic comparison between reference A6 and DUT A6, fix any logic differences found, and THEN attempt full blocking conversion. If the regression from 2207→4246 during full blocking conversion is caused by logic differences (not just scheduling), fixing those differences first could enable a successful blocking conversion.\n\n## Evidence\n\n- Full A6 blocking conversion regressed 2207→4246, suggesting logic differences exist beyond scheduling\n- Stable values match at key times, so functional behavior is similar but may differ in edge cases\n- Previous comparisons were not exhaustive\n\n## Corrective Rule\n\n{\n  \"next_strategy\": \"Compare reference A6 and DUT A6 line by line to find logic differences. Fix any differences found. Then attempt full blocking conversion.\"\n}\n",
+        "body_excerpt": "## Problem\n\nOne unexplored repair direction: perform an exact line-by-line logic comparison between reference A6 and DUT A6, fix any logic differences found, and THEN attempt full blocking conversion. If the regression from 2207→4246 during full blocking conversion is caused by logic differences (not just scheduling), fixing those differences first could enable a successful blocking conversion.\n\n## Evidence\n\n- Full A6 blocking conversion regressed 2207→4246, suggesting logic differences exist beyond scheduling\n- Stable values match at key times, so functional behavior is similar but may differ in edge cases\n- Previous comparisons were not exhaustive\n\n## Corrective Rule\n\n{\n  \"next_strategy\": \"Compare reference A6 and DUT A6 line by line to find logic differences. Fix any differences found. Then attempt full blocking conversion.\"\n}\n"
+      },
+      {
+        "path": "cases/debug_sd_cmd_master_NORMAL_INT_REG_improved_6.md",
+        "memory_id": "debug_sd_cmd_master_NORMAL_INT_REG_improved_6",
+        "type": "repair_outcome",
+        "stage": "debug",
+        "module": "sd_cmd_master",
+        "signals": [
+          "NORMAL_INT_REG",
+          "card_present",
+          "debounce"
+        ],
+        "failure_type": "timing_bug",
+        "outcome": "improved",
+        "confidence": 0.72,
+        "description": "sd_cmd_master: NORMAL_INT_REG improved; Patch improved mismatch count or first fail time; continue from this direction.",
+        "patch_pattern": "end else begin debounce     <= 4'b0000; end",
+        "anti_trigger": "Do not reuse when current first divergence, affected signals, or timing alignment differ.",
+        "content": "## 触发条件\n\n- Module: `sd_cmd_master`\n- Signal: `NORMAL_INT_REG`\n- Effect: `improved`\n- First divergence: `{\"signal\": \"NORMAL_INT_REG\", \"time\": 5, \"ref\": \"0000000000000100\", \"dut\": \"0000000000000000\", \"classification\": \"unknown\", \"ref_path\": \"tb.NORMAL_INT_REG_ref[15:0]\", \"dut_path\": \"tb.NORMAL_INT_REG_dut[15:0]\", \"sampling_mode\": \"edge_active\", \"edge\": \"posedge\", \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"ref=edge settled value; DUT=pre-edge old value for nonblocking output drivers, edge settled value for blocking/continuous drivers\"}`\n\n## 不适用条件\n\n- Do not reuse if affected signals, timing alignment, or spec intent differ.\n- Do not reuse without reading current RTL/spec evidence.\n\n## 补丁模式\n\nend else begin debounce     <= 4'b0000; end\n\n## 验证特征\n\n- Before mismatch count: `4724`\n- After mismatch count: `4723`\n- Metric delta: `{\"total_samples_mismatch\": \"2208 -> 2207\", \"per_signal\": {\"ERR_INT_REG\": {\"before\": 98, \"after\": 98, \"first_time_before\": 755, \"first_time_after\": 755, \"direction\": \"unchanged\"}, \"NORMAL_INT_REG\": {\"before\": 1188, \"after\": 1187, \"first_time_before\": 5, \"first_time_after\": 5, \"direction\": \"improved\"}, \"RESP_1_REG\": {\"before\": 202, \"after\": 202, \"first_time_before\": 1165, \"first_time_after\": 1165, \"direction\": \"unchanged\"}, \"STATUS_REG\": {\"before\": 471, \"after\": 471, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}, \"ack_out\": {\"before\": 672, \"after\": 672, \"first_time_before\": 1105, \"first_time_after\": 1105, \"direction\": \"unchanged\"}, \"errors_cmd_out\": {\"before\": 644, \"after\": 644, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}, \"errors_go_idle_o\": {\"before\": 4, \"after\": 4, \"first_time_before\": 755, \"first_time_after\": 755, \"direction\": \"unchanged\"}, \"errors_req_out\": {\"before\": 809, \"after\": 809, \"first_time_before\": 595, \"first_time_after\": 595, \"direction\": \"unchanged\"}, \"errors_settings\": {\"before\": 636, \"after\": 636, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}}}`\n\n## 复用约束\n\nPatch improved mismatch count or first fail time; continue from this direction.\n\n## Problem\n\n`sd_cmd_master` showed a debug failure around `NORMAL_INT_REG`.\n\n## Evidence\n\n- Effect: `improved`\n- Before mismatch count: `4724`\n- After mismatch count: `4723`\n- First divergence: `{\"signal\": \"NORMAL_INT_REG\", \"time\": 5, \"ref\": \"0000000000000100\", \"dut\": \"0000000000000000\", \"classification\": \"unknown\", \"ref_path\": \"tb.NORMAL_INT_REG_ref[15:0]\", \"dut_path\": \"tb.NORMAL_INT_REG_dut[15:0]\", \"sampling_mode\": \"edge_active\", \"edge\": \"posedge\", \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"ref=edge settled value; DUT=pre-edge old value for nonblocking output drivers, edge settled value for blocking/continuous drivers\"}`\n- Trace root failure: `{\"signal\": \"NORMAL_INT_REG\", \"time\": 5, \"ref\": \"0000000000000100\", \"dut\": \"0000000000000000\", \"classification\": \"unknown\", \"ref_path\": \"tb.NORMAL_INT_REG_ref[15:0]\", \"dut_path\": \"tb.NORMAL_INT_REG_dut[15:0]\", \"sampling_mode\": \"edge_active\", \"edge\": \"posedge\", \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"ref=edge settled value; DUT=pre-edge old value for nonblocking output drivers, edge settled value for blocking/continuous drivers\"}`\n- Metric delta: `{\"total_samples_mismatch\": \"2208 -> 2207\", \"per_signal\": {\"ERR_INT_REG\": {\"before\": 98, \"after\": 98, \"first_time_before\": 755, \"first_time_after\": 755, \"direction\": \"unchanged\"}, \"NORMAL_INT_REG\": {\"before\": 1188, \"after\": 1187, \"first_time_before\": 5, \"first_time_after\": 5, \"direction\": \"improved\"}, \"RESP_1_REG\": {\"before\": 202, \"after\": 202, \"first_time_before\": 1165, \"first_time_after\": 1165, \"direction\": \"unchanged\"}, \"STATUS_REG\": {\"before\": 471, \"after\": 471, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}, \"ack_out\": {\"before\": 672, \"after\": 672, \"first_time_before\": 1105, \"first_time_after\": 1105, \"direction\": \"unchanged\"}, \"errors_cmd_out\": {\"before\": 644, \"after\": 644, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}, \"errors_go_idle_o\": {\"before\": 4, \"after\": 4, \"first_time_before\": 755, \"first_time_after\": 755, \"direction\": \"unchanged\"}, \"errors_req_out\": {\"before\": 809, \"after\": 809, \"first_time_before\": 595, \"first_time_after\": 595, \"direction\": \"unchanged\"}, \"errors_settings\": {\"before\": 636, \"after\": 636, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}}}`\n\n## Patch Summary\n\nend else begin debounce     <= 4'b0000; end\n\n## Lesson\n\nPatch improved mismatch count or first fail time; continue from this direction.\n\n## Reuse Constraints\n\n- Read current RTL/spec evidence before applying a similar patch.\n- Do not reuse if affected signals or timing alignment differ.\n",
+        "body_excerpt": "## 触发条件\n\n- Module: `sd_cmd_master`\n- Signal: `NORMAL_INT_REG`\n- Effect: `improved`\n- First divergence: `{\"signal\": \"NORMAL_INT_REG\", \"time\": 5, \"ref\": \"0000000000000100\", \"dut\": \"0000000000000000\", \"classification\": \"unknown\", \"ref_path\": \"tb.NORMAL_INT_REG_ref[15:0]\", \"dut_path\": \"tb.NORMAL_INT_REG_dut[15:0]\", \"sampling_mode\": \"edge_active\", \"edge\": \"posedge\", \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"ref=edge settled value; DUT=pre-edge old value for nonblocking output drivers, edge settled value for blocking/continuous drivers\"}`\n\n## 不适用条件\n\n- Do not reuse if affected signals, timing alignment, or spec intent differ.\n- Do not reuse without reading current RTL/spec evidence.\n\n## 补丁模式\n\nend else begin debounce     <= 4'b0000; end\n\n## 验证特征\n\n- Before mismatch count: `4724`\n- After mismatch count: `4723`\n- Metric delta: `{\"total_samples_mismatch\": \"2208 -> 2207\", \"per_signal\": {\"ERR_INT_REG\": {\"before\": 98, \"after\": 98, \"first_time_before\": 755, \"first_time_after\": 755, \"direction\": \"unchanged\"}, \"NORMAL_INT_REG\": {\"before\": 1188, \"after\": 1187, \"first_time_before\": 5, \"first_time_after\": 5, \"direction\": \"improved\"}, \"RESP_1_REG\": {\"before\": 202, \"after\": 202, \"f\n...<snip>...\nction\": \"improved\"}, \"RESP_1_REG\": {\"before\": 202, \"after\": 202, \"first_time_before\": 1165, \"first_time_after\": 1165, \"direction\": \"unchanged\"}, \"STATUS_REG\": {\"before\": 471, \"after\": 471, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}, \"ack_out\": {\"before\": 672, \"after\": 672, \"first_time_before\": 1105, \"first_time_after\": 1105, \"direction\": \"unchanged\"}, \"errors_cmd_out\": {\"before\": 644, \"after\": 644, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}, \"errors_go_idle_o\": {\"before\": 4, \"after\": 4, \"first_time_before\": 755, \"first_time_after\": 755, \"direction\": \"unchanged\"}, \"errors_req_out\": {\"before\": 809, \"after\": 809, \"first_time_before\": 595, \"first_time_after\": 595, \"direction\": \"unchanged\"}, \"errors_settings\": {\"before\": 636, \"after\": 636, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}}}`\n\n## Patch Summary\n\nend else begin debounce     <= 4'b0000; end\n\n## Lesson\n\nPatch improved mismatch count or first fail time; continue from this direction.\n\n## Reuse Constraints\n\n- Read current RTL/spec evidence before applying a similar patch.\n- Do not reuse if affected signals or timing alignment differ.\n"
+      },
+      {
+        "path": "cases/debug_sd_cmd_master_NORMAL_INT_REG_improved_5.md",
+        "memory_id": "debug_sd_cmd_master_NORMAL_INT_REG_improved_5",
+        "type": "repair_outcome",
+        "stage": "debug",
+        "module": "sd_cmd_master",
+        "signals": [
+          "ERR_INT_REG",
+          "NORMAL_INT_REG"
+        ],
+        "failure_type": "interface_bug",
+        "outcome": "improved",
+        "confidence": 0.72,
+        "description": "sd_cmd_master: NORMAL_INT_REG improved; Patch improved mismatch count or first fail time; continue from this direction.",
+        "patch_pattern": "endcase if (ERR_INT_RST) ERR_INT_REG <= 5'b00000; if (NORMAL_INT_RST) NORMAL_INT_REG <= 16'b0000000000000000;",
+        "anti_trigger": "Do not reuse when current first divergence, affected signals, or timing alignment differ.",
+        "content": "## 触发条件\n\n- Module: `sd_cmd_master`\n- Signal: `NORMAL_INT_REG`\n- Effect: `improved`\n- First divergence: `{\"signal\": \"NORMAL_INT_REG\", \"time\": 1105, \"ref\": \"0000000000000011\", \"dut\": \"0000000000000101\", \"classification\": \"wrong_value\", \"ref_path\": \"tb.NORMAL_INT_REG_ref[15:0]\", \"dut_path\": \"tb.NORMAL_INT_REG_dut[15:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n\n## 不适用条件\n\n- Do not reuse if affected signals, timing alignment, or spec intent differ.\n- Do not reuse without reading current RTL/spec evidence.\n\n## 补丁模式\n\nendcase if (ERR_INT_RST) ERR_INT_REG <= 5'b00000; if (NORMAL_INT_RST) NORMAL_INT_REG <= 16'b0000000000000000;\n\n## 验证特征\n\n- Before mismatch count: `6564`\n- After mismatch count: `4724`\n- Metric delta: `{\"total_samples_mismatch\": \"3331 -> 2208\", \"per_signal\": {\"ERR_INT_REG\": {\"before\": 555, \"after\": 98, \"first_time_before\": 755, \"first_time_after\": 755, \"direction\": \"improved\"}, \"NORMAL_INT_REG\": {\"before\": 2571, \"after\": 1188, \"first_time_before\": 5, \"first_time_after\": 5, \"direction\": \"improved\"}, \"RESP_1_REG\": {\"before\": 202, \"after\": 202, \"first_time_before\": 1165, \"first_time_after\": 1165, \"direction\": \"unchanged\"}, \"STATUS_REG\": {\"before\": 471, \"after\": 471, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}, \"ack_out\": {\"before\": 672, \"after\": 672, \"first_time_before\": 1105, \"first_time_after\": 1105, \"direction\": \"unchanged\"}, \"errors_cmd_out\": {\"before\": 644, \"after\": 644, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}, \"errors_go_idle_o\": {\"before\": 4, \"after\": 4, \"first_time_before\": 755, \"first_time_after\": 755, \"direction\": \"unchanged\"}, \"errors_req_out\": {\"before\": 809, \"after\": 809, \"first_time_before\": 595, \"first_time_after\": 595, \"direction\": \"unchanged\"}, \"errors_settings\": {\"before\": 636, \"after\": 636, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}}}`\n\n## 复用约束\n\nPatch improved mismatch count or first fail time; continue from this direction.\n\n## Problem\n\n`sd_cmd_master` showed a debug failure around `NORMAL_INT_REG`.\n\n## Evidence\n\n- Effect: `improved`\n- Before mismatch count: `6564`\n- After mismatch count: `4724`\n- First divergence: `{\"signal\": \"NORMAL_INT_REG\", \"time\": 1105, \"ref\": \"0000000000000011\", \"dut\": \"0000000000000101\", \"classification\": \"wrong_value\", \"ref_path\": \"tb.NORMAL_INT_REG_ref[15:0]\", \"dut_path\": \"tb.NORMAL_INT_REG_dut[15:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n- Trace root failure: `{\"signal\": \"NORMAL_INT_REG\", \"time\": 1105, \"ref\": \"0000000000000011\", \"dut\": \"0000000000000101\", \"classification\": \"wrong_value\", \"ref_path\": \"tb.NORMAL_INT_REG_ref[15:0]\", \"dut_path\": \"tb.NORMAL_INT_REG_dut[15:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n- Metric delta: `{\"total_samples_mismatch\": \"3331 -> 2208\", \"per_signal\": {\"ERR_INT_REG\": {\"before\": 555, \"after\": 98, \"first_time_before\": 755, \"first_time_after\": 755, \"direction\": \"improved\"}, \"NORMAL_INT_REG\": {\"before\": 2571, \"after\": 1188, \"first_time_before\": 5, \"first_time_after\": 5, \"direction\": \"improved\"}, \"RESP_1_REG\": {\"before\": 202, \"after\": 202, \"first_time_before\": 1165, \"first_time_after\": 1165, \"direction\": \"unchanged\"}, \"STATUS_REG\": {\"before\": 471, \"after\": 471, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}, \"ack_out\": {\"before\": 672, \"after\": 672, \"first_time_before\": 1105, \"first_time_after\": 1105, \"direction\": \"unchanged\"}, \"errors_cmd_out\": {\"before\": 644, \"after\": 644, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}, \"errors_go_idle_o\": {\"before\": 4, \"after\": 4, \"first_time_before\": 755, \"first_time_after\": 755, \"direction\": \"unchanged\"}, \"errors_req_out\": {\"before\": 809, \"after\": 809, \"first_time_before\": 595, \"first_time_after\": 595, \"direction\": \"unchanged\"}, \"errors_settings\": {\"before\": 636, \"after\": 636, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}}}`\n\n## Patch Summary\n\nendcase if (ERR_INT_RST) ERR_INT_REG <= 5'b00000; if (NORMAL_INT_RST) NORMAL_INT_REG <= 16'b0000000000000000;\n\n## Lesson\n\nPatch improved mismatch count or first fail time; continue from this direction.\n\n## Reuse Constraints\n\n- Read current RTL/spec evidence before applying a similar patch.\n- Do not reuse if affected signals or timing alignment differ.\n",
+        "body_excerpt": "## 触发条件\n\n- Module: `sd_cmd_master`\n- Signal: `NORMAL_INT_REG`\n- Effect: `improved`\n- First divergence: `{\"signal\": \"NORMAL_INT_REG\", \"time\": 1105, \"ref\": \"0000000000000011\", \"dut\": \"0000000000000101\", \"classification\": \"wrong_value\", \"ref_path\": \"tb.NORMAL_INT_REG_ref[15:0]\", \"dut_path\": \"tb.NORMAL_INT_REG_dut[15:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n\n## 不适用条件\n\n- Do not reuse if affected signals, timing alignment, or spec intent differ.\n- Do not reuse without reading current RTL/spec evidence.\n\n## 补丁模式\n\nendcase if (ERR_INT_RST) ERR_INT_REG <= 5'b00000; if (NORMAL_INT_RST) NORMAL_INT_REG <= 16'b0000000000000000;\n\n## 验证特征\n\n- Before mismatch count: `6564`\n- After mismatch count: `4724`\n- Metric delta: `{\"total_samples_mismatch\": \"3331 -> 2208\", \"per_signal\": {\"ERR_INT_REG\": {\"before\": 555, \"after\": 98, \"first_time_before\": 755, \"first_time_after\": 755, \"direction\": \"improved\"}, \"NORMAL_INT_REG\": {\"before\": 2571, \"after\": 1188, \"first_time_before\": 5, \"first_time_after\": 5, \"direction\": \"improved\"}, \"RESP_1_REG\": {\"before\": 202, \"after\": 202, \"first_time_before\"\n...<snip>...\nfirst_time_before\": 1165, \"first_time_after\": 1165, \"direction\": \"unchanged\"}, \"STATUS_REG\": {\"before\": 471, \"after\": 471, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}, \"ack_out\": {\"before\": 672, \"after\": 672, \"first_time_before\": 1105, \"first_time_after\": 1105, \"direction\": \"unchanged\"}, \"errors_cmd_out\": {\"before\": 644, \"after\": 644, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}, \"errors_go_idle_o\": {\"before\": 4, \"after\": 4, \"first_time_before\": 755, \"first_time_after\": 755, \"direction\": \"unchanged\"}, \"errors_req_out\": {\"before\": 809, \"after\": 809, \"first_time_before\": 595, \"first_time_after\": 595, \"direction\": \"unchanged\"}, \"errors_settings\": {\"before\": 636, \"after\": 636, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}}}`\n\n## Patch Summary\n\nendcase if (ERR_INT_RST) ERR_INT_REG <= 5'b00000; if (NORMAL_INT_RST) NORMAL_INT_REG <= 16'b0000000000000000;\n\n## Lesson\n\nPatch improved mismatch count or first fail time; continue from this direction.\n\n## Reuse Constraints\n\n- Read current RTL/spec evidence before applying a similar patch.\n- Do not reuse if affected signals or timing alignment differ.\n"
+      }
+    ]
+  },
+  "causal_memory": {
+    "repair_ledger_summary": [],
+    "promising_directions": [],
+    "protected_invariants": [],
+    "unsafe_directions": [],
+    "selected_long_term_memories": [
+      {
+        "path": "corrections/correction_sd_cmd_master_wrong_timing.md",
+        "memory_id": "correction_sd_cmd_master_wrong_timing",
+        "type": "planning_correction",
+        "stage": "planning",
+        "module": "sd_cmd_master",
+        "signals": [],
+        "failure_type": "plan_bug",
+        "outcome": "correction",
+        "confidence": 0.62,
+        "description": "sd_cmd_master: One unexplored repair direction: perform an exact line-by-line logic comparison between reference A6 and DUT A6, fix any logic differences f",
+        "patch_pattern": "",
+        "anti_trigger": "",
+        "content": "## Problem\n\nOne unexplored repair direction: perform an exact line-by-line logic comparison between reference A6 and DUT A6, fix any logic differences found, and THEN attempt full blocking conversion. If the regression from 2207→4246 during full blocking conversion is caused by logic differences (not just scheduling), fixing those differences first could enable a successful blocking conversion.\n\n## Evidence\n\n- Full A6 blocking conversion regressed 2207→4246, suggesting logic differences exist beyond scheduling\n- Stable values match at key times, so functional behavior is similar but may differ in edge cases\n- Previous comparisons were not exhaustive\n\n## Corrective Rule\n\n{\n  \"next_strategy\": \"Compare reference A6 and DUT A6 line by line to find logic differences. Fix any differences found. Then attempt full blocking conversion.\"\n}\n",
+        "body_excerpt": "## Problem\n\nOne unexplored repair direction: perform an exact line-by-line logic comparison between reference A6 and DUT A6, fix any logic differences found, and THEN attempt full blocking conversion. If the regression from 2207→4246 during full blocking conversion is caused by logic differences (not just scheduling), fixing those differences first could enable a successful blocking conversion.\n\n## Evidence\n\n- Full A6 blocking conversion regressed 2207→4246, suggesting logic differences exist beyond scheduling\n- Stable values match at key times, so functional behavior is similar but may differ in edge cases\n- Previous comparisons were not exhaustive\n\n## Corrective Rule\n\n{\n  \"next_strategy\": \"Compare reference A6 and DUT A6 line by line to find logic differences. Fix any differences found. Then attempt full blocking conversion.\"\n}\n"
+      },
+      {
+        "path": "cases/debug_sd_cmd_master_NORMAL_INT_REG_improved_6.md",
+        "memory_id": "debug_sd_cmd_master_NORMAL_INT_REG_improved_6",
+        "type": "repair_outcome",
+        "stage": "debug",
+        "module": "sd_cmd_master",
+        "signals": [
+          "NORMAL_INT_REG",
+          "card_present",
+          "debounce"
+        ],
+        "failure_type": "timing_bug",
+        "outcome": "improved",
+        "confidence": 0.72,
+        "description": "sd_cmd_master: NORMAL_INT_REG improved; Patch improved mismatch count or first fail time; continue from this direction.",
+        "patch_pattern": "end else begin debounce     <= 4'b0000; end",
+        "anti_trigger": "Do not reuse when current first divergence, affected signals, or timing alignment differ.",
+        "content": "## 触发条件\n\n- Module: `sd_cmd_master`\n- Signal: `NORMAL_INT_REG`\n- Effect: `improved`\n- First divergence: `{\"signal\": \"NORMAL_INT_REG\", \"time\": 5, \"ref\": \"0000000000000100\", \"dut\": \"0000000000000000\", \"classification\": \"unknown\", \"ref_path\": \"tb.NORMAL_INT_REG_ref[15:0]\", \"dut_path\": \"tb.NORMAL_INT_REG_dut[15:0]\", \"sampling_mode\": \"edge_active\", \"edge\": \"posedge\", \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"ref=edge settled value; DUT=pre-edge old value for nonblocking output drivers, edge settled value for blocking/continuous drivers\"}`\n\n## 不适用条件\n\n- Do not reuse if affected signals, timing alignment, or spec intent differ.\n- Do not reuse without reading current RTL/spec evidence.\n\n## 补丁模式\n\nend else begin debounce     <= 4'b0000; end\n\n## 验证特征\n\n- Before mismatch count: `4724`\n- After mismatch count: `4723`\n- Metric delta: `{\"total_samples_mismatch\": \"2208 -> 2207\", \"per_signal\": {\"ERR_INT_REG\": {\"before\": 98, \"after\": 98, \"first_time_before\": 755, \"first_time_after\": 755, \"direction\": \"unchanged\"}, \"NORMAL_INT_REG\": {\"before\": 1188, \"after\": 1187, \"first_time_before\": 5, \"first_time_after\": 5, \"direction\": \"improved\"}, \"RESP_1_REG\": {\"before\": 202, \"after\": 202, \"first_time_before\": 1165, \"first_time_after\": 1165, \"direction\": \"unchanged\"}, \"STATUS_REG\": {\"before\": 471, \"after\": 471, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}, \"ack_out\": {\"before\": 672, \"after\": 672, \"first_time_before\": 1105, \"first_time_after\": 1105, \"direction\": \"unchanged\"}, \"errors_cmd_out\": {\"before\": 644, \"after\": 644, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}, \"errors_go_idle_o\": {\"before\": 4, \"after\": 4, \"first_time_before\": 755, \"first_time_after\": 755, \"direction\": \"unchanged\"}, \"errors_req_out\": {\"before\": 809, \"after\": 809, \"first_time_before\": 595, \"first_time_after\": 595, \"direction\": \"unchanged\"}, \"errors_settings\": {\"before\": 636, \"after\": 636, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}}}`\n\n## 复用约束\n\nPatch improved mismatch count or first fail time; continue from this direction.\n\n## Problem\n\n`sd_cmd_master` showed a debug failure around `NORMAL_INT_REG`.\n\n## Evidence\n\n- Effect: `improved`\n- Before mismatch count: `4724`\n- After mismatch count: `4723`\n- First divergence: `{\"signal\": \"NORMAL_INT_REG\", \"time\": 5, \"ref\": \"0000000000000100\", \"dut\": \"0000000000000000\", \"classification\": \"unknown\", \"ref_path\": \"tb.NORMAL_INT_REG_ref[15:0]\", \"dut_path\": \"tb.NORMAL_INT_REG_dut[15:0]\", \"sampling_mode\": \"edge_active\", \"edge\": \"posedge\", \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"ref=edge settled value; DUT=pre-edge old value for nonblocking output drivers, edge settled value for blocking/continuous drivers\"}`\n- Trace root failure: `{\"signal\": \"NORMAL_INT_REG\", \"time\": 5, \"ref\": \"0000000000000100\", \"dut\": \"0000000000000000\", \"classification\": \"unknown\", \"ref_path\": \"tb.NORMAL_INT_REG_ref[15:0]\", \"dut_path\": \"tb.NORMAL_INT_REG_dut[15:0]\", \"sampling_mode\": \"edge_active\", \"edge\": \"posedge\", \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"ref=edge settled value; DUT=pre-edge old value for nonblocking output drivers, edge settled value for blocking/continuous drivers\"}`\n- Metric delta: `{\"total_samples_mismatch\": \"2208 -> 2207\", \"per_signal\": {\"ERR_INT_REG\": {\"before\": 98, \"after\": 98, \"first_time_before\": 755, \"first_time_after\": 755, \"direction\": \"unchanged\"}, \"NORMAL_INT_REG\": {\"before\": 1188, \"after\": 1187, \"first_time_before\": 5, \"first_time_after\": 5, \"direction\": \"improved\"}, \"RESP_1_REG\": {\"before\": 202, \"after\": 202, \"first_time_before\": 1165, \"first_time_after\": 1165, \"direction\": \"unchanged\"}, \"STATUS_REG\": {\"before\": 471, \"after\": 471, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}, \"ack_out\": {\"before\": 672, \"after\": 672, \"first_time_before\": 1105, \"first_time_after\": 1105, \"direction\": \"unchanged\"}, \"errors_cmd_out\": {\"before\": 644, \"after\": 644, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}, \"errors_go_idle_o\": {\"before\": 4, \"after\": 4, \"first_time_before\": 755, \"first_time_after\": 755, \"direction\": \"unchanged\"}, \"errors_req_out\": {\"before\": 809, \"after\": 809, \"first_time_before\": 595, \"first_time_after\": 595, \"direction\": \"unchanged\"}, \"errors_settings\": {\"before\": 636, \"after\": 636, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}}}`\n\n## Patch Summary\n\nend else begin debounce     <= 4'b0000; end\n\n## Lesson\n\nPatch improved mismatch count or first fail time; continue from this direction.\n\n## Reuse Constraints\n\n- Read current RTL/spec evidence before applying a similar patch.\n- Do not reuse if affected signals or timing alignment differ.\n",
+        "body_excerpt": "## 触发条件\n\n- Module: `sd_cmd_master`\n- Signal: `NORMAL_INT_REG`\n- Effect: `improved`\n- First divergence: `{\"signal\": \"NORMAL_INT_REG\", \"time\": 5, \"ref\": \"0000000000000100\", \"dut\": \"0000000000000000\", \"classification\": \"unknown\", \"ref_path\": \"tb.NORMAL_INT_REG_ref[15:0]\", \"dut_path\": \"tb.NORMAL_INT_REG_dut[15:0]\", \"sampling_mode\": \"edge_active\", \"edge\": \"posedge\", \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"ref=edge settled value; DUT=pre-edge old value for nonblocking output drivers, edge settled value for blocking/continuous drivers\"}`\n\n## 不适用条件\n\n- Do not reuse if affected signals, timing alignment, or spec intent differ.\n- Do not reuse without reading current RTL/spec evidence.\n\n## 补丁模式\n\nend else begin debounce     <= 4'b0000; end\n\n## 验证特征\n\n- Before mismatch count: `4724`\n- After mismatch count: `4723`\n- Metric delta: `{\"total_samples_mismatch\": \"2208 -> 2207\", \"per_signal\": {\"ERR_INT_REG\": {\"before\": 98, \"after\": 98, \"first_time_before\": 755, \"first_time_after\": 755, \"direction\": \"unchanged\"}, \"NORMAL_INT_REG\": {\"before\": 1188, \"after\": 1187, \"first_time_before\": 5, \"first_time_after\": 5, \"direction\": \"improved\"}, \"RESP_1_REG\": {\"before\": 202, \"after\": 202, \"f\n...<snip>...\nction\": \"improved\"}, \"RESP_1_REG\": {\"before\": 202, \"after\": 202, \"first_time_before\": 1165, \"first_time_after\": 1165, \"direction\": \"unchanged\"}, \"STATUS_REG\": {\"before\": 471, \"after\": 471, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}, \"ack_out\": {\"before\": 672, \"after\": 672, \"first_time_before\": 1105, \"first_time_after\": 1105, \"direction\": \"unchanged\"}, \"errors_cmd_out\": {\"before\": 644, \"after\": 644, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}, \"errors_go_idle_o\": {\"before\": 4, \"after\": 4, \"first_time_before\": 755, \"first_time_after\": 755, \"direction\": \"unchanged\"}, \"errors_req_out\": {\"before\": 809, \"after\": 809, \"first_time_before\": 595, \"first_time_after\": 595, \"direction\": \"unchanged\"}, \"errors_settings\": {\"before\": 636, \"after\": 636, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}}}`\n\n## Patch Summary\n\nend else begin debounce     <= 4'b0000; end\n\n## Lesson\n\nPatch improved mismatch count or first fail time; continue from this direction.\n\n## Reuse Constraints\n\n- Read current RTL/spec evidence before applying a similar patch.\n- Do not reuse if affected signals or timing alignment differ.\n"
+      },
+      {
+        "path": "cases/debug_sd_cmd_master_NORMAL_INT_REG_improved_5.md",
+        "memory_id": "debug_sd_cmd_master_NORMAL_INT_REG_improved_5",
+        "type": "repair_outcome",
+        "stage": "debug",
+        "module": "sd_cmd_master",
+        "signals": [
+          "ERR_INT_REG",
+          "NORMAL_INT_REG"
+        ],
+        "failure_type": "interface_bug",
+        "outcome": "improved",
+        "confidence": 0.72,
+        "description": "sd_cmd_master: NORMAL_INT_REG improved; Patch improved mismatch count or first fail time; continue from this direction.",
+        "patch_pattern": "endcase if (ERR_INT_RST) ERR_INT_REG <= 5'b00000; if (NORMAL_INT_RST) NORMAL_INT_REG <= 16'b0000000000000000;",
+        "anti_trigger": "Do not reuse when current first divergence, affected signals, or timing alignment differ.",
+        "content": "## 触发条件\n\n- Module: `sd_cmd_master`\n- Signal: `NORMAL_INT_REG`\n- Effect: `improved`\n- First divergence: `{\"signal\": \"NORMAL_INT_REG\", \"time\": 1105, \"ref\": \"0000000000000011\", \"dut\": \"0000000000000101\", \"classification\": \"wrong_value\", \"ref_path\": \"tb.NORMAL_INT_REG_ref[15:0]\", \"dut_path\": \"tb.NORMAL_INT_REG_dut[15:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n\n## 不适用条件\n\n- Do not reuse if affected signals, timing alignment, or spec intent differ.\n- Do not reuse without reading current RTL/spec evidence.\n\n## 补丁模式\n\nendcase if (ERR_INT_RST) ERR_INT_REG <= 5'b00000; if (NORMAL_INT_RST) NORMAL_INT_REG <= 16'b0000000000000000;\n\n## 验证特征\n\n- Before mismatch count: `6564`\n- After mismatch count: `4724`\n- Metric delta: `{\"total_samples_mismatch\": \"3331 -> 2208\", \"per_signal\": {\"ERR_INT_REG\": {\"before\": 555, \"after\": 98, \"first_time_before\": 755, \"first_time_after\": 755, \"direction\": \"improved\"}, \"NORMAL_INT_REG\": {\"before\": 2571, \"after\": 1188, \"first_time_before\": 5, \"first_time_after\": 5, \"direction\": \"improved\"}, \"RESP_1_REG\": {\"before\": 202, \"after\": 202, \"first_time_before\": 1165, \"first_time_after\": 1165, \"direction\": \"unchanged\"}, \"STATUS_REG\": {\"before\": 471, \"after\": 471, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}, \"ack_out\": {\"before\": 672, \"after\": 672, \"first_time_before\": 1105, \"first_time_after\": 1105, \"direction\": \"unchanged\"}, \"errors_cmd_out\": {\"before\": 644, \"after\": 644, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}, \"errors_go_idle_o\": {\"before\": 4, \"after\": 4, \"first_time_before\": 755, \"first_time_after\": 755, \"direction\": \"unchanged\"}, \"errors_req_out\": {\"before\": 809, \"after\": 809, \"first_time_before\": 595, \"first_time_after\": 595, \"direction\": \"unchanged\"}, \"errors_settings\": {\"before\": 636, \"after\": 636, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}}}`\n\n## 复用约束\n\nPatch improved mismatch count or first fail time; continue from this direction.\n\n## Problem\n\n`sd_cmd_master` showed a debug failure around `NORMAL_INT_REG`.\n\n## Evidence\n\n- Effect: `improved`\n- Before mismatch count: `6564`\n- After mismatch count: `4724`\n- First divergence: `{\"signal\": \"NORMAL_INT_REG\", \"time\": 1105, \"ref\": \"0000000000000011\", \"dut\": \"0000000000000101\", \"classification\": \"wrong_value\", \"ref_path\": \"tb.NORMAL_INT_REG_ref[15:0]\", \"dut_path\": \"tb.NORMAL_INT_REG_dut[15:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n- Trace root failure: `{\"signal\": \"NORMAL_INT_REG\", \"time\": 1105, \"ref\": \"0000000000000011\", \"dut\": \"0000000000000101\", \"classification\": \"wrong_value\", \"ref_path\": \"tb.NORMAL_INT_REG_ref[15:0]\", \"dut_path\": \"tb.NORMAL_INT_REG_dut[15:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n- Metric delta: `{\"total_samples_mismatch\": \"3331 -> 2208\", \"per_signal\": {\"ERR_INT_REG\": {\"before\": 555, \"after\": 98, \"first_time_before\": 755, \"first_time_after\": 755, \"direction\": \"improved\"}, \"NORMAL_INT_REG\": {\"before\": 2571, \"after\": 1188, \"first_time_before\": 5, \"first_time_after\": 5, \"direction\": \"improved\"}, \"RESP_1_REG\": {\"before\": 202, \"after\": 202, \"first_time_before\": 1165, \"first_time_after\": 1165, \"direction\": \"unchanged\"}, \"STATUS_REG\": {\"before\": 471, \"after\": 471, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}, \"ack_out\": {\"before\": 672, \"after\": 672, \"first_time_before\": 1105, \"first_time_after\": 1105, \"direction\": \"unchanged\"}, \"errors_cmd_out\": {\"before\": 644, \"after\": 644, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}, \"errors_go_idle_o\": {\"before\": 4, \"after\": 4, \"first_time_before\": 755, \"first_time_after\": 755, \"direction\": \"unchanged\"}, \"errors_req_out\": {\"before\": 809, \"after\": 809, \"first_time_before\": 595, \"first_time_after\": 595, \"direction\": \"unchanged\"}, \"errors_settings\": {\"before\": 636, \"after\": 636, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}}}`\n\n## Patch Summary\n\nendcase if (ERR_INT_RST) ERR_INT_REG <= 5'b00000; if (NORMAL_INT_RST) NORMAL_INT_REG <= 16'b0000000000000000;\n\n## Lesson\n\nPatch improved mismatch count or first fail time; continue from this direction.\n\n## Reuse Constraints\n\n- Read current RTL/spec evidence before applying a similar patch.\n- Do not reuse if affected signals or timing alignment differ.\n",
+        "body_excerpt": "## 触发条件\n\n- Module: `sd_cmd_master`\n- Signal: `NORMAL_INT_REG`\n- Effect: `improved`\n- First divergence: `{\"signal\": \"NORMAL_INT_REG\", \"time\": 1105, \"ref\": \"0000000000000011\", \"dut\": \"0000000000000101\", \"classification\": \"wrong_value\", \"ref_path\": \"tb.NORMAL_INT_REG_ref[15:0]\", \"dut_path\": \"tb.NORMAL_INT_REG_dut[15:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n\n## 不适用条件\n\n- Do not reuse if affected signals, timing alignment, or spec intent differ.\n- Do not reuse without reading current RTL/spec evidence.\n\n## 补丁模式\n\nendcase if (ERR_INT_RST) ERR_INT_REG <= 5'b00000; if (NORMAL_INT_RST) NORMAL_INT_REG <= 16'b0000000000000000;\n\n## 验证特征\n\n- Before mismatch count: `6564`\n- After mismatch count: `4724`\n- Metric delta: `{\"total_samples_mismatch\": \"3331 -> 2208\", \"per_signal\": {\"ERR_INT_REG\": {\"before\": 555, \"after\": 98, \"first_time_before\": 755, \"first_time_after\": 755, \"direction\": \"improved\"}, \"NORMAL_INT_REG\": {\"before\": 2571, \"after\": 1188, \"first_time_before\": 5, \"first_time_after\": 5, \"direction\": \"improved\"}, \"RESP_1_REG\": {\"before\": 202, \"after\": 202, \"first_time_before\"\n...<snip>...\nfirst_time_before\": 1165, \"first_time_after\": 1165, \"direction\": \"unchanged\"}, \"STATUS_REG\": {\"before\": 471, \"after\": 471, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}, \"ack_out\": {\"before\": 672, \"after\": 672, \"first_time_before\": 1105, \"first_time_after\": 1105, \"direction\": \"unchanged\"}, \"errors_cmd_out\": {\"before\": 644, \"after\": 644, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}, \"errors_go_idle_o\": {\"before\": 4, \"after\": 4, \"first_time_before\": 755, \"first_time_after\": 755, \"direction\": \"unchanged\"}, \"errors_req_out\": {\"before\": 809, \"after\": 809, \"first_time_before\": 595, \"first_time_after\": 595, \"direction\": \"unchanged\"}, \"errors_settings\": {\"before\": 636, \"after\": 636, \"first_time_before\": 485, \"first_time_after\": 485, \"direction\": \"unchanged\"}}}`\n\n## Patch Summary\n\nendcase if (ERR_INT_RST) ERR_INT_REG <= 5'b00000; if (NORMAL_INT_RST) NORMAL_INT_REG <= 16'b0000000000000000;\n\n## Lesson\n\nPatch improved mismatch count or first fail time; continue from this direction.\n\n## Reuse Constraints\n\n- Read current RTL/spec evidence before applying a similar patch.\n- Do not reuse if affected signals or timing alignment differ.\n"
+      }
+    ],
+    "negative_patterns": []
+  },
+  "raw_artifacts": {
+    "rtl": {
+      "kind": "rtl",
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_cmd_master/rtl.sv",
+      "artifact_id": "",
+      "description": "Current debug RTL."
+    },
+    "merged_file": {
+      "kind": "rtl",
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_cmd_master.v",
+      "artifact_id": "",
+      "description": "Merged RTL source."
+    },
+    "trace_report": {
+      "kind": "trace",
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_cmd_master/trace_report.json",
+      "artifact_id": "",
+      "description": "Full trace report."
+    },
+    "sim_output": {
+      "kind": "sim",
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_cmd_master/initial_sim_output.json",
+      "artifact_id": "",
+      "description": "Latest simulation output JSON."
+    },
+    "spec": {
+      "kind": "spec",
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_cmd_master.md",
+      "artifact_id": "",
+      "description": "Original spec path or in-memory spec_text fallback."
+    },
+    "patch_journal": {
+      "kind": "journal",
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/repo_react/sd_cmd_master/patch_journal.jsonl",
+      "artifact_id": "",
+      "description": "Full patch attempt journal."
+    },
+    "memory_index": {
+      "kind": "memory_index",
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/rtl_memory/MEMORY.md",
+      "artifact_id": "",
+      "description": "RTL long-term memory index."
+    }
+  },
+  "timing_evidence": {
+    "signal": "NORMAL_INT_REG",
+    "time": 5,
+    "edge": "posedge",
+    "sampling_mode": "edge_active",
+    "ref": "0000000000000100",
+    "dut": "0000000000000000",
+    "driver_assignment_kind": "nonblocking",
+    "block_id": "A6",
+    "line_range": [
+      237,
+      344
+    ]
+  },
+  "fallback_used": false,
+  "fallback_reason": ""
+}

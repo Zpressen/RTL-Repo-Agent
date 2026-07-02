@@ -1,0 +1,309 @@
+{
+  "trace_report_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_bd/trace_report.json",
+  "fail_time": 385,
+  "total_mismatches": null,
+  "first_failure": {
+    "signal": "dat_out_s",
+    "time": 375,
+    "ref": "1000111010111100",
+    "dut": "0000000000000000",
+    "classification": "dut_early",
+    "ref_path": "tb_sd_bd.dat_out_s_ref[15:0]",
+    "dut_path": "tb_sd_bd.dat_out_s_dut[15:0]",
+    "sampling_mode": "stable",
+    "edge": null,
+    "driver_assignment_kind": "nonblocking",
+    "active_region_model": "settled VCD ref/dut values at sample/change times"
+  },
+  "root_failure": {
+    "signal": "dat_out_s",
+    "time": 375,
+    "ref": "1000111010111100",
+    "dut": "0000000000000000",
+    "classification": "dut_early",
+    "ref_path": "tb_sd_bd.dat_out_s_ref[15:0]",
+    "dut_path": "tb_sd_bd.dat_out_s_dut[15:0]",
+    "sampling_mode": "stable",
+    "edge": null,
+    "driver_assignment_kind": "nonblocking",
+    "active_region_model": "settled VCD ref/dut values at sample/change times"
+  },
+  "edge_active_failure": null,
+  "first_divergence": {
+    "status": "ok",
+    "sampling_mode": "stable",
+    "edge": null,
+    "driver_assignment_kind": "nonblocking",
+    "active_region_model": "settled VCD ref/dut values at sample/change times",
+    "first_divergence": {
+      "signal": "dat_out_s",
+      "time": 375,
+      "ref": "1000111010111100",
+      "dut": "0000000000000000",
+      "classification": "dut_early",
+      "ref_path": "tb_sd_bd.dat_out_s_ref[15:0]",
+      "dut_path": "tb_sd_bd.dat_out_s_dut[15:0]",
+      "sampling_mode": "stable",
+      "edge": null,
+      "driver_assignment_kind": "nonblocking",
+      "active_region_model": "settled VCD ref/dut values at sample/change times"
+    },
+    "nearby": {
+      "times": [
+        360,
+        365,
+        370,
+        375,
+        380,
+        385,
+        390
+      ],
+      "rows": [
+        {
+          "t": 360,
+          "a_cmp": "0",
+          "clk": "0",
+          "dat_in_m": "1000111010111100",
+          "re_s": "0",
+          "rst": "0",
+          "we_m": "0",
+          "dat_out_s_ref": "1000001101111000",
+          "dat_out_s_dut": "1000001101111000",
+          "ack_o_s_ref": "0",
+          "ack_o_s_dut": "0",
+          "free_bd_ref": "00110",
+          "free_bd_dut": "00110"
+        },
+        {
+          "t": 365,
+          "a_cmp": "0",
+          "clk": "1",
+          "dat_in_m": "1000111010111100",
+          "re_s": "1",
+          "rst": "0",
+          "we_m": "0",
+          "dat_out_s_ref": "1000111010111100",
+          "dat_out_s_dut": "1000111010111100",
+          "ack_o_s_ref": "1",
+          "ack_o_s_dut": "1",
+          "free_bd_ref": "00110",
+          "free_bd_dut": "00110"
+        },
+        {
+          "t": 370,
+          "a_cmp": "0",
+          "clk": "0",
+          "dat_in_m": "1000111010111100",
+          "re_s": "1",
+          "rst": "0",
+          "we_m": "0",
+          "dat_out_s_ref": "1000111010111100",
+          "dat_out_s_dut": "1000111010111100",
+          "ack_o_s_ref": "1",
+          "ack_o_s_dut": "1",
+          "free_bd_ref": "00110",
+          "free_bd_dut": "00110"
+        },
+        {
+          "t": 375,
+          "a_cmp": "0",
+          "clk": "1",
+          "dat_in_m": "1000111010111100",
+          "re_s": "1",
+          "rst": "0",
+          "we_m": "0",
+          "dat_out_s_ref": "1000111010111100",
+          "dat_out_s_dut": "0000000000000000",
+          "ack_o_s_ref": "1",
+          "ack_o_s_dut": "1",
+          "free_bd_ref": "00110",
+          "free_bd_dut": "00110"
+        },
+        {
+          "t": 380,
+          "a_cmp": "0",
+          "clk": "0",
+          "dat_in_m": "1000111010111100",
+          "re_s": "1",
+          "rst": "0",
+          "we_m": "0",
+          "dat_out_s_ref": "1000111010111100",
+          "dat_out_s_dut": "0000000000000000",
+          "ack_o_s_ref": "1",
+          "ack_o_s_dut": "1",
+          "free_bd_ref": "00110",
+          "free_bd_dut": "00110"
+        },
+        {
+          "t": 385,
+          "a_cmp": "0",
+          "clk": "1",
+          "dat_in_m": "1000111010111100",
+          "re_s": "0",
+          "rst": "0",
+          "we_m": "0",
+          "dat_out_s_ref": "1000111010111100",
+          "dat_out_s_dut": "0000000000000000",
+          "ack_o_s_ref": "0",
+          "ack_o_s_dut": "0",
+          "free_bd_ref": "00110",
+          "free_bd_dut": "00110"
+        },
+        {
+          "t": 390,
+          "a_cmp": "0",
+          "clk": "0",
+          "dat_in_m": "1000111010111100",
+          "re_s": "0",
+          "rst": "0",
+          "we_m": "0",
+          "dat_out_s_ref": "1000111010111100",
+          "dat_out_s_dut": "0000000000000000",
+          "ack_o_s_ref": "0",
+          "ack_o_s_dut": "0",
+          "free_bd_ref": "00110",
+          "free_bd_dut": "00110"
+        }
+      ]
+    },
+    "suspect": {
+      "driver_blocks": [
+        {
+          "id": "A4",
+          "kind": "always",
+          "clocking": "seq",
+          "writes": [
+            "ack_o_s",
+            "dat_out_s"
+          ],
+          "start_line": 138,
+          "end_line": 162
+        },
+        {
+          "id": "A1",
+          "kind": "always",
+          "clocking": "seq",
+          "writes": [
+            "bd_mem_0",
+            "bd_mem_1",
+            "bd_mem_2",
+            "bd_mem_3",
+            "bd_mem_4",
+            "bd_mem_5",
+            "bd_mem_6",
+            "bd_mem_7",
+            "m_wr_pnt",
+            "new_bw",
+            "wr_cnt"
+          ],
+          "start_line": 43,
+          "end_line": 87
+        },
+        {
+          "id": "A3",
+          "kind": "always",
+          "clocking": "seq",
+          "writes": [
+            "rd_cnt",
+            "s_rd_pnt"
+          ],
+          "start_line": 107,
+          "end_line": 134
+        },
+        {
+          "id": "A2",
+          "kind": "always",
+          "clocking": "seq",
+          "writes": [
+            "free_bd",
+            "last_a_cmp"
+          ],
+          "start_line": 90,
+          "end_line": 104
+        }
+      ],
+      "signals": [
+        "ack_o_s",
+        "dat_out_s",
+        "free_bd"
+      ],
+      "hint": "First real DUT/ref output divergence; use this instead of testbench metric counters."
+    },
+    "candidate_signals": [
+      "ack_o_s",
+      "dat_out_s",
+      "free_bd"
+    ],
+    "ignored_tb_metrics": [],
+    "raw_fail_outputs": [
+      {
+        "sig": "dat_out_s",
+        "mismatches": 2037,
+        "time": 385
+      }
+    ],
+    "dut_instance": "top_module1",
+    "ref_instance": "good1"
+  },
+  "required_next_tool": null,
+  "ignored_tb_metrics": [],
+  "raw_fail_outputs": [
+    {
+      "sig": "dat_out_s",
+      "mismatches": 2037,
+      "time": 385
+    }
+  ],
+  "top_diagnosis": "FIRST FAILURE: dat_out_s failed: expected=1000111010111100, actual=0000000000000000. Direct driver A4 classified as condition_blocks_update: Observed condition values appear to block this assignment update.",
+  "fail_outputs": [
+    {
+      "sig": "dat_out_s",
+      "expected": "1000111010111100",
+      "actual": "0000000000000000",
+      "signal_role": "module_output"
+    }
+  ],
+  "suspect_blocks": [
+    {
+      "id": "A4",
+      "kind": "always",
+      "clocking": "seq",
+      "writes": [
+        "ack_o_s",
+        "dat_out_s"
+      ],
+      "start_line": 138,
+      "end_line": 162
+    }
+  ],
+  "timing_hints": {},
+  "alignment_diagnosis": {
+    "dat_out_s": {
+      "best_alignment": "current",
+      "match_rate_dut_lag1": 0.9342105263157895
+    }
+  },
+  "value_backtrace_summary": [
+    {
+      "sig": "dat_out_s",
+      "expected": "1000111010111100",
+      "actual": "0000000000000000",
+      "steps": [
+        {
+          "signal": "dat_out_s",
+          "driver_block_id": "A4",
+          "classification": "condition_blocks_update",
+          "reason": "Observed condition values appear to block this assignment update.",
+          "rhs_observed_values": {
+            "bd_mem_0": "1000111010111100"
+          },
+          "condition_values": {
+            "rst": "0",
+            "s_rd_pnt": "01001"
+          }
+        }
+      ]
+    }
+  ],
+  "vcd_available": true
+}

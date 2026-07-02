@@ -1,0 +1,158 @@
+{
+  "status": "ok",
+  "pattern": "ack_transfer",
+  "scope": "rtl",
+  "results": [
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_master/rtl.sv",
+      "line": 34,
+      "excerpt": "32:     start_rx_fifo,\n33:     sys_adr,\n34:     ack_transfer,\n35:     Dat_Int_Status,\n36:     CIDAT"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_master/rtl.sv",
+      "line": 72,
+      "excerpt": "70: output reg start_rx_fifo;\n71: output reg [31:0] sys_adr;\n72: output reg ack_transfer;\n73: output reg [7:0] Dat_Int_Status;\n74: output reg CIDAT;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_master/rtl.sv",
+      "line": 214,
+      "excerpt": "212:         start_tx_fifo <= 1'b0;\n213:         start_rx_fifo <= 1'b0;\n214:         ack_transfer <= 1'b0;\n215:     end else begin\n216:         state <= #1 next_state;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_master/rtl.sv",
+      "line": 218,
+      "excerpt": "216:         state <= #1 next_state;\n217:         transm_complete_q <= transm_complete;\n218:         if (ack_transfer) begin\n219:             internal_transm_complete <= 1'b0;\n220:         end else if (transm_complete & ~transm_complete_q) begin"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_master/rtl.sv",
+      "line": 235,
+      "excerpt": "233:         start_tx_fifo <= 1'b0;\n234:         start_rx_fifo <= 1'b0;\n235:         ack_transfer <= 1'b0;\n236:         trans_done <= 1'b0;\n237:         trans_failed <= 1'b0;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_master/rtl.sv",
+      "line": 385,
+      "excerpt": "383:             DATA_TRANSFER: begin\n384:                 CIDAT <= 1'b1;\n385:                 ack_transfer <= ack_transfer;\n386:                 start_tx_fifo <= start_tx_fifo;\n387:                 if (tx_cycle && tx_empt) begin"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_master/rtl.sv",
+      "line": 389,
+      "excerpt": "387:                 if (tx_cycle && tx_empt) begin\n388:                     trans_failed <= 1'b1;\n389:                     ack_transfer <= 1'b1;\n390:                 end else if (rx_cycle && rx_full) begin\n391:                     trans_failed <= 1'b1;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_master/rtl.sv",
+      "line": 392,
+      "excerpt": "390:                 end else if (rx_cycle && rx_full) begin\n391:                     trans_failed <= 1'b1;\n392:                     ack_transfer <= 1'b1;\n393:                 end else if (internal_transm_complete) begin\n394:                     if (crc_ok && busy_n) begin"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_master/rtl.sv",
+      "line": 396,
+      "excerpt": "394:                     if (crc_ok && busy_n) begin\n395:                         trans_done <= 1'b1;\n396:                         ack_transfer <= 1'b1;\n397: \n398:                         if (tx_cycle) begin"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_master/rtl.sv",
+      "line": 422,
+      "excerpt": "420:                 start_rx_fifo <= 1'b0;\n421:                 start_tx_fifo <= 1'b0;\n422:                 ack_transfer <= ack_transfer;\n423:             end\n424: "
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_data_master/rtl.sv",
+      "line": 428,
+      "excerpt": "426:                 d_read <= 1'b1;\n427:                 d_write <= 1'b1;\n428:                 ack_transfer <= ack_transfer;\n429: \n430:                 if (!cmd_busy) begin"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_data_master.v",
+      "line": 34,
+      "excerpt": "32:     start_rx_fifo,\n33:     sys_adr,\n34:     ack_transfer,\n35:     Dat_Int_Status,\n36:     CIDAT"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_data_master.v",
+      "line": 72,
+      "excerpt": "70: output reg start_rx_fifo;\n71: output reg [31:0] sys_adr;\n72: output reg ack_transfer;\n73: output reg [7:0] Dat_Int_Status;\n74: output reg CIDAT;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_data_master.v",
+      "line": 214,
+      "excerpt": "212:         start_tx_fifo <= 1'b0;\n213:         start_rx_fifo <= 1'b0;\n214:         ack_transfer <= 1'b0;\n215:     end else begin\n216:         state <= #1 next_state;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_data_master.v",
+      "line": 218,
+      "excerpt": "216:         state <= #1 next_state;\n217:         transm_complete_q <= transm_complete;\n218:         if (ack_transfer) begin\n219:             internal_transm_complete <= 1'b0;\n220:         end else if (transm_complete & ~transm_complete_q) begin"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_data_master.v",
+      "line": 235,
+      "excerpt": "233:         start_tx_fifo <= 1'b0;\n234:         start_rx_fifo <= 1'b0;\n235:         ack_transfer <= 1'b0;\n236:         trans_done <= 1'b0;\n237:         trans_failed <= 1'b0;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_data_master.v",
+      "line": 385,
+      "excerpt": "383:             DATA_TRANSFER: begin\n384:                 CIDAT <= 1'b1;\n385:                 ack_transfer <= ack_transfer;\n386:                 start_tx_fifo <= start_tx_fifo;\n387:                 if (tx_cycle && tx_empt) begin"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_data_master.v",
+      "line": 389,
+      "excerpt": "387:                 if (tx_cycle && tx_empt) begin\n388:                     trans_failed <= 1'b1;\n389:                     ack_transfer <= 1'b1;\n390:                 end else if (rx_cycle && rx_full) begin\n391:                     trans_failed <= 1'b1;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_data_master.v",
+      "line": 392,
+      "excerpt": "390:                 end else if (rx_cycle && rx_full) begin\n391:                     trans_failed <= 1'b1;\n392:                     ack_transfer <= 1'b1;\n393:                 end else if (internal_transm_complete) begin\n394:                     if (crc_ok && busy_n) begin"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_data_master.v",
+      "line": 396,
+      "excerpt": "394:                     if (crc_ok && busy_n) begin\n395:                         trans_done <= 1'b1;\n396:                         ack_transfer <= 1'b1;\n397: \n398:                         if (tx_cycle) begin"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_data_master.v",
+      "line": 422,
+      "excerpt": "420:                 start_rx_fifo <= 1'b0;\n421:                 start_tx_fifo <= 1'b0;\n422:                 ack_transfer <= ack_transfer;\n423:             end\n424: "
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_data_master.v",
+      "line": 428,
+      "excerpt": "426:                 d_read <= 1'b1;\n427:                 d_write <= 1'b1;\n428:                 ack_transfer <= ack_transfer;\n429: \n430:                 if (!cmd_busy) begin"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_data_serial_host.v",
+      "line": 22,
+      "excerpt": "20: //Controll signals\n21: input [1:0] start_dat,\n22: input ack_transfer,\n23: \n24: output reg busy_n,"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_data_serial_host.v",
+      "line": 56,
+      "excerpt": "54: endgenerate\n55: \n56: reg ack_transfer_int;\n57: reg ack_q;\n58: always @ (posedge sd_clk or posedge rst   )"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_data_serial_host.v",
+      "line": 61,
+      "excerpt": "59: begin: ACK_SYNC\n60: if (rst) begin\n61:   ack_transfer_int <=0;\n62:   ack_q<=0;end\n63: else begin"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_data_serial_host.v",
+      "line": 64,
+      "excerpt": "62:   ack_q<=0;end\n63: else begin\n64:   ack_q<=ack_transfer;\n65:   ack_transfer_int<=ack_q;\n66:   end"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_data_serial_host.v",
+      "line": 65,
+      "excerpt": "63: else begin\n64:   ack_q<=ack_transfer;\n65:   ack_transfer_int<=ack_q;\n66:   end\n67: end"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_data_serial_host.v",
+      "line": 70,
+      "excerpt": "68: \n69: reg q_start_bit;\n70: always @ (state or start_dat or q_start_bit or  transf_cnt or crc_status or busy_int or DAT_dat_i or ack_transfer_int)\n71: begin : FSM_COMBO\n72:  next_state  = 0;   "
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_data_serial_host.v",
+      "line": 99,
+      "excerpt": "97:   end\n98:   WRITE_BUSY: begin\n99:       if ( (busy_int ==1)  & ack_transfer_int)\n100:        next_state= IDLE;\n101:     else "
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_data_serial_host.v",
+      "line": 113,
+      "excerpt": "111:   \n112:   READ_DAT: begin\n113:     if ( ack_transfer_int)  //Startbit consumed...\n114:        next_state= IDLE;\n115:     else if (start_dat == 2'b11)"
+    }
+  ],
+  "truncated": true
+}

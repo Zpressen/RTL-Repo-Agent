@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import shutil
@@ -128,6 +129,10 @@ def _metric_delta(before: dict[str, Any], after: dict[str, Any]) -> dict[str, An
         a = after_signals.get(sig) or {}
         b_count = b.get("count")
         a_count = a.get("count")
+        if b_count is None and isinstance(a_count, int):
+            b_count = 0
+        if a_count is None and isinstance(b_count, int):
+            a_count = 0
         direction = "unknown"
         if isinstance(b_count, int) and isinstance(a_count, int):
             if a_count < b_count:
@@ -151,6 +156,81 @@ def _metric_delta(before: dict[str, Any], after: dict[str, Any]) -> dict[str, An
         ),
         "per_signal": per_signal_delta,
     }
+
+
+def _is_tb_metric_signal(sig: str) -> bool:
+    return sig.startswith("errors_")
+
+
+def _promising_mixed_signal_delta(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any] | None:
+    before_signals = before.get("per_signal") if isinstance(before.get("per_signal"), dict) else {}
+    after_signals = after.get("per_signal") if isinstance(after.get("per_signal"), dict) else {}
+    if not before_signals or not after_signals:
+        return None
+    delta = _metric_delta(before, after)
+    per_signal = delta.get("per_signal") if isinstance(delta.get("per_signal"), dict) else {}
+    improved: list[dict[str, Any]] = []
+    regressed: list[dict[str, Any]] = []
+    ignored_tb: list[str] = []
+    for sig, item in per_signal.items():
+        if _is_tb_metric_signal(str(sig)):
+            if item.get("direction") in {"improved", "regressed"}:
+                ignored_tb.append(str(sig))
+            continue
+        before_count = item.get("before")
+        after_count = item.get("after")
+        if not isinstance(before_count, int) or not isinstance(after_count, int):
+            continue
+        change = before_count - after_count
+        row = {
+            "signal": sig,
+            "before": before_count,
+            "after": after_count,
+            "abs_delta": abs(change),
+        }
+        if change > 0:
+            row["reduction_ratio"] = change / max(1, before_count)
+            improved.append(row)
+        elif change < 0:
+            row["growth_ratio"] = (-change) / max(1, before_count)
+            regressed.append(row)
+
+    if not improved:
+        return None
+
+    improvement_sum = sum(int(item["before"]) - int(item["after"]) for item in improved)
+    regression_sum = sum(int(item["after"]) - int(item["before"]) for item in regressed)
+    best_improvement = max(improved, key=lambda item: int(item["abs_delta"]))
+    if improvement_sum < 10:
+        return None
+    if float(best_improvement.get("reduction_ratio") or 0.0) < 0.5:
+        return None
+    if improvement_sum < max(1, regression_sum):
+        return None
+
+    return {
+        "reason": "promising_mixed_signal_delta",
+        "improvement_sum": improvement_sum,
+        "regression_sum": regression_sum,
+        "improved_signals": improved,
+        "regressed_signals": regressed,
+        "ignored_tb_metric_signals": ignored_tb,
+    }
+
+
+def _build_patch_acceptance_prompt(payload: dict[str, Any]) -> str:
+    return (
+        "You are judging whether an RTL repair patch should be kept as the new debugging baseline or rolled back.\n"
+        "Lint/syntax failures are handled outside this judge. For functional simulation failures, do not use a single total mismatch counter mechanically.\n"
+        "Keep a patch when it is a plausible stepping stone: it fixes the target timing/value, moves the first real failure much later, preserves known good changes, or reveals a missing spec/clear condition that should be repaired next.\n"
+        "Rollback a patch when it clearly destroys a protected invariant, only makes the target worse, has no plausible causal progress, or masks the original bug with unrelated behavior.\n"
+        "Pay attention to conflicts between aggregate mismatch counters and per-signal deltas. Testbench metric signals named errors_* are less important than real DUT/ref outputs.\n"
+        "Return only JSON with this shape:\n"
+        "{\"decision\":\"keep|rollback\",\"confidence\":0.0,\"reason\":\"brief\",\"next_focus\":\"brief next repair target if kept\"}\n\n"
+        "<patch_acceptance_payload_json>\n"
+        f"{json.dumps(payload, indent=2, ensure_ascii=False)}\n"
+        "</patch_acceptance_payload_json>\n"
+    )
 
 
 def _summarize_command_json(command_json: str, *, max_chars: int = 4000) -> str:
@@ -178,6 +258,8 @@ class RepoReActToolState:
     sim_reviewer: SimReviewer
     journal: RepoReActJournal
     kg_service: Any | None = None
+    model_cfg: Any | None = None
+    logger: Any | None = None
     last_sim: SimSnapshot = field(default_factory=SimSnapshot)
     last_sim_output: str = ""
     action_calls: int = 0
@@ -195,6 +277,145 @@ class RepoReActToolState:
 class RepoReActTools:
     def __init__(self, state: RepoReActToolState) -> None:
         self.state = state
+
+    def _run_async(self, coroutine: Any) -> Any:
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(coroutine)
+        import threading
+
+        result: dict[str, Any] = {}
+
+        def runner() -> None:
+            try:
+                result["value"] = asyncio.run(coroutine)
+            except BaseException as exc:  # noqa: BLE001
+                result["error"] = exc
+
+        thread = threading.Thread(target=runner)
+        thread.start()
+        thread.join()
+        if "error" in result:
+            raise result["error"]
+        return result.get("value")
+
+    def _parse_acceptance_decision(self, text: str) -> dict[str, Any] | None:
+        try:
+            start = text.find("{")
+            end = text.rfind("}")
+            payload = json.loads(text[start : end + 1] if start >= 0 and end >= start else text)
+        except Exception:  # noqa: BLE001
+            return None
+        if not isinstance(payload, dict):
+            return None
+        decision = str(payload.get("decision") or "").strip().lower()
+        if decision not in {"keep", "rollback"}:
+            return None
+        out = {
+            "decision": decision,
+            "confidence": payload.get("confidence"),
+            "reason": str(payload.get("reason") or ""),
+            "next_focus": str(payload.get("next_focus") or ""),
+        }
+        return out
+
+    def _llm_patch_acceptance_decision(self, payload: dict[str, Any]) -> dict[str, Any] | None:
+        cfg = self.state.model_cfg
+        if cfg is None or not getattr(cfg, "api_key", ""):
+            return None
+        try:
+            from agentscope.memory import InMemoryMemory
+            from agentscope.message import Msg
+            from zerorepo.rtl_impl.debug_agent.agents import SafeReActAgent, clear_memory_safely, close_model_safely
+            from zerorepo.rtl_impl.debug_agent.model import make_formatter, make_openai_model
+        except Exception:  # noqa: BLE001
+            return None
+
+        agent = SafeReActAgent(
+            name="RepoReActPatchAcceptanceJudge",
+            sys_prompt="You decide whether to keep or rollback an RTL patch after functional simulation. Return JSON only.",
+            model=make_openai_model(cfg),
+            formatter=make_formatter(getattr(cfg, "model", None), getattr(cfg, "base_url", None)),
+            memory=InMemoryMemory(),
+            max_iters=2,
+        )
+
+        async def run_agent_once() -> Any:
+            try:
+                return await agent(Msg("user", _build_patch_acceptance_prompt(payload), role="user"))
+            finally:
+                await close_model_safely(agent)
+
+        try:
+            text = self._run_async(run_agent_once()).get_text_content() or ""
+        except Exception as exc:  # noqa: BLE001
+            if self.state.logger is not None:
+                self.state.logger.debug("Patch acceptance judge failed, using fallback: %s", exc)
+            return None
+        finally:
+            try:
+                clear_memory_safely(agent)
+            except Exception:  # noqa: BLE001
+                pass
+        return self._parse_acceptance_decision(text)
+
+    def _fallback_acceptance_decision(
+        self,
+        *,
+        before_sim: SimSnapshot,
+        first_fail: int | None,
+        before_metrics: dict[str, Any],
+        after_metrics: dict[str, Any],
+        mixed_acceptance: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        if mixed_acceptance:
+            return {
+                "decision": "keep",
+                "confidence": 0.55,
+                "reason": "Fallback kept patch because real per-signal improvements outweigh real per-signal regressions.",
+                "next_focus": "Repair regressed signals from mixed_signal_delta.",
+                "source": "promising_mixed_signal_delta",
+            }
+        if before_sim.first_fail_time is not None and first_fail is not None:
+            moved_by = int(first_fail) - int(before_sim.first_fail_time)
+            if moved_by >= 100:
+                return {
+                    "decision": "keep",
+                    "confidence": 0.52,
+                    "reason": f"Fallback kept patch because first failure moved later by {moved_by} time units.",
+                    "next_focus": "Find the new later failure/clear condition before broad rollback.",
+                    "source": "script_fallback_first_fail_moved_much_later",
+                }
+        delta = _metric_delta(before_metrics, after_metrics)
+        per_signal = delta.get("per_signal") if isinstance(delta.get("per_signal"), dict) else {}
+        real_directions = [
+            item.get("direction")
+            for sig, item in per_signal.items()
+            if not _is_tb_metric_signal(str(sig)) and item.get("direction") != "unchanged"
+        ]
+        before_total = before_metrics.get("total_samples_mismatch")
+        after_total = after_metrics.get("total_samples_mismatch")
+        if (
+            isinstance(before_total, int)
+            and isinstance(after_total, int)
+            and after_total < before_total
+            and "regressed" not in real_directions
+        ):
+            return {
+                "decision": "keep",
+                "confidence": 0.5,
+                "reason": "Fallback kept patch because total sample mismatches improved and no real output signal regressed.",
+                "next_focus": "Continue from the improved baseline.",
+                "source": "script_fallback_clean_total_improvement",
+            }
+        return {
+            "decision": "rollback",
+            "confidence": 0.5,
+            "reason": "Fallback rolled back because no LLM judge was available and no conservative keep heuristic matched.",
+            "next_focus": "Retry with stronger evidence or enable model-based acceptance judging.",
+            "source": "script_fallback_conservative_rollback",
+        }
 
     # ------------------------------------------------------------------
     # Path helpers
@@ -266,7 +487,12 @@ class RepoReActTools:
         name = path.name
         lowered = str(path).lower()
         for token in FORBIDDEN_EDIT_PARTS:
-            if token in parts or token == name or token.lower() in lowered:
+            if token in parts or token == name:
+                return f"Editing forbidden path token '{token}' is not allowed: {path}"
+            # Only match the token as a whole path segment, not as a substring
+            # inside a longer directory name (e.g. "spec" in "aes_unified_functional_spec").
+            token_lower = token.lower()
+            if f"/{token_lower}/" in lowered or lowered.startswith(f"{token_lower}/") or lowered.endswith(f"/{token_lower}"):
                 return f"Editing forbidden path token '{token}' is not allowed: {path}"
         if path.suffix.lower() not in {".v", ".sv"}:
             return f"Only .v/.sv RTL files may be patched, got: {path}"
@@ -277,6 +503,39 @@ class RepoReActTools:
             return hashlib.sha256(self.state.input.rtl_path.read_bytes()).hexdigest()
         except OSError:
             return ""
+
+    def _resolve_long_term_memory_path(self, raw_path: str) -> tuple[Path | None, str]:
+        memory_root = (self.state.input.workspace_root / "rtl_memory").resolve()
+        path = Path(str(raw_path or "")).expanduser()
+        if not str(path):
+            return None, "Memory path is required."
+        resolved = path.resolve() if path.is_absolute() else (memory_root / path).resolve()
+        try:
+            rel = resolved.relative_to(memory_root)
+        except ValueError:
+            return None, f"Path is outside rtl_memory root: {raw_path}"
+        if resolved.suffix.lower() != ".md":
+            return None, f"Only .md long-term memory files may be read: {raw_path}"
+        if not resolved.is_file():
+            return None, f"Long-term memory file not found: {raw_path}"
+        if rel.parts and rel.parts[0] not in {"cases", "patterns", "corrections", "rules"}:
+            return None, f"Unsupported long-term memory directory: {rel.parts[0]}"
+        return resolved, ""
+
+    def read_long_term_memory(self, path: str, max_chars: int = 8000) -> dict[str, Any]:
+        resolved, error = self._resolve_long_term_memory_path(path)
+        if resolved is None:
+            return {"status": "error", "path": path, "error": error}
+        memory_root = (self.state.input.workspace_root / "rtl_memory").resolve()
+        text = resolved.read_text(encoding="utf-8", errors="replace")
+        rel = resolved.relative_to(memory_root).as_posix()
+        return {
+            "status": "ok",
+            "path": rel,
+            "absolute_path": str(resolved),
+            "content": _clip(text, max_chars=max(1000, int(max_chars))),
+            "truncated": len(text) > max(1000, int(max_chars)),
+        }
 
     def _read_jsonl(self, name: str) -> list[dict[str, Any]]:
         path = self.state.journal.root / name
@@ -291,6 +550,25 @@ class RepoReActTools:
             if isinstance(obj, dict):
                 rows.append(obj)
         return rows
+
+    def _record_patch_entry(self, entry: dict[str, Any]) -> None:
+        self.state.journal.append_jsonl("patch_journal.jsonl", entry)
+        self.persist_memory_snapshot()
+        try:
+            from zerorepo.rtl_impl.rtl_memory import RTLMemoryDistiller
+
+            RTLMemoryDistiller(
+                self.state.input.workspace_root,
+                logger=self.state.logger,
+            ).distill_patch_entry(
+                module=self.state.input.module_name,
+                entry=entry,
+                debug_workdir=self.state.input.debug_workdir,
+                repo_react_root=self.state.journal.root,
+            )
+        except Exception as exc:  # noqa: BLE001
+            if self.state.logger is not None:
+                self.state.logger.warning("Failed to distill patch entry into RTL memory: %s", exc)
 
     def _summarize_code(self, text: str, *, max_chars: int = 180) -> str:
         compact = " ".join(line.strip() for line in str(text).splitlines() if line.strip())
@@ -316,6 +594,11 @@ class RepoReActTools:
         status = str(result.get("status") or "")
         if status == "pass" or (result.get("is_pass") and int(result.get("mismatch_count") or 0) == 0):
             return "passed"
+        if status == "improved":
+            return "improved"
+        acceptance = result.get("acceptance_decision") if isinstance(result.get("acceptance_decision"), dict) else {}
+        if acceptance.get("decision") == "keep":
+            return "improved"
         if status == "rollback":
             reason = str(result.get("rollback_reason") or "")
             if "lint" in reason:
@@ -352,6 +635,11 @@ class RepoReActTools:
         if effect == "passed":
             return "Patch fixed all observed mismatches."
         if effect == "improved":
+            acceptance = result.get("acceptance_decision") if isinstance(result.get("acceptance_decision"), dict) else {}
+            if acceptance.get("decision") == "keep":
+                return f"Patch was kept by acceptance judge: {acceptance.get('reason') or 'continue from this functional stepping stone.'}"
+            if result.get("acceptance_reason") == "promising_mixed_signal_delta":
+                return "Patch had higher total mismatch but strong per-signal improvement; keep this direction and repair regressed signals next."
             return "Patch improved mismatch count or first fail time; continue from this direction."
         if effect == "neutral":
             return "Patch was accepted but did not clearly improve tracked metrics."
@@ -710,6 +998,7 @@ class RepoReActTools:
                 },
             },
             "repair_ledger": self._repair_ledger(limit=10),
+            "promising_directions": self._directions_by_effect({"passed", "improved"}, limit=5),
             "protected_invariants": protected,
             "unsafe_directions": self._unsafe_directions(limit=8),
             "next_local_target": self._next_local_target(protected),
@@ -773,8 +1062,7 @@ class RepoReActTools:
             "patches": patches or [],
             "result": result,
         }
-        self.state.journal.append_jsonl("patch_journal.jsonl", entry)
-        self.persist_memory_snapshot()
+        self._record_patch_entry(entry)
         return result
 
     # ------------------------------------------------------------------
@@ -1363,8 +1651,7 @@ class RepoReActTools:
                 "patches": patches,
                 "result": result,
             }
-            self.state.journal.append_jsonl("patch_journal.jsonl", entry)
-            self.persist_memory_snapshot()
+            self._record_patch_entry(entry)
             return result
 
         if not self.state.observed_rtl:
@@ -1518,8 +1805,7 @@ class RepoReActTools:
                 "patches": patches,
                 "result": final_result,
             }
-            self.state.journal.append_jsonl("patch_journal.jsonl", entry)
-            self.persist_memory_snapshot()
+            self._record_patch_entry(entry)
 
         if not verify:
             result["status"] = "kept_unverified"
@@ -1579,6 +1865,54 @@ class RepoReActTools:
         ):
             rollback_reason = "first_fail_time_regressed"
 
+        mixed_acceptance = None
+        if rollback_reason == "mismatch_count_regressed":
+            mixed_acceptance = _promising_mixed_signal_delta(before_metrics, after_metrics_holder.get("metrics", {}))
+            if mixed_acceptance:
+                result["mixed_signal_delta"] = mixed_acceptance
+
+        if rollback_reason and rollback_on_fail:
+            result["script_rollback_recommendation"] = rollback_reason
+            acceptance_payload = {
+                "module": self.state.input.module_name,
+                "action_type": action_type,
+                "block_id": block_id,
+                "target": target,
+                "changed_signals": changed_signals,
+                "reason": reason,
+                "expected_effect": expected_effect,
+                "patch_summary": patch_summary,
+                "script_rollback_recommendation": rollback_reason,
+                "before": before_summary,
+                "after": {
+                    "is_pass": bool(is_pass),
+                    "mismatch_count": int(mismatch_count),
+                    "first_fail_time": first_fail,
+                },
+                "before_metrics": before_metrics,
+                "after_metrics": after_metrics_holder.get("metrics", {}),
+                "metric_delta": _metric_delta(before_metrics, after_metrics_holder.get("metrics", {})),
+                "mixed_signal_delta": mixed_acceptance,
+                "latest_trace_summary": self.state.last_trace_summary,
+                "last_divergence_summary": self.state.last_divergence_summary,
+                "protected_invariants_checked": protected_invariants_checked or [],
+                "preserve_plan": preserve_plan,
+                "relevant_protected_invariants": relevant_invariants,
+            }
+            acceptance = self._llm_patch_acceptance_decision(acceptance_payload)
+            if acceptance is None:
+                acceptance = self._fallback_acceptance_decision(
+                    before_sim=before_sim,
+                    first_fail=first_fail,
+                    before_metrics=before_metrics,
+                    after_metrics=after_metrics_holder.get("metrics", {}),
+                    mixed_acceptance=mixed_acceptance,
+                )
+            result["acceptance_decision"] = acceptance
+            if acceptance.get("decision") == "keep":
+                result["acceptance_reason"] = acceptance.get("source") or "llm_kept_functional_regression"
+                rollback_reason = ""
+
         if rollback_reason and rollback_on_fail:
             rtl_path.write_text(before_text, encoding="utf-8")
             self.state.last_sim = before_sim
@@ -1612,7 +1946,9 @@ class RepoReActTools:
                 and first_fail is not None
                 and int(first_fail) > int(before_sim.first_fail_time)
             )
-            if improved or fail_moved_later:
+            acceptance = result.get("acceptance_decision") if isinstance(result.get("acceptance_decision"), dict) else {}
+            accepted_keep = acceptance.get("decision") == "keep"
+            if improved or fail_moved_later or mixed_acceptance or accepted_keep:
                 result["status"] = "improved"
                 self.state.neutral_kept = 0
             else:

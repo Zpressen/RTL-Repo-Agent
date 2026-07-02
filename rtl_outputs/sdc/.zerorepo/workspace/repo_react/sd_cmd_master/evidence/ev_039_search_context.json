@@ -1,0 +1,58 @@
+{
+  "status": "ok",
+  "pattern": "Watchdog_Cnt",
+  "scope": "rtl",
+  "results": [
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_cmd_master/rtl.sv",
+      "line": 68,
+      "excerpt": "66: \n67:     // Watchdog / debounce\n68:     reg [15:0] Watchdog_Cnt;\n69:     reg [3:0]  debounce;\n70:     reg        card_present;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_cmd_master/rtl.sv",
+      "line": 113,
+      "excerpt": "111:     assign crc_valid              = status[CRC_VALID_BIT];\n112:     assign command_index_mismatch = (cmd_out[37:32] != cmd_in[37:32]);\n113:     assign timeout_expired        = (Watchdog_Cnt >= TIMEOUT_REG);\n114:     assign response_present       = (response_size != 7'b0000000);\n115: "
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_cmd_master/rtl.sv",
+      "line": 252,
+      "excerpt": "250:             index_check_enable <= 1'b0;\n251:             ack_out            <= 1'b0;\n252:             Watchdog_Cnt       <= 16'b0000000000000000;\n253:             go_idle_o          <= 1'b0;\n254:         end else begin"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_cmd_master/rtl.sv",
+      "line": 283,
+      "excerpt": "281:                     cmd_out            <= next_cmd_out;\n282:                     settings           <= next_settings;\n283:                     Watchdog_Cnt       <= 16'b0000000000000000;\n284:                 end\n285: "
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_cmd_master/rtl.sv",
+      "line": 287,
+      "excerpt": "285: \n286:                 EXECUTE: begin\n287:                     Watchdog_Cnt <= Watchdog_Cnt + 16'b0000000000000001;\n288: \n289:                     if (timeout_expired) begin"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_cmd_master.v",
+      "line": 68,
+      "excerpt": "66: \n67:     // Watchdog / debounce\n68:     reg [15:0] Watchdog_Cnt;\n69:     reg [3:0]  debounce;\n70:     reg        card_present;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_cmd_master.v",
+      "line": 113,
+      "excerpt": "111:     assign crc_valid              = status[CRC_VALID_BIT];\n112:     assign command_index_mismatch = (cmd_out[37:32] != cmd_in[37:32]);\n113:     assign timeout_expired        = (Watchdog_Cnt >= TIMEOUT_REG);\n114:     assign response_present       = (response_size != 7'b0000000);\n115: "
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_cmd_master.v",
+      "line": 252,
+      "excerpt": "250:             index_check_enable <= 1'b0;\n251:             ack_out            <= 1'b0;\n252:             Watchdog_Cnt       <= 16'b0000000000000000;\n253:             go_idle_o          <= 1'b0;\n254:         end else begin"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_cmd_master.v",
+      "line": 283,
+      "excerpt": "281:                     cmd_out            <= next_cmd_out;\n282:                     settings           <= next_settings;\n283:                     Watchdog_Cnt       <= 16'b0000000000000000;\n284:                 end\n285: "
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_cmd_master.v",
+      "line": 287,
+      "excerpt": "285: \n286:                 EXECUTE: begin\n287:                     Watchdog_Cnt <= Watchdog_Cnt + 16'b0000000000000001;\n288: \n289:                     if (timeout_expired) begin"
+    }
+  ],
+  "truncated": false
+}

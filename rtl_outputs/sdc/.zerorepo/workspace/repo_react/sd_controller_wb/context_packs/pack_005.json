@@ -1,0 +1,1707 @@
+{
+  "schema_version": "debug_context_pack_v1",
+  "goal": "compact_resume",
+  "module": "sd_controller_wb",
+  "repair_mode": "functional",
+  "pack_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/repo_react/sd_controller_wb/context_packs/pack_005.json",
+  "task_frame": {
+    "current_target": {
+      "signal": "wb_dat_o",
+      "time": 325,
+      "sampling_mode": "stable",
+      "status": "ok",
+      "classification": "dut_late",
+      "ref": "00000000000000000000000000000010",
+      "dut": "00000000000000000000000000000000",
+      "symptom": "DUT/ref stable value mismatch.",
+      "suspect_blocks": [
+        "A2",
+        "A1",
+        "C1",
+        "C9",
+        "C29",
+        "C31",
+        "C32",
+        "C21"
+      ],
+      "must_preserve": [
+        "Preserve improved behavior for signals: wb_dat_o.",
+        "Preserve New_CMD sampling/reset-release timing behavior."
+      ]
+    },
+    "top_diagnosis": "FIRST FAILURE: wb_dat_o failed: expected=00000000000000000000000000000010, actual=00000000000000000000000000000000. Direct driver A2 classified as condition_blocks_update: Observed condition values appear to block this assignment update.",
+    "protected_invariants": [
+      "Preserve improved behavior for signals: wb_dat_o.",
+      "Preserve New_CMD sampling/reset-release timing behavior."
+    ],
+    "unsafe_directions": [
+      "Syntax-failed direction at step 2: if (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\n...<snip>...\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i[7:0]; end end"
+    ],
+    "next_action_hint": "patch_when_causal_diagnosis_is_clear",
+    "required_next_tool": null
+  },
+  "evidence_pack": [
+    {
+      "evidence_id": "ev_058_initial_trace",
+      "kind": "trace",
+      "summary": "initial_trace: fail_time=330; total_mismatches=9552; top_diagnosis=FIRST FAILURE: wb_dat_o failed: expected=00000000000000000000000000000010, actual=00000000000000000000000000000000. Direct driver A2 classified as condition_blocks_update: Observed condition values appear to block this assignment update.; first_failure={'signal': 'wb_dat_o', 'time': 325, 'ref': '00000000000000000000000000000010', 'dut': '00000000000000000000000000000000', 'classif\n...<snip>...\nsmatches': 422, 'time': 3180}, {'sig': 'Bd_isr_enable_reg', 'mismatches': 354, 'time': 4420}, {'sig': 'Bd_isr_reset', 'mismatches': 154, 'time': 5450}, {'sig': 'normal_isr_reset', 'mismatches': 124, 'time': 3790}, {'sig': 'error_isr_reset', 'mismatches': 142, 'time': 12520}, {'sig': 'dat_in_m_rx_bd', 'mismatches': 572, 'time': 470}, {'sig': 'dat_in_m_tx_bd', 'mismatches': 940, 'time': 480}], 'dut_instance': 'top_module1', 'ref_instance': 'good1'}",
+      "artifact_ref": {
+        "kind": "trace",
+        "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/repo_react/sd_controller_wb/evidence/ev_058_initial_trace.json",
+        "artifact_id": "ev_058_initial_trace",
+        "description": "Full trace report."
+      },
+      "why_selected": "Trace summary anchors the current failure target.",
+      "salient": {
+        "module": "sd_controller_wb",
+        "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/trace_report.json"
+      }
+    },
+    {
+      "evidence_id": "ev_059_first_divergence",
+      "kind": "trace",
+      "summary": "first_divergence: status=ok; first_divergence={'signal': 'wb_dat_o', 'time': 325, 'ref': '00000000000000000000000000000010', 'dut': '00000000000000000000000000000000', 'classification': 'dut_late', 'ref_path': 'tb.wb_dat_o_ref[31:0]', 'dut_path': 'tb.wb_dat_o_dut[31:0]', 'sampling_mode': 'stable', 'edge': None, 'driver_assignment_kind': 'nonblocking', 'active_region_model': 'settled VCD ref/dut values at sample/change times'}",
+      "artifact_ref": {
+        "kind": "trace",
+        "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/repo_react/sd_controller_wb/evidence/ev_059_first_divergence.json",
+        "artifact_id": "ev_059_first_divergence",
+        "description": "Full trace report."
+      },
+      "why_selected": "First divergence preserves timing-sensitive evidence.",
+      "salient": {
+        "module": "sd_controller_wb"
+      }
+    },
+    {
+      "evidence_id": "ev_060_causal_memory",
+      "kind": "memory",
+      "summary": "causal_memory: {\"repair_ledger\": [{\"step\": 1, \"action_type\": \"apply_patch\", \"block_id\": null, \"target\": {\"path\": \"/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv\", \"start_line\": 362, \"end_line\": 362}, \"affected_signals\": [\"wb_dat_o\"], \"effect\": \"improved\", \"metric_delta\": {\"total_samples_mismatch\": \"9928 -> 9676\", \"per_signal\": {\"Bd_isr_enable_reg\": {\"before\": 830, \"after\": 830, \"first_time_before\": 442\n...<snip>...\n New_CMD sampling/reset-release timing behavior.\"]}], \"protected_invariants\": [\"Preserve improved behavior for signals: wb_dat_o.\", \"Preserve New_CMD sampling/reset-release timing behavior.\"], \"unsafe_directions\": [\"Syntax-failed direction at step 2: if (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\\n...<snip>...\\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i[7:0]; end end\"]}",
+      "artifact_ref": {
+        "kind": "journal",
+        "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/repo_react/sd_controller_wb/evidence/ev_060_causal_memory.json",
+        "artifact_id": "ev_060_causal_memory",
+        "description": "Full patch attempt journal."
+      },
+      "why_selected": "Recent local repair memory helps avoid repeated failures.",
+      "salient": {
+        "module": "sd_controller_wb"
+      }
+    },
+    {
+      "evidence_id": "ev_061_spec_index",
+      "kind": "spec",
+      "summary": "spec_index: {\"path\": \"/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_controller_wb.md\"}",
+      "artifact_ref": {
+        "kind": "spec",
+        "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/repo_react/sd_controller_wb/evidence/ev_061_spec_index.json",
+        "artifact_id": "ev_061_spec_index",
+        "description": "Original spec path or in-memory spec_text fallback."
+      },
+      "why_selected": "Spec path is available for just-in-time requirement lookup.",
+      "salient": {
+        "module": "sd_controller_wb",
+        "path": "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_controller_wb.md"
+      }
+    },
+    {
+      "evidence_id": "ev_062_long_term_memory",
+      "kind": "memory",
+      "summary": "long_term_memory: [{\"path\": \"cases/debug_sd_controller_wb_wb_dat_o_improved_3.md\", \"memory_id\": \"debug_sd_controller_wb_wb_dat_o_improved_3\", \"type\": \"repair_outcome\", \"stage\": \"debug\", \"module\": \"sd_controller_wb\", \"signals\": [\"Bd_isr_enable_reg_next\", \"Bd_isr_reset_next\", \"argument_reg_next\", \"clock_divider_next\", \"cmd_setting_reg_next\", \"error_int_signal_enable_reg_next\", \"error_isr_reset_next\", \"int_busy_next\", \"new_cmd_next\", \"normal_int_sig\n...<snip>...\nf (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\\n...<snip>...\\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i[7:0]; end end\\n\\n## Lesson\\n\\nPatch failed lint and was rolled back; fix syntax before retrying this idea.\\n\\n## Reuse Constraints\\n\\n- Read current RTL/spec evidence before applying a similar patch.\\n- Do not reuse if affected signals or timing alignment differ.\\n\"}]",
+      "artifact_ref": {
+        "kind": "memory_index",
+        "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/repo_react/sd_controller_wb/evidence/ev_062_long_term_memory.json",
+        "artifact_id": "ev_062_long_term_memory",
+        "description": "RTL long-term memory index."
+      },
+      "why_selected": "Selected long-term memory files match this module/failure context.",
+      "salient": {
+        "module": "sd_controller_wb",
+        "count": 3
+      }
+    }
+  ],
+  "active_working_set": {
+    "current_failure": {
+      "signal": "wb_dat_o",
+      "time": 325,
+      "edge": "",
+      "sampling_mode": "stable",
+      "ref": "00000000000000000000000000000010",
+      "dut": "00000000000000000000000000000000",
+      "driver_assignment_kind": "nonblocking",
+      "block_id": "A2",
+      "line_range": [
+        345,
+        407
+      ],
+      "top_diagnosis": "FIRST FAILURE: wb_dat_o failed: expected=00000000000000000000000000000010, actual=00000000000000000000000000000000. Direct driver A2 classified as condition_blocks_update: Observed condition values appear to block this assignment update."
+    },
+    "active_hypotheses": [
+      {
+        "id": "hyp_current_failure",
+        "text": "FIRST FAILURE: wb_dat_o failed: expected=00000000000000000000000000000010, actual=00000000000000000000000000000000. Direct driver A2 classified as condition_blocks_update: Observed condition values appear to block this assignment update.",
+        "status": "active",
+        "evidence_ids": [
+          "ev_058_initial_trace",
+          "ev_059_first_divergence",
+          "ev_060_causal_memory"
+        ],
+        "related_blocks": [
+          "A2"
+        ],
+        "related_signals": [
+          "wb_dat_o"
+        ],
+        "next_check": "",
+        "rejected_reason": ""
+      },
+      {
+        "id": "hyp_improved_1",
+        "text": "At t=145, wb_rst_i pulses high. Block A2 resets wb_dat_o to 0 (line 362: wb_dat_o <= 32'h00000000), but the ref model does NOT reset wb_dat_o — it holds the previous value (0xC4) and only updates via wb_dat_o_next. Changing to wb_dat_o <= wb_dat_o_next ensures wb_dat_o follows the combinational data path during reset: at t=145 it reads software_reset_reg=0xC4 (pre-reset, since nonblocking) → holds 0xC4; at t=155 it reads software_reset_reg=0x00 (post-reset) → becomes 0x00. This matches the ref trace exactly. Expected effect: wb_dat_o matches ref at t=145 (0xC4 instead of 0x00), fixing the first divergence. The mismatch count for wb_dat_o should drop from 3258 significantly.",
+        "status": "supported",
+        "evidence_ids": [],
+        "related_blocks": [],
+        "related_signals": [
+          "wb_dat_o"
+        ],
+        "next_check": "Preserve this improved behavior while continuing repair.",
+        "rejected_reason": ""
+      },
+      {
+        "id": "hyp_improved_3",
+        "text": "The spec states wb_sel_i is 'not used in the module'. At t=285, wb_sel_i=1100 blocks lower byte writes to argument_reg. Removing all if(wb_sel_byte*) conditions makes all register writes unconditional for their respective widths, matching the ref. Fixed line range to include original line 301 (outer end). Expected effect: argument_reg and other config registers written with full width regardless of wb_sel_i. Should reduce argument_reg mismatch count (8540), cmd_setting_reg (8472), and other byte-gated registers.",
+        "status": "supported",
+        "evidence_ids": [],
+        "related_blocks": [],
+        "related_signals": [
+          "Bd_isr_enable_reg_next",
+          "Bd_isr_reset_next",
+          "argument_reg_next",
+          "clock_divider_next",
+          "cmd_setting_reg_next",
+          "error_int_signal_enable_reg_next",
+          "error_isr_reset_next",
+          "int_busy_next",
+          "new_cmd_next",
+          "normal_int_signal_enable_reg_next",
+          "normal_isr_reset_next",
+          "software_reset_reg_next",
+          "time_out_reg_next"
+        ],
+        "next_check": "Preserve this improved behavior while continuing repair.",
+        "rejected_reason": ""
+      }
+    ],
+    "pinned_evidence": [
+      {
+        "evidence_id": "ev_058_initial_trace",
+        "kind": "trace",
+        "summary": "initial_trace: fail_time=330; total_mismatches=9552; top_diagnosis=FIRST FAILURE: wb_dat_o failed: expected=00000000000000000000000000000010, actual=00000000000000000000000000000000. Direct driver A2 classified as condition_blocks_update: Observed condition values appear to block this assignment update.; first_failure={'signal': 'wb_dat_o', 'time': 325, 'ref': '00000000000000000000000000000010', 'dut': '00000000000000000000000000000000', 'classif\n...<snip>...\nsmatches': 422, 'time': 3180}, {'sig': 'Bd_isr_enable_reg', 'mismatches': 354, 'time': 4420}, {'sig': 'Bd_isr_reset', 'mismatches': 154, 'time': 5450}, {'sig': 'normal_isr_reset', 'mismatches': 124, 'time': 3790}, {'sig': 'error_isr_reset', 'mismatches': 142, 'time': 12520}, {'sig': 'dat_in_m_rx_bd', 'mismatches': 572, 'time': 470}, {'sig': 'dat_in_m_tx_bd', 'mismatches': 940, 'time': 480}], 'dut_instance': 'top_module1', 'ref_instance': 'good1'}",
+        "artifact_ref": {
+          "kind": "trace",
+          "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/repo_react/sd_controller_wb/evidence/ev_058_initial_trace.json",
+          "artifact_id": "ev_058_initial_trace",
+          "description": "Full trace report."
+        },
+        "why_kept": "Trace summary anchors the current failure target.",
+        "salient": {
+          "module": "sd_controller_wb",
+          "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/trace_report.json"
+        }
+      },
+      {
+        "evidence_id": "ev_059_first_divergence",
+        "kind": "trace",
+        "summary": "first_divergence: status=ok; first_divergence={'signal': 'wb_dat_o', 'time': 325, 'ref': '00000000000000000000000000000010', 'dut': '00000000000000000000000000000000', 'classification': 'dut_late', 'ref_path': 'tb.wb_dat_o_ref[31:0]', 'dut_path': 'tb.wb_dat_o_dut[31:0]', 'sampling_mode': 'stable', 'edge': None, 'driver_assignment_kind': 'nonblocking', 'active_region_model': 'settled VCD ref/dut values at sample/change times'}",
+        "artifact_ref": {
+          "kind": "trace",
+          "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/repo_react/sd_controller_wb/evidence/ev_059_first_divergence.json",
+          "artifact_id": "ev_059_first_divergence",
+          "description": "Full trace report."
+        },
+        "why_kept": "First divergence preserves timing-sensitive evidence.",
+        "salient": {
+          "module": "sd_controller_wb"
+        }
+      },
+      {
+        "evidence_id": "ev_060_causal_memory",
+        "kind": "memory",
+        "summary": "causal_memory: {\"repair_ledger\": [{\"step\": 1, \"action_type\": \"apply_patch\", \"block_id\": null, \"target\": {\"path\": \"/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv\", \"start_line\": 362, \"end_line\": 362}, \"affected_signals\": [\"wb_dat_o\"], \"effect\": \"improved\", \"metric_delta\": {\"total_samples_mismatch\": \"9928 -> 9676\", \"per_signal\": {\"Bd_isr_enable_reg\": {\"before\": 830, \"after\": 830, \"first_time_before\": 442\n...<snip>...\n New_CMD sampling/reset-release timing behavior.\"]}], \"protected_invariants\": [\"Preserve improved behavior for signals: wb_dat_o.\", \"Preserve New_CMD sampling/reset-release timing behavior.\"], \"unsafe_directions\": [\"Syntax-failed direction at step 2: if (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\\n...<snip>...\\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i[7:0]; end end\"]}",
+        "artifact_ref": {
+          "kind": "journal",
+          "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/repo_react/sd_controller_wb/evidence/ev_060_causal_memory.json",
+          "artifact_id": "ev_060_causal_memory",
+          "description": "Full patch attempt journal."
+        },
+        "why_kept": "Recent local repair memory helps avoid repeated failures.",
+        "salient": {
+          "module": "sd_controller_wb"
+        }
+      },
+      {
+        "evidence_id": "ev_061_spec_index",
+        "kind": "spec",
+        "summary": "spec_index: {\"path\": \"/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_controller_wb.md\"}",
+        "artifact_ref": {
+          "kind": "spec",
+          "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/repo_react/sd_controller_wb/evidence/ev_061_spec_index.json",
+          "artifact_id": "ev_061_spec_index",
+          "description": "Original spec path or in-memory spec_text fallback."
+        },
+        "why_kept": "Spec path is available for just-in-time requirement lookup.",
+        "salient": {
+          "module": "sd_controller_wb",
+          "path": "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_controller_wb.md"
+        }
+      },
+      {
+        "evidence_id": "ev_062_long_term_memory",
+        "kind": "memory",
+        "summary": "long_term_memory: [{\"path\": \"cases/debug_sd_controller_wb_wb_dat_o_improved_3.md\", \"memory_id\": \"debug_sd_controller_wb_wb_dat_o_improved_3\", \"type\": \"repair_outcome\", \"stage\": \"debug\", \"module\": \"sd_controller_wb\", \"signals\": [\"Bd_isr_enable_reg_next\", \"Bd_isr_reset_next\", \"argument_reg_next\", \"clock_divider_next\", \"cmd_setting_reg_next\", \"error_int_signal_enable_reg_next\", \"error_isr_reset_next\", \"int_busy_next\", \"new_cmd_next\", \"normal_int_sig\n...<snip>...\nf (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\\n...<snip>...\\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i[7:0]; end end\\n\\n## Lesson\\n\\nPatch failed lint and was rolled back; fix syntax before retrying this idea.\\n\\n## Reuse Constraints\\n\\n- Read current RTL/spec evidence before applying a similar patch.\\n- Do not reuse if affected signals or timing alignment differ.\\n\"}]",
+        "artifact_ref": {
+          "kind": "memory_index",
+          "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/repo_react/sd_controller_wb/evidence/ev_062_long_term_memory.json",
+          "artifact_id": "ev_062_long_term_memory",
+          "description": "RTL long-term memory index."
+        },
+        "why_kept": "Selected long-term memory files match this module/failure context.",
+        "salient": {
+          "module": "sd_controller_wb",
+          "count": 3
+        }
+      }
+    ],
+    "pinned_code_slices": [],
+    "pinned_spec_clauses": [],
+    "waveform_facts": [
+      {
+        "signal": "wb_dat_o",
+        "time": 325,
+        "edge": "",
+        "ref": "00000000000000000000000000000010",
+        "dut": "00000000000000000000000000000000",
+        "classification": "stable",
+        "source": "timing_evidence"
+      }
+    ],
+    "accepted_patch_summaries": [
+      {
+        "step": 1,
+        "action_type": "apply_patch",
+        "block_id": null,
+        "target": {
+          "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+          "start_line": 362,
+          "end_line": 362
+        },
+        "changed_signals": [
+          "wb_dat_o"
+        ],
+        "effect": "improved",
+        "metric_delta": {
+          "total_samples_mismatch": "9928 -> 9676",
+          "per_signal": {
+            "Bd_isr_enable_reg": {
+              "before": 830,
+              "after": 830,
+              "first_time_before": 4420,
+              "first_time_after": 4420,
+              "direction": "unchanged"
+            },
+            "Bd_isr_reset": {
+              "before": 154,
+              "after": 154,
+              "first_time_before": 5450,
+              "first_time_after": 5450,
+              "direction": "unchanged"
+            },
+            "argument_reg": {
+              "before": 8540,
+              "after": 8540,
+              "first_time_before": 290,
+              "first_time_after": 290,
+              "direction": "unchanged"
+            },
+            "clock_divider": {
+              "before": 1290,
+              "after": 1290,
+              "first_time_before": 430,
+              "first_time_after": 430,
+              "direction": "unchanged"
+            },
+            "cmd_int_busy": {
+              "before": 1880,
+              "after": 1880,
+              "first_time_before": 2880,
+              "first_time_after": 2880,
+              "direction": "unchanged"
+            },
+            "cmd_setting_reg": {
+              "before": 8472,
+              "after": 8472,
+              "first_time_before": 300,
+              "first_time_after": 300,
+              "direction": "unchanged"
+            },
+            "dat_in_m_rx_bd": {
+              "before": 572,
+              "after": 572,
+              "first_time_before": 470,
+              "first_time_after": 470,
+              "direction": "unchanged"
+            },
+            "dat_in_m_tx_bd": {
+              "before": 940,
+              "after": 940,
+              "first_time_before": 480,
+              "first_time_after": 480,
+              "direction": "unchanged"
+            },
+            "error_int_signal_enable_reg": {
+              "before": 1872,
+              "after": 1872,
+              "first_time_before": 410,
+              "first_time_after": 410,
+              "direction": "unchanged"
+            },
+            "error_isr_reset": {
+              "before": 142,
+              "after": 142,
+              "first_time_before": 12520,
+              "first_time_after": 12520,
+              "direction": "unchanged"
+            },
+            "int_ack": {
+              "before": 72,
+              "after": 72,
+              "first_time_before": 480,
+              "first_time_after": 480,
+              "direction": "unchanged"
+            },
+            "int_busy": {
+              "before": 1088,
+              "after": 1088,
+              "first_time_before": 1020,
+              "first_time_after": 1020,
+              "direction": "unchanged"
+            },
+            "new_cmd": {
+              "before": 2962,
+              "after": 2962,
+              "first_time_before": 820,
+              "first_time_after": 820,
+              "direction": "unchanged"
+            },
+            "normal_int_signal_enable_reg": {
+              "before": 1824,
+              "after": 1824,
+              "first_time_before": 400,
+              "first_time_after": 400,
+              "direction": "unchanged"
+            },
+            "normal_isr_reset": {
+              "before": 124,
+              "after": 124,
+              "first_time_before": 3790,
+              "first_time_after": 3790,
+              "direction": "unchanged"
+            },
+            "software_reset_reg": {
+              "before": 670,
+              "after": 670,
+              "first_time_before": 4280,
+              "first_time_after": 4280,
+              "direction": "unchanged"
+            },
+            "time_out_reg": {
+              "before": 1860,
+              "after": 1860,
+              "first_time_before": 370,
+              "first_time_after": 370,
+              "direction": "unchanged"
+            },
+            "wb_ack_o": {
+              "before": 44,
+              "after": 44,
+              "first_time_before": 480,
+              "first_time_after": 480,
+              "direction": "unchanged"
+            },
+            "wb_dat_o": {
+              "before": 3258,
+              "after": 2676,
+              "first_time_before": 150,
+              "first_time_after": 330,
+              "direction": "improved"
+            },
+            "we_ack": {
+              "before": 1880,
+              "after": 1880,
+              "first_time_before": 2880,
+              "first_time_after": 2880,
+              "direction": "unchanged"
+            },
+            "we_m_rx_bd": {
+              "before": 114,
+              "after": 114,
+              "first_time_before": 470,
+              "first_time_after": 470,
+              "direction": "unchanged"
+            },
+            "we_m_tx_bd": {
+              "before": 142,
+              "after": 142,
+              "first_time_before": 480,
+              "first_time_after": 480,
+              "direction": "unchanged"
+            }
+          }
+        },
+        "hypothesis": "At t=145, wb_rst_i pulses high. Block A2 resets wb_dat_o to 0 (line 362: wb_dat_o <= 32'h00000000), but the ref model does NOT reset wb_dat_o — it holds the previous value (0xC4) and only updates via wb_dat_o_next. Changing to wb_dat_o <= wb_dat_o_next ensures wb_dat_o follows the combinational data path during reset: at t=145 it reads software_reset_reg=0xC4 (pre-reset, since nonblocking) → holds 0xC4; at t=155 it reads software_reset_reg=0x00 (post-reset) → becomes 0x00. This matches the ref trace exactly. Expected effect: wb_dat_o matches ref at t=145 (0xC4 instead of 0x00), fixing the first divergence. The mismatch count for wb_dat_o should drop from 3258 significantly.",
+        "lesson": "Patch improved mismatch count or first fail time; continue from this direction.",
+        "patch_summary": "wb_dat_o                     <= wb_dat_o_next;"
+      },
+      {
+        "step": 3,
+        "action_type": "apply_patch",
+        "block_id": null,
+        "target": {
+          "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+          "start_line": 268,
+          "end_line": 301
+        },
+        "changed_signals": [
+          "Bd_isr_enable_reg_next",
+          "Bd_isr_reset_next",
+          "argument_reg_next",
+          "clock_divider_next",
+          "cmd_setting_reg_next",
+          "error_int_signal_enable_reg_next",
+          "error_isr_reset_next",
+          "int_busy_next",
+          "new_cmd_next",
+          "normal_int_signal_enable_reg_next",
+          "normal_isr_reset_next",
+          "software_reset_reg_next",
+          "time_out_reg_next"
+        ],
+        "effect": "improved",
+        "metric_delta": {
+          "total_samples_mismatch": "9676 -> 9552",
+          "per_signal": {
+            "Bd_isr_enable_reg": {
+              "before": 830,
+              "after": 354,
+              "first_time_before": 4420,
+              "first_time_after": 4420,
+              "direction": "improved"
+            },
+            "Bd_isr_reset": {
+              "before": 154,
+              "after": 154,
+              "first_time_before": 5450,
+              "first_time_after": 5450,
+              "direction": "unchanged"
+            },
+            "argument_reg": {
+              "before": 8540,
+              "after": 8194,
+              "first_time_before": 290,
+              "first_time_after": 2860,
+              "direction": "improved"
+            },
+            "clock_divider": {
+              "before": 1290,
+              "after": 422,
+              "first_time_before": 430,
+              "first_time_after": 3180,
+              "direction": "improved"
+            },
+            "cmd_int_busy": {
+              "before": 1880,
+              "after": 1880,
+              "first_time_before": 2880,
+              "first_time_after": 2880,
+              "direction": "unchanged"
+            },
+            "cmd_setting_reg": {
+              "before": 8472,
+              "after": 8178,
+              "first_time_before": 300,
+              "first_time_after": 2860,
+              "direction": "improved"
+            },
+            "dat_in_m_rx_bd": {
+              "before": 572,
+              "after": 572,
+              "first_time_before": 470,
+              "first_time_after": 470,
+              "direction": "unchanged"
+            },
+            "dat_in_m_tx_bd": {
+              "before": 940,
+              "after": 940,
+              "first_time_before": 480,
+              "first_time_after": 480,
+              "direction": "unchanged"
+            },
+            "error_int_signal_enable_reg": {
+              "before": 1872,
+              "after": 526,
+              "first_time_before": 410,
+              "first_time_after": 3620,
+              "direction": "improved"
+            },
+            "error_isr_reset": {
+              "before": 142,
+              "after": 142,
+              "first_time_before": 12520,
+              "first_time_after": 12520,
+              "direction": "unchanged"
+            },
+            "int_ack": {
+              "before": 72,
+              "after": 72,
+              "first_time_before": 480,
+              "first_time_after": 480,
+              "direction": "unchanged"
+            },
+            "int_busy": {
+              "before": 1088,
+              "after": 1088,
+              "first_time_before": 1020,
+              "first_time_after": 1020,
+              "direction": "unchanged"
+            },
+            "new_cmd": {
+              "before": 2962,
+              "after": 2962,
+              "first_time_before": 820,
+              "first_time_after": 820,
+              "direction": "unchanged"
+            },
+            "normal_int_signal_enable_reg": {
+              "before": 1824,
+              "after": 462,
+              "first_time_before": 400,
+              "first_time_after": 7310,
+              "direction": "improved"
+            },
+            "normal_isr_reset": {
+              "before": 124,
+              "after": 124,
+              "first_time_before": 3790,
+              "first_time_after": 3790,
+              "direction": "unchanged"
+            },
+            "software_reset_reg": {
+              "before": 670,
+              "after": 242,
+              "first_time_before": 4280,
+              "first_time_after": 4280,
+              "direction": "improved"
+            },
+            "time_out_reg": {
+              "before": 1860,
+              "after": 554,
+              "first_time_before": 370,
+              "first_time_after": 8580,
+              "direction": "improved"
+            },
+            "wb_ack_o": {
+              "before": 44,
+              "after": 44,
+              "first_time_before": 480,
+              "first_time_after": 480,
+              "direction": "unchanged"
+            },
+            "wb_dat_o": {
+              "before": 2676,
+              "after": 2416,
+              "first_time_before": 330,
+              "first_time_after": 330,
+              "direction": "improved"
+            },
+            "we_ack": {
+              "before": 1880,
+              "after": 1880,
+              "first_time_before": 2880,
+              "first_time_after": 2880,
+              "direction": "unchanged"
+            },
+            "we_m_rx_bd": {
+              "before": 114,
+              "after": 114,
+              "first_time_before": 470,
+              "first_time_after": 470,
+              "direction": "unchanged"
+            },
+            "we_m_tx_bd": {
+              "before": 142,
+              "after": 142,
+              "first_time_before": 480,
+              "first_time_after": 480,
+              "direction": "unchanged"
+            }
+          }
+        },
+        "hypothesis": "The spec states wb_sel_i is 'not used in the module'. At t=285, wb_sel_i=1100 blocks lower byte writes to argument_reg. Removing all if(wb_sel_byte*) conditions makes all register writes unconditional for their respective widths, matching the ref. Fixed line range to include original line 301 (outer end). Expected effect: argument_reg and other config registers written with full width regardless of wb_sel_i. Should reduce argument_reg mismatch count (8540), cmd_setting_reg (8472), and other byte-gated registers.",
+        "lesson": "Patch improved mismatch count or first fail time; continue from this direction.",
+        "patch_summary": "if (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\n...<snip>...\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i[7:0]; end end"
+      }
+    ],
+    "rejected_hypotheses": [
+      {
+        "step": 2,
+        "block_id": null,
+        "effect": "syntax_failed",
+        "hypothesis": "The spec states wb_sel_i is 'not used in the module'. The ref model ignores wb_sel_i and writes full register widths unconditionally. At t=285, wb_sel_i=1100 (only bytes 2,3 selected), causing the DUT to write only the upper 16 bits of argument_reg, leaving lower 16 bits at reset value (0x0000). Removing all if(wb_sel_byte*) conditions makes all register writes unconditional for their respective w\n...<snip>...\ne ref behavior. Expected effect: argument_reg and all other configuration registers will be written with full width regardless of wb_sel_i. argument_reg mismatch count (8540) should drop significantly. Other byte-write-gated registers (cmd_setting_reg, software_reset_reg, time_out_reg, normal_int_signal_enable_reg, error_int_signal_enable_reg, clock_divider, Bd_isr_enable_reg) should also improve.",
+        "lesson": "Patch failed lint and was rolled back; fix syntax before retrying this idea.",
+        "metric_delta": {
+          "total_samples_mismatch": "9676 -> None",
+          "per_signal": {
+            "Bd_isr_enable_reg": {
+              "before": 830,
+              "after": 0,
+              "first_time_before": 4420,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "Bd_isr_reset": {
+              "before": 154,
+              "after": 0,
+              "first_time_before": 5450,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "argument_reg": {
+              "before": 8540,
+              "after": 0,
+              "first_time_before": 290,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "clock_divider": {
+              "before": 1290,
+              "after": 0,
+              "first_time_before": 430,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "cmd_int_busy": {
+              "before": 1880,
+              "after": 0,
+              "first_time_before": 2880,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "cmd_setting_reg": {
+              "before": 8472,
+              "after": 0,
+              "first_time_before": 300,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "dat_in_m_rx_bd": {
+              "before": 572,
+              "after": 0,
+              "first_time_before": 470,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "dat_in_m_tx_bd": {
+              "before": 940,
+              "after": 0,
+              "first_time_before": 480,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "error_int_signal_enable_reg": {
+              "before": 1872,
+              "after": 0,
+              "first_time_before": 410,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "error_isr_reset": {
+              "before": 142,
+              "after": 0,
+              "first_time_before": 12520,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "int_ack": {
+              "before": 72,
+              "after": 0,
+              "first_time_before": 480,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "int_busy": {
+              "before": 1088,
+              "after": 0,
+              "first_time_before": 1020,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "new_cmd": {
+              "before": 2962,
+              "after": 0,
+              "first_time_before": 820,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "normal_int_signal_enable_reg": {
+              "before": 1824,
+              "after": 0,
+              "first_time_before": 400,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "normal_isr_reset": {
+              "before": 124,
+              "after": 0,
+              "first_time_before": 3790,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "software_reset_reg": {
+              "before": 670,
+              "after": 0,
+              "first_time_before": 4280,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "time_out_reg": {
+              "before": 1860,
+              "after": 0,
+              "first_time_before": 370,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "wb_ack_o": {
+              "before": 44,
+              "after": 0,
+              "first_time_before": 480,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "wb_dat_o": {
+              "before": 2676,
+              "after": 0,
+              "first_time_before": 330,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "we_ack": {
+              "before": 1880,
+              "after": 0,
+              "first_time_before": 2880,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "we_m_rx_bd": {
+              "before": 114,
+              "after": 0,
+              "first_time_before": 470,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "we_m_tx_bd": {
+              "before": 142,
+              "after": 0,
+              "first_time_before": 480,
+              "first_time_after": null,
+              "direction": "improved"
+            }
+          }
+        }
+      }
+    ],
+    "next_edit_candidates": [
+      {
+        "block_id": "A2",
+        "line_range": [
+          345,
+          407
+        ],
+        "signals": [
+          "wb_dat_o"
+        ],
+        "reason": "Primary driver/suspect block for current failure."
+      }
+    ],
+    "missing_evidence": [],
+    "protected_invariants": [
+      "Preserve improved behavior for signals: wb_dat_o.",
+      "Preserve New_CMD sampling/reset-release timing behavior."
+    ],
+    "unsafe_directions": [
+      "Syntax-failed direction at step 2: if (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\n...<snip>...\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i[7:0]; end end"
+    ],
+    "selected_long_term_memories": [
+      {
+        "path": "cases/debug_sd_controller_wb_wb_dat_o_improved_3.md",
+        "memory_id": "debug_sd_controller_wb_wb_dat_o_improved_3",
+        "type": "repair_outcome",
+        "stage": "debug",
+        "module": "sd_controller_wb",
+        "signals": [
+          "Bd_isr_enable_reg_next",
+          "Bd_isr_reset_next",
+          "argument_reg_next",
+          "clock_divider_next",
+          "cmd_setting_reg_next",
+          "error_int_signal_enable_reg_next",
+          "error_isr_reset_next",
+          "int_busy_next",
+          "new_cmd_next",
+          "normal_int_signal_enable_reg_next",
+          "normal_isr_reset_next",
+          "software_reset_reg_next"
+        ],
+        "failure_type": "local_logic_bug",
+        "outcome": "improved",
+        "confidence": 0.72,
+        "description": "sd_controller_wb: wb_dat_o improved; Patch improved mismatch count or first fail time; continue from this direction.",
+        "patch_pattern": "if (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\n...<snip>...\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i",
+        "anti_trigger": "Do not reuse when current first divergence, affected signals, or timing alignment differ.",
+        "content": "## 触发条件\n\n- Module: `sd_controller_wb`\n- Signal: `wb_dat_o`\n- Effect: `improved`\n- First divergence: `{\"signal\": \"wb_dat_o\", \"time\": 325, \"ref\": \"00000000000000000000000000000010\", \"dut\": \"00000000000000000000000000000000\", \"classification\": \"dut_late\", \"ref_path\": \"tb.wb_dat_o_ref[31:0]\", \"dut_path\": \"tb.wb_dat_o_dut[31:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n\n## 不适用条件\n\n- Do not reuse if affected signals, timing alignment, or spec intent differ.\n- Do not reuse without reading current RTL/spec evidence.\n\n## 补丁模式\n\nif (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\n...<snip>...\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i[7:0]; end end\n\n## 验证特征\n\n- Before mismatch count: `38148`\n- After mismatch count: `31462`\n- Metric delta: `{\"total_samples_mismatch\": \"9676 -> 9552\", \"per_signal\": {\"Bd_isr_enable_reg\": {\"before\": 830, \"after\": 354, \"first_time_before\": 4420, \"first_time_after\": 4420, \"direction\": \"improved\"}, \"Bd_isr_reset\": {\"before\": 154, \"after\": 154, \"first_time_before\": 5450, \"first_time_after\": 5450, \"direction\": \"unchanged\"}, \"argument_reg\": {\"before\": 8540, \"after\": 8194, \"first_time_before\": 290, \"first_time_after\": 2860, \"direction\": \"improved\"}, \"clock_divider\": {\"before\": 1290, \"after\": 422, \"first_time_before\": 430, \"first_time_after\": 3180, \"direction\": \"improved\"}, \"cmd_int_busy\": {\"before\": 1880, \"after\": 1880, \"first_time_before\": 2880, \"first_time_after\": 2880, \"direction\": \"unchanged\"}, \"cmd_setting_reg\": {\"before\": 8472, \"after\": 8178, \"first_time_before\": 300, \"first_time_after\": 2860, \"direction\": \"improved\"}, \"dat_in_m_rx_bd\": {\"before\": 572, \"after\": 572, \"first_time_before\": 470, \"first_time_after\": 470, \"direction\": \"unchanged\"}, \"dat_in_m_tx_bd\": {\"before\": 940, \"after\": 940, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}, \"error_int_signal_enable_reg\": {\"before\": 1872, \"after\": 526, \"first_time_before\": 410, \"first_time_after\": 3620, \"direction\": \"improved\"}, \"error_isr_reset\": {\"before\": 142, \"after\": 142, \"first_time_before\": 12520, \"first_time_after\": 12520, \"direction\": \"unchanged\"}, \"int_ack\": {\"before\": 72, \"after\": 72, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}, \"int_busy\": {\"before\": 1088, \"after\": 1088, \"first_time_before\": 1020, \"first_time_after\": 1020, \"direction\": \"unchanged\"}, \"new_cmd\": {\"before\": 2962, \"after\": 2962, \"first_time_before\": 820, \"first_time_after\": 820, \"direction\": \"unchanged\"}, \"normal_int_signal_enable_reg\": {\"before\": 1824, \"after\": 462, \"first_time_before\": 400, \"first_time_after\": 7310, \"direction\": \"improved\"}, \"normal_isr_reset\": {\"before\": 124, \"after\": 124, \"first_time_before\": 3790, \"first_time_after\": 3790, \"direction\": \"unchanged\"}, \"software_reset_reg\": {\"before\": 670, \"after\": 242, \"first_time_before\": 4280, \"first_time_after\": 4280, \"direction\": \"improved\"}, \"time_out_reg\": {\"before\": 1860, \"after\": 554, \"first_time_before\": 370, \"first_time_after\": 8580, \"direction\": \"improved\"}, \"wb_ack_o\": {\"before\": 44, \"after\": 44, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}, \"wb_dat_o\": {\"before\": 2676, \"after\": 2416, \"first_time_before\": 330, \"first_time_after\": 330, \"direction\": \"improved\"}, \"we_ack\": {\"before\": 1880, \"after\": 1880, \"first_time_before\": 2880, \"first_time_after\": 2880, \"direction\": \"unchanged\"}, \"we_m_rx_bd\": {\"before\": 114, \"after\": 114, \"first_time_before\": 470, \"first_time_after\": 470, \"direction\": \"unchanged\"}, \"we_m_tx_bd\": {\"before\": 142, \"after\": 142, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}}}`\n\n## 复用约束\n\nPatch improved mismatch count or first fail time; continue from this direction.\n\n## Problem\n\n`sd_controller_wb` showed a debug failure around `wb_dat_o`.\n\n## Evidence\n\n- Effect: `improved`\n- Before mismatch count: `38148`\n- After mismatch count: `31462`\n- First divergence: `{\"signal\": \"wb_dat_o\", \"time\": 325, \"ref\": \"00000000000000000000000000000010\", \"dut\": \"00000000000000000000000000000000\", \"classification\": \"dut_late\", \"ref_path\": \"tb.wb_dat_o_ref[31:0]\", \"dut_path\": \"tb.wb_dat_o_dut[31:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n- Trace root failure: `{\"signal\": \"wb_dat_o\", \"time\": 325, \"ref\": \"00000000000000000000000000000010\", \"dut\": \"00000000000000000000000000000000\", \"classification\": \"dut_late\", \"ref_path\": \"tb.wb_dat_o_ref[31:0]\", \"dut_path\": \"tb.wb_dat_o_dut[31:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n- Metric delta: `{\"total_samples_mismatch\": \"9676 -> 9552\", \"per_signal\": {\"Bd_isr_enable_reg\": {\"before\": 830, \"after\": 354, \"first_time_before\": 4420, \"first_time_after\": 4420, \"direction\": \"improved\"}, \"Bd_isr_reset\": {\"before\": 154, \"after\": 154, \"first_time_before\": 5450, \"first_time_after\": 5450, \"direction\": \"unchanged\"}, \"argument_reg\": {\"before\": 8540, \"after\": 8194, \"first_time_before\": 290, \"first_time_after\": 2860, \"direction\": \"improved\"}, \"clock_divider\": {\"before\": 1290, \"after\": 422, \"first_time_before\": 430, \"first_time_after\": 3180, \"direction\": \"improved\"}, \"cmd_int_busy\": {\"before\": 1880, \"after\": 1880, \"first_time_before\": 2880, \"first_time_after\": 2880, \"direction\": \"unchanged\"}, \"cmd_setting_reg\": {\"before\": 8472, \"after\": 8178, \"first_time_before\": 300, \"first_time_after\": 2860, \"direction\": \"improved\"}, \"dat_in_m_rx_bd\": {\"before\": 572, \"after\": 572, \"first_time_before\": 470, \"first_time_after\": 470, \"direction\": \"unchanged\"}, \"dat_in_m_tx_bd\": {\"before\": 940, \"after\": 940, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}, \"error_int_signal_enable_reg\": {\"before\": 1872, \"after\": 526, \"first_time_before\": 410, \"first_time_after\": 3620, \"direction\": \"improved\"}, \"error_isr_reset\": {\"before\": 142, \"after\": 142, \"first_time_before\": 12520, \"first_time_after\": 12520, \"direction\": \"unchanged\"}, \"int_ack\": {\"before\": 72, \"after\": 72, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}, \"int_busy\": {\"before\": 1088, \"after\": 1088, \"first_time_before\": 1020, \"first_time_after\": 1020, \"direction\": \"unchanged\"}, \"new_cmd\": {\"before\": 2962, \"after\": 2962, \"first_time_before\": 820, \"first_time_after\": 820, \"direction\": \"unchanged\"}, \"normal_int_signal_enable_reg\": {\"before\": 1824, \"after\": 462, \"first_time_before\": 400, \"first_time_after\": 7310, \"direction\": \"improved\"}, \"normal_isr_reset\": {\"before\": 124, \"after\": 124, \"first_time_before\": 3790, \"first_time_after\": 3790, \"direction\": \"unchanged\"}, \"software_reset_reg\": {\"before\": 670, \"after\": 242, \"first_time_before\": 4280, \"first_time_after\": 4280, \"direction\": \"improved\"}, \"time_out_reg\": {\"before\": 1860, \"after\": 554, \"first_time_before\": 370, \"first_time_after\": 8580, \"direction\": \"improved\"}, \"wb_ack_o\": {\"before\": 44, \"after\": 44, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}, \"wb_dat_o\": {\"before\": 2676, \"after\": 2416, \"first_time_before\": 330, \"first_time_after\": 330, \"direction\": \"improved\"}, \"we_ack\": {\"before\": 1880, \"after\": 1880, \"first_time_before\": 2880, \"first_time_after\": 2880, \"direction\": \"unchanged\"}, \"we_m_rx_bd\": {\"before\": 114, \"after\": 114, \"first_time_before\": 470, \"first_time_after\": 470, \"direction\": \"unchanged\"}, \"we_m_tx_bd\": {\"before\": 142, \"after\": 142, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}}}`\n\n## Patch Summary\n\nif (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\n...<snip>...\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i[7:0]; end end\n\n## Lesson\n\nPatch improved mismatch count or first fail time; continue from this direction.\n\n## Reuse Constraints\n\n- Read current RTL/spec evidence before applying a similar patch.\n- Do not reuse if affected signals or timing alignment differ.\n",
+        "body_excerpt": "## 触发条件\n\n- Module: `sd_controller_wb`\n- Signal: `wb_dat_o`\n- Effect: `improved`\n- First divergence: `{\"signal\": \"wb_dat_o\", \"time\": 325, \"ref\": \"00000000000000000000000000000010\", \"dut\": \"00000000000000000000000000000000\", \"classification\": \"dut_late\", \"ref_path\": \"tb.wb_dat_o_ref[31:0]\", \"dut_path\": \"tb.wb_dat_o_dut[31:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n\n## 不适用条件\n\n- Do not reuse if affected signals, timing alignment, or spec intent differ.\n- Do not reuse without reading current RTL/spec evidence.\n\n## 补丁模式\n\nif (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\n...<snip>...\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i[7:0]; end end\n\n## 验证特征\n\n- Before mismatch count: `38148`\n- After mismatch count: `31462`\n- Metric delta: `{\"total_samples_mismatch\": \"9676 -> 9552\", \"per_signal\": {\"Bd_isr_enable_reg\": {\"before\": 830, \"after\": 354, \"first_time_before\": 4420, \"first_time_after\": 4420, \"direction\": \"improved\"}, \"Bd_isr_reset\": {\"before\": 154, \"after\": 154, \"first_time_before\": 5450, \"first_tim\n...<snip>...\nproved\"}, \"time_out_reg\": {\"before\": 1860, \"after\": 554, \"first_time_before\": 370, \"first_time_after\": 8580, \"direction\": \"improved\"}, \"wb_ack_o\": {\"before\": 44, \"after\": 44, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}, \"wb_dat_o\": {\"before\": 2676, \"after\": 2416, \"first_time_before\": 330, \"first_time_after\": 330, \"direction\": \"improved\"}, \"we_ack\": {\"before\": 1880, \"after\": 1880, \"first_time_before\": 2880, \"first_time_after\": 2880, \"direction\": \"unchanged\"}, \"we_m_rx_bd\": {\"before\": 114, \"after\": 114, \"first_time_before\": 470, \"first_time_after\": 470, \"direction\": \"unchanged\"}, \"we_m_tx_bd\": {\"before\": 142, \"after\": 142, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}}}`\n\n## Patch Summary\n\nif (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\n...<snip>...\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i[7:0]; end end\n\n## Lesson\n\nPatch improved mismatch count or first fail time; continue from this direction.\n\n## Reuse Constraints\n\n- Read current RTL/spec evidence before applying a similar patch.\n- Do not reuse if affected signals or timing alignment differ.\n"
+      },
+      {
+        "path": "cases/debug_sd_controller_wb_argument_reg_improved_1.md",
+        "memory_id": "debug_sd_controller_wb_argument_reg_improved_1",
+        "type": "repair_outcome",
+        "stage": "debug",
+        "module": "sd_controller_wb",
+        "signals": [
+          "argument_reg",
+          "wb_dat_o"
+        ],
+        "failure_type": "local_logic_bug",
+        "outcome": "improved",
+        "confidence": 0.72,
+        "description": "sd_controller_wb: argument_reg improved; Patch improved mismatch count or first fail time; continue from this direction.",
+        "patch_pattern": "wb_dat_o                     <= wb_dat_o_next;",
+        "anti_trigger": "Do not reuse when current first divergence, affected signals, or timing alignment differ.",
+        "content": "## 触发条件\n\n- Module: `sd_controller_wb`\n- Signal: `argument_reg`\n- Effect: `improved`\n- First divergence: `{\"signal\": \"argument_reg\", \"time\": 285, \"ref\": \"10011110111111011101010100000010\", \"dut\": \"10011110111111010000000000000000\", \"classification\": \"wrong_value\", \"ref_path\": \"tb.argument_reg_ref[31:0]\", \"dut_path\": \"tb.argument_reg_dut[31:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n\n## 不适用条件\n\n- Do not reuse if affected signals, timing alignment, or spec intent differ.\n- Do not reuse without reading current RTL/spec evidence.\n\n## 补丁模式\n\nwb_dat_o                     <= wb_dat_o_next;\n\n## 验证特征\n\n- Before mismatch count: `38730`\n- After mismatch count: `38148`\n- Metric delta: `{\"total_samples_mismatch\": \"9928 -> 9676\", \"per_signal\": {\"Bd_isr_enable_reg\": {\"before\": 830, \"after\": 830, \"first_time_before\": 4420, \"first_time_after\": 4420, \"direction\": \"unchanged\"}, \"Bd_isr_reset\": {\"before\": 154, \"after\": 154, \"first_time_before\": 5450, \"first_time_after\": 5450, \"direction\": \"unchanged\"}, \"argument_reg\": {\"before\": 8540, \"after\": 8540, \"first_time_before\": 290, \"first_time_after\": 290, \"direction\": \"unchanged\"}, \"clock_divider\": {\"before\": 1290, \"after\": 1290, \"first_time_before\": 430, \"first_time_after\": 430, \"direction\": \"unchanged\"}, \"cmd_int_busy\": {\"before\": 1880, \"after\": 1880, \"first_time_before\": 2880, \"first_time_after\": 2880, \"direction\": \"unchanged\"}, \"cmd_setting_reg\": {\"before\": 8472, \"after\": 8472, \"first_time_before\": 300, \"first_time_after\": 300, \"direction\": \"unchanged\"}, \"dat_in_m_rx_bd\": {\"before\": 572, \"after\": 572, \"first_time_before\": 470, \"first_time_after\": 470, \"direction\": \"unchanged\"}, \"dat_in_m_tx_bd\": {\"before\": 940, \"after\": 940, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}, \"error_int_signal_enable_reg\": {\"before\": 1872, \"after\": 1872, \"first_time_before\": 410, \"first_time_after\": 410, \"direction\": \"unchanged\"}, \"error_isr_reset\": {\"before\": 142, \"after\": 142, \"first_time_before\": 12520, \"first_time_after\": 12520, \"direction\": \"unchanged\"}, \"int_ack\": {\"before\": 72, \"after\": 72, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}, \"int_busy\": {\"before\": 1088, \"after\": 1088, \"first_time_before\": 1020, \"first_time_after\": 1020, \"direction\": \"unchanged\"}, \"new_cmd\": {\"before\": 2962, \"after\": 2962, \"first_time_before\": 820, \"first_time_after\": 820, \"direction\": \"unchanged\"}, \"normal_int_signal_enable_reg\": {\"before\": 1824, \"after\": 1824, \"first_time_before\": 400, \"first_time_after\": 400, \"direction\": \"unchanged\"}, \"normal_isr_reset\": {\"before\": 124, \"after\": 124, \"first_time_before\": 3790, \"first_time_after\": 3790, \"direction\": \"unchanged\"}, \"software_reset_reg\": {\"before\": 670, \"after\": 670, \"first_time_before\": 4280, \"first_time_after\": 4280, \"direction\": \"unchanged\"}, \"time_out_reg\": {\"before\": 1860, \"after\": 1860, \"first_time_before\": 370, \"first_time_after\": 370, \"direction\": \"unchanged\"}, \"wb_ack_o\": {\"before\": 44, \"after\": 44, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}, \"wb_dat_o\": {\"before\": 3258, \"after\": 2676, \"first_time_before\": 150, \"first_time_after\": 330, \"direction\": \"improved\"}, \"we_ack\": {\"before\": 1880, \"after\": 1880, \"first_time_before\": 2880, \"first_time_after\": 2880, \"direction\": \"unchanged\"}, \"we_m_rx_bd\": {\"before\": 114, \"after\": 114, \"first_time_before\": 470, \"first_time_after\": 470, \"direction\": \"unchanged\"}, \"we_m_tx_bd\": {\"before\": 142, \"after\": 142, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}}}`\n\n## 复用约束\n\nPatch improved mismatch count or first fail time; continue from this direction.\n\n## Problem\n\n`sd_controller_wb` showed a debug failure around `argument_reg`.\n\n## Evidence\n\n- Effect: `improved`\n- Before mismatch count: `38730`\n- After mismatch count: `38148`\n- First divergence: `{\"signal\": \"argument_reg\", \"time\": 285, \"ref\": \"10011110111111011101010100000010\", \"dut\": \"10011110111111010000000000000000\", \"classification\": \"wrong_value\", \"ref_path\": \"tb.argument_reg_ref[31:0]\", \"dut_path\": \"tb.argument_reg_dut[31:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n- Trace root failure: `{\"signal\": \"argument_reg\", \"time\": 285, \"ref\": \"10011110111111011101010100000010\", \"dut\": \"10011110111111010000000000000000\", \"classification\": \"wrong_value\", \"ref_path\": \"tb.argument_reg_ref[31:0]\", \"dut_path\": \"tb.argument_reg_dut[31:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n- Metric delta: `{\"total_samples_mismatch\": \"9928 -> 9676\", \"per_signal\": {\"Bd_isr_enable_reg\": {\"before\": 830, \"after\": 830, \"first_time_before\": 4420, \"first_time_after\": 4420, \"direction\": \"unchanged\"}, \"Bd_isr_reset\": {\"before\": 154, \"after\": 154, \"first_time_before\": 5450, \"first_time_after\": 5450, \"direction\": \"unchanged\"}, \"argument_reg\": {\"before\": 8540, \"after\": 8540, \"first_time_before\": 290, \"first_time_after\": 290, \"direction\": \"unchanged\"}, \"clock_divider\": {\"before\": 1290, \"after\": 1290, \"first_time_before\": 430, \"first_time_after\": 430, \"direction\": \"unchanged\"}, \"cmd_int_busy\": {\"before\": 1880, \"after\": 1880, \"first_time_before\": 2880, \"first_time_after\": 2880, \"direction\": \"unchanged\"}, \"cmd_setting_reg\": {\"before\": 8472, \"after\": 8472, \"first_time_before\": 300, \"first_time_after\": 300, \"direction\": \"unchanged\"}, \"dat_in_m_rx_bd\": {\"before\": 572, \"after\": 572, \"first_time_before\": 470, \"first_time_after\": 470, \"direction\": \"unchanged\"}, \"dat_in_m_tx_bd\": {\"before\": 940, \"after\": 940, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}, \"error_int_signal_enable_reg\": {\"before\": 1872, \"after\": 1872, \"first_time_before\": 410, \"first_time_after\": 410, \"direction\": \"unchanged\"}, \"error_isr_reset\": {\"before\": 142, \"after\": 142, \"first_time_before\": 12520, \"first_time_after\": 12520, \"direction\": \"unchanged\"}, \"int_ack\": {\"before\": 72, \"after\": 72, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}, \"int_busy\": {\"before\": 1088, \"after\": 1088, \"first_time_before\": 1020, \"first_time_after\": 1020, \"direction\": \"unchanged\"}, \"new_cmd\": {\"before\": 2962, \"after\": 2962, \"first_time_before\": 820, \"first_time_after\": 820, \"direction\": \"unchanged\"}, \"normal_int_signal_enable_reg\": {\"before\": 1824, \"after\": 1824, \"first_time_before\": 400, \"first_time_after\": 400, \"direction\": \"unchanged\"}, \"normal_isr_reset\": {\"before\": 124, \"after\": 124, \"first_time_before\": 3790, \"first_time_after\": 3790, \"direction\": \"unchanged\"}, \"software_reset_reg\": {\"before\": 670, \"after\": 670, \"first_time_before\": 4280, \"first_time_after\": 4280, \"direction\": \"unchanged\"}, \"time_out_reg\": {\"before\": 1860, \"after\": 1860, \"first_time_before\": 370, \"first_time_after\": 370, \"direction\": \"unchanged\"}, \"wb_ack_o\": {\"before\": 44, \"after\": 44, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}, \"wb_dat_o\": {\"before\": 3258, \"after\": 2676, \"first_time_before\": 150, \"first_time_after\": 330, \"direction\": \"improved\"}, \"we_ack\": {\"before\": 1880, \"after\": 1880, \"first_time_before\": 2880, \"first_time_after\": 2880, \"direction\": \"unchanged\"}, \"we_m_rx_bd\": {\"before\": 114, \"after\": 114, \"first_time_before\": 470, \"first_time_after\": 470, \"direction\": \"unchanged\"}, \"we_m_tx_bd\": {\"before\": 142, \"after\": 142, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}}}`\n\n## Patch Summary\n\nwb_dat_o                     <= wb_dat_o_next;\n\n## Lesson\n\nPatch improved mismatch count or first fail time; continue from this direction.\n\n## Reuse Constraints\n\n- Read current RTL/spec evidence before applying a similar patch.\n- Do not reuse if affected signals or timing alignment differ.\n",
+        "body_excerpt": "## 触发条件\n\n- Module: `sd_controller_wb`\n- Signal: `argument_reg`\n- Effect: `improved`\n- First divergence: `{\"signal\": \"argument_reg\", \"time\": 285, \"ref\": \"10011110111111011101010100000010\", \"dut\": \"10011110111111010000000000000000\", \"classification\": \"wrong_value\", \"ref_path\": \"tb.argument_reg_ref[31:0]\", \"dut_path\": \"tb.argument_reg_dut[31:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n\n## 不适用条件\n\n- Do not reuse if affected signals, timing alignment, or spec intent differ.\n- Do not reuse without reading current RTL/spec evidence.\n\n## 补丁模式\n\nwb_dat_o                     <= wb_dat_o_next;\n\n## 验证特征\n\n- Before mismatch count: `38730`\n- After mismatch count: `38148`\n- Metric delta: `{\"total_samples_mismatch\": \"9928 -> 9676\", \"per_signal\": {\"Bd_isr_enable_reg\": {\"before\": 830, \"after\": 830, \"first_time_before\": 4420, \"first_time_after\": 4420, \"direction\": \"unchanged\"}, \"Bd_isr_reset\": {\"before\": 154, \"after\": 154, \"first_time_before\": 5450, \"first_time_after\": 5450, \"direction\": \"unchanged\"}, \"argument_reg\": {\"before\": 8540, \"after\": 8540, \"first_time_before\": 290, \"first_time\n...<snip>...\nirection\": \"unchanged\"}, \"software_reset_reg\": {\"before\": 670, \"after\": 670, \"first_time_before\": 4280, \"first_time_after\": 4280, \"direction\": \"unchanged\"}, \"time_out_reg\": {\"before\": 1860, \"after\": 1860, \"first_time_before\": 370, \"first_time_after\": 370, \"direction\": \"unchanged\"}, \"wb_ack_o\": {\"before\": 44, \"after\": 44, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}, \"wb_dat_o\": {\"before\": 3258, \"after\": 2676, \"first_time_before\": 150, \"first_time_after\": 330, \"direction\": \"improved\"}, \"we_ack\": {\"before\": 1880, \"after\": 1880, \"first_time_before\": 2880, \"first_time_after\": 2880, \"direction\": \"unchanged\"}, \"we_m_rx_bd\": {\"before\": 114, \"after\": 114, \"first_time_before\": 470, \"first_time_after\": 470, \"direction\": \"unchanged\"}, \"we_m_tx_bd\": {\"before\": 142, \"after\": 142, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}}}`\n\n## Patch Summary\n\nwb_dat_o                     <= wb_dat_o_next;\n\n## Lesson\n\nPatch improved mismatch count or first fail time; continue from this direction.\n\n## Reuse Constraints\n\n- Read current RTL/spec evidence before applying a similar patch.\n- Do not reuse if affected signals or timing alignment differ.\n"
+      },
+      {
+        "path": "patterns/avoid_sd_controller_wb_argument_reg_syntax_failed_2.md",
+        "memory_id": "avoid_sd_controller_wb_argument_reg_syntax_failed_2",
+        "type": "negative_direction",
+        "stage": "debug",
+        "module": "sd_controller_wb",
+        "signals": [
+          "Bd_isr_enable_reg_next",
+          "Bd_isr_reset_next",
+          "argument_reg",
+          "argument_reg_next",
+          "clock_divider_next",
+          "cmd_setting_reg_next",
+          "error_int_signal_enable_reg_next",
+          "error_isr_reset_next",
+          "int_busy_next",
+          "new_cmd_next",
+          "normal_int_signal_enable_reg_next",
+          "normal_isr_reset_next"
+        ],
+        "failure_type": "local_logic_bug",
+        "outcome": "syntax_failed",
+        "confidence": 0.68,
+        "description": "sd_controller_wb: argument_reg syntax_failed; Patch failed lint and was rolled back; fix syntax before retrying this idea.",
+        "patch_pattern": "if (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\n...<snip>...\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i",
+        "anti_trigger": "Avoid this direction unless new evidence distinguishes the current failure.",
+        "content": "## 触发条件\n\n- Module: `sd_controller_wb`\n- Signal: `argument_reg`\n- Effect: `syntax_failed`\n- First divergence: `{\"signal\": \"argument_reg\", \"time\": 285, \"ref\": \"10011110111111011101010100000010\", \"dut\": \"10011110111111010000000000000000\", \"classification\": \"wrong_value\", \"ref_path\": \"tb.argument_reg_ref[31:0]\", \"dut_path\": \"tb.argument_reg_dut[31:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n\n## 不适用条件\n\n- Do not reuse if affected signals, timing alignment, or spec intent differ.\n- Do not reuse without reading current RTL/spec evidence.\n\n## 补丁模式\n\nif (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\n...<snip>...\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i[7:0]; end end\n\n## 验证特征\n\n- Before mismatch count: `38148`\n- After mismatch count: `None`\n- Metric delta: `{\"total_samples_mismatch\": \"9676 -> None\", \"per_signal\": {\"Bd_isr_enable_reg\": {\"before\": 830, \"after\": 0, \"first_time_before\": 4420, \"first_time_after\": null, \"direction\": \"improved\"}, \"Bd_isr_reset\": {\"before\": 154, \"after\": 0, \"first_time_before\": 5450, \"first_time_after\": null, \"direction\": \"improved\"}, \"argument_reg\": {\"before\": 8540, \"after\": 0, \"first_time_before\": 290, \"first_time_after\": null, \"direction\": \"improved\"}, \"clock_divider\": {\"before\": 1290, \"after\": 0, \"first_time_before\": 430, \"first_time_after\": null, \"direction\": \"improved\"}, \"cmd_int_busy\": {\"before\": 1880, \"after\": 0, \"first_time_before\": 2880, \"first_time_after\": null, \"direction\": \"improved\"}, \"cmd_setting_reg\": {\"before\": 8472, \"after\": 0, \"first_time_before\": 300, \"first_time_after\": null, \"direction\": \"improved\"}, \"dat_in_m_rx_bd\": {\"before\": 572, \"after\": 0, \"first_time_before\": 470, \"first_time_after\": null, \"direction\": \"improved\"}, \"dat_in_m_tx_bd\": {\"before\": 940, \"after\": 0, \"first_time_before\": 480, \"first_time_after\": null, \"direction\": \"improved\"}, \"error_int_signal_enable_reg\": {\"before\": 1872, \"after\": 0, \"first_time_before\": 410, \"first_time_after\": null, \"direction\": \"improved\"}, \"error_isr_reset\": {\"before\": 142, \"after\": 0, \"first_time_before\": 12520, \"first_time_after\": null, \"direction\": \"improved\"}, \"int_ack\": {\"before\": 72, \"after\": 0, \"first_time_before\": 480, \"first_time_after\": null, \"direction\": \"improved\"}, \"int_busy\": {\"before\": 1088, \"after\": 0, \"first_time_before\": 1020, \"first_time_after\": null, \"direction\": \"improved\"}, \"new_cmd\": {\"before\": 2962, \"after\": 0, \"first_time_before\": 820, \"first_time_after\": null, \"direction\": \"improved\"}, \"normal_int_signal_enable_reg\": {\"before\": 1824, \"after\": 0, \"first_time_before\": 400, \"first_time_after\": null, \"direction\": \"improved\"}, \"normal_isr_reset\": {\"before\": 124, \"after\": 0, \"first_time_before\": 3790, \"first_time_after\": null, \"direction\": \"improved\"}, \"software_reset_reg\": {\"before\": 670, \"after\": 0, \"first_time_before\": 4280, \"first_time_after\": null, \"direction\": \"improved\"}, \"time_out_reg\": {\"before\": 1860, \"after\": 0, \"first_time_before\": 370, \"first_time_after\": null, \"direction\": \"improved\"}, \"wb_ack_o\": {\"before\": 44, \"after\": 0, \"first_time_before\": 480, \"first_time_after\": null, \"direction\": \"improved\"}, \"wb_dat_o\": {\"before\": 2676, \"after\": 0, \"first_time_before\": 330, \"first_time_after\": null, \"direction\": \"improved\"}, \"we_ack\": {\"before\": 1880, \"after\": 0, \"first_time_before\": 2880, \"first_time_after\": null, \"direction\": \"improved\"}, \"we_m_rx_bd\": {\"before\": 114, \"after\": 0, \"first_time_before\": 470, \"first_time_after\": null, \"direction\": \"improved\"}, \"we_m_tx_bd\": {\"before\": 142, \"after\": 0, \"first_time_before\": 480, \"first_time_after\": null, \"direction\": \"improved\"}}}`\n\n## 复用约束\n\nPatch failed lint and was rolled back; fix syntax before retrying this idea.\n\n## Problem\n\n`sd_controller_wb` showed a debug failure around `argument_reg`.\n\n## Evidence\n\n- Effect: `syntax_failed`\n- Before mismatch count: `38148`\n- After mismatch count: `None`\n- First divergence: `{\"signal\": \"argument_reg\", \"time\": 285, \"ref\": \"10011110111111011101010100000010\", \"dut\": \"10011110111111010000000000000000\", \"classification\": \"wrong_value\", \"ref_path\": \"tb.argument_reg_ref[31:0]\", \"dut_path\": \"tb.argument_reg_dut[31:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n- Trace root failure: `{\"signal\": \"argument_reg\", \"time\": 285, \"ref\": \"10011110111111011101010100000010\", \"dut\": \"10011110111111010000000000000000\", \"classification\": \"wrong_value\", \"ref_path\": \"tb.argument_reg_ref[31:0]\", \"dut_path\": \"tb.argument_reg_dut[31:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n- Metric delta: `{\"total_samples_mismatch\": \"9676 -> None\", \"per_signal\": {\"Bd_isr_enable_reg\": {\"before\": 830, \"after\": 0, \"first_time_before\": 4420, \"first_time_after\": null, \"direction\": \"improved\"}, \"Bd_isr_reset\": {\"before\": 154, \"after\": 0, \"first_time_before\": 5450, \"first_time_after\": null, \"direction\": \"improved\"}, \"argument_reg\": {\"before\": 8540, \"after\": 0, \"first_time_before\": 290, \"first_time_after\": null, \"direction\": \"improved\"}, \"clock_divider\": {\"before\": 1290, \"after\": 0, \"first_time_before\": 430, \"first_time_after\": null, \"direction\": \"improved\"}, \"cmd_int_busy\": {\"before\": 1880, \"after\": 0, \"first_time_before\": 2880, \"first_time_after\": null, \"direction\": \"improved\"}, \"cmd_setting_reg\": {\"before\": 8472, \"after\": 0, \"first_time_before\": 300, \"first_time_after\": null, \"direction\": \"improved\"}, \"dat_in_m_rx_bd\": {\"before\": 572, \"after\": 0, \"first_time_before\": 470, \"first_time_after\": null, \"direction\": \"improved\"}, \"dat_in_m_tx_bd\": {\"before\": 940, \"after\": 0, \"first_time_before\": 480, \"first_time_after\": null, \"direction\": \"improved\"}, \"error_int_signal_enable_reg\": {\"before\": 1872, \"after\": 0, \"first_time_before\": 410, \"first_time_after\": null, \"direction\": \"improved\"}, \"error_isr_reset\": {\"before\": 142, \"after\": 0, \"first_time_before\": 12520, \"first_time_after\": null, \"direction\": \"improved\"}, \"int_ack\": {\"before\": 72, \"after\": 0, \"first_time_before\": 480, \"first_time_after\": null, \"direction\": \"improved\"}, \"int_busy\": {\"before\": 1088, \"after\": 0, \"first_time_before\": 1020, \"first_time_after\": null, \"direction\": \"improved\"}, \"new_cmd\": {\"before\": 2962, \"after\": 0, \"first_time_before\": 820, \"first_time_after\": null, \"direction\": \"improved\"}, \"normal_int_signal_enable_reg\": {\"before\": 1824, \"after\": 0, \"first_time_before\": 400, \"first_time_after\": null, \"direction\": \"improved\"}, \"normal_isr_reset\": {\"before\": 124, \"after\": 0, \"first_time_before\": 3790, \"first_time_after\": null, \"direction\": \"improved\"}, \"software_reset_reg\": {\"before\": 670, \"after\": 0, \"first_time_before\": 4280, \"first_time_after\": null, \"direction\": \"improved\"}, \"time_out_reg\": {\"before\": 1860, \"after\": 0, \"first_time_before\": 370, \"first_time_after\": null, \"direction\": \"improved\"}, \"wb_ack_o\": {\"before\": 44, \"after\": 0, \"first_time_before\": 480, \"first_time_after\": null, \"direction\": \"improved\"}, \"wb_dat_o\": {\"before\": 2676, \"after\": 0, \"first_time_before\": 330, \"first_time_after\": null, \"direction\": \"improved\"}, \"we_ack\": {\"before\": 1880, \"after\": 0, \"first_time_before\": 2880, \"first_time_after\": null, \"direction\": \"improved\"}, \"we_m_rx_bd\": {\"before\": 114, \"after\": 0, \"first_time_before\": 470, \"first_time_after\": null, \"direction\": \"improved\"}, \"we_m_tx_bd\": {\"before\": 142, \"after\": 0, \"first_time_before\": 480, \"first_time_after\": null, \"direction\": \"improved\"}}}`\n\n## Patch Summary\n\nif (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\n...<snip>...\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i[7:0]; end end\n\n## Lesson\n\nPatch failed lint and was rolled back; fix syntax before retrying this idea.\n\n## Reuse Constraints\n\n- Read current RTL/spec evidence before applying a similar patch.\n- Do not reuse if affected signals or timing alignment differ.\n",
+        "body_excerpt": "## 触发条件\n\n- Module: `sd_controller_wb`\n- Signal: `argument_reg`\n- Effect: `syntax_failed`\n- First divergence: `{\"signal\": \"argument_reg\", \"time\": 285, \"ref\": \"10011110111111011101010100000010\", \"dut\": \"10011110111111010000000000000000\", \"classification\": \"wrong_value\", \"ref_path\": \"tb.argument_reg_ref[31:0]\", \"dut_path\": \"tb.argument_reg_dut[31:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n\n## 不适用条件\n\n- Do not reuse if affected signals, timing alignment, or spec intent differ.\n- Do not reuse without reading current RTL/spec evidence.\n\n## 补丁模式\n\nif (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\n...<snip>...\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i[7:0]; end end\n\n## 验证特征\n\n- Before mismatch count: `38148`\n- After mismatch count: `None`\n- Metric delta: `{\"total_samples_mismatch\": \"9676 -> None\", \"per_signal\": {\"Bd_isr_enable_reg\": {\"before\": 830, \"after\": 0, \"first_time_before\": 4420, \"first_time_after\": null, \"direction\": \"improved\"}, \"Bd_isr_reset\": {\"before\": 154, \"after\": 0, \"first_time_before\n...<snip>...\n\"direction\": \"improved\"}, \"time_out_reg\": {\"before\": 1860, \"after\": 0, \"first_time_before\": 370, \"first_time_after\": null, \"direction\": \"improved\"}, \"wb_ack_o\": {\"before\": 44, \"after\": 0, \"first_time_before\": 480, \"first_time_after\": null, \"direction\": \"improved\"}, \"wb_dat_o\": {\"before\": 2676, \"after\": 0, \"first_time_before\": 330, \"first_time_after\": null, \"direction\": \"improved\"}, \"we_ack\": {\"before\": 1880, \"after\": 0, \"first_time_before\": 2880, \"first_time_after\": null, \"direction\": \"improved\"}, \"we_m_rx_bd\": {\"before\": 114, \"after\": 0, \"first_time_before\": 470, \"first_time_after\": null, \"direction\": \"improved\"}, \"we_m_tx_bd\": {\"before\": 142, \"after\": 0, \"first_time_before\": 480, \"first_time_after\": null, \"direction\": \"improved\"}}}`\n\n## Patch Summary\n\nif (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\n...<snip>...\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i[7:0]; end end\n\n## Lesson\n\nPatch failed lint and was rolled back; fix syntax before retrying this idea.\n\n## Reuse Constraints\n\n- Read current RTL/spec evidence before applying a similar patch.\n- Do not reuse if affected signals or timing alignment differ.\n"
+      }
+    ]
+  },
+  "causal_memory": {
+    "repair_ledger_summary": [
+      {
+        "step": 1,
+        "action_type": "apply_patch",
+        "block_id": null,
+        "target": {
+          "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+          "start_line": 362,
+          "end_line": 362
+        },
+        "affected_signals": [
+          "wb_dat_o"
+        ],
+        "effect": "improved",
+        "metric_delta": {
+          "total_samples_mismatch": "9928 -> 9676",
+          "per_signal": {
+            "Bd_isr_enable_reg": {
+              "before": 830,
+              "after": 830,
+              "first_time_before": 4420,
+              "first_time_after": 4420,
+              "direction": "unchanged"
+            },
+            "Bd_isr_reset": {
+              "before": 154,
+              "after": 154,
+              "first_time_before": 5450,
+              "first_time_after": 5450,
+              "direction": "unchanged"
+            },
+            "argument_reg": {
+              "before": 8540,
+              "after": 8540,
+              "first_time_before": 290,
+              "first_time_after": 290,
+              "direction": "unchanged"
+            },
+            "clock_divider": {
+              "before": 1290,
+              "after": 1290,
+              "first_time_before": 430,
+              "first_time_after": 430,
+              "direction": "unchanged"
+            },
+            "cmd_int_busy": {
+              "before": 1880,
+              "after": 1880,
+              "first_time_before": 2880,
+              "first_time_after": 2880,
+              "direction": "unchanged"
+            },
+            "cmd_setting_reg": {
+              "before": 8472,
+              "after": 8472,
+              "first_time_before": 300,
+              "first_time_after": 300,
+              "direction": "unchanged"
+            },
+            "dat_in_m_rx_bd": {
+              "before": 572,
+              "after": 572,
+              "first_time_before": 470,
+              "first_time_after": 470,
+              "direction": "unchanged"
+            },
+            "dat_in_m_tx_bd": {
+              "before": 940,
+              "after": 940,
+              "first_time_before": 480,
+              "first_time_after": 480,
+              "direction": "unchanged"
+            },
+            "error_int_signal_enable_reg": {
+              "before": 1872,
+              "after": 1872,
+              "first_time_before": 410,
+              "first_time_after": 410,
+              "direction": "unchanged"
+            },
+            "error_isr_reset": {
+              "before": 142,
+              "after": 142,
+              "first_time_before": 12520,
+              "first_time_after": 12520,
+              "direction": "unchanged"
+            },
+            "int_ack": {
+              "before": 72,
+              "after": 72,
+              "first_time_before": 480,
+              "first_time_after": 480,
+              "direction": "unchanged"
+            },
+            "int_busy": {
+              "before": 1088,
+              "after": 1088,
+              "first_time_before": 1020,
+              "first_time_after": 1020,
+              "direction": "unchanged"
+            },
+            "new_cmd": {
+              "before": 2962,
+              "after": 2962,
+              "first_time_before": 820,
+              "first_time_after": 820,
+              "direction": "unchanged"
+            },
+            "normal_int_signal_enable_reg": {
+              "before": 1824,
+              "after": 1824,
+              "first_time_before": 400,
+              "first_time_after": 400,
+              "direction": "unchanged"
+            },
+            "normal_isr_reset": {
+              "before": 124,
+              "after": 124,
+              "first_time_before": 3790,
+              "first_time_after": 3790,
+              "direction": "unchanged"
+            },
+            "software_reset_reg": {
+              "before": 670,
+              "after": 670,
+              "first_time_before": 4280,
+              "first_time_after": 4280,
+              "direction": "unchanged"
+            },
+            "time_out_reg": {
+              "before": 1860,
+              "after": 1860,
+              "first_time_before": 370,
+              "first_time_after": 370,
+              "direction": "unchanged"
+            },
+            "wb_ack_o": {
+              "before": 44,
+              "after": 44,
+              "first_time_before": 480,
+              "first_time_after": 480,
+              "direction": "unchanged"
+            },
+            "wb_dat_o": {
+              "before": 3258,
+              "after": 2676,
+              "first_time_before": 150,
+              "first_time_after": 330,
+              "direction": "improved"
+            },
+            "we_ack": {
+              "before": 1880,
+              "after": 1880,
+              "first_time_before": 2880,
+              "first_time_after": 2880,
+              "direction": "unchanged"
+            },
+            "we_m_rx_bd": {
+              "before": 114,
+              "after": 114,
+              "first_time_before": 470,
+              "first_time_after": 470,
+              "direction": "unchanged"
+            },
+            "we_m_tx_bd": {
+              "before": 142,
+              "after": 142,
+              "first_time_before": 480,
+              "first_time_after": 480,
+              "direction": "unchanged"
+            }
+          }
+        },
+        "lesson": "Patch improved mismatch count or first fail time; continue from this direction.",
+        "hypothesis": "At t=145, wb_rst_i pulses high. Block A2 resets wb_dat_o to 0 (line 362: wb_dat_o <= 32'h00000000), but the ref model does NOT reset wb_dat_o — it holds the previous value (0xC4) and only updates via wb_dat_o_next. Changing to wb_dat_o <= wb_dat_o_next ensures wb_dat_o follows the combinational data path during reset: at t=145 it reads software_reset_reg=0xC4 (pre-reset, since nonblocking) → holds 0xC4; at t=155 it reads software_reset_reg=0x00 (post-reset) → becomes 0x00. This matches the ref trace exactly. Expected effect: wb_dat_o matches ref at t=145 (0xC4 instead of 0x00), fixing the first divergence. The mismatch count for wb_dat_o should drop from 3258 significantly.",
+        "patch_summary": "wb_dat_o                     <= wb_dat_o_next;",
+        "protect": [
+          "Preserve improved behavior for signals: wb_dat_o."
+        ]
+      },
+      {
+        "step": 2,
+        "action_type": "apply_patch",
+        "block_id": null,
+        "target": {
+          "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+          "start_line": 268,
+          "end_line": 300
+        },
+        "affected_signals": [
+          "Bd_isr_enable_reg_next",
+          "Bd_isr_reset_next",
+          "argument_reg_next",
+          "clock_divider_next",
+          "cmd_setting_reg_next",
+          "error_int_signal_enable_reg_next",
+          "error_isr_reset_next",
+          "int_busy_next",
+          "new_cmd_next",
+          "normal_int_signal_enable_reg_next",
+          "normal_isr_reset_next",
+          "software_reset_reg_next",
+          "time_out_reg_next"
+        ],
+        "effect": "syntax_failed",
+        "metric_delta": {
+          "total_samples_mismatch": "9676 -> None",
+          "per_signal": {
+            "Bd_isr_enable_reg": {
+              "before": 830,
+              "after": 0,
+              "first_time_before": 4420,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "Bd_isr_reset": {
+              "before": 154,
+              "after": 0,
+              "first_time_before": 5450,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "argument_reg": {
+              "before": 8540,
+              "after": 0,
+              "first_time_before": 290,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "clock_divider": {
+              "before": 1290,
+              "after": 0,
+              "first_time_before": 430,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "cmd_int_busy": {
+              "before": 1880,
+              "after": 0,
+              "first_time_before": 2880,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "cmd_setting_reg": {
+              "before": 8472,
+              "after": 0,
+              "first_time_before": 300,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "dat_in_m_rx_bd": {
+              "before": 572,
+              "after": 0,
+              "first_time_before": 470,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "dat_in_m_tx_bd": {
+              "before": 940,
+              "after": 0,
+              "first_time_before": 480,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "error_int_signal_enable_reg": {
+              "before": 1872,
+              "after": 0,
+              "first_time_before": 410,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "error_isr_reset": {
+              "before": 142,
+              "after": 0,
+              "first_time_before": 12520,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "int_ack": {
+              "before": 72,
+              "after": 0,
+              "first_time_before": 480,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "int_busy": {
+              "before": 1088,
+              "after": 0,
+              "first_time_before": 1020,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "new_cmd": {
+              "before": 2962,
+              "after": 0,
+              "first_time_before": 820,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "normal_int_signal_enable_reg": {
+              "before": 1824,
+              "after": 0,
+              "first_time_before": 400,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "normal_isr_reset": {
+              "before": 124,
+              "after": 0,
+              "first_time_before": 3790,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "software_reset_reg": {
+              "before": 670,
+              "after": 0,
+              "first_time_before": 4280,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "time_out_reg": {
+              "before": 1860,
+              "after": 0,
+              "first_time_before": 370,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "wb_ack_o": {
+              "before": 44,
+              "after": 0,
+              "first_time_before": 480,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "wb_dat_o": {
+              "before": 2676,
+              "after": 0,
+              "first_time_before": 330,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "we_ack": {
+              "before": 1880,
+              "after": 0,
+              "first_time_before": 2880,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "we_m_rx_bd": {
+              "before": 114,
+              "after": 0,
+              "first_time_before": 470,
+              "first_time_after": null,
+              "direction": "improved"
+            },
+            "we_m_tx_bd": {
+              "before": 142,
+              "after": 0,
+              "first_time_before": 480,
+              "first_time_after": null,
+              "direction": "improved"
+            }
+          }
+        },
+        "lesson": "Patch failed lint and was rolled back; fix syntax before retrying this idea.",
+        "hypothesis": "The spec states wb_sel_i is 'not used in the module'. The ref model ignores wb_sel_i and writes full register widths unconditionally. At t=285, wb_sel_i=1100 (only bytes 2,3 selected), causing the DUT to write only the upper 16 bits of argument_reg, leaving lower 16 bits at reset value (0x0000). Removing all if(wb_sel_byte*) conditions makes all register writes unconditional for their respective w\n...<snip>...\ne ref behavior. Expected effect: argument_reg and all other configuration registers will be written with full width regardless of wb_sel_i. argument_reg mismatch count (8540) should drop significantly. Other byte-write-gated registers (cmd_setting_reg, software_reset_reg, time_out_reg, normal_int_signal_enable_reg, error_int_signal_enable_reg, clock_divider, Bd_isr_enable_reg) should also improve.",
+        "patch_summary": "if (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\n...<snip>...\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i[7:0]; end end",
+        "protect": []
+      },
+      {
+        "step": 3,
+        "action_type": "apply_patch",
+        "block_id": null,
+        "target": {
+          "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+          "start_line": 268,
+          "end_line": 301
+        },
+        "affected_signals": [
+          "Bd_isr_enable_reg_next",
+          "Bd_isr_reset_next",
+          "argument_reg_next",
+          "clock_divider_next",
+          "cmd_setting_reg_next",
+          "error_int_signal_enable_reg_next",
+          "error_isr_reset_next",
+          "int_busy_next",
+          "new_cmd_next",
+          "normal_int_signal_enable_reg_next",
+          "normal_isr_reset_next",
+          "software_reset_reg_next",
+          "time_out_reg_next"
+        ],
+        "effect": "improved",
+        "metric_delta": {
+          "total_samples_mismatch": "9676 -> 9552",
+          "per_signal": {
+            "Bd_isr_enable_reg": {
+              "before": 830,
+              "after": 354,
+              "first_time_before": 4420,
+              "first_time_after": 4420,
+              "direction": "improved"
+            },
+            "Bd_isr_reset": {
+              "before": 154,
+              "after": 154,
+              "first_time_before": 5450,
+              "first_time_after": 5450,
+              "direction": "unchanged"
+            },
+            "argument_reg": {
+              "before": 8540,
+              "after": 8194,
+              "first_time_before": 290,
+              "first_time_after": 2860,
+              "direction": "improved"
+            },
+            "clock_divider": {
+              "before": 1290,
+              "after": 422,
+              "first_time_before": 430,
+              "first_time_after": 3180,
+              "direction": "improved"
+            },
+            "cmd_int_busy": {
+              "before": 1880,
+              "after": 1880,
+              "first_time_before": 2880,
+              "first_time_after": 2880,
+              "direction": "unchanged"
+            },
+            "cmd_setting_reg": {
+              "before": 8472,
+              "after": 8178,
+              "first_time_before": 300,
+              "first_time_after": 2860,
+              "direction": "improved"
+            },
+            "dat_in_m_rx_bd": {
+              "before": 572,
+              "after": 572,
+              "first_time_before": 470,
+              "first_time_after": 470,
+              "direction": "unchanged"
+            },
+            "dat_in_m_tx_bd": {
+              "before": 940,
+              "after": 940,
+              "first_time_before": 480,
+              "first_time_after": 480,
+              "direction": "unchanged"
+            },
+            "error_int_signal_enable_reg": {
+              "before": 1872,
+              "after": 526,
+              "first_time_before": 410,
+              "first_time_after": 3620,
+              "direction": "improved"
+            },
+            "error_isr_reset": {
+              "before": 142,
+              "after": 142,
+              "first_time_before": 12520,
+              "first_time_after": 12520,
+              "direction": "unchanged"
+            },
+            "int_ack": {
+              "before": 72,
+              "after": 72,
+              "first_time_before": 480,
+              "first_time_after": 480,
+              "direction": "unchanged"
+            },
+            "int_busy": {
+              "before": 1088,
+              "after": 1088,
+              "first_time_before": 1020,
+              "first_time_after": 1020,
+              "direction": "unchanged"
+            },
+            "new_cmd": {
+              "before": 2962,
+              "after": 2962,
+              "first_time_before": 820,
+              "first_time_after": 820,
+              "direction": "unchanged"
+            },
+            "normal_int_signal_enable_reg": {
+              "before": 1824,
+              "after": 462,
+              "first_time_before": 400,
+              "first_time_after": 7310,
+              "direction": "improved"
+            },
+            "normal_isr_reset": {
+              "before": 124,
+              "after": 124,
+              "first_time_before": 3790,
+              "first_time_after": 3790,
+              "direction": "unchanged"
+            },
+            "software_reset_reg": {
+              "before": 670,
+              "after": 242,
+              "first_time_before": 4280,
+              "first_time_after": 4280,
+              "direction": "improved"
+            },
+            "time_out_reg": {
+              "before": 1860,
+              "after": 554,
+              "first_time_before": 370,
+              "first_time_after": 8580,
+              "direction": "improved"
+            },
+            "wb_ack_o": {
+              "before": 44,
+              "after": 44,
+              "first_time_before": 480,
+              "first_time_after": 480,
+              "direction": "unchanged"
+            },
+            "wb_dat_o": {
+              "before": 2676,
+              "after": 2416,
+              "first_time_before": 330,
+              "first_time_after": 330,
+              "direction": "improved"
+            },
+            "we_ack": {
+              "before": 1880,
+              "after": 1880,
+              "first_time_before": 2880,
+              "first_time_after": 2880,
+              "direction": "unchanged"
+            },
+            "we_m_rx_bd": {
+              "before": 114,
+              "after": 114,
+              "first_time_before": 470,
+              "first_time_after": 470,
+              "direction": "unchanged"
+            },
+            "we_m_tx_bd": {
+              "before": 142,
+              "after": 142,
+              "first_time_before": 480,
+              "first_time_after": 480,
+              "direction": "unchanged"
+            }
+          }
+        },
+        "lesson": "Patch improved mismatch count or first fail time; continue from this direction.",
+        "hypothesis": "The spec states wb_sel_i is 'not used in the module'. At t=285, wb_sel_i=1100 blocks lower byte writes to argument_reg. Removing all if(wb_sel_byte*) conditions makes all register writes unconditional for their respective widths, matching the ref. Fixed line range to include original line 301 (outer end). Expected effect: argument_reg and other config registers written with full width regardless of wb_sel_i. Should reduce argument_reg mismatch count (8540), cmd_setting_reg (8472), and other byte-gated registers.",
+        "patch_summary": "if (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\n...<snip>...\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i[7:0]; end end",
+        "protect": [
+          "Preserve New_CMD sampling/reset-release timing behavior."
+        ]
+      }
+    ],
+    "promising_directions": [
+      {
+        "step": 1,
+        "effect": "improved",
+        "hypothesis": "At t=145, wb_rst_i pulses high. Block A2 resets wb_dat_o to 0 (line 362: wb_dat_o <= 32'h00000000), but the ref model does NOT reset wb_dat_o — it holds the previous value (0xC4) and only updates via wb_dat_o_next. Changing to wb_dat_o <= wb_dat_o_next ensures wb_dat_o follows the combinational data path during reset: at t=145 it reads software_reset_reg=0xC4 (pre-reset, since nonblocking) → holds 0xC4; at t=155 it reads software_reset_reg=0x00 (post-reset) → becomes 0x00. This matches the ref trace exactly. Expected effect: wb_dat_o matches ref at t=145 (0xC4 instead of 0x00), fixing the first divergence. The mismatch count for wb_dat_o should drop from 3258 significantly.",
+        "lesson": "Patch improved mismatch count or first fail time; continue from this direction.",
+        "changed_signals": [
+          "wb_dat_o"
+        ],
+        "target": {
+          "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+          "start_line": 362,
+          "end_line": 362
+        },
+        "patch_summary": "wb_dat_o                     <= wb_dat_o_next;"
+      },
+      {
+        "step": 3,
+        "effect": "improved",
+        "hypothesis": "The spec states wb_sel_i is 'not used in the module'. At t=285, wb_sel_i=1100 blocks lower byte writes to argument_reg. Removing all if(wb_sel_byte*) conditions makes all register writes unconditional for their respective widths, matching the ref. Fixed line range to include original line 301 (outer end). Expected effect: argument_reg and other config registers written with full width regardless of wb_sel_i. Should reduce argument_reg mismatch count (8540), cmd_setting_reg (8472), and other byte-gated registers.",
+        "lesson": "Patch improved mismatch count or first fail time; continue from this direction.",
+        "changed_signals": [
+          "Bd_isr_enable_reg_next",
+          "Bd_isr_reset_next",
+          "argument_reg_next",
+          "clock_divider_next",
+          "cmd_setting_reg_next",
+          "error_int_signal_enable_reg_next",
+          "error_isr_reset_next",
+          "int_busy_next",
+          "new_cmd_next",
+          "normal_int_signal_enable_reg_next",
+          "normal_isr_reset_next",
+          "software_reset_reg_next",
+          "time_out_reg_next"
+        ],
+        "target": {
+          "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+          "start_line": 268,
+          "end_line": 301
+        },
+        "patch_summary": "if (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\n...<snip>...\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i[7:0]; end end"
+      }
+    ],
+    "protected_invariants": [
+      "Preserve improved behavior for signals: wb_dat_o.",
+      "Preserve New_CMD sampling/reset-release timing behavior."
+    ],
+    "unsafe_directions": [
+      "Syntax-failed direction at step 2: if (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\n...<snip>...\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i[7:0]; end end"
+    ],
+    "selected_long_term_memories": [
+      {
+        "path": "cases/debug_sd_controller_wb_wb_dat_o_improved_3.md",
+        "memory_id": "debug_sd_controller_wb_wb_dat_o_improved_3",
+        "type": "repair_outcome",
+        "stage": "debug",
+        "module": "sd_controller_wb",
+        "signals": [
+          "Bd_isr_enable_reg_next",
+          "Bd_isr_reset_next",
+          "argument_reg_next",
+          "clock_divider_next",
+          "cmd_setting_reg_next",
+          "error_int_signal_enable_reg_next",
+          "error_isr_reset_next",
+          "int_busy_next",
+          "new_cmd_next",
+          "normal_int_signal_enable_reg_next",
+          "normal_isr_reset_next",
+          "software_reset_reg_next"
+        ],
+        "failure_type": "local_logic_bug",
+        "outcome": "improved",
+        "confidence": 0.72,
+        "description": "sd_controller_wb: wb_dat_o improved; Patch improved mismatch count or first fail time; continue from this direction.",
+        "patch_pattern": "if (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\n...<snip>...\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i",
+        "anti_trigger": "Do not reuse when current first divergence, affected signals, or timing alignment differ.",
+        "content": "## 触发条件\n\n- Module: `sd_controller_wb`\n- Signal: `wb_dat_o`\n- Effect: `improved`\n- First divergence: `{\"signal\": \"wb_dat_o\", \"time\": 325, \"ref\": \"00000000000000000000000000000010\", \"dut\": \"00000000000000000000000000000000\", \"classification\": \"dut_late\", \"ref_path\": \"tb.wb_dat_o_ref[31:0]\", \"dut_path\": \"tb.wb_dat_o_dut[31:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n\n## 不适用条件\n\n- Do not reuse if affected signals, timing alignment, or spec intent differ.\n- Do not reuse without reading current RTL/spec evidence.\n\n## 补丁模式\n\nif (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\n...<snip>...\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i[7:0]; end end\n\n## 验证特征\n\n- Before mismatch count: `38148`\n- After mismatch count: `31462`\n- Metric delta: `{\"total_samples_mismatch\": \"9676 -> 9552\", \"per_signal\": {\"Bd_isr_enable_reg\": {\"before\": 830, \"after\": 354, \"first_time_before\": 4420, \"first_time_after\": 4420, \"direction\": \"improved\"}, \"Bd_isr_reset\": {\"before\": 154, \"after\": 154, \"first_time_before\": 5450, \"first_time_after\": 5450, \"direction\": \"unchanged\"}, \"argument_reg\": {\"before\": 8540, \"after\": 8194, \"first_time_before\": 290, \"first_time_after\": 2860, \"direction\": \"improved\"}, \"clock_divider\": {\"before\": 1290, \"after\": 422, \"first_time_before\": 430, \"first_time_after\": 3180, \"direction\": \"improved\"}, \"cmd_int_busy\": {\"before\": 1880, \"after\": 1880, \"first_time_before\": 2880, \"first_time_after\": 2880, \"direction\": \"unchanged\"}, \"cmd_setting_reg\": {\"before\": 8472, \"after\": 8178, \"first_time_before\": 300, \"first_time_after\": 2860, \"direction\": \"improved\"}, \"dat_in_m_rx_bd\": {\"before\": 572, \"after\": 572, \"first_time_before\": 470, \"first_time_after\": 470, \"direction\": \"unchanged\"}, \"dat_in_m_tx_bd\": {\"before\": 940, \"after\": 940, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}, \"error_int_signal_enable_reg\": {\"before\": 1872, \"after\": 526, \"first_time_before\": 410, \"first_time_after\": 3620, \"direction\": \"improved\"}, \"error_isr_reset\": {\"before\": 142, \"after\": 142, \"first_time_before\": 12520, \"first_time_after\": 12520, \"direction\": \"unchanged\"}, \"int_ack\": {\"before\": 72, \"after\": 72, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}, \"int_busy\": {\"before\": 1088, \"after\": 1088, \"first_time_before\": 1020, \"first_time_after\": 1020, \"direction\": \"unchanged\"}, \"new_cmd\": {\"before\": 2962, \"after\": 2962, \"first_time_before\": 820, \"first_time_after\": 820, \"direction\": \"unchanged\"}, \"normal_int_signal_enable_reg\": {\"before\": 1824, \"after\": 462, \"first_time_before\": 400, \"first_time_after\": 7310, \"direction\": \"improved\"}, \"normal_isr_reset\": {\"before\": 124, \"after\": 124, \"first_time_before\": 3790, \"first_time_after\": 3790, \"direction\": \"unchanged\"}, \"software_reset_reg\": {\"before\": 670, \"after\": 242, \"first_time_before\": 4280, \"first_time_after\": 4280, \"direction\": \"improved\"}, \"time_out_reg\": {\"before\": 1860, \"after\": 554, \"first_time_before\": 370, \"first_time_after\": 8580, \"direction\": \"improved\"}, \"wb_ack_o\": {\"before\": 44, \"after\": 44, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}, \"wb_dat_o\": {\"before\": 2676, \"after\": 2416, \"first_time_before\": 330, \"first_time_after\": 330, \"direction\": \"improved\"}, \"we_ack\": {\"before\": 1880, \"after\": 1880, \"first_time_before\": 2880, \"first_time_after\": 2880, \"direction\": \"unchanged\"}, \"we_m_rx_bd\": {\"before\": 114, \"after\": 114, \"first_time_before\": 470, \"first_time_after\": 470, \"direction\": \"unchanged\"}, \"we_m_tx_bd\": {\"before\": 142, \"after\": 142, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}}}`\n\n## 复用约束\n\nPatch improved mismatch count or first fail time; continue from this direction.\n\n## Problem\n\n`sd_controller_wb` showed a debug failure around `wb_dat_o`.\n\n## Evidence\n\n- Effect: `improved`\n- Before mismatch count: `38148`\n- After mismatch count: `31462`\n- First divergence: `{\"signal\": \"wb_dat_o\", \"time\": 325, \"ref\": \"00000000000000000000000000000010\", \"dut\": \"00000000000000000000000000000000\", \"classification\": \"dut_late\", \"ref_path\": \"tb.wb_dat_o_ref[31:0]\", \"dut_path\": \"tb.wb_dat_o_dut[31:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n- Trace root failure: `{\"signal\": \"wb_dat_o\", \"time\": 325, \"ref\": \"00000000000000000000000000000010\", \"dut\": \"00000000000000000000000000000000\", \"classification\": \"dut_late\", \"ref_path\": \"tb.wb_dat_o_ref[31:0]\", \"dut_path\": \"tb.wb_dat_o_dut[31:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n- Metric delta: `{\"total_samples_mismatch\": \"9676 -> 9552\", \"per_signal\": {\"Bd_isr_enable_reg\": {\"before\": 830, \"after\": 354, \"first_time_before\": 4420, \"first_time_after\": 4420, \"direction\": \"improved\"}, \"Bd_isr_reset\": {\"before\": 154, \"after\": 154, \"first_time_before\": 5450, \"first_time_after\": 5450, \"direction\": \"unchanged\"}, \"argument_reg\": {\"before\": 8540, \"after\": 8194, \"first_time_before\": 290, \"first_time_after\": 2860, \"direction\": \"improved\"}, \"clock_divider\": {\"before\": 1290, \"after\": 422, \"first_time_before\": 430, \"first_time_after\": 3180, \"direction\": \"improved\"}, \"cmd_int_busy\": {\"before\": 1880, \"after\": 1880, \"first_time_before\": 2880, \"first_time_after\": 2880, \"direction\": \"unchanged\"}, \"cmd_setting_reg\": {\"before\": 8472, \"after\": 8178, \"first_time_before\": 300, \"first_time_after\": 2860, \"direction\": \"improved\"}, \"dat_in_m_rx_bd\": {\"before\": 572, \"after\": 572, \"first_time_before\": 470, \"first_time_after\": 470, \"direction\": \"unchanged\"}, \"dat_in_m_tx_bd\": {\"before\": 940, \"after\": 940, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}, \"error_int_signal_enable_reg\": {\"before\": 1872, \"after\": 526, \"first_time_before\": 410, \"first_time_after\": 3620, \"direction\": \"improved\"}, \"error_isr_reset\": {\"before\": 142, \"after\": 142, \"first_time_before\": 12520, \"first_time_after\": 12520, \"direction\": \"unchanged\"}, \"int_ack\": {\"before\": 72, \"after\": 72, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}, \"int_busy\": {\"before\": 1088, \"after\": 1088, \"first_time_before\": 1020, \"first_time_after\": 1020, \"direction\": \"unchanged\"}, \"new_cmd\": {\"before\": 2962, \"after\": 2962, \"first_time_before\": 820, \"first_time_after\": 820, \"direction\": \"unchanged\"}, \"normal_int_signal_enable_reg\": {\"before\": 1824, \"after\": 462, \"first_time_before\": 400, \"first_time_after\": 7310, \"direction\": \"improved\"}, \"normal_isr_reset\": {\"before\": 124, \"after\": 124, \"first_time_before\": 3790, \"first_time_after\": 3790, \"direction\": \"unchanged\"}, \"software_reset_reg\": {\"before\": 670, \"after\": 242, \"first_time_before\": 4280, \"first_time_after\": 4280, \"direction\": \"improved\"}, \"time_out_reg\": {\"before\": 1860, \"after\": 554, \"first_time_before\": 370, \"first_time_after\": 8580, \"direction\": \"improved\"}, \"wb_ack_o\": {\"before\": 44, \"after\": 44, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}, \"wb_dat_o\": {\"before\": 2676, \"after\": 2416, \"first_time_before\": 330, \"first_time_after\": 330, \"direction\": \"improved\"}, \"we_ack\": {\"before\": 1880, \"after\": 1880, \"first_time_before\": 2880, \"first_time_after\": 2880, \"direction\": \"unchanged\"}, \"we_m_rx_bd\": {\"before\": 114, \"after\": 114, \"first_time_before\": 470, \"first_time_after\": 470, \"direction\": \"unchanged\"}, \"we_m_tx_bd\": {\"before\": 142, \"after\": 142, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}}}`\n\n## Patch Summary\n\nif (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\n...<snip>...\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i[7:0]; end end\n\n## Lesson\n\nPatch improved mismatch count or first fail time; continue from this direction.\n\n## Reuse Constraints\n\n- Read current RTL/spec evidence before applying a similar patch.\n- Do not reuse if affected signals or timing alignment differ.\n",
+        "body_excerpt": "## 触发条件\n\n- Module: `sd_controller_wb`\n- Signal: `wb_dat_o`\n- Effect: `improved`\n- First divergence: `{\"signal\": \"wb_dat_o\", \"time\": 325, \"ref\": \"00000000000000000000000000000010\", \"dut\": \"00000000000000000000000000000000\", \"classification\": \"dut_late\", \"ref_path\": \"tb.wb_dat_o_ref[31:0]\", \"dut_path\": \"tb.wb_dat_o_dut[31:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n\n## 不适用条件\n\n- Do not reuse if affected signals, timing alignment, or spec intent differ.\n- Do not reuse without reading current RTL/spec evidence.\n\n## 补丁模式\n\nif (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\n...<snip>...\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i[7:0]; end end\n\n## 验证特征\n\n- Before mismatch count: `38148`\n- After mismatch count: `31462`\n- Metric delta: `{\"total_samples_mismatch\": \"9676 -> 9552\", \"per_signal\": {\"Bd_isr_enable_reg\": {\"before\": 830, \"after\": 354, \"first_time_before\": 4420, \"first_time_after\": 4420, \"direction\": \"improved\"}, \"Bd_isr_reset\": {\"before\": 154, \"after\": 154, \"first_time_before\": 5450, \"first_tim\n...<snip>...\nproved\"}, \"time_out_reg\": {\"before\": 1860, \"after\": 554, \"first_time_before\": 370, \"first_time_after\": 8580, \"direction\": \"improved\"}, \"wb_ack_o\": {\"before\": 44, \"after\": 44, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}, \"wb_dat_o\": {\"before\": 2676, \"after\": 2416, \"first_time_before\": 330, \"first_time_after\": 330, \"direction\": \"improved\"}, \"we_ack\": {\"before\": 1880, \"after\": 1880, \"first_time_before\": 2880, \"first_time_after\": 2880, \"direction\": \"unchanged\"}, \"we_m_rx_bd\": {\"before\": 114, \"after\": 114, \"first_time_before\": 470, \"first_time_after\": 470, \"direction\": \"unchanged\"}, \"we_m_tx_bd\": {\"before\": 142, \"after\": 142, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}}}`\n\n## Patch Summary\n\nif (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\n...<snip>...\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i[7:0]; end end\n\n## Lesson\n\nPatch improved mismatch count or first fail time; continue from this direction.\n\n## Reuse Constraints\n\n- Read current RTL/spec evidence before applying a similar patch.\n- Do not reuse if affected signals or timing alignment differ.\n"
+      },
+      {
+        "path": "cases/debug_sd_controller_wb_argument_reg_improved_1.md",
+        "memory_id": "debug_sd_controller_wb_argument_reg_improved_1",
+        "type": "repair_outcome",
+        "stage": "debug",
+        "module": "sd_controller_wb",
+        "signals": [
+          "argument_reg",
+          "wb_dat_o"
+        ],
+        "failure_type": "local_logic_bug",
+        "outcome": "improved",
+        "confidence": 0.72,
+        "description": "sd_controller_wb: argument_reg improved; Patch improved mismatch count or first fail time; continue from this direction.",
+        "patch_pattern": "wb_dat_o                     <= wb_dat_o_next;",
+        "anti_trigger": "Do not reuse when current first divergence, affected signals, or timing alignment differ.",
+        "content": "## 触发条件\n\n- Module: `sd_controller_wb`\n- Signal: `argument_reg`\n- Effect: `improved`\n- First divergence: `{\"signal\": \"argument_reg\", \"time\": 285, \"ref\": \"10011110111111011101010100000010\", \"dut\": \"10011110111111010000000000000000\", \"classification\": \"wrong_value\", \"ref_path\": \"tb.argument_reg_ref[31:0]\", \"dut_path\": \"tb.argument_reg_dut[31:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n\n## 不适用条件\n\n- Do not reuse if affected signals, timing alignment, or spec intent differ.\n- Do not reuse without reading current RTL/spec evidence.\n\n## 补丁模式\n\nwb_dat_o                     <= wb_dat_o_next;\n\n## 验证特征\n\n- Before mismatch count: `38730`\n- After mismatch count: `38148`\n- Metric delta: `{\"total_samples_mismatch\": \"9928 -> 9676\", \"per_signal\": {\"Bd_isr_enable_reg\": {\"before\": 830, \"after\": 830, \"first_time_before\": 4420, \"first_time_after\": 4420, \"direction\": \"unchanged\"}, \"Bd_isr_reset\": {\"before\": 154, \"after\": 154, \"first_time_before\": 5450, \"first_time_after\": 5450, \"direction\": \"unchanged\"}, \"argument_reg\": {\"before\": 8540, \"after\": 8540, \"first_time_before\": 290, \"first_time_after\": 290, \"direction\": \"unchanged\"}, \"clock_divider\": {\"before\": 1290, \"after\": 1290, \"first_time_before\": 430, \"first_time_after\": 430, \"direction\": \"unchanged\"}, \"cmd_int_busy\": {\"before\": 1880, \"after\": 1880, \"first_time_before\": 2880, \"first_time_after\": 2880, \"direction\": \"unchanged\"}, \"cmd_setting_reg\": {\"before\": 8472, \"after\": 8472, \"first_time_before\": 300, \"first_time_after\": 300, \"direction\": \"unchanged\"}, \"dat_in_m_rx_bd\": {\"before\": 572, \"after\": 572, \"first_time_before\": 470, \"first_time_after\": 470, \"direction\": \"unchanged\"}, \"dat_in_m_tx_bd\": {\"before\": 940, \"after\": 940, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}, \"error_int_signal_enable_reg\": {\"before\": 1872, \"after\": 1872, \"first_time_before\": 410, \"first_time_after\": 410, \"direction\": \"unchanged\"}, \"error_isr_reset\": {\"before\": 142, \"after\": 142, \"first_time_before\": 12520, \"first_time_after\": 12520, \"direction\": \"unchanged\"}, \"int_ack\": {\"before\": 72, \"after\": 72, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}, \"int_busy\": {\"before\": 1088, \"after\": 1088, \"first_time_before\": 1020, \"first_time_after\": 1020, \"direction\": \"unchanged\"}, \"new_cmd\": {\"before\": 2962, \"after\": 2962, \"first_time_before\": 820, \"first_time_after\": 820, \"direction\": \"unchanged\"}, \"normal_int_signal_enable_reg\": {\"before\": 1824, \"after\": 1824, \"first_time_before\": 400, \"first_time_after\": 400, \"direction\": \"unchanged\"}, \"normal_isr_reset\": {\"before\": 124, \"after\": 124, \"first_time_before\": 3790, \"first_time_after\": 3790, \"direction\": \"unchanged\"}, \"software_reset_reg\": {\"before\": 670, \"after\": 670, \"first_time_before\": 4280, \"first_time_after\": 4280, \"direction\": \"unchanged\"}, \"time_out_reg\": {\"before\": 1860, \"after\": 1860, \"first_time_before\": 370, \"first_time_after\": 370, \"direction\": \"unchanged\"}, \"wb_ack_o\": {\"before\": 44, \"after\": 44, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}, \"wb_dat_o\": {\"before\": 3258, \"after\": 2676, \"first_time_before\": 150, \"first_time_after\": 330, \"direction\": \"improved\"}, \"we_ack\": {\"before\": 1880, \"after\": 1880, \"first_time_before\": 2880, \"first_time_after\": 2880, \"direction\": \"unchanged\"}, \"we_m_rx_bd\": {\"before\": 114, \"after\": 114, \"first_time_before\": 470, \"first_time_after\": 470, \"direction\": \"unchanged\"}, \"we_m_tx_bd\": {\"before\": 142, \"after\": 142, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}}}`\n\n## 复用约束\n\nPatch improved mismatch count or first fail time; continue from this direction.\n\n## Problem\n\n`sd_controller_wb` showed a debug failure around `argument_reg`.\n\n## Evidence\n\n- Effect: `improved`\n- Before mismatch count: `38730`\n- After mismatch count: `38148`\n- First divergence: `{\"signal\": \"argument_reg\", \"time\": 285, \"ref\": \"10011110111111011101010100000010\", \"dut\": \"10011110111111010000000000000000\", \"classification\": \"wrong_value\", \"ref_path\": \"tb.argument_reg_ref[31:0]\", \"dut_path\": \"tb.argument_reg_dut[31:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n- Trace root failure: `{\"signal\": \"argument_reg\", \"time\": 285, \"ref\": \"10011110111111011101010100000010\", \"dut\": \"10011110111111010000000000000000\", \"classification\": \"wrong_value\", \"ref_path\": \"tb.argument_reg_ref[31:0]\", \"dut_path\": \"tb.argument_reg_dut[31:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n- Metric delta: `{\"total_samples_mismatch\": \"9928 -> 9676\", \"per_signal\": {\"Bd_isr_enable_reg\": {\"before\": 830, \"after\": 830, \"first_time_before\": 4420, \"first_time_after\": 4420, \"direction\": \"unchanged\"}, \"Bd_isr_reset\": {\"before\": 154, \"after\": 154, \"first_time_before\": 5450, \"first_time_after\": 5450, \"direction\": \"unchanged\"}, \"argument_reg\": {\"before\": 8540, \"after\": 8540, \"first_time_before\": 290, \"first_time_after\": 290, \"direction\": \"unchanged\"}, \"clock_divider\": {\"before\": 1290, \"after\": 1290, \"first_time_before\": 430, \"first_time_after\": 430, \"direction\": \"unchanged\"}, \"cmd_int_busy\": {\"before\": 1880, \"after\": 1880, \"first_time_before\": 2880, \"first_time_after\": 2880, \"direction\": \"unchanged\"}, \"cmd_setting_reg\": {\"before\": 8472, \"after\": 8472, \"first_time_before\": 300, \"first_time_after\": 300, \"direction\": \"unchanged\"}, \"dat_in_m_rx_bd\": {\"before\": 572, \"after\": 572, \"first_time_before\": 470, \"first_time_after\": 470, \"direction\": \"unchanged\"}, \"dat_in_m_tx_bd\": {\"before\": 940, \"after\": 940, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}, \"error_int_signal_enable_reg\": {\"before\": 1872, \"after\": 1872, \"first_time_before\": 410, \"first_time_after\": 410, \"direction\": \"unchanged\"}, \"error_isr_reset\": {\"before\": 142, \"after\": 142, \"first_time_before\": 12520, \"first_time_after\": 12520, \"direction\": \"unchanged\"}, \"int_ack\": {\"before\": 72, \"after\": 72, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}, \"int_busy\": {\"before\": 1088, \"after\": 1088, \"first_time_before\": 1020, \"first_time_after\": 1020, \"direction\": \"unchanged\"}, \"new_cmd\": {\"before\": 2962, \"after\": 2962, \"first_time_before\": 820, \"first_time_after\": 820, \"direction\": \"unchanged\"}, \"normal_int_signal_enable_reg\": {\"before\": 1824, \"after\": 1824, \"first_time_before\": 400, \"first_time_after\": 400, \"direction\": \"unchanged\"}, \"normal_isr_reset\": {\"before\": 124, \"after\": 124, \"first_time_before\": 3790, \"first_time_after\": 3790, \"direction\": \"unchanged\"}, \"software_reset_reg\": {\"before\": 670, \"after\": 670, \"first_time_before\": 4280, \"first_time_after\": 4280, \"direction\": \"unchanged\"}, \"time_out_reg\": {\"before\": 1860, \"after\": 1860, \"first_time_before\": 370, \"first_time_after\": 370, \"direction\": \"unchanged\"}, \"wb_ack_o\": {\"before\": 44, \"after\": 44, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}, \"wb_dat_o\": {\"before\": 3258, \"after\": 2676, \"first_time_before\": 150, \"first_time_after\": 330, \"direction\": \"improved\"}, \"we_ack\": {\"before\": 1880, \"after\": 1880, \"first_time_before\": 2880, \"first_time_after\": 2880, \"direction\": \"unchanged\"}, \"we_m_rx_bd\": {\"before\": 114, \"after\": 114, \"first_time_before\": 470, \"first_time_after\": 470, \"direction\": \"unchanged\"}, \"we_m_tx_bd\": {\"before\": 142, \"after\": 142, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}}}`\n\n## Patch Summary\n\nwb_dat_o                     <= wb_dat_o_next;\n\n## Lesson\n\nPatch improved mismatch count or first fail time; continue from this direction.\n\n## Reuse Constraints\n\n- Read current RTL/spec evidence before applying a similar patch.\n- Do not reuse if affected signals or timing alignment differ.\n",
+        "body_excerpt": "## 触发条件\n\n- Module: `sd_controller_wb`\n- Signal: `argument_reg`\n- Effect: `improved`\n- First divergence: `{\"signal\": \"argument_reg\", \"time\": 285, \"ref\": \"10011110111111011101010100000010\", \"dut\": \"10011110111111010000000000000000\", \"classification\": \"wrong_value\", \"ref_path\": \"tb.argument_reg_ref[31:0]\", \"dut_path\": \"tb.argument_reg_dut[31:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n\n## 不适用条件\n\n- Do not reuse if affected signals, timing alignment, or spec intent differ.\n- Do not reuse without reading current RTL/spec evidence.\n\n## 补丁模式\n\nwb_dat_o                     <= wb_dat_o_next;\n\n## 验证特征\n\n- Before mismatch count: `38730`\n- After mismatch count: `38148`\n- Metric delta: `{\"total_samples_mismatch\": \"9928 -> 9676\", \"per_signal\": {\"Bd_isr_enable_reg\": {\"before\": 830, \"after\": 830, \"first_time_before\": 4420, \"first_time_after\": 4420, \"direction\": \"unchanged\"}, \"Bd_isr_reset\": {\"before\": 154, \"after\": 154, \"first_time_before\": 5450, \"first_time_after\": 5450, \"direction\": \"unchanged\"}, \"argument_reg\": {\"before\": 8540, \"after\": 8540, \"first_time_before\": 290, \"first_time\n...<snip>...\nirection\": \"unchanged\"}, \"software_reset_reg\": {\"before\": 670, \"after\": 670, \"first_time_before\": 4280, \"first_time_after\": 4280, \"direction\": \"unchanged\"}, \"time_out_reg\": {\"before\": 1860, \"after\": 1860, \"first_time_before\": 370, \"first_time_after\": 370, \"direction\": \"unchanged\"}, \"wb_ack_o\": {\"before\": 44, \"after\": 44, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}, \"wb_dat_o\": {\"before\": 3258, \"after\": 2676, \"first_time_before\": 150, \"first_time_after\": 330, \"direction\": \"improved\"}, \"we_ack\": {\"before\": 1880, \"after\": 1880, \"first_time_before\": 2880, \"first_time_after\": 2880, \"direction\": \"unchanged\"}, \"we_m_rx_bd\": {\"before\": 114, \"after\": 114, \"first_time_before\": 470, \"first_time_after\": 470, \"direction\": \"unchanged\"}, \"we_m_tx_bd\": {\"before\": 142, \"after\": 142, \"first_time_before\": 480, \"first_time_after\": 480, \"direction\": \"unchanged\"}}}`\n\n## Patch Summary\n\nwb_dat_o                     <= wb_dat_o_next;\n\n## Lesson\n\nPatch improved mismatch count or first fail time; continue from this direction.\n\n## Reuse Constraints\n\n- Read current RTL/spec evidence before applying a similar patch.\n- Do not reuse if affected signals or timing alignment differ.\n"
+      },
+      {
+        "path": "patterns/avoid_sd_controller_wb_argument_reg_syntax_failed_2.md",
+        "memory_id": "avoid_sd_controller_wb_argument_reg_syntax_failed_2",
+        "type": "negative_direction",
+        "stage": "debug",
+        "module": "sd_controller_wb",
+        "signals": [
+          "Bd_isr_enable_reg_next",
+          "Bd_isr_reset_next",
+          "argument_reg",
+          "argument_reg_next",
+          "clock_divider_next",
+          "cmd_setting_reg_next",
+          "error_int_signal_enable_reg_next",
+          "error_isr_reset_next",
+          "int_busy_next",
+          "new_cmd_next",
+          "normal_int_signal_enable_reg_next",
+          "normal_isr_reset_next"
+        ],
+        "failure_type": "local_logic_bug",
+        "outcome": "syntax_failed",
+        "confidence": 0.68,
+        "description": "sd_controller_wb: argument_reg syntax_failed; Patch failed lint and was rolled back; fix syntax before retrying this idea.",
+        "patch_pattern": "if (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\n...<snip>...\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i",
+        "anti_trigger": "Avoid this direction unless new evidence distinguishes the current failure.",
+        "content": "## 触发条件\n\n- Module: `sd_controller_wb`\n- Signal: `argument_reg`\n- Effect: `syntax_failed`\n- First divergence: `{\"signal\": \"argument_reg\", \"time\": 285, \"ref\": \"10011110111111011101010100000010\", \"dut\": \"10011110111111010000000000000000\", \"classification\": \"wrong_value\", \"ref_path\": \"tb.argument_reg_ref[31:0]\", \"dut_path\": \"tb.argument_reg_dut[31:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n\n## 不适用条件\n\n- Do not reuse if affected signals, timing alignment, or spec intent differ.\n- Do not reuse without reading current RTL/spec evidence.\n\n## 补丁模式\n\nif (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\n...<snip>...\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i[7:0]; end end\n\n## 验证特征\n\n- Before mismatch count: `38148`\n- After mismatch count: `None`\n- Metric delta: `{\"total_samples_mismatch\": \"9676 -> None\", \"per_signal\": {\"Bd_isr_enable_reg\": {\"before\": 830, \"after\": 0, \"first_time_before\": 4420, \"first_time_after\": null, \"direction\": \"improved\"}, \"Bd_isr_reset\": {\"before\": 154, \"after\": 0, \"first_time_before\": 5450, \"first_time_after\": null, \"direction\": \"improved\"}, \"argument_reg\": {\"before\": 8540, \"after\": 0, \"first_time_before\": 290, \"first_time_after\": null, \"direction\": \"improved\"}, \"clock_divider\": {\"before\": 1290, \"after\": 0, \"first_time_before\": 430, \"first_time_after\": null, \"direction\": \"improved\"}, \"cmd_int_busy\": {\"before\": 1880, \"after\": 0, \"first_time_before\": 2880, \"first_time_after\": null, \"direction\": \"improved\"}, \"cmd_setting_reg\": {\"before\": 8472, \"after\": 0, \"first_time_before\": 300, \"first_time_after\": null, \"direction\": \"improved\"}, \"dat_in_m_rx_bd\": {\"before\": 572, \"after\": 0, \"first_time_before\": 470, \"first_time_after\": null, \"direction\": \"improved\"}, \"dat_in_m_tx_bd\": {\"before\": 940, \"after\": 0, \"first_time_before\": 480, \"first_time_after\": null, \"direction\": \"improved\"}, \"error_int_signal_enable_reg\": {\"before\": 1872, \"after\": 0, \"first_time_before\": 410, \"first_time_after\": null, \"direction\": \"improved\"}, \"error_isr_reset\": {\"before\": 142, \"after\": 0, \"first_time_before\": 12520, \"first_time_after\": null, \"direction\": \"improved\"}, \"int_ack\": {\"before\": 72, \"after\": 0, \"first_time_before\": 480, \"first_time_after\": null, \"direction\": \"improved\"}, \"int_busy\": {\"before\": 1088, \"after\": 0, \"first_time_before\": 1020, \"first_time_after\": null, \"direction\": \"improved\"}, \"new_cmd\": {\"before\": 2962, \"after\": 0, \"first_time_before\": 820, \"first_time_after\": null, \"direction\": \"improved\"}, \"normal_int_signal_enable_reg\": {\"before\": 1824, \"after\": 0, \"first_time_before\": 400, \"first_time_after\": null, \"direction\": \"improved\"}, \"normal_isr_reset\": {\"before\": 124, \"after\": 0, \"first_time_before\": 3790, \"first_time_after\": null, \"direction\": \"improved\"}, \"software_reset_reg\": {\"before\": 670, \"after\": 0, \"first_time_before\": 4280, \"first_time_after\": null, \"direction\": \"improved\"}, \"time_out_reg\": {\"before\": 1860, \"after\": 0, \"first_time_before\": 370, \"first_time_after\": null, \"direction\": \"improved\"}, \"wb_ack_o\": {\"before\": 44, \"after\": 0, \"first_time_before\": 480, \"first_time_after\": null, \"direction\": \"improved\"}, \"wb_dat_o\": {\"before\": 2676, \"after\": 0, \"first_time_before\": 330, \"first_time_after\": null, \"direction\": \"improved\"}, \"we_ack\": {\"before\": 1880, \"after\": 0, \"first_time_before\": 2880, \"first_time_after\": null, \"direction\": \"improved\"}, \"we_m_rx_bd\": {\"before\": 114, \"after\": 0, \"first_time_before\": 470, \"first_time_after\": null, \"direction\": \"improved\"}, \"we_m_tx_bd\": {\"before\": 142, \"after\": 0, \"first_time_before\": 480, \"first_time_after\": null, \"direction\": \"improved\"}}}`\n\n## 复用约束\n\nPatch failed lint and was rolled back; fix syntax before retrying this idea.\n\n## Problem\n\n`sd_controller_wb` showed a debug failure around `argument_reg`.\n\n## Evidence\n\n- Effect: `syntax_failed`\n- Before mismatch count: `38148`\n- After mismatch count: `None`\n- First divergence: `{\"signal\": \"argument_reg\", \"time\": 285, \"ref\": \"10011110111111011101010100000010\", \"dut\": \"10011110111111010000000000000000\", \"classification\": \"wrong_value\", \"ref_path\": \"tb.argument_reg_ref[31:0]\", \"dut_path\": \"tb.argument_reg_dut[31:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n- Trace root failure: `{\"signal\": \"argument_reg\", \"time\": 285, \"ref\": \"10011110111111011101010100000010\", \"dut\": \"10011110111111010000000000000000\", \"classification\": \"wrong_value\", \"ref_path\": \"tb.argument_reg_ref[31:0]\", \"dut_path\": \"tb.argument_reg_dut[31:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n- Metric delta: `{\"total_samples_mismatch\": \"9676 -> None\", \"per_signal\": {\"Bd_isr_enable_reg\": {\"before\": 830, \"after\": 0, \"first_time_before\": 4420, \"first_time_after\": null, \"direction\": \"improved\"}, \"Bd_isr_reset\": {\"before\": 154, \"after\": 0, \"first_time_before\": 5450, \"first_time_after\": null, \"direction\": \"improved\"}, \"argument_reg\": {\"before\": 8540, \"after\": 0, \"first_time_before\": 290, \"first_time_after\": null, \"direction\": \"improved\"}, \"clock_divider\": {\"before\": 1290, \"after\": 0, \"first_time_before\": 430, \"first_time_after\": null, \"direction\": \"improved\"}, \"cmd_int_busy\": {\"before\": 1880, \"after\": 0, \"first_time_before\": 2880, \"first_time_after\": null, \"direction\": \"improved\"}, \"cmd_setting_reg\": {\"before\": 8472, \"after\": 0, \"first_time_before\": 300, \"first_time_after\": null, \"direction\": \"improved\"}, \"dat_in_m_rx_bd\": {\"before\": 572, \"after\": 0, \"first_time_before\": 470, \"first_time_after\": null, \"direction\": \"improved\"}, \"dat_in_m_tx_bd\": {\"before\": 940, \"after\": 0, \"first_time_before\": 480, \"first_time_after\": null, \"direction\": \"improved\"}, \"error_int_signal_enable_reg\": {\"before\": 1872, \"after\": 0, \"first_time_before\": 410, \"first_time_after\": null, \"direction\": \"improved\"}, \"error_isr_reset\": {\"before\": 142, \"after\": 0, \"first_time_before\": 12520, \"first_time_after\": null, \"direction\": \"improved\"}, \"int_ack\": {\"before\": 72, \"after\": 0, \"first_time_before\": 480, \"first_time_after\": null, \"direction\": \"improved\"}, \"int_busy\": {\"before\": 1088, \"after\": 0, \"first_time_before\": 1020, \"first_time_after\": null, \"direction\": \"improved\"}, \"new_cmd\": {\"before\": 2962, \"after\": 0, \"first_time_before\": 820, \"first_time_after\": null, \"direction\": \"improved\"}, \"normal_int_signal_enable_reg\": {\"before\": 1824, \"after\": 0, \"first_time_before\": 400, \"first_time_after\": null, \"direction\": \"improved\"}, \"normal_isr_reset\": {\"before\": 124, \"after\": 0, \"first_time_before\": 3790, \"first_time_after\": null, \"direction\": \"improved\"}, \"software_reset_reg\": {\"before\": 670, \"after\": 0, \"first_time_before\": 4280, \"first_time_after\": null, \"direction\": \"improved\"}, \"time_out_reg\": {\"before\": 1860, \"after\": 0, \"first_time_before\": 370, \"first_time_after\": null, \"direction\": \"improved\"}, \"wb_ack_o\": {\"before\": 44, \"after\": 0, \"first_time_before\": 480, \"first_time_after\": null, \"direction\": \"improved\"}, \"wb_dat_o\": {\"before\": 2676, \"after\": 0, \"first_time_before\": 330, \"first_time_after\": null, \"direction\": \"improved\"}, \"we_ack\": {\"before\": 1880, \"after\": 0, \"first_time_before\": 2880, \"first_time_after\": null, \"direction\": \"improved\"}, \"we_m_rx_bd\": {\"before\": 114, \"after\": 0, \"first_time_before\": 470, \"first_time_after\": null, \"direction\": \"improved\"}, \"we_m_tx_bd\": {\"before\": 142, \"after\": 0, \"first_time_before\": 480, \"first_time_after\": null, \"direction\": \"improved\"}}}`\n\n## Patch Summary\n\nif (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\n...<snip>...\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i[7:0]; end end\n\n## Lesson\n\nPatch failed lint and was rolled back; fix syntax before retrying this idea.\n\n## Reuse Constraints\n\n- Read current RTL/spec evidence before applying a similar patch.\n- Do not reuse if affected signals or timing alignment differ.\n",
+        "body_excerpt": "## 触发条件\n\n- Module: `sd_controller_wb`\n- Signal: `argument_reg`\n- Effect: `syntax_failed`\n- First divergence: `{\"signal\": \"argument_reg\", \"time\": 285, \"ref\": \"10011110111111011101010100000010\", \"dut\": \"10011110111111010000000000000000\", \"classification\": \"wrong_value\", \"ref_path\": \"tb.argument_reg_ref[31:0]\", \"dut_path\": \"tb.argument_reg_dut[31:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n\n## 不适用条件\n\n- Do not reuse if affected signals, timing alignment, or spec intent differ.\n- Do not reuse without reading current RTL/spec evidence.\n\n## 补丁模式\n\nif (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\n...<snip>...\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i[7:0]; end end\n\n## 验证特征\n\n- Before mismatch count: `38148`\n- After mismatch count: `None`\n- Metric delta: `{\"total_samples_mismatch\": \"9676 -> None\", \"per_signal\": {\"Bd_isr_enable_reg\": {\"before\": 830, \"after\": 0, \"first_time_before\": 4420, \"first_time_after\": null, \"direction\": \"improved\"}, \"Bd_isr_reset\": {\"before\": 154, \"after\": 0, \"first_time_before\n...<snip>...\n\"direction\": \"improved\"}, \"time_out_reg\": {\"before\": 1860, \"after\": 0, \"first_time_before\": 370, \"first_time_after\": null, \"direction\": \"improved\"}, \"wb_ack_o\": {\"before\": 44, \"after\": 0, \"first_time_before\": 480, \"first_time_after\": null, \"direction\": \"improved\"}, \"wb_dat_o\": {\"before\": 2676, \"after\": 0, \"first_time_before\": 330, \"first_time_after\": null, \"direction\": \"improved\"}, \"we_ack\": {\"before\": 1880, \"after\": 0, \"first_time_before\": 2880, \"first_time_after\": null, \"direction\": \"improved\"}, \"we_m_rx_bd\": {\"before\": 114, \"after\": 0, \"first_time_before\": 470, \"first_time_after\": null, \"direction\": \"improved\"}, \"we_m_tx_bd\": {\"before\": 142, \"after\": 0, \"first_time_before\": 480, \"first_time_after\": null, \"direction\": \"improved\"}}}`\n\n## Patch Summary\n\nif (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\n...<snip>...\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i[7:0]; end end\n\n## Lesson\n\nPatch failed lint and was rolled back; fix syntax before retrying this idea.\n\n## Reuse Constraints\n\n- Read current RTL/spec evidence before applying a similar patch.\n- Do not reuse if affected signals or timing alignment differ.\n"
+      }
+    ],
+    "negative_patterns": [
+      {
+        "path": "patterns/avoid_sd_controller_wb_argument_reg_syntax_failed_2.md",
+        "memory_id": "avoid_sd_controller_wb_argument_reg_syntax_failed_2",
+        "type": "negative_direction",
+        "stage": "debug",
+        "module": "sd_controller_wb",
+        "signals": [
+          "Bd_isr_enable_reg_next",
+          "Bd_isr_reset_next",
+          "argument_reg",
+          "argument_reg_next",
+          "clock_divider_next",
+          "cmd_setting_reg_next",
+          "error_int_signal_enable_reg_next",
+          "error_isr_reset_next",
+          "int_busy_next",
+          "new_cmd_next",
+          "normal_int_signal_enable_reg_next",
+          "normal_isr_reset_next"
+        ],
+        "failure_type": "local_logic_bug",
+        "outcome": "syntax_failed",
+        "confidence": 0.68,
+        "description": "sd_controller_wb: argument_reg syntax_failed; Patch failed lint and was rolled back; fix syntax before retrying this idea.",
+        "patch_pattern": "if (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\n...<snip>...\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i",
+        "anti_trigger": "Avoid this direction unless new evidence distinguishes the current failure.",
+        "content": "## 触发条件\n\n- Module: `sd_controller_wb`\n- Signal: `argument_reg`\n- Effect: `syntax_failed`\n- First divergence: `{\"signal\": \"argument_reg\", \"time\": 285, \"ref\": \"10011110111111011101010100000010\", \"dut\": \"10011110111111010000000000000000\", \"classification\": \"wrong_value\", \"ref_path\": \"tb.argument_reg_ref[31:0]\", \"dut_path\": \"tb.argument_reg_dut[31:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n\n## 不适用条件\n\n- Do not reuse if affected signals, timing alignment, or spec intent differ.\n- Do not reuse without reading current RTL/spec evidence.\n\n## 补丁模式\n\nif (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\n...<snip>...\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i[7:0]; end end\n\n## 验证特征\n\n- Before mismatch count: `38148`\n- After mismatch count: `None`\n- Metric delta: `{\"total_samples_mismatch\": \"9676 -> None\", \"per_signal\": {\"Bd_isr_enable_reg\": {\"before\": 830, \"after\": 0, \"first_time_before\": 4420, \"first_time_after\": null, \"direction\": \"improved\"}, \"Bd_isr_reset\": {\"before\": 154, \"after\": 0, \"first_time_before\": 5450, \"first_time_after\": null, \"direction\": \"improved\"}, \"argument_reg\": {\"before\": 8540, \"after\": 0, \"first_time_before\": 290, \"first_time_after\": null, \"direction\": \"improved\"}, \"clock_divider\": {\"before\": 1290, \"after\": 0, \"first_time_before\": 430, \"first_time_after\": null, \"direction\": \"improved\"}, \"cmd_int_busy\": {\"before\": 1880, \"after\": 0, \"first_time_before\": 2880, \"first_time_after\": null, \"direction\": \"improved\"}, \"cmd_setting_reg\": {\"before\": 8472, \"after\": 0, \"first_time_before\": 300, \"first_time_after\": null, \"direction\": \"improved\"}, \"dat_in_m_rx_bd\": {\"before\": 572, \"after\": 0, \"first_time_before\": 470, \"first_time_after\": null, \"direction\": \"improved\"}, \"dat_in_m_tx_bd\": {\"before\": 940, \"after\": 0, \"first_time_before\": 480, \"first_time_after\": null, \"direction\": \"improved\"}, \"error_int_signal_enable_reg\": {\"before\": 1872, \"after\": 0, \"first_time_before\": 410, \"first_time_after\": null, \"direction\": \"improved\"}, \"error_isr_reset\": {\"before\": 142, \"after\": 0, \"first_time_before\": 12520, \"first_time_after\": null, \"direction\": \"improved\"}, \"int_ack\": {\"before\": 72, \"after\": 0, \"first_time_before\": 480, \"first_time_after\": null, \"direction\": \"improved\"}, \"int_busy\": {\"before\": 1088, \"after\": 0, \"first_time_before\": 1020, \"first_time_after\": null, \"direction\": \"improved\"}, \"new_cmd\": {\"before\": 2962, \"after\": 0, \"first_time_before\": 820, \"first_time_after\": null, \"direction\": \"improved\"}, \"normal_int_signal_enable_reg\": {\"before\": 1824, \"after\": 0, \"first_time_before\": 400, \"first_time_after\": null, \"direction\": \"improved\"}, \"normal_isr_reset\": {\"before\": 124, \"after\": 0, \"first_time_before\": 3790, \"first_time_after\": null, \"direction\": \"improved\"}, \"software_reset_reg\": {\"before\": 670, \"after\": 0, \"first_time_before\": 4280, \"first_time_after\": null, \"direction\": \"improved\"}, \"time_out_reg\": {\"before\": 1860, \"after\": 0, \"first_time_before\": 370, \"first_time_after\": null, \"direction\": \"improved\"}, \"wb_ack_o\": {\"before\": 44, \"after\": 0, \"first_time_before\": 480, \"first_time_after\": null, \"direction\": \"improved\"}, \"wb_dat_o\": {\"before\": 2676, \"after\": 0, \"first_time_before\": 330, \"first_time_after\": null, \"direction\": \"improved\"}, \"we_ack\": {\"before\": 1880, \"after\": 0, \"first_time_before\": 2880, \"first_time_after\": null, \"direction\": \"improved\"}, \"we_m_rx_bd\": {\"before\": 114, \"after\": 0, \"first_time_before\": 470, \"first_time_after\": null, \"direction\": \"improved\"}, \"we_m_tx_bd\": {\"before\": 142, \"after\": 0, \"first_time_before\": 480, \"first_time_after\": null, \"direction\": \"improved\"}}}`\n\n## 复用约束\n\nPatch failed lint and was rolled back; fix syntax before retrying this idea.\n\n## Problem\n\n`sd_controller_wb` showed a debug failure around `argument_reg`.\n\n## Evidence\n\n- Effect: `syntax_failed`\n- Before mismatch count: `38148`\n- After mismatch count: `None`\n- First divergence: `{\"signal\": \"argument_reg\", \"time\": 285, \"ref\": \"10011110111111011101010100000010\", \"dut\": \"10011110111111010000000000000000\", \"classification\": \"wrong_value\", \"ref_path\": \"tb.argument_reg_ref[31:0]\", \"dut_path\": \"tb.argument_reg_dut[31:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n- Trace root failure: `{\"signal\": \"argument_reg\", \"time\": 285, \"ref\": \"10011110111111011101010100000010\", \"dut\": \"10011110111111010000000000000000\", \"classification\": \"wrong_value\", \"ref_path\": \"tb.argument_reg_ref[31:0]\", \"dut_path\": \"tb.argument_reg_dut[31:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n- Metric delta: `{\"total_samples_mismatch\": \"9676 -> None\", \"per_signal\": {\"Bd_isr_enable_reg\": {\"before\": 830, \"after\": 0, \"first_time_before\": 4420, \"first_time_after\": null, \"direction\": \"improved\"}, \"Bd_isr_reset\": {\"before\": 154, \"after\": 0, \"first_time_before\": 5450, \"first_time_after\": null, \"direction\": \"improved\"}, \"argument_reg\": {\"before\": 8540, \"after\": 0, \"first_time_before\": 290, \"first_time_after\": null, \"direction\": \"improved\"}, \"clock_divider\": {\"before\": 1290, \"after\": 0, \"first_time_before\": 430, \"first_time_after\": null, \"direction\": \"improved\"}, \"cmd_int_busy\": {\"before\": 1880, \"after\": 0, \"first_time_before\": 2880, \"first_time_after\": null, \"direction\": \"improved\"}, \"cmd_setting_reg\": {\"before\": 8472, \"after\": 0, \"first_time_before\": 300, \"first_time_after\": null, \"direction\": \"improved\"}, \"dat_in_m_rx_bd\": {\"before\": 572, \"after\": 0, \"first_time_before\": 470, \"first_time_after\": null, \"direction\": \"improved\"}, \"dat_in_m_tx_bd\": {\"before\": 940, \"after\": 0, \"first_time_before\": 480, \"first_time_after\": null, \"direction\": \"improved\"}, \"error_int_signal_enable_reg\": {\"before\": 1872, \"after\": 0, \"first_time_before\": 410, \"first_time_after\": null, \"direction\": \"improved\"}, \"error_isr_reset\": {\"before\": 142, \"after\": 0, \"first_time_before\": 12520, \"first_time_after\": null, \"direction\": \"improved\"}, \"int_ack\": {\"before\": 72, \"after\": 0, \"first_time_before\": 480, \"first_time_after\": null, \"direction\": \"improved\"}, \"int_busy\": {\"before\": 1088, \"after\": 0, \"first_time_before\": 1020, \"first_time_after\": null, \"direction\": \"improved\"}, \"new_cmd\": {\"before\": 2962, \"after\": 0, \"first_time_before\": 820, \"first_time_after\": null, \"direction\": \"improved\"}, \"normal_int_signal_enable_reg\": {\"before\": 1824, \"after\": 0, \"first_time_before\": 400, \"first_time_after\": null, \"direction\": \"improved\"}, \"normal_isr_reset\": {\"before\": 124, \"after\": 0, \"first_time_before\": 3790, \"first_time_after\": null, \"direction\": \"improved\"}, \"software_reset_reg\": {\"before\": 670, \"after\": 0, \"first_time_before\": 4280, \"first_time_after\": null, \"direction\": \"improved\"}, \"time_out_reg\": {\"before\": 1860, \"after\": 0, \"first_time_before\": 370, \"first_time_after\": null, \"direction\": \"improved\"}, \"wb_ack_o\": {\"before\": 44, \"after\": 0, \"first_time_before\": 480, \"first_time_after\": null, \"direction\": \"improved\"}, \"wb_dat_o\": {\"before\": 2676, \"after\": 0, \"first_time_before\": 330, \"first_time_after\": null, \"direction\": \"improved\"}, \"we_ack\": {\"before\": 1880, \"after\": 0, \"first_time_before\": 2880, \"first_time_after\": null, \"direction\": \"improved\"}, \"we_m_rx_bd\": {\"before\": 114, \"after\": 0, \"first_time_before\": 470, \"first_time_after\": null, \"direction\": \"improved\"}, \"we_m_tx_bd\": {\"before\": 142, \"after\": 0, \"first_time_before\": 480, \"first_time_after\": null, \"direction\": \"improved\"}}}`\n\n## Patch Summary\n\nif (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\n...<snip>...\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i[7:0]; end end\n\n## Lesson\n\nPatch failed lint and was rolled back; fix syntax before retrying this idea.\n\n## Reuse Constraints\n\n- Read current RTL/spec evidence before applying a similar patch.\n- Do not reuse if affected signals or timing alignment differ.\n",
+        "body_excerpt": "## 触发条件\n\n- Module: `sd_controller_wb`\n- Signal: `argument_reg`\n- Effect: `syntax_failed`\n- First divergence: `{\"signal\": \"argument_reg\", \"time\": 285, \"ref\": \"10011110111111011101010100000010\", \"dut\": \"10011110111111010000000000000000\", \"classification\": \"wrong_value\", \"ref_path\": \"tb.argument_reg_ref[31:0]\", \"dut_path\": \"tb.argument_reg_dut[31:0]\", \"sampling_mode\": \"stable\", \"edge\": null, \"driver_assignment_kind\": \"nonblocking\", \"active_region_model\": \"settled VCD ref/dut values at sample/change times\"}`\n\n## 不适用条件\n\n- Do not reuse if affected signals, timing alignment, or spec intent differ.\n- Do not reuse without reading current RTL/spec evidence.\n\n## 补丁模式\n\nif (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\n...<snip>...\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i[7:0]; end end\n\n## 验证特征\n\n- Before mismatch count: `38148`\n- After mismatch count: `None`\n- Metric delta: `{\"total_samples_mismatch\": \"9676 -> None\", \"per_signal\": {\"Bd_isr_enable_reg\": {\"before\": 830, \"after\": 0, \"first_time_before\": 4420, \"first_time_after\": null, \"direction\": \"improved\"}, \"Bd_isr_reset\": {\"before\": 154, \"after\": 0, \"first_time_before\n...<snip>...\n\"direction\": \"improved\"}, \"time_out_reg\": {\"before\": 1860, \"after\": 0, \"first_time_before\": 370, \"first_time_after\": null, \"direction\": \"improved\"}, \"wb_ack_o\": {\"before\": 44, \"after\": 0, \"first_time_before\": 480, \"first_time_after\": null, \"direction\": \"improved\"}, \"wb_dat_o\": {\"before\": 2676, \"after\": 0, \"first_time_before\": 330, \"first_time_after\": null, \"direction\": \"improved\"}, \"we_ack\": {\"before\": 1880, \"after\": 0, \"first_time_before\": 2880, \"first_time_after\": null, \"direction\": \"improved\"}, \"we_m_rx_bd\": {\"before\": 114, \"after\": 0, \"first_time_before\": 470, \"first_time_after\": null, \"direction\": \"improved\"}, \"we_m_tx_bd\": {\"before\": 142, \"after\": 0, \"first_time_before\": 480, \"first_time_after\": null, \"direction\": \"improved\"}}}`\n\n## Patch Summary\n\nif (wb_write_access) begin if (addr_argument) begin argument_reg_next[7:0]   = wb_dat_i[7:\n...<snip>...\nb1; end else if (addr_bd_isr_enable) begin Bd_isr_enable_reg_next = wb_dat_i[7:0]; end end\n\n## Lesson\n\nPatch failed lint and was rolled back; fix syntax before retrying this idea.\n\n## Reuse Constraints\n\n- Read current RTL/spec evidence before applying a similar patch.\n- Do not reuse if affected signals or timing alignment differ.\n"
+      }
+    ]
+  },
+  "raw_artifacts": {
+    "rtl": {
+      "kind": "rtl",
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+      "artifact_id": "",
+      "description": "Current debug RTL."
+    },
+    "merged_file": {
+      "kind": "rtl",
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_controller_wb.v",
+      "artifact_id": "",
+      "description": "Merged RTL source."
+    },
+    "trace_report": {
+      "kind": "trace",
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/trace_report.json",
+      "artifact_id": "",
+      "description": "Full trace report."
+    },
+    "sim_output": {
+      "kind": "sim",
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/debug_sim_output.json",
+      "artifact_id": "",
+      "description": "Latest simulation output JSON."
+    },
+    "spec": {
+      "kind": "spec",
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_dataset/sdc/sd_controller_wb.md",
+      "artifact_id": "",
+      "description": "Original spec path or in-memory spec_text fallback."
+    },
+    "patch_journal": {
+      "kind": "journal",
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/repo_react/sd_controller_wb/patch_journal.jsonl",
+      "artifact_id": "",
+      "description": "Full patch attempt journal."
+    },
+    "memory_index": {
+      "kind": "memory_index",
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/rtl_memory/MEMORY.md",
+      "artifact_id": "",
+      "description": "RTL long-term memory index."
+    }
+  },
+  "timing_evidence": {
+    "signal": "wb_dat_o",
+    "time": 325,
+    "edge": "",
+    "sampling_mode": "stable",
+    "ref": "00000000000000000000000000000010",
+    "dut": "00000000000000000000000000000000",
+    "driver_assignment_kind": "nonblocking",
+    "block_id": "A2",
+    "line_range": [
+      345,
+      407
+    ]
+  },
+  "fallback_used": true,
+  "fallback_reason": "deterministic_debug_context_router"
+}

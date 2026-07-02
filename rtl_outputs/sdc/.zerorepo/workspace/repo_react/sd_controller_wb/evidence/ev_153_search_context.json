@@ -1,0 +1,83 @@
+{
+  "status": "ok",
+  "pattern": "we_m_tx_bd",
+  "scope": "rtl",
+  "results": [
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+      "line": 17,
+      "excerpt": "15: \n16:     // Control outputs to other sub-modules\n17:     output reg              we_m_tx_bd,\n18:     output reg              we_m_rx_bd,\n19:     output reg              new_cmd,"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+      "line": 98,
+      "excerpt": "96: reg [31:0] wb_dat_o_next;\n97: reg        wb_ack_o_next;\n98: reg        we_m_tx_bd_next;\n99: reg        we_m_rx_bd_next;\n100: reg        new_cmd_next;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+      "line": 229,
+      "excerpt": "227:     wb_dat_o_next                     = wb_dat_o;\n228:     wb_ack_o_next                     = 1'b0;\n229:     we_m_tx_bd_next                   = 1'b0;\n230:     we_m_rx_bd_next                   = 1'b0;\n231:     new_cmd_next                      = 1'b0;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+      "line": 353,
+      "excerpt": "351:         wb_dat_o                     <= wb_dat_o_next;\n352:         wb_ack_o                     <= 1'b0;\n353:         we_m_tx_bd                   <= 1'b0;\n354:         we_m_rx_bd                   <= 1'b0;\n355:         new_cmd                      <= 1'b0;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+      "line": 383,
+      "excerpt": "381:         wb_dat_o                     <= wb_dat_o_next;\n382:         wb_ack_o                     <= wb_ack_o_next;\n383:         we_m_tx_bd                   <= we_m_tx_bd_next;\n384:         we_m_rx_bd                   <= we_m_rx_bd_next;\n385:         new_cmd                      <= new_cmd_next;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sdc_controller.v",
+      "line": 59,
+      "excerpt": "57: \n58: // Wishbone control signals\n59: wire        we_m_tx_bd;\n60: wire        we_m_rx_bd;\n61: wire        new_cmd;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sdc_controller.v",
+      "line": 179,
+      "excerpt": "177:     .wb_stb_i                     (wb_stb_i),\n178:     .wb_ack_o                     (wb_ack_o),\n179:     .we_m_tx_bd                   (we_m_tx_bd),\n180:     .we_m_rx_bd                   (we_m_rx_bd),\n181:     .new_cmd                      (new_cmd),"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sdc_controller.v",
+      "line": 323,
+      "excerpt": "321:     .clk        (wb_clk_i),\n322:     .rst        (core_rst),\n323:     .we_m       (we_m_tx_bd),\n324:     .dat_in_m   (dat_in_m_tx_bd),\n325:     .free_bd    (free_tx_bd),"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_controller_wb.v",
+      "line": 17,
+      "excerpt": "15: \n16:     // Control outputs to other sub-modules\n17:     output reg              we_m_tx_bd,\n18:     output reg              we_m_rx_bd,\n19:     output reg              new_cmd,"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_controller_wb.v",
+      "line": 98,
+      "excerpt": "96: reg [31:0] wb_dat_o_next;\n97: reg        wb_ack_o_next;\n98: reg        we_m_tx_bd_next;\n99: reg        we_m_rx_bd_next;\n100: reg        new_cmd_next;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_controller_wb.v",
+      "line": 229,
+      "excerpt": "227:     wb_dat_o_next                     = wb_dat_o;\n228:     wb_ack_o_next                     = 1'b0;\n229:     we_m_tx_bd_next                   = 1'b0;\n230:     we_m_rx_bd_next                   = 1'b0;\n231:     new_cmd_next                      = 1'b0;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_controller_wb.v",
+      "line": 314,
+      "excerpt": "312:         end else if (bd_tx_write_pulse) begin\n313:             int_ack_next          = 1'b0;\n314:             we_m_tx_bd_next       = 1'b1;\n315:             dat_in_m_tx_bd_next   = wb_dat_i[15:0];\n316:             bd_tx_low_word_next   = wb_dat_i;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_controller_wb.v",
+      "line": 327,
+      "excerpt": "325:     end else if (bd_fsm_state == BD_FSM_TX_LOW) begin\n326:         int_ack_next        = 1'b1;\n327:         we_m_tx_bd_next     = 1'b1;\n328:         dat_in_m_tx_bd_next = bd_tx_high_word[31:16];\n329:         bd_fsm_state_next   = BD_FSM_IDLE;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_controller_wb.v",
+      "line": 364,
+      "excerpt": "362:         wb_dat_o                     <= 32'h00000000;\n363:         wb_ack_o                     <= 1'b0;\n364:         we_m_tx_bd                   <= 1'b0;\n365:         we_m_rx_bd                   <= 1'b0;\n366:         new_cmd                      <= 1'b0;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_controller_wb.v",
+      "line": 394,
+      "excerpt": "392:         wb_dat_o                     <= wb_dat_o_next;\n393:         wb_ack_o                     <= wb_ack_o_next;\n394:         we_m_tx_bd                   <= we_m_tx_bd_next;\n395:         we_m_rx_bd                   <= we_m_rx_bd_next;\n396:         new_cmd                      <= new_cmd_next;"
+    }
+  ],
+  "truncated": false
+}

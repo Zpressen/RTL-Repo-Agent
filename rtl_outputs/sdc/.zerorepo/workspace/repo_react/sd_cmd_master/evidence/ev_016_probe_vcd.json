@@ -1,0 +1,16 @@
+{
+  "status": "ok",
+  "rows": [
+    {
+      "t": 0,
+      "tb.good1.NORMAL_INT_REG[15:0]": "0000000000000000"
+    },
+    {
+      "t": 5,
+      "tb.good1.NORMAL_INT_REG[15:0]": "0000000000000100"
+    }
+  ],
+  "row_count": 2,
+  "truncated": false,
+  "mode": "changes"
+}

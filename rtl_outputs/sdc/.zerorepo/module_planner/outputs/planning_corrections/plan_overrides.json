@@ -17,6 +17,24 @@
         "scope": "When sd_controller_wb decodes address 8'h1c, wb_dat_o should return 32'h00000002 for the fixed oracle, despite the spec reset-text conflict.",
         "preserve": "Do not alter address decode, reset sequencing, write decode, ack/int_ack/new_cmd, or other readable constants."
       }
+    },
+    {
+      "step": 10,
+      "module": "sd_controller_wb",
+      "correction_type": "wrong_contract",
+      "original_artifact": "sd_controller_wb.md Control Logic section",
+      "problem": "The spec only defines when int_busy is SET (\"whenever the wishbone makes an access to the cmd_arg register\") but does not define when it is CLEARED. The reference implementation shows int_busy asserting at T=75 (matching new_cmd with one-cycle delay) and de-asserting around T=1020. Without the clear condition, all attempted sticky implementations (steps 6,7,10) fix the early T=75 divergence but cause 784→1846+ regressions because int_busy stays high permanently. The clear condition may involve write_req_s de-assertion, cmd_int_busy falling edge, or command completion.",
+      "evidence": [
+        "Step 5 showed correct int_busy assertion timing at T=75 using int_busy_next = new_cmd, but de-asserted at T=85 when new_cmd dropped",
+        "Step 7 (sequential sticky: if(int_busy_next) int_busy <= 1'b1) moved first failure from T=75→1020 but increased int_busy mismatches 784→1846",
+        "Step 10 (int_busy_next = int_busy | new_cmd) same result: first fail T=75→100, int_busy 784→1846",
+        "Reference int_busy de-asserts at approximately T=1020 per step 7 evidence"
+      ],
+      "override": {
+        "int_busy_set_condition": "new_cmd (registered, one-cycle delayed)",
+        "int_busy_clear_condition": "UNKNOWN — needs investigation at T=1020 reference behavior",
+        "recommended_next": "Probe VCD at T=1000-1050 to identify the signal or condition that clears int_busy in the reference"
+      }
     }
   ]
 }

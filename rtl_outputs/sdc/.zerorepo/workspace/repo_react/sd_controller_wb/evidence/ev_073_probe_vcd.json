@@ -1,0 +1,38 @@
+{
+  "status": "ok",
+  "rows": [
+    {
+      "t": 325,
+      "tb.good1.wb_dat_o[31:0]": "00000000000000000000000000000010",
+      "tb.good1.cmd_setting_reg[15:0]": "1000001101111000",
+      "tb.top_module1.controller_setting_value[15:0]": "0000000000000000"
+    },
+    {
+      "t": 335,
+      "tb.good1.wb_dat_o[31:0]": "00000000000000000000001000000000",
+      "tb.good1.cmd_setting_reg[15:0]": "1000001101111000",
+      "tb.top_module1.controller_setting_value[15:0]": "0000000000000000"
+    },
+    {
+      "t": 345,
+      "tb.good1.wb_dat_o[31:0]": "00000000000000000000000000001111",
+      "tb.good1.cmd_setting_reg[15:0]": "1000001101111000",
+      "tb.top_module1.controller_setting_value[15:0]": "0000000000000000"
+    },
+    {
+      "t": 355,
+      "tb.good1.wb_dat_o[31:0]": "00000000000000000000000011000100",
+      "tb.good1.cmd_setting_reg[15:0]": "1000001101111000",
+      "tb.top_module1.controller_setting_value[15:0]": "0000000000000000"
+    },
+    {
+      "t": 365,
+      "tb.good1.wb_dat_o[31:0]": "00000000000000000000000000000000",
+      "tb.good1.cmd_setting_reg[15:0]": "1000001101111000",
+      "tb.top_module1.controller_setting_value[15:0]": "0000000000000000"
+    }
+  ],
+  "row_count": 5,
+  "truncated": false,
+  "mode": "changes"
+}

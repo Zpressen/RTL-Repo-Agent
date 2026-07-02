@@ -1,0 +1,174 @@
+{
+  "schema_version": "stage6_semantic_merge_report_v2",
+  "module": "sd_bd",
+  "required_includes": [
+    "sd_defines.v"
+  ],
+  "signal_ownership": {
+    "bd_mem_0": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "bd_mem_1": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "bd_mem_2": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "bd_mem_3": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "bd_mem_4": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "bd_mem_5": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "bd_mem_6": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "bd_mem_7": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "free_bd": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "last_a_cmp": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "m_wr_pnt": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "new_bw": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "wr_cnt": {
+      "drivers": [
+        "A1"
+      ],
+      "owner_block": "A1"
+    },
+    "rd_cnt": {
+      "drivers": [
+        "A2"
+      ],
+      "owner_block": "A2"
+    },
+    "s_rd_pnt": {
+      "drivers": [
+        "A2"
+      ],
+      "owner_block": "A2"
+    },
+    "ack_o_s": {
+      "drivers": [
+        "A3"
+      ],
+      "owner_block": "A3"
+    },
+    "dat_out_s": {
+      "drivers": [
+        "A3"
+      ],
+      "owner_block": "A3"
+    }
+  },
+  "always_block_responsibility": [
+    {
+      "id": "A1",
+      "kind": "always",
+      "start_line": 43,
+      "end_line": 98,
+      "writes": [
+        "bd_mem_0",
+        "bd_mem_1",
+        "bd_mem_2",
+        "bd_mem_3",
+        "bd_mem_4",
+        "bd_mem_5",
+        "bd_mem_6",
+        "bd_mem_7",
+        "free_bd",
+        "last_a_cmp",
+        "m_wr_pnt",
+        "new_bw",
+        "wr_cnt"
+      ],
+      "uses_nonblocking": true,
+      "uses_blocking": false
+    },
+    {
+      "id": "A2",
+      "kind": "always",
+      "start_line": 101,
+      "end_line": 128,
+      "writes": [
+        "rd_cnt",
+        "s_rd_pnt"
+      ],
+      "uses_nonblocking": true,
+      "uses_blocking": false
+    },
+    {
+      "id": "A3",
+      "kind": "always",
+      "start_line": 131,
+      "end_line": 149,
+      "writes": [
+        "ack_o_s",
+        "dat_out_s"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    }
+  ],
+  "static_check_summary": {
+    "status": "pass",
+    "errors": [],
+    "warnings": [
+      "Block A1 drives outputs (free_bd) using only nonblocking assignments. If the reference testbench samples on clock edges, this will cause edge_active sampling mismatches. Consider using blocking assignments (=) for output signals in sequential always blocks."
+    ]
+  },
+  "lint_summary": {
+    "status": "ok",
+    "is_pass": true,
+    "output_excerpt": "{\n    \"stdout\": \"- V e r i l a t i o n   R e p o r t: Verilator 5.044 2026-01-01 rev conda-forge build 0\\n- Verilator: Built from 0.141 MB sources in 4 modules, into 0.023 MB in 3 C++ files needing 0.000 MB\\n- Verilator: Walltime 0.023 s (elab=0.003, cvt=0.006, bld=0.000); cpu 0.022 s on 1 threads; alloced 22.949 MB\\n\",\n    \"stderr\": \"%Warning-DECLFILENAME: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merge_drafts/sd_bd_draft.v:3:8: Filename 'sd_bd_draft' does not match MODULE name: 'sd_bd'\\n    3 | module sd_bd (\\n      |        ^~~~~\\n                       ... For warning description see https://verilator.org/warn/DECLFILENAME?v=5.044\\n                       ... Use \\\"/* verilator lint_off DECLFILENAME */\\\" and lint_on around source to disable this message.\\n%Warning-DECLFILENAME: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merge_drafts/sd_cmd_master_draft.v:8:8: Filename 'sd_cmd_master_draft' does not match MODULE name: 'sd_cmd_master'\\n    8 | module sd_cmd_master (\\n      |        ^~~~~~~~~~~~~\\n%Warning-DECLFILENAME: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merge_drafts/sd_controller_wb_draft.v:3:8: Filename 'sd_controller_wb_draft' does not match MODULE name: 'sd_controller_wb'\\n    3 | module sd_controller_wb (\\n      |        ^~~~~~~~~~~~~~~~\\n%Warning-WIDTHTRUNC: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merge_drafts/sd_bd_draft.v:21:31: Operator VAR 'FREE_BD_INIT_32' expects 5 bits on the Initial value, but Initial value's SHIFTR generates 32 or 6 bits.\\n                                                                                                                   : ... note: In instance 'sd_bd'\\n   21 |     localparam [BD_WIDTH-1:0] FREE_BD_INIT_32 = (BD_SIZE >> 1);\\n      |                               ^~~~~~~~~~~~~~~\\n                     ... For warning description see https://verilator.org/warn/WIDTHTRUNC?v=5.044\\n                     ... Use \\\"/* verilator lint_off WIDTHTRUNC */\\\" and lint_on around source to disable this message.\\n%Warning-WIDTHTRUNC: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merge_drafts/sd_bd_draft.v:22:31: Operator VAR 'FREE_BD_INIT_16' expects 5 bits on the Initial value, but Initial value's SHIFTR generates 32 or 6 bits.\\n                                                                                                                   : ... note: In instance 'sd_bd'\\n   22 |     localparam [BD_WIDTH-1:0] FREE_BD_INIT_16 = (BD_SIZE >> 2);\\n      |                               ^~~~~~~~~~~~~~~\\n%Warning-WIDTHEXPAND: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merge_drafts/sd_bd_draft.v:67:30: Operator EQ expects 32 or 6 bits on the LHS, but LHS's VARREF 'm_wr_pnt' generates 5 bits.\\n                                                                                                                    : ... note: In instance 'sd_bd'\\n   67 |                 if (m_wr_pnt == (BD_SIZE - 1)) begin\\n      |                              ^~\\n                      ... For warning description see https://verilator.org/warn/WIDTHEXPAND?v=5.044\\n                      ... Use \\\"/* verilator lint_off WIDTHEXPAND */\\\" and lint_on around source to disable this message.\\n%Warning-WIDTHEXPAND: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merge_drafts/sd_bd_draft.v:107:30: Operator EQ expects 32 or 6 bits on the LHS, but LHS's VARREF 's_rd_pnt' generates 5 bits.\\n                                                                                                                     : ... note: In instance 'sd_bd'\\n  107 |                 if (s_rd_pnt == (BD_SIZE - 1)) begin\\n      |                              ^~\\n%Warning-UNUSEDSIGNAL: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merge_drafts/sd_bd_draft.v:41:9: Signal is not used: 'new_bw'\\n                                                                                                                    : ... note: In instance 'sd_bd'\\n   41 |     reg new_bw;\\n      |         ^~~~~~\\n                       ... For warning description see https://verilator.org/warn/UNUSEDSIGNAL?v=5.044\\n                       ... Use \\\"/* verilator lint_off UNUSEDSIGNAL */\\\" and lint_on around source to disable this message.\\n\"\n}"
+  },
+  "draft_committed": true,
+  "total_action_calls": 1
+}

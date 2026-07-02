@@ -1,0 +1,28 @@
+{
+  "status": "ok",
+  "pattern": "sd_bd",
+  "scope": "rtl",
+  "results": [
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_bd/rtl.sv",
+      "line": 3,
+      "excerpt": "1: `include \"sd_defines.v\"\n2: \n3: module sd_bd (\n4:     input  clk,\n5:     input  rst,"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sdc_controller.v",
+      "line": 316,
+      "excerpt": "314: );\n315: \n316: sd_bd #(\n317:     .BD_SIZE       (8),\n318:     .BD_WIDTH      (3),"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sdc_controller.v",
+      "line": 332,
+      "excerpt": "330: );\n331: \n332: sd_bd #(\n333:     .BD_SIZE       (8),\n334:     .BD_WIDTH      (3),"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_bd.v",
+      "line": 3,
+      "excerpt": "1: `include \"sd_defines.v\"\n2: \n3: module sd_bd (\n4:     input  clk,\n5:     input  rst,"
+    }
+  ],
+  "truncated": false
+}

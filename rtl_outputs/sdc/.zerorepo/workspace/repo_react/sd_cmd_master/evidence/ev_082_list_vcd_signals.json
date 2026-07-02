@@ -1,0 +1,12 @@
+{
+  "status": "ok",
+  "signals": [
+    "tb.ERR_INT_REG_ref[4:0]",
+    "tb.ERR_INT_REG_dut[4:0]",
+    "tb.good1.ERR_INT_REG[4:0]",
+    "tb.top_module1.ERR_INT_REG[4:0]"
+  ],
+  "count": 4,
+  "truncated": false,
+  "total_in_vcd": 179
+}

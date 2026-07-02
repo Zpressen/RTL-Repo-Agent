@@ -16,5 +16,63 @@
         "action": "1) Fix GET_RX_BD transition: change bd_cnt > (READ_CYCLE-1) to bd_cnt >= (READ_CYCLE-1). 2) Remove ALL default-zero assignments and instead explicitly set every signal that needs to change in each state, matching the reference output logic exactly. The IDLE state clears all signals; other states only set what they need. 3) Ensure signals that should persist (cmd_set, cmd_arg, sys_adr, tx_cycle, rx_cycle, etc.) are not cleared in states where they should hold."
       }
     }
+  ],
+  "sd_cmd_master": [
+    {
+      "step": 0,
+      "module": "sd_cmd_master",
+      "correction_type": "wrong_interface",
+      "original_artifact": "stage5_codegen",
+      "problem": "NORMAL_INT_REG bit assignments for CARD_INSERT_INT (bit 1) and CARD_REMOVE_INT (bit 2) appear transposed in block A6. At t=415, ref shows CARD_REMOVE (bit 2=1) while DUT shows CARD_INSERT (bit 1=1) — the DUT is computing the correct event but writing it to the wrong bit position. This is a stable-value functional mismatch, not an active-region sampling artifact.",
+      "evidence": [
+        "first_divergence at t=415: ref=0000000000000100 (bit2=CARD_REMOVE), dut=0000000000000010 (bit1=CARD_INSERT), classification=dut_early, sampling_mode=stable",
+        "context_pack summary: 'Register loaded with wrong bit position. DUT NORMAL_INT_REG[1]=1 but ref NORMAL_INT_REG[2]=1'",
+        "context_pack summary: 'two-line swap in A6: NORMAL_INT_REG[1] and NORMAL_INT_REG[2] assignments are transposed'",
+        "planning_correction step 13 confirms t=5 NORMAL_INT_REG mismatch is active-region only, but t=415 is a real stable mismatch"
+      ],
+      "override": {
+        "bug_type": "transposed_bit_assignments",
+        "target_block": "A6",
+        "fix": "swap NORMAL_INT_REG[1] and NORMAL_INT_REG[2] assignments",
+        "avoid": "Do not change A6 blocking/nonblocking semantics; this is a pure logic/index bug"
+      }
+    },
+    {
+      "step": 0,
+      "module": "sd_cmd_master",
+      "correction_type": "wrong_interface",
+      "original_artifact": "stage_artifact A6 block lines 240-337",
+      "problem": "NORMAL_INT_REG driver A6 produces bit 4 (0x0010) instead of bit 8 (0x0100) at t=415. The bit-position swap (4 vs 8) indicates either a miscoded constant (e.g., 8'h10 vs 8'h100 or 4 vs 8 in bit index) or a misconnected condition branch in the A6 always block. Long-term memory confirms NORMAL_INT_REG bugs respond to A6 condition/logic fixes involving card_present, debounce, and ERR_INT_REG signals.",
+      "evidence": [
+        "first_divergence: NORMAL_INT_REG at t=415, ref=0x0100, dut=0x0010",
+        "probe_vcd obs_015: confirmed ref/dut mismatch",
+        "search_context: NORMAL_INT_REG mentioned at lines 20, 54, 246, 258, 259",
+        "long-term memory: improved_5 (interface_bug, ERR_INT_REG+NORMAL_INT_REG), improved_6 (timing_bug, card_present+debounce+NORMAL_INT_REG)"
+      ],
+      "override": {
+        "fix_direction": "In block A6 lines 240-337, locate the condition branch that assigns bit 4 to NORMAL_INT_REG and correct it to bit 8, or locate the constant 8'h10 / 16'h0010 and change to 16'h0100. The bit positions differ by a factor of 16, suggesting either a hex constant error or a bit-index constant swap."
+      }
+    },
+    {
+      "step": 0,
+      "module": "sd_cmd_master",
+      "correction_type": "wrong_interface",
+      "original_artifact": "A6 block lines 240-337",
+      "problem": "NORMAL_INT_REG at t=415 shows ref=0x0100 (bit 8) vs dut=0x0010 (bit 4). This is a stable-value mismatch, not active-region. The DUT is assigning the correct logical condition to the wrong bit position. Bit 4 vs bit 8 differs by factor 16, indicating a hex constant error (e.g., 4'd4 vs 4'd8 or 16'h0010 vs 16'h0100) in a NORMAL_INT_REG assignment within A6. The card_present pipeline (step 2) only marginally helped (2789→2788), confirming timing is not the root cause for this specific divergence. The state #1 delay (step 4) improved NORMAL_INT_REG 2788→2572, but 2572 mismatches remain, with the first at t=415 still showing bit-position error.",
+      "evidence": [
+        "first_divergence: NORMAL_INT_REG at t=415, ref=0x0100, dut=0x0010, sampling_mode=stable",
+        "planning_correction wrong_interface step 0: 'DUT produces bit 4 (0x0010) instead of bit 8 (0x0100)'",
+        "search_context: NORMAL_INT_REG at lines 20, 54, 246, 258, 259",
+        "Step 2 card_present_q: NORMAL_INT_REG 2789→2788 (marginal, confirming timing is not dominant)",
+        "Step 4 state #1: NORMAL_INT_REG 2788→2572 (improved but first divergence unchanged at t=415)"
+      ],
+      "override": {
+        "bug_type": "wrong_bit_constant",
+        "target_lines": [
+          246
+        ],
+        "fix_direction": "Inspect line 246 for a constant like 4'd4, 4'h4, 16'h0010, or similar and change to target bit 8 (4'd8, 4'h8, 16'h0100). If line 246 is a default clear (NORMAL_INT_REG <= 16'h0000) then the error is elsewhere in A6; check lines 258-259 for bit-index constants."
+      }
+    }
   ]
 }

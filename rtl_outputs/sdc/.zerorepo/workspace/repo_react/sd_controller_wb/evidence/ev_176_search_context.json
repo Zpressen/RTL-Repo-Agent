@@ -1,0 +1,258 @@
+{
+  "status": "ok",
+  "pattern": "wb_dat_o",
+  "scope": "rtl",
+  "results": [
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+      "line": 8,
+      "excerpt": "6:     input  wire             wb_rst_i,\n7:     input  wire [31:0]      wb_dat_i,\n8:     output reg  [31:0]      wb_dat_o,\n9:     input  wire [7:0]       wb_adr_i,\n10:     input  wire [3:0]       wb_sel_i,"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+      "line": 96,
+      "excerpt": "94: reg [31:0] bd_tx_high_word_next;\n95: \n96: reg [31:0] wb_dat_o_next;\n97: reg        wb_ack_o_next;\n98: reg        we_m_tx_bd_next;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+      "line": 209,
+      "excerpt": "207: assign bd_tx_write_pulse        = wb_write_access & addr_bd_tx;\n208: \n209: always @(wb_dat_i or wb_adr_i or wb_sel_i or wb_we_i or wb_cyc_i or wb_stb_i or wb_ack_o or int_ack or bd_fsm_state or bd_rx_high_word or bd_rx_low_word or bd_tx_high_word or bd_tx_low_word or argument_reg or cmd_setting_reg or software_reset_reg or time_out_reg or normal_int_signal_enable_reg or error_int_signal_enable_reg or clock_divider or Bd_isr_enable_reg or status_reg or cmd_resp_1 or normal_int_status_reg or error_int_status_reg or Bd_Status_reg or Bd_isr_reg or write_req_s or cmd_arg_s or cmd_set_s or wb_dat_o) begin\n210:     // Default assignments: hold current register values\n211:     argument_reg_next                 = argument_reg;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+      "line": 227,
+      "excerpt": "225: \n226:     // Control signals default low, except int_ack high and we_ack follows write_req_s\n227:     wb_dat_o_next                     = wb_dat_o;\n228:     wb_ack_o_next                     = 1'b0;\n229:     we_m_tx_bd_next                   = 1'b0;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+      "line": 245,
+      "excerpt": "243:     if (wb_access) begin\n244:         case (wb_addr)\n245:             8'h00: wb_dat_o_next = argument_reg;\n246:             8'h04: wb_dat_o_next = {16'h0000, cmd_setting_reg};\n247:             8'h08: wb_dat_o_next = {16'h0000, status_reg};"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+      "line": 246,
+      "excerpt": "244:         case (wb_addr)\n245:             8'h00: wb_dat_o_next = argument_reg;\n246:             8'h04: wb_dat_o_next = {16'h0000, cmd_setting_reg};\n247:             8'h08: wb_dat_o_next = {16'h0000, status_reg};\n248:             8'h0c: wb_dat_o_next = cmd_resp_1;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+      "line": 247,
+      "excerpt": "245:             8'h00: wb_dat_o_next = argument_reg;\n246:             8'h04: wb_dat_o_next = {16'h0000, cmd_setting_reg};\n247:             8'h08: wb_dat_o_next = {16'h0000, status_reg};\n248:             8'h0c: wb_dat_o_next = cmd_resp_1;\n249:             8'h1c: wb_dat_o_next = {16'h0000, controller_setting_value};"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+      "line": 248,
+      "excerpt": "246:             8'h04: wb_dat_o_next = {16'h0000, cmd_setting_reg};\n247:             8'h08: wb_dat_o_next = {16'h0000, status_reg};\n248:             8'h0c: wb_dat_o_next = cmd_resp_1;\n249:             8'h1c: wb_dat_o_next = {16'h0000, controller_setting_value};\n250:             8'h20: wb_dat_o_next = {16'h0000, block_size_value};"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+      "line": 249,
+      "excerpt": "247:             8'h08: wb_dat_o_next = {16'h0000, status_reg};\n248:             8'h0c: wb_dat_o_next = cmd_resp_1;\n249:             8'h1c: wb_dat_o_next = {16'h0000, controller_setting_value};\n250:             8'h20: wb_dat_o_next = {16'h0000, block_size_value};\n251:             8'h24: wb_dat_o_next = {24'h000000, power_control_value};"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+      "line": 250,
+      "excerpt": "248:             8'h0c: wb_dat_o_next = cmd_resp_1;\n249:             8'h1c: wb_dat_o_next = {16'h0000, controller_setting_value};\n250:             8'h20: wb_dat_o_next = {16'h0000, block_size_value};\n251:             8'h24: wb_dat_o_next = {24'h000000, power_control_value};\n252:             8'h28: wb_dat_o_next = {24'h000000, software_reset_reg};"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+      "line": 251,
+      "excerpt": "249:             8'h1c: wb_dat_o_next = {16'h0000, controller_setting_value};\n250:             8'h20: wb_dat_o_next = {16'h0000, block_size_value};\n251:             8'h24: wb_dat_o_next = {24'h000000, power_control_value};\n252:             8'h28: wb_dat_o_next = {24'h000000, software_reset_reg};\n253:             8'h2c: wb_dat_o_next = {16'h0000, time_out_reg};"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+      "line": 252,
+      "excerpt": "250:             8'h20: wb_dat_o_next = {16'h0000, block_size_value};\n251:             8'h24: wb_dat_o_next = {24'h000000, power_control_value};\n252:             8'h28: wb_dat_o_next = {24'h000000, software_reset_reg};\n253:             8'h2c: wb_dat_o_next = {16'h0000, time_out_reg};\n254:             8'h30: wb_dat_o_next = {16'h0000, normal_int_status_value};"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+      "line": 253,
+      "excerpt": "251:             8'h24: wb_dat_o_next = {24'h000000, power_control_value};\n252:             8'h28: wb_dat_o_next = {24'h000000, software_reset_reg};\n253:             8'h2c: wb_dat_o_next = {16'h0000, time_out_reg};\n254:             8'h30: wb_dat_o_next = {16'h0000, normal_int_status_value};\n255:             8'h34: wb_dat_o_next = {16'h0000, error_int_status_value};"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+      "line": 254,
+      "excerpt": "252:             8'h28: wb_dat_o_next = {24'h000000, software_reset_reg};\n253:             8'h2c: wb_dat_o_next = {16'h0000, time_out_reg};\n254:             8'h30: wb_dat_o_next = {16'h0000, normal_int_status_value};\n255:             8'h34: wb_dat_o_next = {16'h0000, error_int_status_value};\n256:             8'h38: wb_dat_o_next = {16'h0000, normal_int_signal_enable_reg};"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+      "line": 255,
+      "excerpt": "253:             8'h2c: wb_dat_o_next = {16'h0000, time_out_reg};\n254:             8'h30: wb_dat_o_next = {16'h0000, normal_int_status_value};\n255:             8'h34: wb_dat_o_next = {16'h0000, error_int_status_value};\n256:             8'h38: wb_dat_o_next = {16'h0000, normal_int_signal_enable_reg};\n257:             8'h3c: wb_dat_o_next = {16'h0000, error_int_signal_enable_reg};"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+      "line": 256,
+      "excerpt": "254:             8'h30: wb_dat_o_next = {16'h0000, normal_int_status_value};\n255:             8'h34: wb_dat_o_next = {16'h0000, error_int_status_value};\n256:             8'h38: wb_dat_o_next = {16'h0000, normal_int_signal_enable_reg};\n257:             8'h3c: wb_dat_o_next = {16'h0000, error_int_signal_enable_reg};\n258:             8'h48: wb_dat_o_next = {16'h0000, capability_value};"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+      "line": 257,
+      "excerpt": "255:             8'h34: wb_dat_o_next = {16'h0000, error_int_status_value};\n256:             8'h38: wb_dat_o_next = {16'h0000, normal_int_signal_enable_reg};\n257:             8'h3c: wb_dat_o_next = {16'h0000, error_int_signal_enable_reg};\n258:             8'h48: wb_dat_o_next = {16'h0000, capability_value};\n259:             8'h4c: wb_dat_o_next = {24'h000000, clock_divider};"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+      "line": 258,
+      "excerpt": "256:             8'h38: wb_dat_o_next = {16'h0000, normal_int_signal_enable_reg};\n257:             8'h3c: wb_dat_o_next = {16'h0000, error_int_signal_enable_reg};\n258:             8'h48: wb_dat_o_next = {16'h0000, capability_value};\n259:             8'h4c: wb_dat_o_next = {24'h000000, clock_divider};\n260:             8'h50: wb_dat_o_next = {16'h0000, bd_status_value};"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+      "line": 259,
+      "excerpt": "257:             8'h3c: wb_dat_o_next = {16'h0000, error_int_signal_enable_reg};\n258:             8'h48: wb_dat_o_next = {16'h0000, capability_value};\n259:             8'h4c: wb_dat_o_next = {24'h000000, clock_divider};\n260:             8'h50: wb_dat_o_next = {16'h0000, bd_status_value};\n261:             8'h54: wb_dat_o_next = {24'h000000, bd_isr_status_value};"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+      "line": 260,
+      "excerpt": "258:             8'h48: wb_dat_o_next = {16'h0000, capability_value};\n259:             8'h4c: wb_dat_o_next = {24'h000000, clock_divider};\n260:             8'h50: wb_dat_o_next = {16'h0000, bd_status_value};\n261:             8'h54: wb_dat_o_next = {24'h000000, bd_isr_status_value};\n262:             8'h58: wb_dat_o_next = {24'h000000, Bd_isr_enable_reg};"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+      "line": 261,
+      "excerpt": "259:             8'h4c: wb_dat_o_next = {24'h000000, clock_divider};\n260:             8'h50: wb_dat_o_next = {16'h0000, bd_status_value};\n261:             8'h54: wb_dat_o_next = {24'h000000, bd_isr_status_value};\n262:             8'h58: wb_dat_o_next = {24'h000000, Bd_isr_enable_reg};\n263:             default: wb_dat_o_next = 32'h00000000;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+      "line": 262,
+      "excerpt": "260:             8'h50: wb_dat_o_next = {16'h0000, bd_status_value};\n261:             8'h54: wb_dat_o_next = {24'h000000, bd_isr_status_value};\n262:             8'h58: wb_dat_o_next = {24'h000000, Bd_isr_enable_reg};\n263:             default: wb_dat_o_next = 32'h00000000;\n264:         endcase"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+      "line": 263,
+      "excerpt": "261:             8'h54: wb_dat_o_next = {24'h000000, bd_isr_status_value};\n262:             8'h58: wb_dat_o_next = {24'h000000, Bd_isr_enable_reg};\n263:             default: wb_dat_o_next = 32'h00000000;\n264:         endcase\n265:     end"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+      "line": 361,
+      "excerpt": "359:         bd_tx_high_word              <= 32'h00000000;\n360: \n361:         wb_dat_o                     <= wb_dat_o_next;\n362:         wb_ack_o                     <= 1'b0;\n363:         we_m_tx_bd                   <= 1'b0;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/rtl.sv",
+      "line": 391,
+      "excerpt": "389:         bd_tx_high_word              <= bd_tx_high_word_next;\n390: \n391:         wb_dat_o                     <= wb_dat_o_next;\n392:         wb_ack_o                     <= wb_ack_o_next;\n393:         we_m_tx_bd                   <= we_m_tx_bd_next;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_fifo_rx_filler.v",
+      "line": 13,
+      "excerpt": "11:     output wire [31:0]   m_wb_adr_o,\n12:     output wire          m_wb_we_o,\n13:     output reg [31:0]   m_wb_dat_o,\n14:     output wire          m_wb_cyc_o,\n15:     output wire          m_wb_stb_o,"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_fifo_rx_filler.v",
+      "line": 59,
+      "excerpt": "57:     assign empty        = fifo_empty;\n58:     assign m_wb_adr_o   = adr + {23'b0, offset};\n59:     // m_wb_dat_o is registered directly in the always block\n60:     assign m_wb_we_o    = wb_request_active;\n61:     assign m_wb_cyc_o   = wb_request_active;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_fifo_rx_filler.v",
+      "line": 72,
+      "excerpt": "70:     localparam ACTIVE = 3'd1;\n71: \n72:     // dat_o register removed; using m_wb_dat_o directly\n73: \n74:     always @(posedge clk or posedge rst) begin"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_fifo_rx_filler.v",
+      "line": 81,
+      "excerpt": "79:             reset_rx_fifo <= 1'b1;\n80:             rd           <= 1'b0;\n81:             m_wb_dat_o   <= 32'h0;\n82:         end else if (!en) begin\n83:             state        <= IDLE;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_fifo_rx_filler.v",
+      "line": 88,
+      "excerpt": "86:             reset_rx_fifo <= 1'b1;\n87:             rd           <= 1'b0;\n88:             // m_wb_dat_o retains its value when disabled\n89:         end else begin\n90:             case (state)"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_fifo_rx_filler.v",
+      "line": 96,
+      "excerpt": "94:                     if (!empty && wb_free) begin\n95:                         rd       <= 1'b1;\n96:                         m_wb_dat_o <= fifo_q;\n97:                         wb_free  <= 1'b0;\n98:                         state    <= ACTIVE;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sdc_controller.v",
+      "line": 7,
+      "excerpt": "5:     input   [3:0]   wb_sel_i,\n6:     input   [31:0]  wb_dat_i,\n7:     output  [31:0]  wb_dat_o,\n8:     input   [7:0]   wb_adr_i,\n9:     input           wb_we_i,"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sdc_controller.v",
+      "line": 18,
+      "excerpt": "16:     output          m_wb_sel_o,\n17:     output          m_wb_we_o,\n18:     output  [31:0]  m_wb_dat_o,\n19:     input   [31:0]  m_wb_dat_i,\n20:     output          m_wb_cyc_o,"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sdc_controller.v",
+      "line": 154,
+      "excerpt": "152: wire [31:0] rx_m_wb_adr_o;\n153: wire        rx_m_wb_we_o;\n154: wire [31:0] rx_m_wb_dat_o;\n155: wire        rx_m_wb_cyc_o;\n156: wire        rx_m_wb_stb_o;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sdc_controller.v",
+      "line": 172,
+      "excerpt": "170:     .wb_rst_i                     (core_rst),\n171:     .wb_dat_i                     (wb_dat_i),\n172:     .wb_dat_o                     (wb_dat_o),\n173:     .wb_adr_i                     (wb_adr_i),\n174:     .wb_sel_i                     (wb_sel_i),"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sdc_controller.v",
+      "line": 373,
+      "excerpt": "371:     .m_wb_adr_o   (rx_m_wb_adr_o),\n372:     .m_wb_we_o    (rx_m_wb_we_o),\n373:     .m_wb_dat_o   (rx_m_wb_dat_o),\n374:     .m_wb_cyc_o   (rx_m_wb_cyc_o),\n375:     .m_wb_stb_o   (rx_m_wb_stb_o),"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sdc_controller.v",
+      "line": 394,
+      "excerpt": "392:                     start_rx_fifo ? rx_m_wb_we_o : 1'b0;\n393: \n394: assign m_wb_dat_o = start_rx_fifo ? rx_m_wb_dat_o : 32'd0;\n395: \n396: assign m_wb_cyc_o = start_tx_fifo ? tx_m_wb_cyc_o :"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_controller_wb.v",
+      "line": 8,
+      "excerpt": "6:     input  wire             wb_rst_i,\n7:     input  wire [31:0]      wb_dat_i,\n8:     output reg  [31:0]      wb_dat_o,\n9:     input  wire [7:0]       wb_adr_i,\n10:     input  wire [3:0]       wb_sel_i,"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_controller_wb.v",
+      "line": 96,
+      "excerpt": "94: reg [31:0] bd_tx_high_word_next;\n95: \n96: reg [31:0] wb_dat_o_next;\n97: reg        wb_ack_o_next;\n98: reg        we_m_tx_bd_next;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_controller_wb.v",
+      "line": 209,
+      "excerpt": "207: assign bd_tx_write_pulse        = wb_write_access & addr_bd_tx & int_ack;\n208: \n209: always @(wb_dat_i or wb_adr_i or wb_sel_i or wb_we_i or wb_cyc_i or wb_stb_i or wb_ack_o or int_ack or bd_fsm_state or bd_rx_high_word or bd_rx_low_word or bd_tx_high_word or bd_tx_low_word or argument_reg or cmd_setting_reg or software_reset_reg or time_out_reg or normal_int_signal_enable_reg or error_int_signal_enable_reg or clock_divider or Bd_isr_enable_reg or status_reg or cmd_resp_1 or normal_int_status_reg or error_int_status_reg or Bd_Status_reg or Bd_isr_reg or write_req_s or cmd_arg_s or cmd_set_s or wb_dat_o) begin\n210:     // Default assignments: hold current register values\n211:     argument_reg_next                 = argument_reg;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_controller_wb.v",
+      "line": 227,
+      "excerpt": "225: \n226:     // Control signals default low, except int_ack high and we_ack follows write_req_s\n227:     wb_dat_o_next                     = wb_dat_o;\n228:     wb_ack_o_next                     = 1'b0;\n229:     we_m_tx_bd_next                   = 1'b0;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_controller_wb.v",
+      "line": 245,
+      "excerpt": "243:     if (wb_access) begin\n244:         case (wb_addr)\n245:             8'h00: wb_dat_o_next = argument_reg;\n246:             8'h04: wb_dat_o_next = {16'h0000, cmd_setting_reg};\n247:             8'h08: wb_dat_o_next = {16'h0000, status_reg};"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_controller_wb.v",
+      "line": 246,
+      "excerpt": "244:         case (wb_addr)\n245:             8'h00: wb_dat_o_next = argument_reg;\n246:             8'h04: wb_dat_o_next = {16'h0000, cmd_setting_reg};\n247:             8'h08: wb_dat_o_next = {16'h0000, status_reg};\n248:             8'h0c: wb_dat_o_next = cmd_resp_1;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_controller_wb.v",
+      "line": 247,
+      "excerpt": "245:             8'h00: wb_dat_o_next = argument_reg;\n246:             8'h04: wb_dat_o_next = {16'h0000, cmd_setting_reg};\n247:             8'h08: wb_dat_o_next = {16'h0000, status_reg};\n248:             8'h0c: wb_dat_o_next = cmd_resp_1;\n249:             8'h1c: wb_dat_o_next = {16'h0000, controller_setting_value};"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_controller_wb.v",
+      "line": 248,
+      "excerpt": "246:             8'h04: wb_dat_o_next = {16'h0000, cmd_setting_reg};\n247:             8'h08: wb_dat_o_next = {16'h0000, status_reg};\n248:             8'h0c: wb_dat_o_next = cmd_resp_1;\n249:             8'h1c: wb_dat_o_next = {16'h0000, controller_setting_value};\n250:             8'h20: wb_dat_o_next = {16'h0000, block_size_value};"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_controller_wb.v",
+      "line": 249,
+      "excerpt": "247:             8'h08: wb_dat_o_next = {16'h0000, status_reg};\n248:             8'h0c: wb_dat_o_next = cmd_resp_1;\n249:             8'h1c: wb_dat_o_next = {16'h0000, controller_setting_value};\n250:             8'h20: wb_dat_o_next = {16'h0000, block_size_value};\n251:             8'h24: wb_dat_o_next = {24'h000000, power_control_value};"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_controller_wb.v",
+      "line": 250,
+      "excerpt": "248:             8'h0c: wb_dat_o_next = cmd_resp_1;\n249:             8'h1c: wb_dat_o_next = {16'h0000, controller_setting_value};\n250:             8'h20: wb_dat_o_next = {16'h0000, block_size_value};\n251:             8'h24: wb_dat_o_next = {24'h000000, power_control_value};\n252:             8'h28: wb_dat_o_next = {24'h000000, software_reset_reg};"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_controller_wb.v",
+      "line": 251,
+      "excerpt": "249:             8'h1c: wb_dat_o_next = {16'h0000, controller_setting_value};\n250:             8'h20: wb_dat_o_next = {16'h0000, block_size_value};\n251:             8'h24: wb_dat_o_next = {24'h000000, power_control_value};\n252:             8'h28: wb_dat_o_next = {24'h000000, software_reset_reg};\n253:             8'h2c: wb_dat_o_next = {16'h0000, time_out_reg};"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_controller_wb.v",
+      "line": 252,
+      "excerpt": "250:             8'h20: wb_dat_o_next = {16'h0000, block_size_value};\n251:             8'h24: wb_dat_o_next = {24'h000000, power_control_value};\n252:             8'h28: wb_dat_o_next = {24'h000000, software_reset_reg};\n253:             8'h2c: wb_dat_o_next = {16'h0000, time_out_reg};\n254:             8'h30: wb_dat_o_next = {16'h0000, normal_int_status_value};"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_controller_wb.v",
+      "line": 253,
+      "excerpt": "251:             8'h24: wb_dat_o_next = {24'h000000, power_control_value};\n252:             8'h28: wb_dat_o_next = {24'h000000, software_reset_reg};\n253:             8'h2c: wb_dat_o_next = {16'h0000, time_out_reg};\n254:             8'h30: wb_dat_o_next = {16'h0000, normal_int_status_value};\n255:             8'h34: wb_dat_o_next = {16'h0000, error_int_status_value};"
+    }
+  ],
+  "truncated": true
+}

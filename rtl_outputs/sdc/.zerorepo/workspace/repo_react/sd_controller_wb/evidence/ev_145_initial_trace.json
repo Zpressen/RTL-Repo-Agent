@@ -1,0 +1,897 @@
+{
+  "trace_report_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_controller_wb/trace_report.json",
+  "fail_time": 480,
+  "total_mismatches": 9486,
+  "first_failure": {
+    "signal": "dat_in_m_tx_bd",
+    "time": 475,
+    "ref": "1111111011110111",
+    "dut": "0000000000000000",
+    "classification": "dut_late",
+    "ref_path": "tb.dat_in_m_tx_bd_ref[15:0]",
+    "dut_path": "tb.dat_in_m_tx_bd_dut[15:0]",
+    "sampling_mode": "stable",
+    "edge": null,
+    "driver_assignment_kind": "nonblocking",
+    "active_region_model": "settled VCD ref/dut values at sample/change times"
+  },
+  "root_failure": {
+    "signal": "dat_in_m_tx_bd",
+    "time": 475,
+    "ref": "1111111011110111",
+    "dut": "0000000000000000",
+    "classification": "dut_late",
+    "ref_path": "tb.dat_in_m_tx_bd_ref[15:0]",
+    "dut_path": "tb.dat_in_m_tx_bd_dut[15:0]",
+    "sampling_mode": "stable",
+    "edge": null,
+    "driver_assignment_kind": "nonblocking",
+    "active_region_model": "settled VCD ref/dut values at sample/change times"
+  },
+  "edge_active_failure": null,
+  "first_divergence": {
+    "status": "ok",
+    "sampling_mode": "stable",
+    "edge": null,
+    "driver_assignment_kind": "nonblocking",
+    "active_region_model": "settled VCD ref/dut values at sample/change times",
+    "first_divergence": {
+      "signal": "dat_in_m_tx_bd",
+      "time": 475,
+      "ref": "1111111011110111",
+      "dut": "0000000000000000",
+      "classification": "dut_late",
+      "ref_path": "tb.dat_in_m_tx_bd_ref[15:0]",
+      "dut_path": "tb.dat_in_m_tx_bd_dut[15:0]",
+      "sampling_mode": "stable",
+      "edge": null,
+      "driver_assignment_kind": "nonblocking",
+      "active_region_model": "settled VCD ref/dut values at sample/change times"
+    },
+    "nearby": {
+      "times": [
+        460,
+        465,
+        470,
+        475,
+        480,
+        485,
+        490
+      ],
+      "rows": [
+        {
+          "t": 460,
+          "Bd_Status_reg": "0000000000000000",
+          "Bd_isr_reg": "00000000",
+          "cmd_arg_s": "00000000000000000000000000000000",
+          "cmd_resp_1": "00000000000000000000000000000000",
+          "cmd_set_s": "0000000000000000",
+          "error_int_status_reg": "0000000000000000",
+          "normal_int_status_reg": "0000000000000000",
+          "status_reg": "0000000000000000",
+          "wb_adr_i": "01011000",
+          "wb_clk_i": "0",
+          "wb_cyc_i": "1",
+          "wb_dat_i": "01111001001011010011001001100011",
+          "dat_in_m_tx_bd_ref": "0000000000000000",
+          "dat_in_m_tx_bd_dut": "0000000000000000",
+          "wb_dat_o_ref": "00000000000000000000000000000000",
+          "wb_dat_o_dut": "00000000000000000000000000000000",
+          "wb_ack_o_ref": "0",
+          "wb_ack_o_dut": "0",
+          "we_m_tx_bd_ref": "0",
+          "we_m_tx_bd_dut": "0",
+          "new_cmd_ref": "0",
+          "new_cmd_dut": "0",
+          "we_ack_ref": "0",
+          "we_ack_dut": "0",
+          "int_ack_ref": "1",
+          "int_ack_dut": "1",
+          "cmd_int_busy_ref": "0",
+          "cmd_int_busy_dut": "0"
+        },
+        {
+          "t": 465,
+          "Bd_Status_reg": "0000000000000000",
+          "Bd_isr_reg": "00000000",
+          "cmd_arg_s": "00000000000000000000000000000000",
+          "cmd_resp_1": "00000000000000000000000000000000",
+          "cmd_set_s": "0000000000000000",
+          "error_int_status_reg": "0000000000000000",
+          "normal_int_status_reg": "0000000000000000",
+          "status_reg": "0000000000000000",
+          "wb_adr_i": "01100000",
+          "wb_clk_i": "1",
+          "wb_cyc_i": "1",
+          "wb_dat_i": "01100000011000101011111001101111",
+          "dat_in_m_tx_bd_ref": "0000000000000000",
+          "dat_in_m_tx_bd_dut": "0000000000000000",
+          "wb_dat_o_ref": "00000000000000000000000000000000",
+          "wb_dat_o_dut": "00000000000000000000000000000000",
+          "wb_ack_o_ref": "0",
+          "wb_ack_o_dut": "0",
+          "we_m_tx_bd_ref": "0",
+          "we_m_tx_bd_dut": "0",
+          "new_cmd_ref": "0",
+          "new_cmd_dut": "0",
+          "we_ack_ref": "0",
+          "we_ack_dut": "0",
+          "int_ack_ref": "0",
+          "int_ack_dut": "0",
+          "cmd_int_busy_ref": "0",
+          "cmd_int_busy_dut": "0"
+        },
+        {
+          "t": 470,
+          "Bd_Status_reg": "0000000000000000",
+          "Bd_isr_reg": "00000000",
+          "cmd_arg_s": "00000000000000000000000000000000",
+          "cmd_resp_1": "00000000000000000000000000000000",
+          "cmd_set_s": "0000000000000000",
+          "error_int_status_reg": "0000000000000000",
+          "normal_int_status_reg": "0000000000000000",
+          "status_reg": "0000000000000000",
+          "wb_adr_i": "01100000",
+          "wb_clk_i": "0",
+          "wb_cyc_i": "1",
+          "wb_dat_i": "01100000011000101011111001101111",
+          "dat_in_m_tx_bd_ref": "0000000000000000",
+          "dat_in_m_tx_bd_dut": "0000000000000000",
+          "wb_dat_o_ref": "00000000000000000000000000000000",
+          "wb_dat_o_dut": "00000000000000000000000000000000",
+          "wb_ack_o_ref": "0",
+          "wb_ack_o_dut": "0",
+          "we_m_tx_bd_ref": "0",
+          "we_m_tx_bd_dut": "0",
+          "new_cmd_ref": "0",
+          "new_cmd_dut": "0",
+          "we_ack_ref": "0",
+          "we_ack_dut": "0",
+          "int_ack_ref": "0",
+          "int_ack_dut": "0",
+          "cmd_int_busy_ref": "0",
+          "cmd_int_busy_dut": "0"
+        },
+        {
+          "t": 475,
+          "Bd_Status_reg": "0000000000000000",
+          "Bd_isr_reg": "00000000",
+          "cmd_arg_s": "00000000000000000000000000000000",
+          "cmd_resp_1": "00000000000000000000000000000000",
+          "cmd_set_s": "0000000000000000",
+          "error_int_status_reg": "0000000000000000",
+          "normal_int_status_reg": "0000000000000000",
+          "status_reg": "0000000000000000",
+          "wb_adr_i": "10000000",
+          "wb_clk_i": "1",
+          "wb_cyc_i": "1",
+          "wb_dat_i": "10010011100000111111111011110111",
+          "dat_in_m_tx_bd_ref": "1111111011110111",
+          "dat_in_m_tx_bd_dut": "0000000000000000",
+          "wb_dat_o_ref": "00000000000000000000000000000000",
+          "wb_dat_o_dut": "00000000000000000000000000000000",
+          "wb_ack_o_ref": "0",
+          "wb_ack_o_dut": "0",
+          "we_m_tx_bd_ref": "1",
+          "we_m_tx_bd_dut": "0",
+          "new_cmd_ref": "0",
+          "new_cmd_dut": "0",
+          "we_ack_ref": "0",
+          "we_ack_dut": "0",
+          "int_ack_ref": "0",
+          "int_ack_dut": "0",
+          "cmd_int_busy_ref": "0",
+          "cmd_int_busy_dut": "0"
+        },
+        {
+          "t": 480,
+          "Bd_Status_reg": "0000000000000000",
+          "Bd_isr_reg": "00000000",
+          "cmd_arg_s": "00000000000000000000000000000000",
+          "cmd_resp_1": "00000000000000000000000000000000",
+          "cmd_set_s": "0000000000000000",
+          "error_int_status_reg": "0000000000000000",
+          "normal_int_status_reg": "0000000000000000",
+          "status_reg": "0000000000000000",
+          "wb_adr_i": "10000000",
+          "wb_clk_i": "0",
+          "wb_cyc_i": "1",
+          "wb_dat_i": "10010011100000111111111011110111",
+          "dat_in_m_tx_bd_ref": "1111111011110111",
+          "dat_in_m_tx_bd_dut": "0000000000000000",
+          "wb_dat_o_ref": "00000000000000000000000000000000",
+          "wb_dat_o_dut": "00000000000000000000000000000000",
+          "wb_ack_o_ref": "0",
+          "wb_ack_o_dut": "0",
+          "we_m_tx_bd_ref": "1",
+          "we_m_tx_bd_dut": "0",
+          "new_cmd_ref": "0",
+          "new_cmd_dut": "0",
+          "we_ack_ref": "0",
+          "we_ack_dut": "0",
+          "int_ack_ref": "0",
+          "int_ack_dut": "0",
+          "cmd_int_busy_ref": "0",
+          "cmd_int_busy_dut": "0"
+        },
+        {
+          "t": 485,
+          "Bd_Status_reg": "0000000000000000",
+          "Bd_isr_reg": "00000000",
+          "cmd_arg_s": "00000000000000000000000000000000",
+          "cmd_resp_1": "00000000000000000000000000000000",
+          "cmd_set_s": "0000000000000000",
+          "error_int_status_reg": "0000000000000000",
+          "normal_int_status_reg": "0000000000000000",
+          "status_reg": "0000000000000000",
+          "wb_adr_i": "00000000",
+          "wb_clk_i": "1",
+          "wb_cyc_i": "1",
+          "wb_dat_i": "10010011100000111111111011110111",
+          "dat_in_m_tx_bd_ref": "1111111011110111",
+          "dat_in_m_tx_bd_dut": "0000000000000000",
+          "wb_dat_o_ref": "10011110111111011101010100000010",
+          "wb_dat_o_dut": "10011110111111011101010100000010",
+          "wb_ack_o_ref": "1",
+          "wb_ack_o_dut": "1",
+          "we_m_tx_bd_ref": "0",
+          "we_m_tx_bd_dut": "0",
+          "new_cmd_ref": "0",
+          "new_cmd_dut": "0",
+          "we_ack_ref": "0",
+          "we_ack_dut": "0",
+          "int_ack_ref": "1",
+          "int_ack_dut": "1",
+          "cmd_int_busy_ref": "0",
+          "cmd_int_busy_dut": "0"
+        },
+        {
+          "t": 490,
+          "Bd_Status_reg": "0000000000000000",
+          "Bd_isr_reg": "00000000",
+          "cmd_arg_s": "00000000000000000000000000000000",
+          "cmd_resp_1": "00000000000000000000000000000000",
+          "cmd_set_s": "0000000000000000",
+          "error_int_status_reg": "0000000000000000",
+          "normal_int_status_reg": "0000000000000000",
+          "status_reg": "0000000000000000",
+          "wb_adr_i": "00000000",
+          "wb_clk_i": "0",
+          "wb_cyc_i": "1",
+          "wb_dat_i": "10010011100000111111111011110111",
+          "dat_in_m_tx_bd_ref": "1111111011110111",
+          "dat_in_m_tx_bd_dut": "0000000000000000",
+          "wb_dat_o_ref": "10011110111111011101010100000010",
+          "wb_dat_o_dut": "10011110111111011101010100000010",
+          "wb_ack_o_ref": "1",
+          "wb_ack_o_dut": "1",
+          "we_m_tx_bd_ref": "0",
+          "we_m_tx_bd_dut": "0",
+          "new_cmd_ref": "0",
+          "new_cmd_dut": "0",
+          "we_ack_ref": "0",
+          "we_ack_dut": "0",
+          "int_ack_ref": "1",
+          "int_ack_dut": "1",
+          "cmd_int_busy_ref": "0",
+          "cmd_int_busy_dut": "0"
+        }
+      ]
+    },
+    "suspect": {
+      "driver_blocks": [
+        {
+          "id": "A2",
+          "kind": "always",
+          "clocking": "seq",
+          "writes": [
+            "Bd_isr_enable_reg",
+            "Bd_isr_reset",
+            "argument_reg",
+            "bd_fsm_state",
+            "bd_rx_high_word",
+            "bd_rx_low_word",
+            "bd_tx_high_word",
+            "bd_tx_low_word",
+            "clock_divider",
+            "cmd_int_busy",
+            "cmd_setting_reg",
+            "dat_in_m_rx_bd",
+            "dat_in_m_tx_bd",
+            "error_int_signal_enable_reg",
+            "error_isr_reset",
+            "int_ack",
+            "int_busy",
+            "new_cmd",
+            "normal_int_signal_enable_reg",
+            "normal_isr_reset",
+            "software_reset_reg",
+            "time_out_reg",
+            "wb_ack_o",
+            "wb_dat_o",
+            "we_ack",
+            "we_m_rx_bd",
+            "we_m_tx_bd"
+          ],
+          "start_line": 334,
+          "end_line": 396
+        },
+        {
+          "id": "A1",
+          "kind": "always",
+          "clocking": "unknown",
+          "writes": [
+            "Bd_isr_enable_reg_next",
+            "Bd_isr_reset_next",
+            "argument_reg_next",
+            "bd_fsm_state_next",
+            "bd_rx_high_word_next",
+            "bd_rx_low_word_next",
+            "bd_tx_high_word_next",
+            "bd_tx_low_word_next",
+            "clock_divider_next",
+            "cmd_int_busy_next",
+            "cmd_setting_reg_next",
+            "dat_in_m_rx_bd_next",
+            "dat_in_m_tx_bd_next",
+            "error_int_signal_enable_reg_next",
+            "error_isr_reset_next",
+            "int_ack_next",
+            "int_busy_next",
+            "new_cmd_next",
+            "normal_int_signal_enable_reg_next",
+            "normal_isr_reset_next",
+            "software_reset_reg_next",
+            "time_out_reg_next",
+            "wb_ack_o_next",
+            "wb_dat_o_next",
+            "we_ack_next",
+            "we_m_rx_bd_next",
+            "we_m_tx_bd_next"
+          ],
+          "start_line": 209,
+          "end_line": 328
+        },
+        {
+          "id": "C1",
+          "kind": "assign",
+          "clocking": "comb",
+          "writes": [
+            "wb_access"
+          ],
+          "start_line": 162,
+          "end_line": 162
+        },
+        {
+          "id": "C9",
+          "kind": "assign",
+          "clocking": "comb",
+          "writes": [
+            "addr_argument"
+          ],
+          "start_line": 171,
+          "end_line": 171
+        },
+        {
+          "id": "C29",
+          "kind": "assign",
+          "clocking": "comb",
+          "writes": [
+            "controller_setting_value"
+          ],
+          "start_line": 192,
+          "end_line": 192
+        },
+        {
+          "id": "C31",
+          "kind": "assign",
+          "clocking": "comb",
+          "writes": [
+            "power_control_value"
+          ],
+          "start_line": 194,
+          "end_line": 194
+        },
+        {
+          "id": "C32",
+          "kind": "assign",
+          "clocking": "comb",
+          "writes": [
+            "capability_value"
+          ],
+          "start_line": 195,
+          "end_line": 195
+        },
+        {
+          "id": "C21",
+          "kind": "assign",
+          "clocking": "comb",
+          "writes": [
+            "addr_error_int_enable"
+          ],
+          "start_line": 183,
+          "end_line": 183
+        }
+      ],
+      "signals": [
+        "cmd_int_busy",
+        "dat_in_m_tx_bd",
+        "int_ack",
+        "new_cmd",
+        "wb_ack_o",
+        "wb_dat_o",
+        "we_ack",
+        "we_m_tx_bd"
+      ],
+      "hint": "First real DUT/ref output divergence; use this instead of testbench metric counters."
+    },
+    "candidate_signals": [
+      "Bd_isr_enable_reg",
+      "Bd_isr_reset",
+      "argument_reg",
+      "clock_divider",
+      "cmd_int_busy",
+      "cmd_setting_reg",
+      "dat_in_m_rx_bd",
+      "dat_in_m_tx_bd",
+      "error_int_signal_enable_reg",
+      "error_isr_reset",
+      "int_ack",
+      "int_busy",
+      "new_cmd",
+      "normal_int_signal_enable_reg",
+      "normal_isr_reset",
+      "software_reset_reg",
+      "time_out_reg",
+      "wb_ack_o",
+      "wb_dat_o",
+      "we_ack",
+      "we_m_rx_bd",
+      "we_m_tx_bd"
+    ],
+    "ignored_tb_metrics": [],
+    "raw_fail_outputs": [
+      {
+        "sig": "wb_dat_o",
+        "mismatches": 1948,
+        "time": 670
+      },
+      {
+        "sig": "wb_ack_o",
+        "mismatches": 34,
+        "time": 12670
+      },
+      {
+        "sig": "we_m_tx_bd",
+        "mismatches": 18,
+        "time": 480
+      },
+      {
+        "sig": "new_cmd",
+        "mismatches": 2962,
+        "time": 820
+      },
+      {
+        "sig": "we_ack",
+        "mismatches": 1880,
+        "time": 2880
+      },
+      {
+        "sig": "int_ack",
+        "mismatches": 194,
+        "time": 3010
+      },
+      {
+        "sig": "cmd_int_busy",
+        "mismatches": 1880,
+        "time": 2880
+      },
+      {
+        "sig": "we_m_rx_bd",
+        "mismatches": 32,
+        "time": 3000
+      },
+      {
+        "sig": "int_busy",
+        "mismatches": 1088,
+        "time": 1020
+      },
+      {
+        "sig": "argument_reg",
+        "mismatches": 8194,
+        "time": 2860
+      },
+      {
+        "sig": "cmd_setting_reg",
+        "mismatches": 8178,
+        "time": 2860
+      },
+      {
+        "sig": "software_reset_reg",
+        "mismatches": 242,
+        "time": 4280
+      },
+      {
+        "sig": "time_out_reg",
+        "mismatches": 554,
+        "time": 8580
+      },
+      {
+        "sig": "normal_int_signal_enable_reg",
+        "mismatches": 462,
+        "time": 7310
+      },
+      {
+        "sig": "error_int_signal_enable_reg",
+        "mismatches": 526,
+        "time": 3620
+      },
+      {
+        "sig": "clock_divider",
+        "mismatches": 422,
+        "time": 3180
+      },
+      {
+        "sig": "Bd_isr_enable_reg",
+        "mismatches": 354,
+        "time": 4420
+      },
+      {
+        "sig": "Bd_isr_reset",
+        "mismatches": 154,
+        "time": 5450
+      },
+      {
+        "sig": "normal_isr_reset",
+        "mismatches": 124,
+        "time": 3790
+      },
+      {
+        "sig": "error_isr_reset",
+        "mismatches": 142,
+        "time": 12520
+      },
+      {
+        "sig": "dat_in_m_rx_bd",
+        "mismatches": 502,
+        "time": 3000
+      },
+      {
+        "sig": "dat_in_m_tx_bd",
+        "mismatches": 824,
+        "time": 480
+      }
+    ],
+    "dut_instance": "top_module1",
+    "ref_instance": "good1"
+  },
+  "required_next_tool": null,
+  "ignored_tb_metrics": [],
+  "raw_fail_outputs": [
+    {
+      "sig": "wb_dat_o",
+      "mismatches": 1948,
+      "time": 670
+    },
+    {
+      "sig": "wb_ack_o",
+      "mismatches": 34,
+      "time": 12670
+    },
+    {
+      "sig": "we_m_tx_bd",
+      "mismatches": 18,
+      "time": 480
+    },
+    {
+      "sig": "new_cmd",
+      "mismatches": 2962,
+      "time": 820
+    },
+    {
+      "sig": "we_ack",
+      "mismatches": 1880,
+      "time": 2880
+    },
+    {
+      "sig": "int_ack",
+      "mismatches": 194,
+      "time": 3010
+    },
+    {
+      "sig": "cmd_int_busy",
+      "mismatches": 1880,
+      "time": 2880
+    },
+    {
+      "sig": "we_m_rx_bd",
+      "mismatches": 32,
+      "time": 3000
+    },
+    {
+      "sig": "int_busy",
+      "mismatches": 1088,
+      "time": 1020
+    },
+    {
+      "sig": "argument_reg",
+      "mismatches": 8194,
+      "time": 2860
+    },
+    {
+      "sig": "cmd_setting_reg",
+      "mismatches": 8178,
+      "time": 2860
+    },
+    {
+      "sig": "software_reset_reg",
+      "mismatches": 242,
+      "time": 4280
+    },
+    {
+      "sig": "time_out_reg",
+      "mismatches": 554,
+      "time": 8580
+    },
+    {
+      "sig": "normal_int_signal_enable_reg",
+      "mismatches": 462,
+      "time": 7310
+    },
+    {
+      "sig": "error_int_signal_enable_reg",
+      "mismatches": 526,
+      "time": 3620
+    },
+    {
+      "sig": "clock_divider",
+      "mismatches": 422,
+      "time": 3180
+    },
+    {
+      "sig": "Bd_isr_enable_reg",
+      "mismatches": 354,
+      "time": 4420
+    },
+    {
+      "sig": "Bd_isr_reset",
+      "mismatches": 154,
+      "time": 5450
+    },
+    {
+      "sig": "normal_isr_reset",
+      "mismatches": 124,
+      "time": 3790
+    },
+    {
+      "sig": "error_isr_reset",
+      "mismatches": 142,
+      "time": 12520
+    },
+    {
+      "sig": "dat_in_m_rx_bd",
+      "mismatches": 502,
+      "time": 3000
+    },
+    {
+      "sig": "dat_in_m_tx_bd",
+      "mismatches": 824,
+      "time": 480
+    }
+  ],
+  "top_diagnosis": "FIRST FAILURE: we_m_tx_bd failed: expected=1, actual=0. Direct driver A2 classified as condition_blocks_update: Observed condition values appear to block this assignment update.",
+  "fail_outputs": [
+    {
+      "sig": "we_m_tx_bd",
+      "expected": "1",
+      "actual": "0",
+      "signal_role": "module_output"
+    },
+    {
+      "sig": "dat_in_m_tx_bd",
+      "expected": "1111111011110111",
+      "actual": "0000000000000000",
+      "signal_role": "module_output"
+    }
+  ],
+  "suspect_blocks": [
+    {
+      "id": "A2",
+      "kind": "always",
+      "clocking": "seq",
+      "writes": [
+        "Bd_isr_enable_reg",
+        "Bd_isr_reset",
+        "argument_reg",
+        "bd_fsm_state",
+        "bd_rx_high_word",
+        "bd_rx_low_word",
+        "bd_tx_high_word",
+        "bd_tx_low_word",
+        "clock_divider",
+        "cmd_int_busy",
+        "cmd_setting_reg",
+        "dat_in_m_rx_bd",
+        "dat_in_m_tx_bd",
+        "error_int_signal_enable_reg",
+        "error_isr_reset",
+        "int_ack",
+        "int_busy",
+        "new_cmd",
+        "normal_int_signal_enable_reg",
+        "normal_isr_reset",
+        "software_reset_reg",
+        "time_out_reg",
+        "wb_ack_o",
+        "wb_dat_o",
+        "we_ack",
+        "we_m_rx_bd",
+        "we_m_tx_bd"
+      ],
+      "start_line": 334,
+      "end_line": 396
+    }
+  ],
+  "timing_hints": {
+    "we_m_tx_bd": {
+      "actual_matches_prev_expected": true,
+      "prev_t": 475,
+      "t": 480
+    },
+    "dat_in_m_tx_bd": {
+      "actual_matches_prev_expected": true,
+      "prev_t": 475,
+      "t": 480
+    }
+  },
+  "alignment_diagnosis": {
+    "wb_dat_o": {
+      "best_alignment": "current",
+      "match_rate_dut_lag1": 0.8842105263157894
+    },
+    "wb_ack_o": {
+      "best_alignment": "current",
+      "match_rate_dut_lag1": 0.6210526315789474
+    },
+    "we_m_tx_bd": {
+      "best_alignment": "dut_lead1",
+      "match_rate_dut_lag1": 0.9894736842105263
+    },
+    "new_cmd": {
+      "best_alignment": "current",
+      "match_rate_dut_lag1": 0.9578947368421052
+    },
+    "we_ack": {
+      "best_alignment": "current",
+      "match_rate_dut_lag1": 1.0
+    },
+    "int_ack": {
+      "best_alignment": "current",
+      "match_rate_dut_lag1": 0.9894736842105263
+    },
+    "cmd_int_busy": {
+      "best_alignment": "current",
+      "match_rate_dut_lag1": 1.0
+    },
+    "we_m_rx_bd": {
+      "best_alignment": "current",
+      "match_rate_dut_lag1": 1.0
+    },
+    "int_busy": {
+      "best_alignment": "current",
+      "match_rate_dut_lag1": 0.968421052631579
+    },
+    "argument_reg": {
+      "best_alignment": "current",
+      "match_rate_dut_lag1": 0.968421052631579
+    },
+    "cmd_setting_reg": {
+      "best_alignment": "current",
+      "match_rate_dut_lag1": 0.968421052631579
+    },
+    "software_reset_reg": {
+      "best_alignment": "current",
+      "match_rate_dut_lag1": 0.9368421052631579
+    },
+    "time_out_reg": {
+      "best_alignment": "current",
+      "match_rate_dut_lag1": 0.9894736842105263
+    },
+    "normal_int_signal_enable_reg": {
+      "best_alignment": "current",
+      "match_rate_dut_lag1": 0.9894736842105263
+    },
+    "error_int_signal_enable_reg": {
+      "best_alignment": "current",
+      "match_rate_dut_lag1": 0.9894736842105263
+    },
+    "clock_divider": {
+      "best_alignment": "current",
+      "match_rate_dut_lag1": 0.9894736842105263
+    },
+    "Bd_isr_enable_reg": {
+      "best_alignment": "current",
+      "match_rate_dut_lag1": 0.9894736842105263
+    },
+    "Bd_isr_reset": {
+      "best_alignment": "current",
+      "match_rate_dut_lag1": 0.9789473684210527
+    },
+    "normal_isr_reset": {
+      "best_alignment": "current",
+      "match_rate_dut_lag1": 0.9789473684210527
+    },
+    "error_isr_reset": {
+      "best_alignment": "current",
+      "match_rate_dut_lag1": 0.9789473684210527
+    },
+    "dat_in_m_rx_bd": {
+      "best_alignment": "current",
+      "match_rate_dut_lag1": 1.0
+    },
+    "dat_in_m_tx_bd": {
+      "best_alignment": "dut_lead1",
+      "match_rate_dut_lag1": 0.9894736842105263
+    }
+  },
+  "value_backtrace_summary": [
+    {
+      "sig": "we_m_tx_bd",
+      "expected": "1",
+      "actual": "0",
+      "steps": [
+        {
+          "signal": "we_m_tx_bd",
+          "driver_block_id": "A2",
+          "classification": "condition_blocks_update",
+          "reason": "Observed condition values appear to block this assignment update.",
+          "rhs_observed_values": {
+            "we_m_tx_bd_next": "0"
+          },
+          "condition_values": {
+            "wb_rst_i": "0"
+          }
+        }
+      ]
+    },
+    {
+      "sig": "dat_in_m_tx_bd",
+      "expected": "1111111011110111",
+      "actual": "0000000000000000",
+      "steps": [
+        {
+          "signal": "dat_in_m_tx_bd",
+          "driver_block_id": "A2",
+          "classification": "condition_blocks_update",
+          "reason": "Observed condition values appear to block this assignment update.",
+          "rhs_observed_values": {
+            "dat_in_m_tx_bd_next": "0000000000000000"
+          },
+          "condition_values": {
+            "wb_rst_i": "0"
+          }
+        }
+      ]
+    },
+    {
+      "sig": "wb_dat_o",
+      "expected": "00000000000000000000000000000000",
+      "actual": "00000000000000000000000000000000",
+      "steps": [
+        {
+          "signal": "wb_dat_o",
+          "driver_block_id": "A2",
+          "classification": "condition_blocks_update",
+          "reason": "Observed condition values appear to block this assignment update.",
+          "rhs_observed_values": {
+            "wb_dat_o_next": "00000000000000000000000000000000"
+          },
+          "condition_values": {
+            "wb_rst_i": "0"
+          }
+        }
+      ]
+    }
+  ],
+  "vcd_available": true
+}

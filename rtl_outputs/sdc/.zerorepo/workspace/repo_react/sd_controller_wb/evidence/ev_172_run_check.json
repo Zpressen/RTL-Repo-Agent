@@ -1,0 +1,540 @@
+{
+  "status": "ok",
+  "mode": "first_divergence",
+  "first_divergence": {
+    "status": "ok",
+    "sampling_mode": "stable",
+    "edge": null,
+    "driver_assignment_kind": "nonblocking",
+    "active_region_model": "settled VCD ref/dut values at sample/change times",
+    "first_divergence": {
+      "signal": "wb_dat_o",
+      "time": 665,
+      "ref": "00000000000000000000000001100011",
+      "dut": "00000000000000000000000000000000",
+      "classification": "dut_early",
+      "ref_path": "tb.wb_dat_o_ref[31:0]",
+      "dut_path": "tb.wb_dat_o_dut[31:0]",
+      "sampling_mode": "stable",
+      "edge": null,
+      "driver_assignment_kind": "nonblocking",
+      "active_region_model": "settled VCD ref/dut values at sample/change times"
+    },
+    "nearby": {
+      "times": [
+        650,
+        655,
+        660,
+        665,
+        670,
+        675,
+        680
+      ],
+      "rows": [
+        {
+          "t": 650,
+          "Bd_Status_reg": "0000000000000000",
+          "Bd_isr_reg": "00000000",
+          "cmd_arg_s": "00000000000000000000000000000000",
+          "cmd_resp_1": "00000000000000000000000000000000",
+          "cmd_set_s": "0000000000000000",
+          "error_int_status_reg": "0000000000000000",
+          "normal_int_status_reg": "0000000000000000",
+          "status_reg": "0000000000000000",
+          "wb_adr_i": "01010100",
+          "wb_clk_i": "0",
+          "wb_cyc_i": "1",
+          "wb_dat_i": "10010011100000111111111011110111",
+          "wb_dat_o_ref": "00000000000000000000000000000000",
+          "wb_dat_o_dut": "00000000000000000000000000000000",
+          "wb_ack_o_ref": "1",
+          "wb_ack_o_dut": "1",
+          "we_m_tx_bd_ref": "0",
+          "we_m_tx_bd_dut": "0",
+          "new_cmd_ref": "0",
+          "new_cmd_dut": "0",
+          "we_ack_ref": "0",
+          "we_ack_dut": "0",
+          "int_ack_ref": "1",
+          "int_ack_dut": "1",
+          "cmd_int_busy_ref": "0",
+          "cmd_int_busy_dut": "0",
+          "we_m_rx_bd_ref": "0",
+          "we_m_rx_bd_dut": "0"
+        },
+        {
+          "t": 655,
+          "Bd_Status_reg": "0000000000000000",
+          "Bd_isr_reg": "00000000",
+          "cmd_arg_s": "00000000000000000000000000000000",
+          "cmd_resp_1": "00000000000000000000000000000000",
+          "cmd_set_s": "0000000000000000",
+          "error_int_status_reg": "0000000000000000",
+          "normal_int_status_reg": "0000000000000000",
+          "status_reg": "0000000000000000",
+          "wb_adr_i": "01011000",
+          "wb_clk_i": "1",
+          "wb_cyc_i": "1",
+          "wb_dat_i": "10010011100000111111111011110111",
+          "wb_dat_o_ref": "00000000000000000000000001100011",
+          "wb_dat_o_dut": "00000000000000000000000001100011",
+          "wb_ack_o_ref": "0",
+          "wb_ack_o_dut": "0",
+          "we_m_tx_bd_ref": "0",
+          "we_m_tx_bd_dut": "0",
+          "new_cmd_ref": "0",
+          "new_cmd_dut": "0",
+          "we_ack_ref": "0",
+          "we_ack_dut": "0",
+          "int_ack_ref": "1",
+          "int_ack_dut": "1",
+          "cmd_int_busy_ref": "0",
+          "cmd_int_busy_dut": "0",
+          "we_m_rx_bd_ref": "0",
+          "we_m_rx_bd_dut": "0"
+        },
+        {
+          "t": 660,
+          "Bd_Status_reg": "0000000000000000",
+          "Bd_isr_reg": "00000000",
+          "cmd_arg_s": "00000000000000000000000000000000",
+          "cmd_resp_1": "00000000000000000000000000000000",
+          "cmd_set_s": "0000000000000000",
+          "error_int_status_reg": "0000000000000000",
+          "normal_int_status_reg": "0000000000000000",
+          "status_reg": "0000000000000000",
+          "wb_adr_i": "01011000",
+          "wb_clk_i": "0",
+          "wb_cyc_i": "1",
+          "wb_dat_i": "10010011100000111111111011110111",
+          "wb_dat_o_ref": "00000000000000000000000001100011",
+          "wb_dat_o_dut": "00000000000000000000000001100011",
+          "wb_ack_o_ref": "0",
+          "wb_ack_o_dut": "0",
+          "we_m_tx_bd_ref": "0",
+          "we_m_tx_bd_dut": "0",
+          "new_cmd_ref": "0",
+          "new_cmd_dut": "0",
+          "we_ack_ref": "0",
+          "we_ack_dut": "0",
+          "int_ack_ref": "1",
+          "int_ack_dut": "1",
+          "cmd_int_busy_ref": "0",
+          "cmd_int_busy_dut": "0",
+          "we_m_rx_bd_ref": "0",
+          "we_m_rx_bd_dut": "0"
+        },
+        {
+          "t": 665,
+          "Bd_Status_reg": "0000000000000000",
+          "Bd_isr_reg": "00000000",
+          "cmd_arg_s": "00000000000000000000000000000000",
+          "cmd_resp_1": "00000000000000000000000000000000",
+          "cmd_set_s": "0000000000000000",
+          "error_int_status_reg": "0000000000000000",
+          "normal_int_status_reg": "0000000000000000",
+          "status_reg": "0000000000000000",
+          "wb_adr_i": "01100000",
+          "wb_clk_i": "1",
+          "wb_cyc_i": "1",
+          "wb_dat_i": "10010011100000111111111011110111",
+          "wb_dat_o_ref": "00000000000000000000000001100011",
+          "wb_dat_o_dut": "00000000000000000000000000000000",
+          "wb_ack_o_ref": "1",
+          "wb_ack_o_dut": "1",
+          "we_m_tx_bd_ref": "0",
+          "we_m_tx_bd_dut": "0",
+          "new_cmd_ref": "0",
+          "new_cmd_dut": "0",
+          "we_ack_ref": "0",
+          "we_ack_dut": "0",
+          "int_ack_ref": "1",
+          "int_ack_dut": "1",
+          "cmd_int_busy_ref": "0",
+          "cmd_int_busy_dut": "0",
+          "we_m_rx_bd_ref": "0",
+          "we_m_rx_bd_dut": "0"
+        },
+        {
+          "t": 670,
+          "Bd_Status_reg": "0000000000000000",
+          "Bd_isr_reg": "00000000",
+          "cmd_arg_s": "00000000000000000000000000000000",
+          "cmd_resp_1": "00000000000000000000000000000000",
+          "cmd_set_s": "0000000000000000",
+          "error_int_status_reg": "0000000000000000",
+          "normal_int_status_reg": "0000000000000000",
+          "status_reg": "0000000000000000",
+          "wb_adr_i": "01100000",
+          "wb_clk_i": "0",
+          "wb_cyc_i": "1",
+          "wb_dat_i": "10010011100000111111111011110111",
+          "wb_dat_o_ref": "00000000000000000000000001100011",
+          "wb_dat_o_dut": "00000000000000000000000000000000",
+          "wb_ack_o_ref": "1",
+          "wb_ack_o_dut": "1",
+          "we_m_tx_bd_ref": "0",
+          "we_m_tx_bd_dut": "0",
+          "new_cmd_ref": "0",
+          "new_cmd_dut": "0",
+          "we_ack_ref": "0",
+          "we_ack_dut": "0",
+          "int_ack_ref": "1",
+          "int_ack_dut": "1",
+          "cmd_int_busy_ref": "0",
+          "cmd_int_busy_dut": "0",
+          "we_m_rx_bd_ref": "0",
+          "we_m_rx_bd_dut": "0"
+        },
+        {
+          "t": 675,
+          "Bd_Status_reg": "0000000000000000",
+          "Bd_isr_reg": "00000000",
+          "cmd_arg_s": "00000000000000000000000000000000",
+          "cmd_resp_1": "00000000000000000000000000000000",
+          "cmd_set_s": "0000000000000000",
+          "error_int_status_reg": "0000000000000000",
+          "normal_int_status_reg": "0000000000000000",
+          "status_reg": "0000000000000000",
+          "wb_adr_i": "10000000",
+          "wb_clk_i": "1",
+          "wb_cyc_i": "1",
+          "wb_dat_i": "10010011100000111111111011110111",
+          "wb_dat_o_ref": "00000000000000000000000001100011",
+          "wb_dat_o_dut": "00000000000000000000000000000000",
+          "wb_ack_o_ref": "0",
+          "wb_ack_o_dut": "0",
+          "we_m_tx_bd_ref": "0",
+          "we_m_tx_bd_dut": "0",
+          "new_cmd_ref": "0",
+          "new_cmd_dut": "0",
+          "we_ack_ref": "0",
+          "we_ack_dut": "0",
+          "int_ack_ref": "1",
+          "int_ack_dut": "1",
+          "cmd_int_busy_ref": "0",
+          "cmd_int_busy_dut": "0",
+          "we_m_rx_bd_ref": "0",
+          "we_m_rx_bd_dut": "0"
+        },
+        {
+          "t": 680,
+          "Bd_Status_reg": "0000000000000000",
+          "Bd_isr_reg": "00000000",
+          "cmd_arg_s": "00000000000000000000000000000000",
+          "cmd_resp_1": "00000000000000000000000000000000",
+          "cmd_set_s": "0000000000000000",
+          "error_int_status_reg": "0000000000000000",
+          "normal_int_status_reg": "0000000000000000",
+          "status_reg": "0000000000000000",
+          "wb_adr_i": "10000000",
+          "wb_clk_i": "0",
+          "wb_cyc_i": "1",
+          "wb_dat_i": "10010011100000111111111011110111",
+          "wb_dat_o_ref": "00000000000000000000000001100011",
+          "wb_dat_o_dut": "00000000000000000000000000000000",
+          "wb_ack_o_ref": "0",
+          "wb_ack_o_dut": "0",
+          "we_m_tx_bd_ref": "0",
+          "we_m_tx_bd_dut": "0",
+          "new_cmd_ref": "0",
+          "new_cmd_dut": "0",
+          "we_ack_ref": "0",
+          "we_ack_dut": "0",
+          "int_ack_ref": "1",
+          "int_ack_dut": "1",
+          "cmd_int_busy_ref": "0",
+          "cmd_int_busy_dut": "0",
+          "we_m_rx_bd_ref": "0",
+          "we_m_rx_bd_dut": "0"
+        }
+      ]
+    },
+    "suspect": {
+      "driver_blocks": [
+        {
+          "id": "A2",
+          "kind": "always",
+          "clocking": "seq",
+          "writes": [
+            "Bd_isr_enable_reg",
+            "Bd_isr_reset",
+            "argument_reg",
+            "bd_fsm_state",
+            "bd_rx_high_word",
+            "bd_rx_low_word",
+            "bd_tx_high_word",
+            "bd_tx_low_word",
+            "clock_divider",
+            "cmd_int_busy",
+            "cmd_setting_reg",
+            "dat_in_m_rx_bd",
+            "dat_in_m_tx_bd",
+            "error_int_signal_enable_reg",
+            "error_isr_reset",
+            "int_ack",
+            "int_busy",
+            "new_cmd",
+            "normal_int_signal_enable_reg",
+            "normal_isr_reset",
+            "software_reset_reg",
+            "time_out_reg",
+            "wb_ack_o",
+            "wb_dat_o",
+            "we_ack",
+            "we_m_rx_bd",
+            "we_m_tx_bd"
+          ],
+          "start_line": 344,
+          "end_line": 406
+        },
+        {
+          "id": "A1",
+          "kind": "always",
+          "clocking": "unknown",
+          "writes": [
+            "Bd_isr_enable_reg_next",
+            "Bd_isr_reset_next",
+            "argument_reg_next",
+            "bd_fsm_state_next",
+            "bd_rx_high_word_next",
+            "bd_rx_low_word_next",
+            "bd_tx_high_word_next",
+            "bd_tx_low_word_next",
+            "clock_divider_next",
+            "cmd_int_busy_next",
+            "cmd_setting_reg_next",
+            "dat_in_m_rx_bd_next",
+            "dat_in_m_tx_bd_next",
+            "error_int_signal_enable_reg_next",
+            "error_isr_reset_next",
+            "int_ack_next",
+            "int_busy_next",
+            "new_cmd_next",
+            "normal_int_signal_enable_reg_next",
+            "normal_isr_reset_next",
+            "software_reset_reg_next",
+            "time_out_reg_next",
+            "wb_ack_o_next",
+            "wb_dat_o_next",
+            "we_ack_next",
+            "we_m_rx_bd_next",
+            "we_m_tx_bd_next"
+          ],
+          "start_line": 209,
+          "end_line": 338
+        },
+        {
+          "id": "C1",
+          "kind": "assign",
+          "clocking": "comb",
+          "writes": [
+            "wb_access"
+          ],
+          "start_line": 162,
+          "end_line": 162
+        },
+        {
+          "id": "C9",
+          "kind": "assign",
+          "clocking": "comb",
+          "writes": [
+            "addr_argument"
+          ],
+          "start_line": 171,
+          "end_line": 171
+        },
+        {
+          "id": "C29",
+          "kind": "assign",
+          "clocking": "comb",
+          "writes": [
+            "controller_setting_value"
+          ],
+          "start_line": 192,
+          "end_line": 192
+        },
+        {
+          "id": "C31",
+          "kind": "assign",
+          "clocking": "comb",
+          "writes": [
+            "power_control_value"
+          ],
+          "start_line": 194,
+          "end_line": 194
+        },
+        {
+          "id": "C32",
+          "kind": "assign",
+          "clocking": "comb",
+          "writes": [
+            "capability_value"
+          ],
+          "start_line": 195,
+          "end_line": 195
+        },
+        {
+          "id": "C21",
+          "kind": "assign",
+          "clocking": "comb",
+          "writes": [
+            "addr_error_int_enable"
+          ],
+          "start_line": 183,
+          "end_line": 183
+        }
+      ],
+      "signals": [
+        "cmd_int_busy",
+        "int_ack",
+        "new_cmd",
+        "wb_ack_o",
+        "wb_dat_o",
+        "we_ack",
+        "we_m_rx_bd",
+        "we_m_tx_bd"
+      ],
+      "hint": "First real DUT/ref output divergence; use this instead of testbench metric counters."
+    },
+    "candidate_signals": [
+      "Bd_isr_enable_reg",
+      "Bd_isr_reset",
+      "argument_reg",
+      "clock_divider",
+      "cmd_int_busy",
+      "cmd_setting_reg",
+      "dat_in_m_rx_bd",
+      "dat_in_m_tx_bd",
+      "error_int_signal_enable_reg",
+      "error_isr_reset",
+      "int_ack",
+      "int_busy",
+      "new_cmd",
+      "normal_int_signal_enable_reg",
+      "normal_isr_reset",
+      "software_reset_reg",
+      "time_out_reg",
+      "wb_ack_o",
+      "wb_dat_o",
+      "we_ack",
+      "we_m_rx_bd",
+      "we_m_tx_bd"
+    ],
+    "ignored_tb_metrics": [],
+    "raw_fail_outputs": [
+      {
+        "sig": "wb_dat_o",
+        "mismatches": 1948,
+        "time": 670
+      },
+      {
+        "sig": "wb_ack_o",
+        "mismatches": 34,
+        "time": 12670
+      },
+      {
+        "sig": "we_m_tx_bd",
+        "mismatches": 72,
+        "time": 4600
+      },
+      {
+        "sig": "new_cmd",
+        "mismatches": 2962,
+        "time": 820
+      },
+      {
+        "sig": "we_ack",
+        "mismatches": 1880,
+        "time": 2880
+      },
+      {
+        "sig": "int_ack",
+        "mismatches": 194,
+        "time": 3010
+      },
+      {
+        "sig": "cmd_int_busy",
+        "mismatches": 1880,
+        "time": 2880
+      },
+      {
+        "sig": "we_m_rx_bd",
+        "mismatches": 32,
+        "time": 3000
+      },
+      {
+        "sig": "int_busy",
+        "mismatches": 1088,
+        "time": 1020
+      },
+      {
+        "sig": "argument_reg",
+        "mismatches": 8194,
+        "time": 2860
+      },
+      {
+        "sig": "cmd_setting_reg",
+        "mismatches": 8178,
+        "time": 2860
+      },
+      {
+        "sig": "software_reset_reg",
+        "mismatches": 242,
+        "time": 4280
+      },
+      {
+        "sig": "time_out_reg",
+        "mismatches": 554,
+        "time": 8580
+      },
+      {
+        "sig": "normal_int_signal_enable_reg",
+        "mismatches": 462,
+        "time": 7310
+      },
+      {
+        "sig": "error_int_signal_enable_reg",
+        "mismatches": 526,
+        "time": 3620
+      },
+      {
+        "sig": "clock_divider",
+        "mismatches": 422,
+        "time": 3180
+      },
+      {
+        "sig": "Bd_isr_enable_reg",
+        "mismatches": 354,
+        "time": 4420
+      },
+      {
+        "sig": "Bd_isr_reset",
+        "mismatches": 154,
+        "time": 5450
+      },
+      {
+        "sig": "normal_isr_reset",
+        "mismatches": 124,
+        "time": 3790
+      },
+      {
+        "sig": "error_isr_reset",
+        "mismatches": 142,
+        "time": 12520
+      },
+      {
+        "sig": "dat_in_m_rx_bd",
+        "mismatches": 502,
+        "time": 3000
+      },
+      {
+        "sig": "dat_in_m_tx_bd",
+        "mismatches": 888,
+        "time": 4600
+      }
+    ],
+    "dut_instance": "top_module1",
+    "ref_instance": "good1"
+  }
+}

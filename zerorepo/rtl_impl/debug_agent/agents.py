@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import inspect
 from typing import Any
 
 from agentscope.agent import ReActAgent
@@ -48,3 +49,28 @@ def clear_memory_safely(agent: ReActAgent) -> None:
         except RuntimeError:
             # No running loop; run it to completion.
             __import__("asyncio").run(ret)  # type: ignore[arg-type]
+
+
+async def close_model_safely(agent: ReActAgent) -> None:
+    """Close short-lived AgentScope model clients before their event loop exits."""
+    model = getattr(agent, "model", None)
+    seen: set[int] = set()
+    stack = [model]
+    while stack:
+        obj = stack.pop()
+        if obj is None or id(obj) in seen:
+            continue
+        seen.add(id(obj))
+        client = getattr(obj, "client", None)
+        if client is not None:
+            close = getattr(client, "close", None) or getattr(client, "aclose", None)
+            if close is not None:
+                try:
+                    ret = close()
+                    if inspect.isawaitable(ret):
+                        await ret
+                except Exception:  # noqa: BLE001
+                    pass
+        nested = getattr(obj, "_base_model", None)
+        if nested is not None:
+            stack.append(nested)

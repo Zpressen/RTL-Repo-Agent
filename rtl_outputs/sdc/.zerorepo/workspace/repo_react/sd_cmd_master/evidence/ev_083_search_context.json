@@ -1,0 +1,93 @@
+{
+  "status": "ok",
+  "pattern": "ERR_INT_REG",
+  "scope": "rtl",
+  "results": [
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_cmd_master/rtl.sv",
+      "line": 19,
+      "excerpt": "17:     output reg [15:0] STATUS_REG,\n18:     output reg [31:0] RESP_1_REG,\n19:     output reg [4:0]  ERR_INT_REG,\n20:     output reg [15:0] NORMAL_INT_REG,\n21:     input           ERR_INT_RST,"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_cmd_master/rtl.sv",
+      "line": 50,
+      "excerpt": "48:     // STATUS_REG bit\n49:     localparam CICMD = 0;\n50:     // ERR_INT_REG bits\n51:     localparam CTE   = 0;\n52:     localparam CCRCE = 1;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_cmd_master/rtl.sv",
+      "line": 242,
+      "excerpt": "240:             complete           = 1'b0;\n241:             RESP_1_REG         = 32'b00000000000000000000000000000000;\n242:             ERR_INT_REG        = 5'b00000;\n243:             NORMAL_INT_REG     = 16'b0000000000000000;\n244:             STATUS_REG         = 16'b0000000000000000;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_cmd_master/rtl.sv",
+      "line": 274,
+      "excerpt": "272:                 SETUP: begin\n273:                     NORMAL_INT_REG = 16'b0000000000000000;\n274:                     ERR_INT_REG    = 5'b00000;\n275: \n276:                     index_check_enable = CICE;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_cmd_master/rtl.sv",
+      "line": 309,
+      "excerpt": "307: \n308:                     if (Watchdog_Cnt > TIMEOUT_REG) begin\n309:                         ERR_INT_REG[CTE] = 1'b1;\n310:                         NORMAL_INT_REG[EI] = 1'b1;\n311:                         go_idle_o = 1'b1;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_cmd_master/rtl.sv",
+      "line": 331,
+      "excerpt": "329: \n330:                             if (CRC_check_enable && !serial_status[CRC_VALID_BIT]) begin\n331:                                 ERR_INT_REG[CCRCE] = 1'b1;\n332:                                 NORMAL_INT_REG[EI] = 1'b1;\n333:                             end"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_cmd_master/rtl.sv",
+      "line": 336,
+      "excerpt": "334: \n335:                             if (index_check_enable && command_index_mismatch) begin\n336:                                 ERR_INT_REG[CIE] = 1'b1;\n337:                                 NORMAL_INT_REG[EI] = 1'b1;\n338:                             end"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/debug/sd_cmd_master/rtl.sv",
+      "line": 357,
+      "excerpt": "355: \n356:             if (ERR_INT_RST) begin\n357:                 ERR_INT_REG = 5'b00000;\n358:             end\n359:             if (NORMAL_INT_RST) begin"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sdc_controller.v",
+      "line": 228,
+      "excerpt": "226:     .STATUS_REG      (cmd_status_reg),\n227:     .RESP_1_REG      (cmd_resp_1),\n228:     .ERR_INT_REG     (cmd_error_int_reg),\n229:     .NORMAL_INT_REG  (cmd_normal_int_reg),\n230:     .ERR_INT_RST     (error_isr_reset),"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_cmd_master.v",
+      "line": 19,
+      "excerpt": "17:     output reg [15:0] STATUS_REG,\n18:     output reg [31:0] RESP_1_REG,\n19:     output reg [4:0]  ERR_INT_REG,\n20:     output reg [15:0] NORMAL_INT_REG,\n21:     input           ERR_INT_RST,"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_cmd_master.v",
+      "line": 50,
+      "excerpt": "48:     // STATUS_REG bit\n49:     localparam CICMD = 0;\n50:     // ERR_INT_REG bits\n51:     localparam CTE   = 0;\n52:     localparam CCRCE = 1;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_cmd_master.v",
+      "line": 242,
+      "excerpt": "240:             complete           <= 1'b0;\n241:             RESP_1_REG         <= 32'b00000000000000000000000000000000;\n242:             ERR_INT_REG        <= 5'b00000;\n243:             NORMAL_INT_REG     <= 16'b0000000000000000;\n244:             STATUS_REG         <= 16'b0000000000000000;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_cmd_master.v",
+      "line": 274,
+      "excerpt": "272:                 SETUP: begin\n273:                     NORMAL_INT_REG <= 16'b0000000000000000;\n274:                     ERR_INT_REG    <= 5'b00000;\n275:                     STATUS_REG     <= 16'b0000000000000000;\n276:                     STATUS_REG[CICMD] <= 1'b1;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_cmd_master.v",
+      "line": 290,
+      "excerpt": "288: \n289:                     if (timeout_expired) begin\n290:                         ERR_INT_REG[CTE] = 1'b1;\n291:                         NORMAL_INT_REG[EI] = 1'b1;\n292:                         go_idle_o = 1'b1;"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_cmd_master.v",
+      "line": 312,
+      "excerpt": "310: \n311:                             if (CRC_check_enable && !serial_status[CRC_VALID_BIT]) begin\n312:                                 ERR_INT_REG[CCRCE] <= 1'b1;\n313:                                 NORMAL_INT_REG[EI] <= 1'b1;\n314:                             end"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_cmd_master.v",
+      "line": 317,
+      "excerpt": "315: \n316:                             if (index_check_enable && command_index_mismatch) begin\n317:                                 ERR_INT_REG[CIE] <= 1'b1;\n318:                                 NORMAL_INT_REG[EI] <= 1'b1;\n319:                             end"
+    },
+    {
+      "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_cmd_master.v",
+      "line": 338,
+      "excerpt": "336: \n337:             if (ERR_INT_RST) begin\n338:                 ERR_INT_REG <= 5'b00000;\n339:             end\n340:             if (NORMAL_INT_RST) begin"
+    }
+  ],
+  "truncated": false
+}

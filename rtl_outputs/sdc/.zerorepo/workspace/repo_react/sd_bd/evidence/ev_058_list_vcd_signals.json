@@ -1,0 +1,12 @@
+{
+  "status": "ok",
+  "signals": [
+    "tb_sd_bd.dat_out_s_ref[15:0]",
+    "tb_sd_bd.dat_out_s_dut[15:0]",
+    "tb_sd_bd.good1.dat_out_s[15:0]",
+    "tb_sd_bd.top_module1.dat_out_s[15:0]"
+  ],
+  "count": 4,
+  "truncated": false,
+  "total_in_vcd": 131
+}
