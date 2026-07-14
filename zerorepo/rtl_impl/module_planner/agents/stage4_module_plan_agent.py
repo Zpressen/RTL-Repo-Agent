@@ -135,13 +135,12 @@ class Stage4ModulePlanAgent(BaseStageAgent):
                 task,
                 partial_artifacts,
                 output_model=ModulePlanArtifact,
-                quality_validator=lambda artifact, expected_module=module_name, expected_blocks=skeleton_blocks, valid_spec_ids=spec_block_ids, required_interface_ids=interface_spec_ids, expected_refs=expected_spec_refs_by_id: (
+                quality_validator=lambda artifact, expected_module=module_name, expected_blocks=skeleton_blocks, valid_spec_ids=spec_block_ids, expected_refs=expected_spec_refs_by_id: (
                     self._validate_module_plan(
                         artifact,
                         expected_module=expected_module,
                         expected_blocks=expected_blocks,
                         valid_spec_ids=valid_spec_ids,
-                        interface_spec_ids=required_interface_ids,
                         expected_spec_refs_by_id=expected_refs,
                     )
                 ),
@@ -225,11 +224,9 @@ class Stage4ModulePlanAgent(BaseStageAgent):
         expected_module: str,
         expected_blocks: List["_SkeletonBlock"],
         valid_spec_ids: set[str],
-        interface_spec_ids: List[str] | None = None,
         expected_spec_refs_by_id: Dict[str, List[str]] | None = None,
     ) -> List[str]:
         errors: List[str] = []
-        interface_ids = list(interface_spec_ids or [])
         expected_refs = expected_spec_refs_by_id or {}
         if artifact.schema_version != "module_plan_v1":
             errors.append("schema_version must remain module_plan_v1")
@@ -237,22 +234,6 @@ class Stage4ModulePlanAgent(BaseStageAgent):
             errors.append(f"module must be {expected_module}")
         if len(artifact.subtasks) != len(expected_blocks):
             errors.append(f"expected {len(expected_blocks)} subtasks, got {len(artifact.subtasks)}")
-        if interface_ids:
-            referenced_ids = {ref for subtask in artifact.subtasks for ref in subtask.spec_refs}
-            missing_module_refs = [item for item in interface_ids if item not in referenced_ids]
-            if missing_module_refs:
-                errors.append(f"module interface spec_refs must be referenced by at least one subtask: {missing_module_refs}")
-            first_decl_index = next(
-                (index for index, block in enumerate(expected_blocks) if block.block_kind == "decl"),
-                None,
-            )
-            if first_decl_index is not None and first_decl_index < len(artifact.subtasks):
-                decl_subtask = artifact.subtasks[first_decl_index]
-                missing_decl_refs = [item for item in interface_ids if item not in decl_subtask.spec_refs]
-                if missing_decl_refs:
-                    errors.append(
-                        f"{decl_subtask.id}: first declaration subtask must include interface spec_refs {missing_decl_refs}"
-                    )
         for index, expected_block in enumerate(expected_blocks):
             if index >= len(artifact.subtasks):
                 break

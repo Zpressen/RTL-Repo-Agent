@@ -1,8 +1,0 @@
-{
-  "schema_version": "stage6_syntax_repair_v1",
-  "module": "sd_data_serial_host",
-  "status": "pass_without_repair",
-  "max_trials": 5,
-  "attempts": [],
-  "final_rtl_hash": "6995d75dfd8edfe7"
-}

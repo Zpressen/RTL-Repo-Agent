@@ -1,5 +1,11 @@
 from .planner_runner import PlannerRunner
-from .module_organizer import build_module_organized_artifact
+from .module_organizer import (
+    build_module_organized_artifact,
+    build_module_organized_artifact_from_repo_skeleton,
+    build_module_organized_artifact_from_repo_skeleton_only,
+    build_stage2_planning_input,
+    build_stage2_planning_input_from_task,
+)
 from .interfaces import (
     PlanningArtifactSink,
     PlanningContextProvider,
@@ -95,7 +101,9 @@ from .schemas import (
     PairwisePassResult,
     PairwiseTieBreakResult,
     FinalModulePlan,
+    Stage2PlanningInput,
     Stage2RepoSkeletonArtifact,
+    Stage2SourceSpec,
     Stage3CandidatesArtifact,
     Stage4ScoresArtifact,
     ClockingModel,
@@ -121,6 +129,10 @@ from .schemas import (
 __all__ = [
     "PlannerRunner",
     "build_module_organized_artifact",
+    "build_module_organized_artifact_from_repo_skeleton",
+    "build_module_organized_artifact_from_repo_skeleton_only",
+    "build_stage2_planning_input",
+    "build_stage2_planning_input_from_task",
     "PlanningArtifactSink",
     "PlanningContextProvider",
     "NullPlanningArtifactSink",
@@ -222,7 +234,9 @@ __all__ = [
     "GlobalInvariants",
     "RepoModuleSkeleton",
     "PlanningDecisions",
+    "Stage2PlanningInput",
     "Stage2RepoSkeletonArtifact",
+    "Stage2SourceSpec",
     "Stage3CandidatesArtifact",
     "Stage4ScoresArtifact",
     "ImageDigest",

@@ -13,6 +13,20 @@ FailureType = Literal[
     "plan_bug",
     "unknown",
 ]
+SystemFailureCategory = Literal[
+    "compile_or_elaboration",
+    "vcd_or_trace_unavailable",
+    "top_protocol_or_fsm",
+    "hierarchy_connection",
+    "interface_width_or_port_order",
+    "endian_or_byte_lane_mapping",
+    "key_schedule_logic",
+    "round_transform_logic",
+    "sbox_or_lookup_logic",
+    "latency_or_done_timing",
+    "spec_or_plan_mismatch",
+    "unknown",
+]
 NextAction = Literal["patch", "read_more", "record_correction", "stop"]
 RepoReActStatus = Literal["pass", "fail", "give_up", "max_steps_exceeded", "error"]
 DebugContextGoal = Literal[
@@ -100,6 +114,22 @@ class TimingEvidence(BaseModel):
     line_range: list[int] = Field(default_factory=list)
 
 
+class SystemTriage(BaseModel):
+    category: SystemFailureCategory = "unknown"
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    symptom: str = ""
+    root_signal: str = ""
+    root_time: int | None = None
+    suspect_modules: list[str] = Field(default_factory=list)
+    suspect_files: list[str] = Field(default_factory=list)
+    signal_path: list[dict[str, Any]] = Field(default_factory=list)
+    evidence: list[str] = Field(default_factory=list)
+    missing_evidence: list[str] = Field(default_factory=list)
+    recommended_tool_calls: list[dict[str, Any]] = Field(default_factory=list)
+    patch_scope: str = ""
+    reason: str = ""
+
+
 class DebugContextPack(BaseModel):
     schema_version: str = "debug_context_pack_v1"
     goal: DebugContextGoal = "initial_triage"
@@ -112,6 +142,7 @@ class DebugContextPack(BaseModel):
     causal_memory: dict[str, Any] = Field(default_factory=dict)
     raw_artifacts: dict[str, RawArtifactRef] = Field(default_factory=dict)
     timing_evidence: TimingEvidence = Field(default_factory=TimingEvidence)
+    system_triage: SystemTriage = Field(default_factory=SystemTriage)
     fallback_used: bool = False
     fallback_reason: str = ""
 
@@ -129,10 +160,15 @@ class RepoReActInput(BaseModel):
 
     module_name: str
     repair_mode: Literal["syntax", "functional"] = "functional"
+    repair_scope: Literal["module", "repo"] = "module"
     workspace_root: Path
     debug_workdir: Path
     rtl_path: Path
     merged_file: Path
+    rtl_root: Path | None = None
+    top_module: str = ""
+    verify_dir: Path | None = None
+    verify_script: Path | None = None
     output_root: Path | None = None
     repo_root: Path | None = None
     spec_text: str = ""

@@ -1,9 +1,0 @@
-{
-  "status": "ok",
-  "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_unified_functional_spec/.zerorepo/module_planner/outputs/spec_blocks.json",
-  "module_name": "aes_cipher_top",
-  "query": "text_out timing done",
-  "block_id": null,
-  "matches": [],
-  "truncated": false
-}

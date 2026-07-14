@@ -106,6 +106,7 @@ class ModuleRecord(BaseModel):
     module: str = Field(..., min_length=1)
     doc_file: str = Field(..., min_length=1)
     export_file: str = Field(..., min_length=1)
+    spec_context_file: str = Field(default="")
     export_schema_version: str = Field(default="module_skeleton_export_v1")
     source_refs: SourceRefs
     planning_note: str = Field(default="")

@@ -1,9 +1,0 @@
-{
-  "schema_version": "stage6_syntax_diagnostic_v1",
-  "module": "sd_cmd_master",
-  "status": "delegated_to_debug_syntax_repair",
-  "syntax_passed": false,
-  "delegated_to": "ModuleDebugRunner.repo_react_syntax",
-  "merged_file": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_cmd_master.v",
-  "syntax_summary": "%Error: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_cmd_master.v:1:1: syntax error, unexpected IDENTIFIER\n    1 | None\n      | ^~~~\n        ... See the manual at https://verilator.org/verilator_doc.html?v=5.044 for more assistance.\n%Error: Exiting due to 1 error(s)"
-}

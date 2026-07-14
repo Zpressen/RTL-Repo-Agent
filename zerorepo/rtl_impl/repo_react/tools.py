@@ -34,15 +34,16 @@ except Exception:  # noqa: BLE001
 
 
 _FAIL_TIME_HINT_RE = re.compile(
-    r"Hint:\s+Output\s+'[^']+'\s+has\s+\d+\s+mismatches\.\s+First mismatch occurred at time\s+(?P<t>\d+)\.",
-    re.MULTILINE,
+    r"Hint:\s+Output\s+(?:'[^']+'|[A-Za-z_][A-Za-z0-9_$]*)(?:\s+signal)?\s+has\s+\d+\s+mismatches\.\s+First(?:\s+mismatch\s+occurred)?\s+at\s+time\s+(?P<t>\d+)\b",
+    re.IGNORECASE | re.MULTILINE,
 )
 _FAIL_TIME_FAILED_RE = re.compile(
     r"SIMULATION FAILED - \d+\s+MISMATCHES DETECTED.*FIRST AT TIME\s+(?P<t>\d+)",
     re.IGNORECASE,
 )
 _SIM_HINT_RE = re.compile(
-    r"Hint:\s+Output\s+'(?P<sig>[^']+)'\s+has\s+(?P<count>\d+)\s+mismatches\.\s+First mismatch occurred at time\s+(?P<time>\d+)\.",
+    r"Hint:\s+Output\s+(?:'(?P<quoted_sig>[^']+)'|(?P<bare_sig>[A-Za-z_][A-Za-z0-9_$]*)(?:\s+signal)?)\s+has\s+(?P<count>\d+)\s+mismatches\.\s+First(?:\s+mismatch\s+occurred)?\s+at\s+time\s+(?P<time>\d+)\b",
+    re.IGNORECASE,
 )
 _SIM_TOTAL_RE = re.compile(r"Mismatches:\s+(?P<count>\d+)\s+in\s+(?P<samples>\d+)\s+samples")
 
@@ -57,6 +58,28 @@ STAGE_ARTIFACTS = {
     "stage5_codegen": "stage5_codegen.json",
     "stage6_merge": "stage6_merge.json",
 }
+
+
+def stage_artifact_help() -> dict[str, Any]:
+    special = ["global_defines_manifest", "merge_report", "stage6_merge_report"]
+    return {
+        "valid_artifact_names": sorted([*STAGE_ARTIFACTS.keys(), *special]),
+        "common_repo_debug_artifacts": [
+            "repo_skeleton",
+            "spec_blocks",
+            "module_plans",
+            "stage5_codegen",
+            "stage6_merge",
+            "contracts",
+            "modules",
+        ],
+        "usage": 'read_context(kind="stage_artifact", artifact_name="<one_of_valid_artifact_names>")',
+    }
+
+
+def stage_artifact_help_text() -> str:
+    return ", ".join(stage_artifact_help()["valid_artifact_names"])
+
 
 FORBIDDEN_EDIT_PARTS = {
     "spec",
@@ -106,7 +129,10 @@ def _parse_sim_metrics(sim_log_json: str | None) -> dict[str, Any]:
     stdout = str(obj.get("stdout") or sim_log_json)
     per_signal: dict[str, dict[str, int]] = {}
     for match in _SIM_HINT_RE.finditer(stdout):
-        per_signal[match.group("sig")] = {
+        sig = (match.group("quoted_sig") or match.group("bare_sig") or "").strip()
+        if not sig:
+            continue
+        per_signal[sig] = {
             "count": int(match.group("count")),
             "first_time": int(match.group("time")),
         }
@@ -428,6 +454,8 @@ class RepoReActTools:
             inp.workspace_root,
             inp.output_root,
             inp.repo_root,
+            inp.rtl_root,
+            inp.verify_dir,
         ]
         return [p.resolve() for p in roots if p is not None]
 
@@ -449,6 +477,7 @@ class RepoReActTools:
             return None
         candidates = [
             self.state.input.debug_workdir / path,
+            (self.state.input.rtl_root / path) if self.state.input.rtl_root else None,
             self.state.input.workspace_root / path,
             (self.state.input.output_root / path) if self.state.input.output_root else None,
             (self.state.input.repo_root / path) if self.state.input.repo_root else None,
@@ -471,6 +500,18 @@ class RepoReActTools:
         inp = self.state.input
         rtl = inp.rtl_path.resolve()
         merged = inp.merged_file.resolve()
+        if inp.repair_scope == "repo":
+            rtl_root = (inp.rtl_root or inp.rtl_path.parent).resolve()
+            if self._is_under(path, rtl_root):
+                return path.resolve(), ""
+            if path == merged:
+                mapped = (rtl_root / merged.name).resolve()
+                if mapped.is_file():
+                    return mapped, f"Mapped merged RTL path {merged} to generated repo RTL {mapped} for verified patching."
+            return None, (
+                "RepoReAct repo-scope patches may only edit generated RTL under "
+                f"{rtl_root}. Requested path: {path}"
+            )
         if path == rtl:
             return rtl, ""
         if path == merged:
@@ -652,6 +693,28 @@ class RepoReActTools:
     def _recent_repair_entries(self, limit: int = 5) -> list[dict[str, Any]]:
         rows = self._read_jsonl("patch_journal.jsonl")
         return rows[-max(1, int(limit)) :]
+
+    def _slim_repair_entry(self, row: dict[str, Any]) -> dict[str, Any]:
+        changed_signals = row.get("changed_signals")
+        if not isinstance(changed_signals, list):
+            changed_signals = []
+        return {
+            "step": row.get("step"),
+            "action_type": row.get("action_type"),
+            "block_id": row.get("block_id"),
+            "effect": row.get("effect"),
+            "lesson": _clip(str(row.get("lesson") or ""), max_chars=500),
+            "patch_summary": _clip(str(row.get("patch_summary") or ""), max_chars=500),
+            "before": row.get("before") if isinstance(row.get("before"), dict) else {},
+            "after": row.get("after") if isinstance(row.get("after"), dict) else {},
+            "metric_delta": self._row_metric_delta(row),
+            "changed_signals": changed_signals[:12],
+            "target": row.get("target") if isinstance(row.get("target"), dict) else {},
+        }
+
+    def _recent_repair_entries_slim(self, limit: int = 3) -> list[dict[str, Any]]:
+        rows = self._recent_repair_entries(limit=limit)
+        return [self._slim_repair_entry(row) for row in rows]
 
     def _directions_by_effect(self, effects: set[str], limit: int = 5) -> list[dict[str, Any]]:
         directions: list[dict[str, Any]] = []
@@ -1091,6 +1154,8 @@ class RepoReActTools:
         if kind == "repo_tree":
             roots = {
                 "debug_workdir": inp.debug_workdir,
+                "rtl_root": inp.rtl_root,
+                "verify_dir": inp.verify_dir,
                 "workspace_root": inp.workspace_root,
                 "output_root": inp.output_root,
             }
@@ -1162,10 +1227,19 @@ class RepoReActTools:
                 return {"status": "ok", "kind": kind, "artifact_name": name, "path": str(target), "content": _clip(text, max_chars=max_chars)}
             rel = inp.stage_artifacts.get(name) or STAGE_ARTIFACTS.get(name)
             if not rel:
-                return {"status": "error", "error": f"Unknown stage artifact: {name}", "known": sorted(STAGE_ARTIFACTS)}
+                return {
+                    "status": "error",
+                    "error": f"Unknown stage artifact: {name}",
+                    **stage_artifact_help(),
+                }
             target = self._resolve_read_path(rel)
             if target is None or not target.is_file():
-                return {"status": "error", "error": f"Stage artifact not found: {name}", "path": rel}
+                return {
+                    "status": "error",
+                    "error": f"Stage artifact not found: {name}",
+                    "path": rel,
+                    **stage_artifact_help(),
+                }
             self.state.observed_stage_artifact = True
             self.state.observed_spec_or_stage = True
             text = target.read_text(encoding="utf-8", errors="replace")
@@ -1225,6 +1299,8 @@ class RepoReActTools:
         files: list[Path] = []
         if scope in {"rtl", "all"}:
             files.append(inp.rtl_path)
+            if inp.rtl_root and inp.rtl_root.exists():
+                files.extend(p for p in inp.rtl_root.rglob("*") if p.suffix.lower() in {".v", ".sv"})
             merged_root = inp.workspace_root / "merged"
             if merged_root.exists():
                 files.extend(p for p in merged_root.rglob("*") if p.suffix.lower() in {".v", ".sv"})
@@ -1486,6 +1562,26 @@ class RepoReActTools:
                 self.state.observed_real_divergence = True
         return report
 
+    def _trace_payload_for_sim(self, sim_output: str) -> dict[str, Any]:
+        try:
+            report, _blocks = build_trace_report(
+                rtl_path=self.state.input.rtl_path,
+                sim_log_json=sim_output,
+                output_dir=self.state.input.debug_workdir,
+                kg_service=self.state.kg_service,
+                kg_hop_depth=self.state.input.kg_hop_depth,
+            )
+        except Exception as exc:  # noqa: BLE001
+            if self.state.logger is not None:
+                self.state.logger.debug("Could not build after-patch trace payload for acceptance judge: %s", exc)
+            return {"trace_summary": None, "divergence_summary": None, "error": f"{type(exc).__name__}: {exc}"}
+        divergence = report.get("first_divergence")
+        return {
+            "trace_summary": self._trace_summary(report),
+            "divergence_summary": divergence if isinstance(divergence, dict) else None,
+            "error": None,
+        }
+
     def _trace_summary(self, report: dict[str, Any]) -> dict[str, Any]:
         chains = ((report.get("value_backtrace") or {}).get("chains") or [])[:3]
         return {
@@ -1536,10 +1632,13 @@ class RepoReActTools:
         time_window: tuple[int, int] | None = None,
     ) -> dict[str, Any]:
         del module_name
-        if mode in {"top_sim", "wave_window"}:
+        if mode == "wave_window":
             return {"status": "unsupported_in_v1", "mode": mode}
         if mode == "lint":
-            ok, output = check_syntax(str(self.state.input.rtl_path), top_module=self.state.input.module_name)
+            ok, output = check_syntax(
+                str(self.state.input.rtl_path),
+                top_module=self.state.input.top_module or self.state.input.module_name,
+            )
             self.state.observed_trace_or_sim = True
             return {
                 "status": "ok",
@@ -1547,7 +1646,9 @@ class RepoReActTools:
                 "is_pass": bool(ok),
                 "output_excerpt": _summarize_command_json(output, max_chars=5000),
             }
-        if mode == "module_sim":
+        if mode in {"module_sim", "top_sim"}:
+            if mode == "module_sim" and self.state.input.repair_scope == "repo":
+                mode = "top_sim"
             is_pass, mismatch_count, sim_output = self.state.sim_reviewer.review()
             sim_path = self.state.input.debug_workdir / "debug_sim_output.json"
             sim_path.write_text(sim_output, encoding="utf-8")
@@ -1613,20 +1714,8 @@ class RepoReActTools:
         action_type: str = "apply_patch",
         block_id: str | None = None,
     ) -> dict[str, Any]:
-        max_actions = max(1, int(self.state.input.max_steps or 1))
-        if int(self.state.action_calls) >= max_actions:
-            return self._record_rejected_action(
-                action_type=action_type,
-                step=int(self.state.action_calls) + 1,
-                reason=f"Repair action budget exhausted: max_steps={max_actions}.",
-                hypothesis=reason,
-                patches=patches,
-                block_id=block_id,
-            )
-        self.state.action_calls += 1
-        step = self.state.action_calls
-
         def reject(message: str) -> dict[str, Any]:
+            step = int(self.state.action_calls) + 1
             result = {"status": "rejected", "reason": message, "is_action_executed": False}
             entry = {
                 "step": step,
@@ -1654,25 +1743,10 @@ class RepoReActTools:
             self._record_patch_entry(entry)
             return result
 
-        if not self.state.observed_rtl:
-            return reject("Patch blocked: current RTL source has not been read in this ReAct session.")
-        if not self.state.observed_trace_or_sim:
-            return reject("Patch blocked: trace_report or simulation result has not been observed in this ReAct session.")
-        if self.state.input.repair_mode != "syntax" and not self.state.observed_tb_or_spec_or_kg:
-            return reject("Patch blocked: inspect testbench, specification, or KG before patching.")
-        if self.state.input.repair_mode == "functional" and not self.state.observed_real_divergence:
-            return reject(
-                "Patch blocked: observe real or edge-active DUT/ref divergence with run_check(mode=\"first_divergence\") before functional RTL edits."
-            )
-        if self.state.input.repair_mode == "functional" and not self.state.observed_spec_or_stage:
-            return reject(
-                "Patch blocked: inspect original spec or stage/spec artifact before functional RTL edits."
-            )
         if not isinstance(patches, list) or not patches:
             return reject("patches must be a non-empty list.")
 
-        parsed: list[Patch] = []
-        edit_paths: list[Path] = []
+        parsed_items: list[tuple[Patch, Path]] = []
         warnings: list[str] = []
         try:
             for item in patches:
@@ -1685,18 +1759,54 @@ class RepoReActTools:
                 forbidden = self._forbidden_edit_reason(edit_path)
                 if forbidden:
                     return reject(forbidden)
-                parsed.append(patch)
-                edit_paths.append(edit_path)
+                parsed_items.append((patch, edit_path.resolve()))
                 if warning:
                     warnings.append(warning)
         except Exception as exc:  # noqa: BLE001
             return reject(f"Invalid patch payload: {type(exc).__name__}: {exc}")
 
-        if len(set(edit_paths)) != 1 or edit_paths[0].resolve() != self.state.input.rtl_path.resolve():
-            return reject("RepoReAct v1 can only patch the current debug RTL file.")
+        grouped: dict[Path, list[tuple[int, Patch]]] = {}
+        edited_paths: list[Path] = []
+        for idx, (patch, edit_path) in enumerate(parsed_items):
+            if self.state.input.repair_scope != "repo" and edit_path != self.state.input.rtl_path.resolve():
+                return reject("RepoReAct module-scope can only patch the current debug RTL file.")
+            grouped.setdefault(edit_path, []).append((idx, patch))
+            if edit_path not in edited_paths:
+                edited_paths.append(edit_path)
 
-        rtl_path = self.state.input.rtl_path
-        before_text = rtl_path.read_text(encoding="utf-8")
+        before_text_by_path: dict[Path, str] = {}
+        lines_by_path: dict[Path, list[str]] = {}
+        old_text_by_patch: dict[int, str] = {}
+        try:
+            for path in edited_paths:
+                before_text = path.read_text(encoding="utf-8")
+                before_text_by_path[path] = before_text
+                lines = before_text.splitlines()
+                lines_by_path[path] = lines
+                ranges = sorted((patch.start_line, patch.end_line) for _, patch in grouped[path])
+                for pos, (start_line, end_line) in enumerate(ranges):
+                    if end_line > len(lines):
+                        return reject(f"Invalid patch range {start_line}-{end_line}; RTL has {len(lines)} lines: {path}")
+                    if pos > 0 and start_line <= ranges[pos - 1][1]:
+                        return reject(f"Overlapping patch ranges in {path}: {ranges[pos - 1][0]}-{ranges[pos - 1][1]} and {start_line}-{end_line}.")
+                for idx, patch in grouped[path]:
+                    old_text_by_patch[idx] = "\n".join(lines[patch.start_line - 1 : patch.end_line])
+        except OSError as exc:
+            return reject(f"Could not read RTL for patching: {exc}")
+
+        max_actions = max(1, int(self.state.input.max_steps or 1))
+        if int(self.state.action_calls) >= max_actions:
+            return self._record_rejected_action(
+                action_type=action_type,
+                step=int(self.state.action_calls) + 1,
+                reason=f"Repair action budget exhausted: max_steps={max_actions}.",
+                hypothesis=reason,
+                patches=patches,
+                block_id=block_id,
+            )
+
+        self.state.action_calls += 1
+        step = self.state.action_calls
         before_sim = self.state.last_sim
         before_sim_output = self.state.last_sim_output
         before_summary = {
@@ -1707,15 +1817,7 @@ class RepoReActTools:
         before_metrics = _parse_sim_metrics(before_sim_output)
         after_metrics_holder: dict[str, dict[str, Any]] = {"metrics": {}}
 
-        lines = before_text.splitlines()
-        for patch in parsed:
-            if patch.end_line > len(lines):
-                return reject(f"Invalid patch range {patch.start_line}-{patch.end_line}; RTL has {len(lines)} lines.")
-
-        old_text_by_patch = {
-            idx: "\n".join(lines[patch.start_line - 1 : patch.end_line])
-            for idx, patch in enumerate(parsed)
-        }
+        parsed = [patch for patch, _path in parsed_items]
         patch_summary = "; ".join(self._summarize_code(patch.new_text) for patch in parsed)
         changed_signals = sorted(
             {
@@ -1727,10 +1829,20 @@ class RepoReActTools:
                 )
             }
         )
+        file_targets = [
+            {
+                "path": str(path),
+                "start_line": min(patch.start_line for _idx, patch in grouped[path]),
+                "end_line": max(patch.end_line for _idx, patch in grouped[path]),
+            }
+            for path in edited_paths
+        ]
+        legacy_target = file_targets[0] if file_targets else {"path": "", "start_line": None, "end_line": None}
         target = {
-            "path": str(rtl_path),
-            "start_line": min(p.start_line for p in parsed),
-            "end_line": max(p.end_line for p in parsed),
+            "path": legacy_target["path"],
+            "start_line": legacy_target["start_line"],
+            "end_line": legacy_target["end_line"],
+            "files": file_targets,
         }
         if block_id:
             target["block_id"] = block_id
@@ -1740,20 +1852,20 @@ class RepoReActTools:
             changed_signals=changed_signals,
             block_id=block_id,
         )
-        if self.state.input.repair_mode == "functional" and needs_preserve:
-            if not protected_invariants_checked or not str(preserve_plan or "").strip():
-                return reject(
-                    "Patch blocked: this edit may affect protected invariants or a high-coupling block. "
-                    "Provide protected_invariants_checked and preserve_plan."
-                )
 
-        before_snapshot = self.state.journal.snapshot_files(step=step, label="before", files=[rtl_path])
-        normalized = sorted(parsed, key=lambda item: item.start_line, reverse=True)
-        for patch in normalized:
-            replacement = patch.new_text.rstrip("\n").splitlines()
-            lines[patch.start_line - 1 : patch.end_line] = replacement
-        rtl_path.write_text("\n".join(lines) + ("\n" if before_text.endswith("\n") else ""), encoding="utf-8")
-        after_snapshot = self.state.journal.snapshot_files(step=step, label="after", files=[rtl_path])
+        before_snapshot = self.state.journal.snapshot_files(step=step, label="before", files=edited_paths)
+        for path in edited_paths:
+            lines = list(lines_by_path[path])
+            for _idx, patch in sorted(grouped[path], key=lambda item: item[1].start_line, reverse=True):
+                replacement = patch.new_text.rstrip("\n").splitlines()
+                lines[patch.start_line - 1 : patch.end_line] = replacement
+            original = before_text_by_path[path]
+            path.write_text("\n".join(lines) + ("\n" if original.endswith("\n") else ""), encoding="utf-8")
+        after_snapshot = self.state.journal.snapshot_files(step=step, label="after", files=edited_paths)
+
+        def restore_edited_files() -> None:
+            for path, text in before_text_by_path.items():
+                path.write_text(text, encoding="utf-8")
 
         result: dict[str, Any] = {
             "status": "pending",
@@ -1812,12 +1924,15 @@ class RepoReActTools:
             persist_patch_result(result)
             return result
 
-        lint_ok, lint_output = check_syntax(str(rtl_path), top_module=self.state.input.module_name)
+        lint_ok, lint_output = check_syntax(
+            str(self.state.input.rtl_path),
+            top_module=self.state.input.top_module or self.state.input.module_name,
+        )
         result["lint_pass"] = bool(lint_ok)
         result["lint_output_excerpt"] = _summarize_command_json(lint_output, max_chars=5000)
         if not lint_ok:
             if rollback_on_fail:
-                rtl_path.write_text(before_text, encoding="utf-8")
+                restore_edited_files()
             result["status"] = "rollback"
             result["rollback_reason"] = "lint_failed"
             persist_patch_result(result)
@@ -1855,8 +1970,8 @@ class RepoReActTools:
 
         rollback_reason = ""
         if not is_pass and int(mismatch_count) == 0:
-            rollback_reason = "module_sim_failed_without_mismatch_count"
-        elif int(mismatch_count) > int(before_sim.mismatch_count):
+            rollback_reason = "top_sim_failed_without_mismatch_count" if self.state.input.repair_scope == "repo" else "module_sim_failed_without_mismatch_count"
+        elif int(before_sim.mismatch_count) > 0 and int(mismatch_count) > int(before_sim.mismatch_count):
             rollback_reason = "mismatch_count_regressed"
         elif (
             before_sim.first_fail_time is not None
@@ -1871,8 +1986,16 @@ class RepoReActTools:
             if mixed_acceptance:
                 result["mixed_signal_delta"] = mixed_acceptance
 
-        if rollback_reason and rollback_on_fail:
-            result["script_rollback_recommendation"] = rollback_reason
+        after_trace_payload: dict[str, Any] = {"trace_summary": None, "divergence_summary": None, "error": None}
+        if rollback_reason and rollback_on_fail and int(mismatch_count) > 0:
+            after_trace_payload = self._trace_payload_for_sim(sim_output)
+            result["after_trace_summary"] = after_trace_payload.get("trace_summary")
+            result["after_divergence_summary"] = after_trace_payload.get("divergence_summary")
+            if after_trace_payload.get("error"):
+                result["after_trace_error"] = after_trace_payload.get("error")
+
+        def judge_rollback_candidate(candidate_reason: str, candidate_mixed_acceptance: dict[str, Any] | None) -> str:
+            result["script_rollback_recommendation"] = candidate_reason
             acceptance_payload = {
                 "module": self.state.input.module_name,
                 "action_type": action_type,
@@ -1882,17 +2005,23 @@ class RepoReActTools:
                 "reason": reason,
                 "expected_effect": expected_effect,
                 "patch_summary": patch_summary,
-                "script_rollback_recommendation": rollback_reason,
+                "script_rollback_recommendation": candidate_reason,
                 "before": before_summary,
                 "after": {
                     "is_pass": bool(is_pass),
                     "mismatch_count": int(mismatch_count),
                     "first_fail_time": first_fail,
                 },
+                "after_sim_output_excerpt": result.get("sim_output_excerpt"),
                 "before_metrics": before_metrics,
                 "after_metrics": after_metrics_holder.get("metrics", {}),
                 "metric_delta": _metric_delta(before_metrics, after_metrics_holder.get("metrics", {})),
-                "mixed_signal_delta": mixed_acceptance,
+                "mixed_signal_delta": candidate_mixed_acceptance,
+                "before_trace_summary": self.state.last_trace_summary,
+                "before_divergence_summary": self.state.last_divergence_summary,
+                "after_trace_summary": after_trace_payload.get("trace_summary"),
+                "after_divergence_summary": after_trace_payload.get("divergence_summary"),
+                "after_trace_error": after_trace_payload.get("error"),
                 "latest_trace_summary": self.state.last_trace_summary,
                 "last_divergence_summary": self.state.last_divergence_summary,
                 "protected_invariants_checked": protected_invariants_checked or [],
@@ -1906,15 +2035,19 @@ class RepoReActTools:
                     first_fail=first_fail,
                     before_metrics=before_metrics,
                     after_metrics=after_metrics_holder.get("metrics", {}),
-                    mixed_acceptance=mixed_acceptance,
+                    mixed_acceptance=candidate_mixed_acceptance,
                 )
             result["acceptance_decision"] = acceptance
             if acceptance.get("decision") == "keep":
                 result["acceptance_reason"] = acceptance.get("source") or "llm_kept_functional_regression"
-                rollback_reason = ""
+                return ""
+            return candidate_reason
 
         if rollback_reason and rollback_on_fail:
-            rtl_path.write_text(before_text, encoding="utf-8")
+            rollback_reason = judge_rollback_candidate(rollback_reason, mixed_acceptance)
+
+        if rollback_reason and rollback_on_fail:
+            restore_edited_files()
             self.state.last_sim = before_sim
             self.state.last_sim_output = before_sim_output
             if before_sim_output:
@@ -1955,13 +2088,19 @@ class RepoReActTools:
                 self.state.neutral_kept += 1
                 result["status"] = "neutral"
                 if self.state.neutral_kept > 2 and rollback_on_fail:
-                    rtl_path.write_text(before_text, encoding="utf-8")
-                    self.state.last_sim = before_sim
-                    self.state.last_sim_output = before_sim_output
-                    if before_sim_output:
-                        sim_path.write_text(before_sim_output, encoding="utf-8")
-                    result["status"] = "rollback"
-                    result["rollback_reason"] = "too_many_neutral_patches"
+                    neutral_rollback_reason = judge_rollback_candidate("too_many_neutral_patches", None)
+                    if neutral_rollback_reason:
+                        restore_edited_files()
+                        self.state.last_sim = before_sim
+                        self.state.last_sim_output = before_sim_output
+                        if before_sim_output:
+                            sim_path.write_text(before_sim_output, encoding="utf-8")
+                        result["status"] = "rollback"
+                        result["rollback_reason"] = neutral_rollback_reason
+                        persist_patch_result(result)
+                        return result
+                    result["status"] = "improved"
+                    self.state.neutral_kept = 0
 
         persist_patch_result(result)
         return result
@@ -1987,19 +2126,17 @@ class RepoReActTools:
                 block_id=block_id,
             )
         if not block_id or not isinstance(block_id, str):
-            self.state.action_calls += 1
             return self._record_rejected_action(
                 action_type="replace_block",
-                step=self.state.action_calls,
+                step=int(self.state.action_calls) + 1,
                 reason="replace_block requires a non-empty block_id.",
                 hypothesis=reason,
                 block_id=block_id,
             )
         if not str(new_code).strip():
-            self.state.action_calls += 1
             return self._record_rejected_action(
                 action_type="replace_block",
-                step=self.state.action_calls,
+                step=int(self.state.action_calls) + 1,
                 reason="replace_block requires non-empty new_code.",
                 hypothesis=reason,
                 block_id=block_id,
@@ -2009,10 +2146,9 @@ class RepoReActTools:
         try:
             rtl_text = rtl_path.read_text(encoding="utf-8")
         except OSError as exc:
-            self.state.action_calls += 1
             return self._record_rejected_action(
                 action_type="replace_block",
-                step=self.state.action_calls,
+                step=int(self.state.action_calls) + 1,
                 reason=f"Could not read RTL for block replacement: {exc}",
                 hypothesis=reason,
                 block_id=block_id,
@@ -2021,19 +2157,17 @@ class RepoReActTools:
         blocks = parse_rtl_blocks(rtl_text)
         block = next((b for b in blocks if b.id == block_id), None)
         if block is None:
-            self.state.action_calls += 1
             return self._record_rejected_action(
                 action_type="replace_block",
-                step=self.state.action_calls,
+                step=int(self.state.action_calls) + 1,
                 reason=f"Block id {block_id!r} was not found in current debug RTL.",
                 hypothesis=reason,
                 block_id=block_id,
             )
         if block.kind not in {"always", "assign"}:
-            self.state.action_calls += 1
             return self._record_rejected_action(
                 action_type="replace_block",
-                step=self.state.action_calls,
+                step=int(self.state.action_calls) + 1,
                 reason=f"Block id {block_id!r} has unsupported kind {block.kind!r}.",
                 hypothesis=reason,
                 block_id=block_id,
@@ -2144,7 +2278,7 @@ class RepoReActTools:
             "current_rtl_hash": self._current_rtl_hash(),
             "latest_trace_summary": self.state.last_trace_summary,
             "last_divergence_summary": self.state.last_divergence_summary,
-            "recent_repair_journal": self._recent_repair_entries(limit=5),
+            "recent_repair_journal": self._recent_repair_entries_slim(limit=3),
             "recent_edited_ranges": self._recent_edited_ranges(limit=5),
             "recent_replaced_blocks": self._recent_replaced_blocks(limit=5),
             "failed_directions": self._directions_by_effect({"rejected", "syntax_failed", "regressed"}, limit=5),

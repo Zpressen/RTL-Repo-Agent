@@ -1,9 +1,0 @@
-{
-  "status": "ok",
-  "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/module_planner/outputs/spec_blocks.json",
-  "module_name": "sd_controller_wb",
-  "query": "bd_write_flow",
-  "block_id": null,
-  "matches": [],
-  "truncated": false
-}

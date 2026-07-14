@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from zerorepo.rpg_gen.base.llm_client import AssistantMessage, SystemMessage, UserMessage
+from zerorepo.rtl_impl.retrieval_agent import ModuleSpecContextRetriever
 
 from ..prompts import stage3_module_skeleton
 from ..schemas import (
@@ -17,7 +18,7 @@ from ..schemas import (
     Stage2RepoSkeletonArtifact,
     Stage3ModuleSkeletonArtifact,
 )
-from ..utils import load_markdown, parse_module_skeleton_doc
+from ..utils import parse_module_skeleton_doc
 from .base import BaseStageAgent, model_dump, validate_model
 
 
@@ -29,6 +30,7 @@ class Stage3Agent(BaseStageAgent):
     enable_validation = True
     docs_dirname = "module_skeleton_docs"
     exports_dirname = "module_skeleton_json"
+    spec_context_dirname = "module_spec_context_json"
 
     def __init__(
         self,
@@ -37,9 +39,14 @@ class Stage3Agent(BaseStageAgent):
         artifact_sink=None,
         logger=None,
         output_root: str | Path | None = None,
+        module_spec_context_retriever: ModuleSpecContextRetriever | None = None,
     ):
         super().__init__(llm_client, context_provider, artifact_sink, logger)
         self.output_root = Path(output_root) if output_root is not None else None
+        self.module_spec_context_retriever = module_spec_context_retriever or ModuleSpecContextRetriever(
+            llm_client,
+            logger=self.logger,
+        )
 
     def run(self, task_input: Any, partial_artifacts: Dict[str, Any]) -> Stage3ModuleSkeletonArtifact:
         return self.run_incremental(task_input, partial_artifacts)
@@ -83,14 +90,18 @@ class Stage3Agent(BaseStageAgent):
             if repo_module is None:
                 raise ValueError(f"Stage3 requires repo_skeleton.json slice for `{module_name}`")
 
-            module_spec_path = self._resolve_module_spec_file(task, module_name)
+            module_spec_markdown, module_spec_path, spec_context_result = self._module_spec_context(
+                task,
+                module_name=module_name,
+                repo_module=repo_module,
+                partial_artifacts=partial_artifacts,
+            )
             expected_file_path = f"rtl/{module_name}.v"
             source_refs = SourceRefs(
                 module_contract_ref=f"{modules_artifact.schema_version}::{module_name}",
                 repo_skeleton_ref=f"{repo_skeleton.schema_version}::{module_name}",
                 module_spec_file=str(Path(module_spec_path).resolve()),
             )
-            module_spec_markdown = load_markdown(module_spec_path)
             prompt = stage3_module_skeleton.build_prompt(
                 module_name=module_name,
                 global_summary_json=self.to_pretty_json(global_summary),
@@ -123,6 +134,7 @@ class Stage3Agent(BaseStageAgent):
             )
 
             record = self._build_module_record(export)
+            record.spec_context_file = self._spec_context_relative_path(module_name)
             artifact.module_records.append(record)
             artifact.completed_modules.append(module_name)
             artifact.resume_cursor = len(artifact.completed_modules)
@@ -145,6 +157,8 @@ class Stage3Agent(BaseStageAgent):
                         "doc_text": doc_text,
                         "export_file": record.export_file,
                         "export_payload": model_dump(export),
+                        "spec_context_file": record.spec_context_file,
+                        "spec_context_payload": model_dump(spec_context_result),
                     }
                 )
 
@@ -469,6 +483,10 @@ class Stage3Agent(BaseStageAgent):
             errors.append(f"{expected_module}: doc_file must remain {expected_doc}")
         if record.export_file != expected_export:
             errors.append(f"{expected_module}: export_file must remain {expected_export}")
+        if record.spec_context_file:
+            expected_spec_context = self._spec_context_relative_path(expected_module)
+            if record.spec_context_file != expected_spec_context:
+                errors.append(f"{expected_module}: spec_context_file must remain {expected_spec_context}")
         if record.source_refs.module_contract_ref != f"module_contracts_v1::{expected_module}":
             errors.append(f"{expected_module}: source_refs.module_contract_ref must remain module_contracts_v1::{expected_module}")
         if record.source_refs.repo_skeleton_ref != f"repo_skeleton_v1::{expected_module}":
@@ -530,10 +548,68 @@ class Stage3Agent(BaseStageAgent):
             if candidate.exists():
                 return str(candidate.resolve())
 
+        for path in paths:
+            if path.is_file():
+                return str(path.resolve())
+
         raise FileNotFoundError(
             f"Stage3 could not find a standalone spec file for module `{module_name}`. "
             f"Expected one of the provided spec_md_files or a sibling file named `{module_name}.md`."
         )
+
+    def _module_spec_context(
+        self,
+        task_input: PlannerTaskInput,
+        *,
+        module_name: str,
+        repo_module: Any | None,
+        partial_artifacts: Dict[str, Any],
+    ) -> tuple[str, str, Any]:
+        result = self.module_spec_context_retriever.select_module_spec_context(
+            module_name=module_name,
+            spec_md_files=task_input.spec_md_files,
+            repo_module=repo_module,
+            fact_ledger=self._fact_ledger(partial_artifacts),
+        )
+        lines = [
+            f"# Retrieved specification context for {module_name}",
+            "",
+        ]
+        if result.fallback_used:
+            lines.extend(
+                [
+                    f"Retrieval fallback: {result.fallback_reason}",
+                    "",
+                ]
+            )
+        for block in result.blocks:
+            lines.extend(
+                [
+                    f"## {block.block_id}",
+                    f"Source: {block.source_file or 'unknown'}",
+                    "",
+                    block.text,
+                    "",
+                ]
+            )
+        if result.open_issues:
+            lines.extend(["## Retrieval Open Issues", *[f"- {item}" for item in result.open_issues]])
+        source_file = next((block.source_file for block in result.blocks if block.source_file), "")
+        source_file = source_file or self._resolve_module_spec_file(task_input, module_name)
+        return "\n".join(lines).strip(), source_file, result
+
+    def _fact_ledger(self, partial_artifacts: Dict[str, Any]) -> Any | None:
+        stage2_input = partial_artifacts.get("stage2_input")
+        if stage2_input is not None:
+            return getattr(stage2_input, "fact_ledger", None) or (
+                stage2_input.get("fact_ledger") if isinstance(stage2_input, dict) else None
+            )
+        stage1 = partial_artifacts.get("stage1")
+        if stage1 is not None:
+            return getattr(stage1, "fact_ledger", None) or (
+                stage1.get("fact_ledger") if isinstance(stage1, dict) else None
+            )
+        return None
 
     def _get_modules_artifact(self, partial_artifacts: Dict[str, Any]) -> ModuleOrganizationArtifact:
         candidate = partial_artifacts.get("modules")
@@ -556,6 +632,9 @@ class Stage3Agent(BaseStageAgent):
 
     def _export_relative_path(self, module_name: str) -> str:
         return f"{self.exports_dirname}/{module_name}.json"
+
+    def _spec_context_relative_path(self, module_name: str) -> str:
+        return f"{self.spec_context_dirname}/{module_name}.json"
 
     def _resolve_stage3_path(self, relative_or_absolute: str) -> Path:
         path = Path(relative_or_absolute)

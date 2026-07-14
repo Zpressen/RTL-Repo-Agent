@@ -1,9 +1,0 @@
-{
-  "schema_version": "stage6_syntax_diagnostic_v1",
-  "module": "sd_controller_wb",
-  "status": "pass",
-  "syntax_passed": true,
-  "delegated_to": "ModuleDebugRunner.repo_react_syntax",
-  "merged_file": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_controller_wb.v",
-  "syntax_summary": "- V e r i l a t i o n   R e p o r t: Verilator 5.044 2026-01-01 rev conda-forge build 0\n- Verilator: Built from 1.171 MB sources in 15 modules, into 0.065 MB in 3 C++ files needing 0.000 MB\n- Verilator: Walltime 0.031 s (elab=0.004, cvt=0.008, bld=0.000); cpu 0.034 s on 1 threads; alloced 25.633 MB\n\n%Warning-PINCONNECTEMPTY: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_fifo_rx_filler.v:50:10: Instance pin connected by name with empty reference: 'mem_empt'\n   50 |         .mem_empt (),\n      |          ^~~~~~~~\n                          ... For warning description see https://verilator.org/warn/PINCONNECTEMPTY?v=5.044\n                          ... Use \"/* verilator lint_off PINCONNECTEMPTY */\" and lint_on around source to disable this message.\n%Warning-PINMISSING: /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sdc_controller.v:368:19: Instance has missing pin: 'empty'\n  368 | sd_fifo_rx_filler u_sd_fifo_rx_filler (\n      |                   ^~~~~~~~~~~~~~~~~~~\n                     /home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/workspace/merged/sd_fifo_rx_filler.v:10:26: ... Location of port declaration\n   10 |     output wire          empty,\n      |                          ^~~~~\n                     ... For warning description see https://verilator.org/warn/PINMISSING?v=5.044\n                     ... Use \"/* verilator lint_off PINMISSING */\" and lint_on around source to disable this message."
-}

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+import json
+from typing import Any, Dict, List, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 class TextGrounding(BaseModel):
     source_md_file: str = Field(default="")
@@ -15,6 +16,53 @@ class ImageGrounding(BaseModel):
     image_id: str = Field(default="")
     image_file: str = Field(default="")
     visible_text: List[str] = Field(default_factory=list)
+
+
+FactSourceKind = Literal[
+    "explicit_text",
+    "table_row",
+    "figure_text",
+    "section_heading",
+    "ambiguous_text",
+]
+
+
+class ExtractedFact(BaseModel):
+    fact_id: str = Field(default="")
+    module: str = Field(default="")
+    category: str = Field(default="")
+    subject: str = Field(default="")
+    predicate: str = Field(default="")
+    object: Dict[str, Any] = Field(default_factory=dict)
+    source_kind: FactSourceKind = Field(default="explicit_text")
+    text_grounding: List[TextGrounding] = Field(default_factory=list)
+    image_grounding: List[ImageGrounding] = Field(default_factory=list)
+    notes: str = Field(default="")
+
+    @model_validator(mode="after")
+    def validate_fact_shape(self) -> "ExtractedFact":
+        if not self.category.strip():
+            raise ValueError("category must be non-empty")
+        return self
+
+    def stable_key(self) -> str:
+        return "|".join(
+            [
+                self.module.strip(),
+                self.category.strip(),
+                self.subject.strip(),
+                self.predicate.strip(),
+                json.dumps(self.object, sort_keys=True, ensure_ascii=True),
+                self.source_kind,
+                self.notes.strip(),
+            ]
+        )
+
+
+class Stage1FactLedger(BaseModel):
+    source_files: List[str] = Field(default_factory=list)
+    facts: List[ExtractedFact] = Field(default_factory=list)
+    ambiguous_items: List[ExtractedFact] = Field(default_factory=list)
 
 
 class StructureRelation(BaseModel):
@@ -182,6 +230,7 @@ class PlanningFactsContract(BaseModel):
 class ModuleContractsBundle(BaseModel):
     module: str = Field(..., min_length=1)
     is_top_module: bool = Field(default=False)
+    facts: List[ExtractedFact] = Field(default_factory=list)
     interface_contract: InterfaceContract | None = None
     timing_contract: TimingContract | None = None
     control_contract: ControlContract | None = None
@@ -202,6 +251,8 @@ class ModuleOrganizationArtifact(BaseModel):
     top_module: str = Field(default="")
     module_order: List[str] = Field(default_factory=list)
     repository_structure: StructureContract = Field(default_factory=StructureContract)
+    fact_ledger: Stage1FactLedger = Field(default_factory=Stage1FactLedger)
+    repository_facts: List[ExtractedFact] = Field(default_factory=list)
     modules: List[ModuleContractsBundle] = Field(default_factory=list)
 
 
@@ -217,6 +268,7 @@ class Stage1ContractsArtifact(BaseModel):
     instantiation_relation_candidates: List[StructureRelation] = Field(default_factory=list)
     top_module_candidates: List[str] = Field(default_factory=list)
     structure_contract: StructureContract = Field(default_factory=StructureContract)
+    fact_ledger: Stage1FactLedger = Field(default_factory=Stage1FactLedger)
     interface_contracts: List[InterfaceContract] = Field(default_factory=list)
     timing_contracts: List[TimingContract] = Field(default_factory=list)
     control_contracts: List[ControlContract] = Field(default_factory=list)

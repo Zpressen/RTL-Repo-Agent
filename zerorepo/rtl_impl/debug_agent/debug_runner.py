@@ -292,6 +292,98 @@ class ModuleDebugRunner:
                 raise RuntimeError(result.reason) from exc
             return result
 
+    def run_module_syntax_gate(
+        self,
+        *,
+        module_name: str,
+        merged_file: str | Path,
+        task: Any,
+        spec_text: str,
+        contract_json: str,
+        spec_source_path: str | None = None,
+    ) -> ModuleDebugResult:
+        """Run a module-level syntax/elaboration gate without module oracle simulation."""
+        if not self.config.enabled:
+            return ModuleDebugResult(module=module_name, status="disabled", reason="RTL debug is disabled.")
+
+        merged_path = Path(merged_file)
+        workdir = (self.debug_root / module_name).resolve()
+        try:
+            self._ensure_toolchain_path()
+            self._prepare_syntax_gate_workdir(
+                module_name=module_name,
+                merged_file=merged_path,
+                workdir=workdir,
+                contract_json=contract_json,
+                spec_source_path=spec_source_path,
+            )
+            syntax_passed, syntax_output = check_syntax(str(workdir / "rtl.sv"), top_module=module_name)
+            self._write_text(workdir / "initial_syntax_output.json", syntax_output)
+            if syntax_passed:
+                result = ModuleDebugResult(
+                    module=module_name,
+                    status="pass",
+                    mismatch_count=0,
+                    workdir=str(workdir),
+                    final_rtl_path=str(workdir / "rtl.sv"),
+                    sim_output_path=str(workdir / "initial_syntax_output.json"),
+                )
+                self._write_syntax_gate_log(
+                    workdir=workdir,
+                    module_name=module_name,
+                    status="pass_without_repair",
+                    syntax_output=syntax_output,
+                    debug_trials=0,
+                )
+                return result
+
+            syntax_passed, _rtl_code, syntax_trials = self._run_repo_react_syntax_repair(
+                spec_text=spec_text,
+                workdir=workdir,
+                syntax_output=syntax_output,
+                contract_json=contract_json,
+                task=task,
+                module_name=module_name,
+                merged_file=merged_path,
+                spec_source_path=spec_source_path,
+            )
+            final_rtl = workdir / "rtl.sv"
+            if syntax_passed and final_rtl.is_file():
+                shutil.copyfile(final_rtl, merged_path)
+                status: DebugStatus = "fixed"
+                reason = ""
+            else:
+                status = "fail"
+                reason = "Syntax gate failed after repair attempts."
+            self._write_syntax_gate_log(
+                workdir=workdir,
+                module_name=module_name,
+                status="pass_after_repair" if syntax_passed else "fail",
+                syntax_output=syntax_output,
+                debug_trials=int(syntax_trials),
+            )
+            return ModuleDebugResult(
+                module=module_name,
+                status=status,
+                mismatch_count=0,
+                debug_trials=int(syntax_trials),
+                workdir=str(workdir),
+                final_rtl_path=str(final_rtl),
+                sim_output_path=str(workdir / "initial_syntax_output.json"),
+                reason=reason,
+            )
+        except Exception as exc:  # noqa: BLE001
+            result = ModuleDebugResult(
+                module=module_name,
+                status="error",
+                workdir=str(workdir),
+                final_rtl_path=str(workdir / "rtl.sv"),
+                reason=f"{type(exc).__name__}: {exc}",
+            )
+            if not self.config.allow_failure:
+                raise RuntimeError(result.reason) from exc
+            return result
+
     def _prepare_workdir(
         self,
         *,
@@ -330,6 +422,70 @@ class ModuleDebugRunner:
             "tb_visibility": "tb_only",
         }
         self._write_text(workdir / "debug_input_manifest.json", json.dumps(manifest, indent=2) + "\n")
+
+    def _prepare_syntax_gate_workdir(
+        self,
+        *,
+        module_name: str,
+        merged_file: Path,
+        workdir: Path,
+        contract_json: str,
+        spec_source_path: str | None,
+    ) -> None:
+        if not merged_file.is_file():
+            raise FileNotFoundError(f"Merged RTL not found: {merged_file}")
+        if workdir.exists():
+            shutil.rmtree(workdir)
+        workdir.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(merged_file, workdir / "rtl.sv")
+        self._write_text(workdir / "stage1_contract.json", contract_json.rstrip() + "\n")
+        self._write_text(workdir / "contract.json", contract_json.rstrip() + "\n")
+
+        merged_root = merged_file.parent
+        support_chunks: list[str] = []
+        for path in sorted([*merged_root.glob("*.sv"), *merged_root.glob("*.v")], key=lambda item: item.name):
+            if path.resolve() == merged_file.resolve():
+                continue
+            try:
+                support_chunks.append(f"// support source: {path.name}\n{path.read_text(encoding='utf-8')}")
+            except OSError:
+                continue
+        self._write_text(workdir / "support.sv", "\n\n".join(support_chunks).rstrip() + "\n")
+
+        for path in sorted(merged_root.iterdir(), key=lambda item: item.name):
+            if path.is_file() and path.suffix.lower() in {".vh", ".svh", ".inc"}:
+                shutil.copyfile(path, workdir / path.name)
+
+        manifest = {
+            "module": module_name,
+            "merged_file": str(merged_file),
+            "support_file": str(workdir / "support.sv"),
+            "spec_source_path": spec_source_path or "",
+            "debug_behavior_source": "syntax_gate_only",
+            "tb_visibility": "none",
+        }
+        self._write_text(workdir / "debug_input_manifest.json", json.dumps(manifest, indent=2) + "\n")
+
+    def _write_syntax_gate_log(
+        self,
+        *,
+        workdir: Path,
+        module_name: str,
+        status: str,
+        syntax_output: str,
+        debug_trials: int,
+    ) -> None:
+        payload = {
+            "module": module_name,
+            "status": status,
+            "repair_mode": "repo_react_syntax",
+            "debug_trials": int(debug_trials),
+            "initial_syntax_summary": self._summarize_syntax_output(syntax_output),
+        }
+        self._write_text(
+            workdir / "pre_debug_syntax_repair.json",
+            json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
+        )
 
     def _initial_debug_result(
         self,

@@ -132,12 +132,7 @@ class BlockSpecRetriever:
             raise ValueError(f"expected {len(skeleton_blocks)} selections, got {len(result.selections)}")
 
         valid_refs = {block_id(item) for item in blocks(module_spec)}
-        interface_refs = interface_block_refs(module_spec)
-        referenced_refs: set[str] = set()
-        first_decl_index = next(
-            (index for index, block in enumerate(skeleton_blocks) if self._block_kind(block) == "decl"),
-            None,
-        )
+        interface_refs = set(interface_block_refs(module_spec))
 
         for index, (selection, expected_block) in enumerate(zip(result.selections, skeleton_blocks)):
             expected_id = self._subtask_id(expected_block)
@@ -151,18 +146,11 @@ class BlockSpecRetriever:
             unknown_refs = [ref for ref in selection.spec_refs if ref not in valid_refs]
             if unknown_refs:
                 raise ValueError(f"{selection.id}: unknown spec_refs {unknown_refs}")
-            referenced_refs.update(selection.spec_refs)
-
-        if interface_refs:
-            missing_module_refs = [ref for ref in interface_refs if ref not in referenced_refs]
-            if missing_module_refs:
-                raise ValueError(f"module interface spec_refs must be referenced: {missing_module_refs}")
-            if first_decl_index is not None and first_decl_index < len(result.selections):
-                decl_selection = result.selections[first_decl_index]
-                missing_decl_refs = [ref for ref in interface_refs if ref not in decl_selection.spec_refs]
-                if missing_decl_refs:
+            if index == 0 and self._block_kind(expected_block) == "decl":
+                missing_interface_refs = sorted(interface_refs - set(selection.spec_refs))
+                if missing_interface_refs:
                     raise ValueError(
-                        f"{decl_selection.id}: first declaration selection must include interface spec_refs {missing_decl_refs}"
+                        f"{selection.id}: first declaration block must include interface spec_refs {missing_interface_refs}"
                     )
 
     def _format_spec_candidates(self, module_spec: Any) -> str:

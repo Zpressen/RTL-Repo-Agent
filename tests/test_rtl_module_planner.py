@@ -7,23 +7,38 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel
 
-from zerorepo.rtl_impl.retrieval_agent import BlockSpecRetriever, BlockSpecRetrievalResult
+from zerorepo.rtl_impl.debug_agent.adapters import build_debug_contract_json
+from zerorepo.rtl_impl.retrieval_agent import (
+    BlockSpecRetriever,
+    BlockSpecRetrievalResult,
+    ModuleSpecContextRetriever,
+)
 from zerorepo.rtl_impl.module_planner.agents import (
     Stage1Agent,
     Stage2Agent,
     Stage3Agent,
+    Stage4SpecBlocksAgent,
     Stage4ModulePlanAgent,
     Stage5Agent,
     Stage6MergeAgent,
 )
 import zerorepo.rtl_impl.module_planner.agents.global_defines as global_defines_mod
 from zerorepo.rtl_impl.module_planner.agents.base import BaseStageAgent, validate_model
-from zerorepo.rtl_impl.module_planner.module_organizer import build_module_organized_artifact
+from zerorepo.rtl_impl.module_planner.module_organizer import (
+    build_module_organized_artifact,
+    build_module_organized_artifact_from_repo_skeleton,
+    build_module_organized_artifact_from_repo_skeleton_only,
+    build_stage2_planning_input,
+    build_stage2_planning_input_from_task,
+)
 from zerorepo.rtl_impl.module_planner.planner_runner import PlannerRunner
 from zerorepo.rtl_impl.module_planner.prompts import stage1_ingest_extract
 from zerorepo.rtl_impl.module_planner.schemas import (
+    ExtractedFact,
     ModuleOrganizationArtifact,
     PlannerTaskInput,
+    Stage1FactLedger,
+    Stage2PlanningInput,
     Stage3ModuleSkeletonArtifact,
     Stage1ContractsArtifact,
     Stage2RepoSkeletonArtifact,
@@ -667,20 +682,24 @@ def make_empty_structure_payload() -> dict:
 
 
 def make_stage1_contract_artifact(md_path: Path, image_paths: list[Path]) -> Stage1ContractsArtifact:
-    return validate_model(
+    artifact = validate_model(
         Stage1ContractsArtifact,
         {
             "task_id": "aes_demo_001",
             "stage1_status": "contracts_completed",
-            "completed_rounds": ["structure", "interface", "timing", "control", "datapath", "planning_facts"],
-            **make_structure_payload(md_path),
-            **make_interface_payload(md_path),
-            **make_timing_payload(md_path, image_paths[0] if image_paths else None),
-            **make_control_payload(md_path, image_paths[0] if image_paths else None),
-            **make_datapath_payload(md_path),
-            **make_planning_facts_payload(md_path),
+            "completed_rounds": ["facts"],
+            "spec_index": {"aes_cipher_top": str(md_path)},
+            **make_stage1_fact_payload(md_path),
         },
     )
+    task = PlannerTaskInput(
+        task_id="aes_demo_001",
+        spec_md_files=[str(md_path)],
+        spec_images=[str(item) for item in image_paths],
+        project_type="light_repo_spec2rtl",
+        notes="fixture",
+    )
+    return Stage1Agent(PlannerLLMClient(backend=QueueBackend([])))._finalize_structure_contract(artifact, task)
 
 
 def make_repo_skeleton_payload() -> dict:
@@ -1006,6 +1025,27 @@ def make_stage3_module_skeleton_doc(module_name: str, spec_path: Path) -> str:
     )
 
 
+def make_module_spec_context_payload(module_name: str, spec_path: Path, text: str | None = None) -> dict:
+    source_text = text if text is not None else spec_path.read_text(encoding="utf-8")
+    return {
+        "schema_version": "module_spec_context_retrieval_v1",
+        "module": module_name,
+        "blocks": [
+            {
+                "block_id": "S001",
+                "text": source_text.strip(),
+                "source_file": str(spec_path.resolve()),
+                "source_chunk_ids": [],
+                "relevance_reason": [f"Use source text for {module_name}."],
+                "confidence": "high",
+            }
+        ],
+        "open_issues": [],
+        "fallback_used": False,
+        "fallback_reason": "",
+    }
+
+
 def make_stage4_module_plan_payload(module_name: str, top_module: bool = False) -> dict:
     block_specs = (
         [
@@ -1117,6 +1157,322 @@ def test_build_module_organized_artifact_groups_contracts_by_module(tmp_path):
     assert organized.modules[1].planning_facts is None
 
 
+def _fact_grounding(md_path: Path, anchor: str) -> list[dict]:
+    return [
+        {
+            "source_md_file": str(md_path.resolve()),
+            "section_path": "AES Demo Repository",
+            "start_line_anchor": anchor,
+            "end_line_anchor": anchor,
+        }
+    ]
+
+
+def _fact(
+    md_path: Path,
+    *,
+    module: str,
+    category: str,
+    subject: str,
+    predicate: str,
+    obj: dict,
+    source_kind: str = "explicit_text",
+    notes: str = "",
+) -> dict:
+    return {
+        "fact_id": "",
+        "module": module,
+        "category": category,
+        "subject": subject,
+        "predicate": predicate,
+        "object": obj,
+        "source_kind": source_kind,
+        "text_grounding": _fact_grounding(md_path, subject),
+        "image_grounding": [],
+        "notes": notes,
+    }
+
+
+def make_stage1_fact_payload(md_path: Path) -> dict:
+    facts = [
+        _fact(
+            md_path,
+            module="aes_cipher_top",
+            category="module_identity",
+            subject="aes_cipher_top",
+            predicate="is_top_module",
+            obj={
+                "system": "AES Demo Repository",
+                "module": "aes_cipher_top",
+                "modules": ["aes_cipher_top", "aes_key_expand_128"],
+                "files": ["aes_cipher_top.v", "aes_key_expand_128.v"],
+                "file_map": {
+                    "aes_cipher_top.v": ["aes_cipher_top"],
+                    "aes_key_expand_128.v": ["aes_key_expand_128"],
+                },
+            },
+        ),
+        *[
+            _fact(
+                md_path,
+                module="aes_cipher_top",
+                category="interface",
+                subject=name,
+                predicate="is_port",
+                obj={"name": name, "direction": direction, "width": "1", "role": role, **extra},
+                source_kind="table_row",
+            )
+            for name, direction, role, extra in [
+                ("clk", "input", "clock", {}),
+                ("rst", "input", "reset", {"active": "high"}),
+                ("ld", "input", "load_start", {}),
+                ("done", "output", "completion", {}),
+            ]
+        ],
+        _fact(
+            md_path,
+            module="aes_cipher_top",
+            category="register",
+            subject="state_reg",
+            predicate="is_register",
+            obj={"name": "state_reg", "width": "128", "role": "current AES state"},
+        ),
+        _fact(
+            md_path,
+            module="aes_cipher_top",
+            category="register",
+            subject="dcnt",
+            predicate="is_register",
+            obj={"name": "dcnt", "width": "4", "role": "round counter"},
+        ),
+        _fact(
+            md_path,
+            module="aes_cipher_top",
+            category="state_machine",
+            subject="control states",
+            predicate="has_states",
+            obj={"states": ["IDLE", "LOAD", "ROUND_PROC", "DONE"]},
+        ),
+        _fact(
+            md_path,
+            module="aes_cipher_top",
+            category="timing",
+            subject="input sampling",
+            predicate="states_rule",
+            obj={
+                "clocking": {
+                    "clock": "clk",
+                    "update_edge": "rising clock edge",
+                    "statement": "ld is sampled on the rising clock edge",
+                },
+                "reset_behavior": {
+                    "signal": "rst",
+                    "active": "high",
+                    "effect": "returns the control to IDLE",
+                },
+                "timing_rules": [
+                    "ld is sampled on the rising clock edge",
+                    "done is asserted for one cycle after the final round",
+                    "one round per clock cycle",
+                ],
+                "registered_objects": [
+                    {
+                        "name": "state_reg",
+                        "timing_role": "state register",
+                        "timing": "updated synchronously once per active round",
+                    }
+                ],
+            },
+        ),
+        _fact(
+            md_path,
+            module="aes_cipher_top",
+            category="datapath",
+            subject="round flow",
+            predicate="has_main_flow",
+            obj={
+                "input_data": ["text_in", "key"],
+                "main_flow": ["initial_addroundkey", "subbytes", "shiftrows", "mixcolumns", "addroundkey"],
+                "intermediate_object": "state_reg",
+                "role": "current AES state",
+                "registered_paths": ["mixcolumns_out -> state_reg"],
+                "combinational_paths": ["state_reg -> subbytes_out"],
+                "mapping": "text_in maps into state matrix in column-major order",
+            },
+        ),
+        _fact(
+            md_path,
+            module="aes_cipher_top",
+            category="module_identity",
+            subject="aes_key_expand_128",
+            predicate="contains",
+            obj={"parent": "aes_cipher_top", "child": "aes_key_expand_128"},
+        ),
+        _fact(
+            md_path,
+            module="aes_cipher_top",
+            category="data_dependency",
+            subject="round key",
+            predicate="uses_provider_output",
+            obj={"data": "round key", "provider": "aes_key_expand_128"},
+        ),
+    ]
+    return {"fact_ledger": {"source_files": [str(md_path.resolve())], "facts": facts, "ambiguous_items": []}}
+
+
+def test_extracted_fact_requires_grounding_and_accepts_flexible_object(tmp_path):
+    _, md_path, _ = make_task_input(tmp_path)
+
+    fact = ExtractedFact.model_validate(
+        _fact(
+            md_path,
+            module="aes_cipher_top",
+            category="resource_requirement",
+            subject="SubBytes",
+            predicate="uses_parallel_units",
+            obj={"unit": "S-box", "count": 16, "extra": {"shape": "parallel"}},
+        )
+    )
+
+    assert fact.object["extra"]["shape"] == "parallel"
+    # Grounding is no longer required; facts without grounding are accepted.
+    fact_no_grounding = ExtractedFact.model_validate(
+        {
+            "module": "aes_cipher_top",
+            "category": "interface",
+            "subject": "clk",
+            "predicate": "is_port",
+            "object": {"name": "clk"},
+            "source_kind": "explicit_text",
+        }
+    )
+    assert fact_no_grounding.subject == "clk"
+
+
+def test_stage1_fact_ledger_projects_legacy_contracts_without_inferred_hierarchy(tmp_path):
+    task, md_path, _ = make_task_input(tmp_path)
+    facts = [
+        _fact(
+            md_path,
+            module="aes_cipher_top",
+            category="module_identity",
+            subject="aes_cipher_top",
+            predicate="is_top_module",
+            obj={"module": "aes_cipher_top", "modules": ["aes_cipher_top", "aes_sbox"]},
+        ),
+        _fact(
+            md_path,
+            module="aes_cipher_top",
+            category="interface",
+            subject="clk",
+            predicate="is_port",
+            obj={"name": "clk", "direction": "input", "width": "1", "role": "clock"},
+            source_kind="table_row",
+        ),
+        _fact(
+            md_path,
+            module="aes_cipher_top",
+            category="register",
+            subject="dcnt",
+            predicate="is_register",
+            obj={"name": "dcnt", "width": "4", "role": "round counter"},
+            source_kind="table_row",
+        ),
+        _fact(
+            md_path,
+            module="aes_cipher_top",
+            category="state_machine",
+            subject="control states",
+            predicate="has_states",
+            obj={"states": ["IDLE", "ROUND_OP", "DONE"]},
+        ),
+        _fact(
+            md_path,
+            module="aes_cipher_top",
+            category="timing",
+            subject="round timing",
+            predicate="states_rule",
+            obj={"statement": "one round per clock cycle"},
+        ),
+        _fact(
+            md_path,
+            module="aes_cipher_top",
+            category="datapath",
+            subject="round flow",
+            predicate="has_main_flow",
+            obj={"main_flow": ["SubBytes", "ShiftRows", "MixColumns", "AddRoundKey"]},
+        ),
+        _fact(
+            md_path,
+            module="aes_cipher_top",
+            category="resource_requirement",
+            subject="SubBytes",
+            predicate="uses_parallel_units",
+            obj={"unit": "S-box", "count": 16},
+            notes="Do not infer hierarchy in stage1.",
+        ),
+        _fact(
+            md_path,
+            module="aes_cipher_top",
+            category="data_dependency",
+            subject="AddRoundKey",
+            predicate="uses_provider_output",
+            obj={"data": "round key", "provider": "key expansion module"},
+            notes="Do not infer key expansion ports in stage1.",
+        ),
+    ]
+    backend = QueueBackend([{"fact_ledger": {"source_files": [str(md_path.resolve())], "facts": facts, "ambiguous_items": []}}])
+    agent = Stage1Agent(PlannerLLMClient(backend=backend))
+
+    artifact = agent.run_incremental(task, {})
+
+    assert artifact.completed_rounds == ["facts"]
+    assert artifact.fact_ledger.facts[0].fact_id == "F0001"
+    assert artifact.structure_contract.top_module == "aes_cipher_top"
+    assert "aes_sbox" in artifact.structure_contract.modules
+    assert artifact.interface_contracts[0].ports[0].name == "clk"
+    assert artifact.planning_facts[0].registers[0].name == "dcnt"
+    assert artifact.control_contracts[0].abstract_states == ["IDLE", "ROUND_OP", "DONE"]
+    assert artifact.timing_contracts[0].timing_rules == ["one round per clock cycle"]
+    assert artifact.datapath_contracts[0].main_flow == ["SubBytes", "ShiftRows", "MixColumns", "AddRoundKey"]
+    assert artifact.structure_contract.hierarchy == []
+    assert artifact.structure_contract.instantiation_graph == []
+
+
+def test_module_organizer_passes_fact_ledger_to_modules_json(tmp_path):
+    task, md_path, _ = make_task_input(tmp_path)
+    ledger = Stage1FactLedger.model_validate(
+        {
+            "source_files": [str(md_path.resolve())],
+            "facts": [
+                _fact(
+                    md_path,
+                    module="aes_cipher_top",
+                    category="module_identity",
+                    subject="aes_cipher_top",
+                    predicate="is_top_module",
+                    obj={"module": "aes_cipher_top"},
+                )
+            ],
+            "ambiguous_items": [],
+        }
+    )
+    artifact = Stage1ContractsArtifact(
+        task_id=task.task_id,
+        stage1_status="contracts_completed",
+        completed_rounds=["facts"],
+        spec_index={"aes_cipher_top": str(md_path)},
+        fact_ledger=ledger,
+    )
+    agent = Stage1Agent(PlannerLLMClient(backend=QueueBackend([])))
+    artifact = agent._finalize_structure_contract(artifact, task)
+
+    organized = build_module_organized_artifact(artifact)
+
+    assert organized.fact_ledger.facts[0].fact_id == "F0001"
+    assert organized.modules[0].facts[0].category == "module_identity"
+
+
 def test_base_stage_agent_uses_up_to_five_quality_attempts_and_returns_best_effort():
     backend = QueueBackend([{"value": 5}, {"value": 4}, {"value": 3}, {"value": 2}, {"value": 1}])
     agent = QualityRetryAgent(PlannerLLMClient(backend=backend))
@@ -1143,18 +1499,9 @@ def test_expand_markdown_inputs_recurses_directories_and_sorts(tmp_path):
     assert expanded == sorted({str(a_path.resolve()), str(b_path.resolve())})
 
 
-def test_stage1_agent_runs_all_contract_rounds_without_alias_groups(tmp_path):
+def test_stage1_agent_runs_facts_round_without_alias_groups(tmp_path):
     task, md_path, image_paths = make_task_input(tmp_path, image_count=1)
-    backend = QueueBackend(
-        [
-            make_structure_payload(md_path),
-            make_interface_payload(md_path),
-            make_timing_payload(md_path, image_paths[0]),
-            make_control_payload(md_path, image_paths[0]),
-            make_datapath_payload(md_path),
-            make_planning_facts_payload(md_path),
-        ]
-    )
+    backend = QueueBackend([make_stage1_fact_payload(md_path)])
     context_provider = RecordingContextProvider()
     sink = RecordingSink()
     agent = Stage1Agent(
@@ -1167,7 +1514,7 @@ def test_stage1_agent_runs_all_contract_rounds_without_alias_groups(tmp_path):
 
     assert isinstance(artifact, Stage1ContractsArtifact)
     assert artifact.stage1_status == "contracts_completed"
-    assert artifact.completed_rounds == ["structure", "interface", "timing", "control", "datapath", "planning_facts"]
+    assert artifact.completed_rounds == ["facts"]
     assert artifact.completed_batches == ["batch_0001"]
     assert artifact.structure_contract.top_module == "aes_cipher_top"
     assert artifact.interface_contracts[0].ports[0].name == "clk"
@@ -1175,6 +1522,8 @@ def test_stage1_agent_runs_all_contract_rounds_without_alias_groups(tmp_path):
     assert artifact.control_contracts[0].abstract_states == ["IDLE", "LOAD", "ROUND_PROC", "DONE"]
     assert artifact.datapath_contracts[0].main_flow[0] == "initial_addroundkey"
     assert artifact.planning_facts[0].registers[0].name == "state_reg"
+    assert len(backend.calls) == 1
+    assert "Stage1 round: facts" in backend.calls[0]["user_prompt"]
     assert "image_contracts" not in artifact.model_dump()
     assert "entity_alias_groups" not in artifact.model_dump()
     assert context_provider.calls == ["stage1_contracts"]
@@ -1204,21 +1553,53 @@ def test_stage1_agent_batches_directory_specs_and_reduces_hierarchy(tmp_path):
         )
         module_paths.append(md_path)
 
-    responses = []
-    for module_name, md_path, child in [
-        ("mod_1", module_paths[0], "mod_6"),
-        ("mod_6", module_paths[5], ""),
-    ]:
-        responses.extend(
-            [
-                make_module_structure_payload(module_name, md_path, child=child),
-                make_minimal_interface_payload(module_name, md_path),
-                {"timing_contracts": []},
-                make_minimal_control_payload(module_name, md_path),
-                make_minimal_datapath_payload(module_name, md_path),
-                make_minimal_planning_facts_payload(module_name, md_path, child=child),
-            ]
-        )
+    # Build module_identity facts for every module so they appear in
+    # structure_contract.modules even after spec_index.keys() is no longer
+    # treated as a module-name source.
+    def _batch_facts(batch_paths, extra_facts=()):
+        return [
+            *[
+                _fact(
+                    p,
+                    module=p.stem,
+                    category="module_identity",
+                    subject=p.stem,
+                    predicate="is_module",
+                    obj={"name": p.stem},
+                )
+                for p in batch_paths
+            ],
+            *extra_facts,
+        ]
+
+    responses = [
+        {
+            "fact_ledger": {
+                "source_files": [str(p.resolve()) for p in module_paths[:5]],
+                "facts": _batch_facts(
+                    module_paths[:5],
+                    extra_facts=[
+                        _fact(
+                            module_paths[0],
+                            module="mod_1",
+                            category="module_identity",
+                            subject="mod_1",
+                            predicate="contains",
+                            obj={"parent": "mod_1", "child": "mod_6"},
+                        )
+                    ],
+                ),
+                "ambiguous_items": [],
+            }
+        },
+        {
+            "fact_ledger": {
+                "source_files": [str(module_paths[5].resolve())],
+                "facts": _batch_facts([module_paths[5]]),
+                "ambiguous_items": [],
+            }
+        },
+    ]
     task = PlannerTaskInput(
         task_id="mod_1_demo",
         spec_md_files=[str(specs_dir)],
@@ -1236,48 +1617,29 @@ def test_stage1_agent_batches_directory_specs_and_reduces_hierarchy(tmp_path):
     assert set(artifact.structure_contract.modules) == {f"mod_{index}" for index in range(1, 7)}
     assert [(item.parent, item.child) for item in artifact.structure_contract.hierarchy] == [("mod_1", "mod_6")]
     assert artifact.structure_contract.generation_order_candidate.index("mod_6") < artifact.structure_contract.generation_order_candidate.index("mod_1")
-    assert len(backend.calls) == 12
+    assert len(backend.calls) == 2
     assert backend.calls[0]["user_prompt"].count("[Document DOC_") == 5
-    assert backend.calls[6]["user_prompt"].count("[Document DOC_") == 1
+    assert backend.calls[1]["user_prompt"].count("[Document DOC_") == 1
     organized = build_module_organized_artifact(artifact)
     assert organized.module_order[:6] == [f"mod_{index}" for index in range(1, 7)]
 
 
-def test_stage1_agent_passes_existing_contracts_into_later_round_prompts(tmp_path):
+def test_stage1_agent_facts_prompt_includes_current_contracts_context(tmp_path):
     task, md_path, image_paths = make_task_input(tmp_path, image_count=1)
-    backend = QueueBackend(
-        [
-            make_structure_payload(md_path),
-            make_interface_payload(md_path),
-            make_timing_payload(md_path, image_paths[0]),
-            make_control_payload(md_path, image_paths[0]),
-            make_datapath_payload(md_path),
-            make_planning_facts_payload(md_path),
-        ]
-    )
+    backend = QueueBackend([make_stage1_fact_payload(md_path)])
     agent = Stage1Agent(PlannerLLMClient(backend=backend))
 
     agent.run(task, {})
 
-    assert '"top_module": "aes_cipher_top"' in backend.calls[1]["user_prompt"]
-    assert '"interface_contracts"' in backend.calls[2]["user_prompt"]
-    assert '"timing_contracts"' in backend.calls[3]["user_prompt"]
-    assert '"control_contracts"' in backend.calls[4]["user_prompt"]
-    assert '"datapath_contracts"' in backend.calls[5]["user_prompt"]
+    assert len(backend.calls) == 1
+    assert '"schema_version": "stage1_contracts_v1"' in backend.calls[0]["user_prompt"]
+    assert "Return JSON with exactly one key: `fact_ledger`" in backend.calls[0]["user_prompt"]
+    assert "interface_contracts" in backend.calls[0]["user_prompt"]
 
 
-def test_stage1_agent_interface_contract_uses_module_level_grounding_only(tmp_path):
+def test_stage1_agent_projected_interface_contract_uses_module_level_grounding_only(tmp_path):
     task, md_path, image_paths = make_task_input(tmp_path, image_count=1)
-    backend = QueueBackend(
-        [
-            make_structure_payload(md_path),
-            make_interface_payload(md_path),
-            make_timing_payload(md_path, image_paths[0]),
-            make_control_payload(md_path, image_paths[0]),
-            make_datapath_payload(md_path),
-            make_planning_facts_payload(md_path),
-        ]
-    )
+    backend = QueueBackend([make_stage1_fact_payload(md_path)])
     agent = Stage1Agent(PlannerLLMClient(backend=backend))
 
     artifact = agent.run(task, {})
@@ -1287,7 +1649,7 @@ def test_stage1_agent_interface_contract_uses_module_level_grounding_only(tmp_pa
     assert "text_grounding" not in dumped["interface_contracts"][0]["ports"][0]
 
 
-def test_stage1_agent_accepts_structurally_valid_timing_without_keyword_gate(tmp_path):
+def test_stage1_agent_projects_timing_facts_from_fact_ledger(tmp_path):
     md_path = tmp_path / "control_only.md"
     md_path.write_text(
         "\n".join(
@@ -1310,29 +1672,22 @@ def test_stage1_agent_accepts_structurally_valid_timing_without_keyword_gate(tmp
     )
     backend = QueueBackend(
         [
-            make_empty_structure_payload(),
-            {"interface_contracts": []},
             {
-                "timing_contracts": [
-                    {
-                        "module": "aes_cipher_top",
-                        "clocking": {},
-                        "reset_behavior": {},
-                        "registered_objects": [],
-                        "phase_timing": [
-                            {
-                                "phase": "completion",
-                                "timing": "done is asserted when processing finishes",
-                            }
-                        ],
-                        "timing_rules": [],
-                        "underspecified": [],
-                    }
-                ]
-            },
-            {"control_contracts": []},
-            {"datapath_contracts": []},
-            {"planning_facts": []},
+                "fact_ledger": {
+                    "source_files": [str(md_path.resolve())],
+                    "facts": [
+                        _fact(
+                            md_path,
+                            module="aes_cipher_top",
+                            category="timing",
+                            subject="completion",
+                            predicate="states_rule",
+                            obj={"phase_timing": [{"phase": "completion", "timing": "done is asserted when processing finishes"}]},
+                        )
+                    ],
+                    "ambiguous_items": [],
+                }
+            }
         ]
     )
     agent = Stage1Agent(PlannerLLMClient(backend=backend))
@@ -1341,79 +1696,65 @@ def test_stage1_agent_accepts_structurally_valid_timing_without_keyword_gate(tmp
 
     assert len(artifact.timing_contracts) == 1
     assert artifact.timing_contracts[0].phase_timing[0]["phase"] == "completion"
-    assert len(backend.calls) == 6
-    assert "Do not treat the following as timing evidence by themselves" in backend.calls[2]["user_prompt"]
+    assert len(backend.calls) == 1
+    assert "Stage 1 now produces a flexible evidence-backed fact ledger" in backend.calls[0]["user_prompt"]
 
 
-def test_stage1_agent_retries_when_timing_round_returns_empty_shell_contract(tmp_path):
+def test_stage1_agent_accepts_ungrounded_fact_without_retry(tmp_path):
     task, md_path, image_paths = make_task_input(tmp_path, image_count=1)
     backend = QueueBackend(
         [
-            make_structure_payload(md_path),
-            make_interface_payload(md_path),
             {
-                "timing_contracts": [
-                    {
-                        "module": "aes_cipher_top",
-                        "clocking": {},
-                        "reset_behavior": {},
-                        "registered_objects": [],
-                        "phase_timing": [],
-                        "timing_rules": [],
-                        "underspecified": [],
-                    }
-                ]
+                "fact_ledger": {
+                    "source_files": [str(md_path.resolve())],
+                    "facts": [
+                        {
+                            "module": "aes_cipher_top",
+                            "category": "timing",
+                            "subject": "clocking",
+                            "predicate": "states_rule",
+                            "object": {"statement": "register updates on rising edge"},
+                            "source_kind": "explicit_text",
+                            "text_grounding": [],
+                            "image_grounding": [],
+                        }
+                    ],
+                    "ambiguous_items": [],
+                }
             },
-            make_timing_payload(md_path, image_paths[0]),
-            make_control_payload(md_path, image_paths[0]),
-            make_datapath_payload(md_path),
-            make_planning_facts_payload(md_path),
         ]
     )
     agent = Stage1Agent(PlannerLLMClient(backend=backend))
 
     artifact = agent.run(task, {})
 
-    assert artifact.timing_contracts[0].clocking["update_edge"] == "rising clock edge"
-    assert artifact.timing_contracts[0].timing_rules[0] == "ld is sampled on the rising clock edge"
-    assert len(backend.calls) == 7
-    assert "empty shell timing contract" in backend.calls[3]["user_prompt"]
+    # Ungrounded facts are now accepted without retry — only 1 LLM call.
+    assert len(backend.calls) == 1
 
 
-def test_stage1_timing_prompt_uses_empty_list_negative_example_and_broader_explicit_wording():
-    prompt = stage1_ingest_extract.build_timing_prompt(
+def test_stage1_facts_prompt_replaces_old_timing_prompt():
+    prompt = stage1_ingest_extract.build_facts_prompt(
         document_markdown="# Demo",
-        current_contracts_json='{"timing_contracts": []}',
+        current_contracts_json='{"fact_ledger": {"facts": []}}',
         stage_context="{}",
     )
 
-    assert '"timing_contracts": []' in prompt
-    assert "Do not emit placeholder or shell contracts" in prompt
-    assert '"clocking": {}' in prompt
-    assert '"registered_objects": []' in prompt
-    assert "synchronous loading" in prompt
-    assert "register updates on clock rising edge" in prompt
-    assert "one round per clock cycle" in prompt
+    assert "Return JSON with exactly one key: `fact_ledger`" in prompt
+    assert "resource_requirement" in prompt
+    assert "data_dependency" in prompt
+    assert not hasattr(stage1_ingest_extract, "build_timing_prompt")
 
 
-def test_stage1_agent_ignores_spec_images_and_runs_text_rounds_only(tmp_path):
+def test_stage1_agent_ignores_spec_images_and_runs_text_facts_round_only(tmp_path):
     task, md_path, image_paths = make_task_input(tmp_path, image_count=2)
-    backend = QueueBackend(
-        [
-            make_structure_payload(md_path),
-            make_interface_payload(md_path),
-            make_timing_payload(md_path, image_paths[0]),
-            make_control_payload(md_path, image_paths[0]),
-            make_datapath_payload(md_path),
-            make_planning_facts_payload(md_path),
-        ]
-    )
+    backend = QueueBackend([make_stage1_fact_payload(md_path)])
     agent = Stage1Agent(PlannerLLMClient(backend=backend))
 
     artifact = agent.run(task, {})
 
-    assert len(backend.calls) == 6
+    assert len(backend.calls) == 1
     assert all(call["images"] == [] for call in backend.calls)
+    assert artifact.completed_rounds == ["facts"]
     assert "image_contracts" not in artifact.model_dump()
 
 
@@ -1429,12 +1770,13 @@ def test_stage1_agent_leaves_missing_information_blank(tmp_path):
     )
     backend = QueueBackend(
         [
-            make_empty_structure_payload(),
-            {"interface_contracts": []},
-            {"timing_contracts": []},
-            {"control_contracts": []},
-            {"datapath_contracts": []},
-            {"planning_facts": []},
+            {
+                "fact_ledger": {
+                    "source_files": [str(md_path.resolve())],
+                    "facts": [],
+                    "ambiguous_items": [],
+                }
+            }
         ]
     )
     agent = Stage1Agent(PlannerLLMClient(backend=backend))
@@ -1442,25 +1784,16 @@ def test_stage1_agent_leaves_missing_information_blank(tmp_path):
     artifact = agent.run(task, {})
 
     assert artifact.structure_contract.top_module == ""
-    assert artifact.structure_contract.modules == ["empty"]
+    assert artifact.structure_contract.modules == []
     assert artifact.interface_contracts == []
     assert artifact.planning_facts == []
+    assert artifact.completed_rounds == ["facts"]
     assert "image_contracts" not in artifact.model_dump()
-
 
 def test_planner_runner_writes_contracts_json_and_resume_reuses_it(tmp_path):
     task, md_path, image_paths = make_task_input(tmp_path, image_count=1)
     output_root = tmp_path / "outputs"
-    backend = QueueBackend(
-        [
-            make_structure_payload(md_path),
-            make_interface_payload(md_path),
-            make_timing_payload(md_path, image_paths[0]),
-            make_control_payload(md_path, image_paths[0]),
-            make_datapath_payload(md_path),
-            make_planning_facts_payload(md_path),
-        ]
-    )
+    backend = QueueBackend([])
     runner = PlannerRunner(output_root=output_root, llm_backend=backend)
 
     first = runner.run(task, end_stage="stage1")
@@ -1469,23 +1802,17 @@ def test_planner_runner_writes_contracts_json_and_resume_reuses_it(tmp_path):
     target = output_root / "contracts.json"
     modules_target = output_root / "modules.json"
     assert target.exists()
-    assert modules_target.exists()
+    assert not modules_target.exists()
     payload = json.loads(target.read_text(encoding="utf-8"))
-    modules_payload = json.loads(modules_target.read_text(encoding="utf-8"))
     assert payload["stage1_status"] == "contracts_completed"
-    assert payload["completed_rounds"] == ["structure", "interface", "timing", "control", "datapath", "planning_facts"]
+    assert payload["completed_rounds"] == ["facts"]
     assert "image_contracts" not in payload
     assert "entity_alias_groups" not in payload
-    assert "text_grounding" not in json.dumps(payload, ensure_ascii=False)
-    assert "text_grounding" not in json.dumps(modules_payload, ensure_ascii=False)
-    assert payload["planning_facts"][0]["module"] == "aes_cipher_top"
-    assert modules_payload["top_module"] == "aes_cipher_top"
-    assert modules_payload["module_order"] == ["aes_cipher_top", "aes_key_expand_128"]
-    assert modules_payload["modules"][0]["is_top_module"] is True
-    assert modules_payload["modules"][0]["module"] == "aes_cipher_top"
-    assert modules_payload["modules"][0]["planning_facts"]["module"] == "aes_cipher_top"
+    assert payload["fact_ledger"]["source_files"] == [str(md_path.resolve())]
+    assert payload["fact_ledger"]["facts"] == []
+    assert payload["planning_facts"] == []
     assert first.completed_rounds == second.completed_rounds
-    assert len(backend.calls) == 6
+    assert len(backend.calls) == 0
 
 
 def test_planner_runner_resume_continues_from_partial_contracts_json(tmp_path):
@@ -1496,37 +1823,26 @@ def test_planner_runner_resume_continues_from_partial_contracts_json(tmp_path):
         "task_id": task.task_id,
         "stage1_status": "interface_completed",
         "completed_rounds": ["structure", "interface"],
-        **make_structure_payload(md_path),
-        **make_interface_payload(md_path),
-        "timing_contracts": [],
-        "control_contracts": [],
-        "datapath_contracts": [],
-        "planning_facts": [],
+        "fact_ledger": {"source_files": [], "facts": [], "ambiguous_items": []},
     }
     partial_payload = drop_text_grounding(partial_payload)
     (output_root / "contracts.json").write_text(json.dumps(partial_payload, indent=2), encoding="utf-8")
 
-    backend = QueueBackend(
-        [
-            make_timing_payload(md_path, image_paths[0]),
-            make_control_payload(md_path, image_paths[0]),
-            make_datapath_payload(md_path),
-            make_planning_facts_payload(md_path),
-        ]
-    )
+    backend = QueueBackend([])
     runner = PlannerRunner(output_root=output_root, llm_backend=backend)
 
     artifact = runner.run(task, resume=True, end_stage="stage1")
 
-    assert artifact.completed_rounds == ["structure", "interface", "timing", "control", "datapath", "planning_facts"]
-    assert len(backend.calls) == 4
+    assert artifact.completed_rounds == ["facts"]
+    assert artifact.fact_ledger.facts == []
+    assert len(backend.calls) == 0
 
 
-def test_planner_runner_resume_ignores_empty_shell_timing_artifact(tmp_path):
+def test_planner_runner_resume_ignores_legacy_six_round_contracts_json(tmp_path):
     task, md_path, image_paths = make_task_input(tmp_path, image_count=1)
     output_root = tmp_path / "outputs"
     output_root.mkdir(parents=True, exist_ok=True)
-    shell_payload = {
+    legacy_payload = {
         "task_id": task.task_id,
         "stage1_status": "contracts_completed",
         "completed_rounds": ["structure", "interface", "timing", "control", "datapath", "planning_facts"],
@@ -1547,41 +1863,23 @@ def test_planner_runner_resume_ignores_empty_shell_timing_artifact(tmp_path):
         **make_datapath_payload(md_path),
         **make_planning_facts_payload(md_path),
     }
-    shell_payload = drop_text_grounding(shell_payload)
-    (output_root / "contracts.json").write_text(json.dumps(shell_payload, indent=2), encoding="utf-8")
+    legacy_payload = drop_text_grounding(legacy_payload)
+    (output_root / "contracts.json").write_text(json.dumps(legacy_payload, indent=2), encoding="utf-8")
 
-    backend = QueueBackend(
-        [
-            make_structure_payload(md_path),
-            make_interface_payload(md_path),
-            make_timing_payload(md_path, image_paths[0]),
-            make_control_payload(md_path, image_paths[0]),
-            make_datapath_payload(md_path),
-            make_planning_facts_payload(md_path),
-        ]
-    )
+    backend = QueueBackend([])
     runner = PlannerRunner(output_root=output_root, llm_backend=backend)
 
     artifact = runner.run(task, resume=True, end_stage="stage1")
 
-    assert artifact.timing_contracts[0].clocking["clock"] == "clk"
-    assert len(backend.calls) == 6
+    assert artifact.timing_contracts == []
+    assert artifact.completed_rounds == ["facts"]
+    assert len(backend.calls) == 0
 
 
 def test_planner_runner_writes_repo_skeleton_for_stage2(tmp_path):
     task, md_path, image_paths = make_task_input(tmp_path, image_count=1)
     output_root = tmp_path / "outputs"
-    backend = QueueBackend(
-        [
-            make_structure_payload(md_path),
-            make_interface_payload(md_path),
-            make_timing_payload(md_path, image_paths[0]),
-            make_control_payload(md_path, image_paths[0]),
-            make_datapath_payload(md_path),
-            make_planning_facts_payload(md_path),
-            make_repo_skeleton_payload(),
-        ]
-    )
+    backend = QueueBackend([make_repo_skeleton_payload()])
     runner = PlannerRunner(output_root=output_root, llm_backend=backend)
 
     artifact = runner.run(task, end_stage="stage2")
@@ -1594,7 +1892,8 @@ def test_planner_runner_writes_repo_skeleton_for_stage2(tmp_path):
     assert payload["top_module"] == "aes_cipher_top"
     assert "module_order" not in payload
     assert payload["planning_decisions"]["generation_order"] == ["aes_key_expand_128", "aes_cipher_top"]
-    assert len(backend.calls) == 7
+    assert len(backend.calls) == 1
+    assert not (output_root / "contracts.json").exists()
 
 
 def test_planner_runner_resume_reuses_repo_skeleton_json(tmp_path):
@@ -1605,26 +1904,17 @@ def test_planner_runner_resume_reuses_repo_skeleton_json(tmp_path):
         json.dumps(make_repo_skeleton_payload(), indent=2),
         encoding="utf-8",
     )
-    backend = QueueBackend(
-        [
-            make_structure_payload(md_path),
-            make_interface_payload(md_path),
-            make_timing_payload(md_path, image_paths[0]),
-            make_control_payload(md_path, image_paths[0]),
-            make_datapath_payload(md_path),
-            make_planning_facts_payload(md_path),
-        ]
-    )
+    backend = QueueBackend([])
     runner = PlannerRunner(output_root=output_root, llm_backend=backend)
 
     artifact = runner.run(task, resume=True, end_stage="stage2")
 
     assert isinstance(artifact, Stage2RepoSkeletonArtifact)
     assert artifact.stage2_status == "repo_skeleton_planned"
-    assert len(backend.calls) == 6
+    assert len(backend.calls) == 0
 
 
-def test_planner_runner_resume_runs_only_planning_facts_when_first_five_rounds_exist(tmp_path):
+def test_planner_runner_resume_reruns_facts_when_legacy_partial_rounds_exist(tmp_path):
     task, md_path, image_paths = make_task_input(tmp_path, image_count=1)
     output_root = tmp_path / "outputs"
     output_root.mkdir(parents=True, exist_ok=True)
@@ -1632,39 +1922,25 @@ def test_planner_runner_resume_runs_only_planning_facts_when_first_five_rounds_e
         "task_id": task.task_id,
         "stage1_status": "datapath_completed",
         "completed_rounds": ["structure", "interface", "timing", "control", "datapath"],
-        **make_structure_payload(md_path),
-        **make_interface_payload(md_path),
-        **make_timing_payload(md_path, image_paths[0]),
-        **make_control_payload(md_path, image_paths[0]),
-        **make_datapath_payload(md_path),
-        "planning_facts": [],
+        "fact_ledger": {"source_files": [], "facts": [], "ambiguous_items": []},
     }
     partial_payload = drop_text_grounding(partial_payload)
     (output_root / "contracts.json").write_text(json.dumps(partial_payload, indent=2), encoding="utf-8")
 
-    backend = QueueBackend([make_planning_facts_payload(md_path)])
+    backend = QueueBackend([])
     runner = PlannerRunner(output_root=output_root, llm_backend=backend)
 
     artifact = runner.run(task, resume=True, end_stage="stage1")
 
-    assert artifact.completed_rounds == ["structure", "interface", "timing", "control", "datapath", "planning_facts"]
-    assert artifact.planning_facts[0].module == "aes_cipher_top"
-    assert len(backend.calls) == 1
+    assert artifact.completed_rounds == ["facts"]
+    assert artifact.planning_facts == []
+    assert len(backend.calls) == 0
 
 
 def test_planner_runner_writes_incremental_contract_statuses(tmp_path):
     task, md_path, image_paths = make_task_input(tmp_path, image_count=1)
     output_root = tmp_path / "outputs"
-    backend = QueueBackend(
-        [
-            make_structure_payload(md_path),
-            make_interface_payload(md_path),
-            make_timing_payload(md_path, image_paths[0]),
-            make_control_payload(md_path, image_paths[0]),
-            make_datapath_payload(md_path),
-            make_planning_facts_payload(md_path),
-        ]
-    )
+    backend = QueueBackend([])
     runner = PlannerRunner(output_root=output_root, llm_backend=backend)
 
     writes = []
@@ -1677,16 +1953,7 @@ def test_planner_runner_writes_incremental_contract_statuses(tmp_path):
     runner._write_payload = recording_write
     runner.run(task, end_stage="stage1")
 
-    assert writes == [
-        "batch_0001_structure_completed",
-        "batch_0001_interface_completed",
-        "batch_0001_timing_completed",
-        "batch_0001_control_completed",
-        "batch_0001_datapath_completed",
-        "batch_0001_planning_facts_completed",
-        "batch_0001_completed",
-        "contracts_completed",
-    ]
+    assert writes == ["contracts_completed"]
 
 
 def test_planner_runner_supports_stage3_execution(tmp_path):
@@ -1695,14 +1962,10 @@ def test_planner_runner_supports_stage3_execution(tmp_path):
     top_spec.write_text(md_path.read_text(encoding="utf-8"), encoding="utf-8")
     backend = QueueBackend(
         [
-            make_structure_payload(md_path),
-            make_interface_payload(md_path),
-            make_timing_payload(md_path, image_paths[0]),
-            make_control_payload(md_path, image_paths[0]),
-            make_datapath_payload(md_path),
-            make_planning_facts_payload(md_path),
             make_repo_skeleton_payload(),
+            make_module_spec_context_payload("aes_key_expand_128", key_spec),
             make_stage3_module_skeleton_doc("aes_key_expand_128", key_spec),
+            make_module_spec_context_payload("aes_cipher_top", top_spec),
             make_stage3_module_skeleton_doc("aes_cipher_top", top_spec),
         ]
     )
@@ -1881,14 +2144,10 @@ def test_planner_runner_supports_stage4_spec_block_splitting(tmp_path):
     )
     backend = QueueBackend(
         [
-            make_structure_payload(md_path),
-            make_interface_payload(md_path),
-            make_timing_payload(md_path, image_paths[0]),
-            make_control_payload(md_path, image_paths[0]),
-            make_datapath_payload(md_path),
-            make_planning_facts_payload(md_path),
             make_repo_skeleton_payload(),
+            make_module_spec_context_payload("aes_key_expand_128", key_spec),
             make_stage3_module_skeleton_doc("aes_key_expand_128", key_spec),
+            make_module_spec_context_payload("aes_cipher_top", top_spec),
             make_stage3_module_skeleton_doc("aes_cipher_top", top_spec),
             make_block_spec_retrieval_payload("aes_key_expand_128"),
             make_stage4_module_plan_payload("aes_key_expand_128"),
@@ -1909,19 +2168,206 @@ def test_planner_runner_supports_stage4_spec_block_splitting(tmp_path):
     module_plans_target = output_root / "module_plans.json"
     key_plan_target = output_root / "module_plan_json" / "aes_key_expand_128.json"
     key_retrieval_target = output_root / "block_spec_retrieval_json" / "aes_key_expand_128.json"
+    key_spec_context_target = output_root / "module_spec_context_json" / "aes_key_expand_128.json"
     assert spec_blocks_target.exists()
     assert module_plans_target.exists()
     assert key_plan_target.exists()
     assert key_retrieval_target.exists()
+    assert key_spec_context_target.exists()
     spec_payload = json.loads(spec_blocks_target.read_text(encoding="utf-8"))
     plan_payload = json.loads(key_plan_target.read_text(encoding="utf-8"))
     retrieval_payload = json.loads(key_retrieval_target.read_text(encoding="utf-8"))
-    assert spec_payload["modules"][0]["blocks"][1]["block_id"] == "S002"
+    assert spec_payload["modules"][0]["blocks"][0]["block_id"] == "S001"
+    assert "KEYEXP UNIQUE SPEC MARKER" in spec_payload["modules"][0]["blocks"][0]["text"]
     assert plan_payload["subtasks"][0]["target"] == "<block: decl_state_and_keys>"
     assert retrieval_payload["schema_version"] == "block_spec_retrieval_v1"
-    assert "MODULE_SKELETON_DOC v1" in backend.calls[9]["user_prompt"]
-    assert "KEYEXP UNIQUE SPEC MARKER" in backend.calls[9]["user_prompt"]
-    assert len(backend.calls) == 13
+    assert "MODULE_SKELETON_DOC v1" in backend.calls[5]["user_prompt"]
+    assert "KEYEXP UNIQUE SPEC MARKER" in backend.calls[5]["user_prompt"]
+    assert len(backend.calls) == 9
+
+
+def test_stage4_spec_blocks_reuses_stage3_spec_context_sidecar(tmp_path):
+    spec_path = tmp_path / "toy.md"
+    spec_path.write_text("# Toy Spec\n", encoding="utf-8")
+    output_root = tmp_path / "outputs"
+    spec_context_dir = output_root / "module_spec_context_json"
+    spec_context_dir.mkdir(parents=True)
+    spec_context_file = spec_context_dir / "toy.json"
+    spec_context_file.write_text(
+        json.dumps(
+            {
+                "schema_version": "module_spec_context_retrieval_v1",
+                "module": "toy",
+                "blocks": [
+                    {
+                        "block_id": "S001",
+                        "text": "## Interface\nToy has input a and output y.\n\n## Operation\nOutput y follows input a.",
+                        "source_file": str(spec_path.resolve()),
+                        "source_chunk_ids": ["C001"],
+                        "relevance_reason": ["Cached broad retrieval."],
+                        "confidence": "high",
+                    }
+                ],
+                "open_issues": [],
+                "fallback_used": False,
+                "fallback_reason": "",
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    task = PlannerTaskInput(
+        task_id="toy_task",
+        spec_md_files=[str(spec_path)],
+        spec_images=[],
+        project_type="light_repo_spec2rtl",
+    )
+    stage2_artifact = validate_model(
+        Stage2RepoSkeletonArtifact,
+        {
+            "task_id": task.task_id,
+            "stage2_status": "repo_skeleton_planned",
+            "top_module": "toy",
+            "global_invariants": {"hierarchy": [], "file_map": {"toy": "rtl/toy.v"}},
+            "modules": [
+                {
+                    "module": "toy",
+                    "file_path": "rtl/toy.v",
+                    "role": "toy passthrough",
+                    "kind": "leaf_combinational",
+                    "parents": [],
+                    "children": [],
+                    "instance_hints": [],
+                }
+            ],
+            "planning_decisions": {
+                "generation_order": ["toy"],
+                "leaf_first": True,
+                "shared_modules": [],
+            },
+            "open_issues": [],
+        },
+    )
+    stage3_artifact = validate_model(
+        Stage3ModuleSkeletonArtifact,
+        {
+            "task_id": task.task_id,
+            "stage3_status": "module_skeletons_planned",
+            "top_module": "toy",
+            "module_order": ["toy"],
+            "completed_modules": ["toy"],
+            "resume_cursor": 1,
+            "global_summary": [],
+            "module_records": [
+                {
+                    "module": "toy",
+                    "doc_file": "module_skeleton_docs/toy.md",
+                    "export_file": "module_skeleton_json/toy.json",
+                    "spec_context_file": "module_spec_context_json/toy.json",
+                    "export_schema_version": "module_skeleton_export_v1",
+                    "source_refs": {
+                        "module_contract_ref": "module_contracts_v1::toy",
+                        "repo_skeleton_ref": "repo_skeleton_v1::toy",
+                        "module_spec_file": str(spec_path.resolve()),
+                    },
+                    "planning_note": "Toy skeleton.",
+                    "block_ids": ["B1"],
+                }
+            ],
+            "open_issues": [],
+        },
+    )
+
+    class ExplodingRetriever:
+        def select_module_spec_context(self, **kwargs):
+            raise AssertionError("Stage4 should reuse the Stage3 spec context sidecar")
+
+    backend = QueueBackend([])
+    agent = Stage4SpecBlocksAgent(
+        PlannerLLMClient(backend=backend),
+        output_root=output_root,
+        module_spec_context_retriever=ExplodingRetriever(),
+    )
+
+    artifact = agent.run(task, {"stage2": stage2_artifact, "stage3": stage3_artifact})
+
+    assert backend.calls == []
+    assert artifact.modules[0].source_spec_file == str(spec_path.resolve())
+    assert [block.block_id for block in artifact.modules[0].blocks] == ["S001", "S002"]
+    assert "Toy has input a" in artifact.modules[0].blocks[0].text
+    assert "Output y follows input a" in artifact.modules[0].blocks[1].text
+
+
+def test_stage4_spec_blocks_falls_back_for_legacy_stage3_without_sidecar(tmp_path):
+    spec_path = tmp_path / "toy.md"
+    spec_path.write_text("## Operation\nLegacy fallback source text.", encoding="utf-8")
+    task = PlannerTaskInput(
+        task_id="toy_task",
+        spec_md_files=[str(spec_path)],
+        spec_images=[],
+        project_type="light_repo_spec2rtl",
+    )
+    stage2_artifact = validate_model(
+        Stage2RepoSkeletonArtifact,
+        {
+            "task_id": task.task_id,
+            "stage2_status": "repo_skeleton_planned",
+            "top_module": "toy",
+            "global_invariants": {"hierarchy": [], "file_map": {"toy": "rtl/toy.v"}},
+            "modules": [
+                {
+                    "module": "toy",
+                    "file_path": "rtl/toy.v",
+                    "role": "toy passthrough",
+                    "kind": "leaf_combinational",
+                    "parents": [],
+                    "children": [],
+                    "instance_hints": [],
+                }
+            ],
+            "planning_decisions": {
+                "generation_order": ["toy"],
+                "leaf_first": True,
+                "shared_modules": [],
+            },
+            "open_issues": [],
+        },
+    )
+    stage3_artifact = validate_model(
+        Stage3ModuleSkeletonArtifact,
+        {
+            "task_id": task.task_id,
+            "stage3_status": "module_skeletons_planned",
+            "top_module": "toy",
+            "module_order": ["toy"],
+            "completed_modules": ["toy"],
+            "resume_cursor": 1,
+            "global_summary": [],
+            "module_records": [
+                {
+                    "module": "toy",
+                    "doc_file": "module_skeleton_docs/toy.md",
+                    "export_file": "module_skeleton_json/toy.json",
+                    "export_schema_version": "module_skeleton_export_v1",
+                    "source_refs": {
+                        "module_contract_ref": "module_contracts_v1::toy",
+                        "repo_skeleton_ref": "repo_skeleton_v1::toy",
+                        "module_spec_file": str(spec_path.resolve()),
+                    },
+                    "planning_note": "Legacy skeleton record.",
+                    "block_ids": ["B1"],
+                }
+            ],
+            "open_issues": [],
+        },
+    )
+    backend = QueueBackend([make_module_spec_context_payload("toy", spec_path)])
+    agent = Stage4SpecBlocksAgent(PlannerLLMClient(backend=backend))
+
+    artifact = agent.run(task, {"stage2": stage2_artifact, "stage3": stage3_artifact})
+
+    assert len(backend.calls) == 1
+    assert "Legacy fallback source text" in artifact.modules[0].blocks[0].text
 
 
 def test_stage4_module_plan_requires_interface_refs_for_first_decl_block(tmp_path):
@@ -2094,7 +2540,9 @@ def test_stage4_module_plan_requires_interface_refs_for_first_decl_block(tmp_pat
 
     assert isinstance(artifact, Stage4ModulePlansArtifact)
     assert len(backend.calls) == 3
-    assert '"spec_refs": [\n        "S001",\n        "S002"\n      ]' in backend.calls[1]["user_prompt"]
+    assert '"id": "B1_decl_table"' in backend.calls[1]["user_prompt"]
+    assert '"S001"' in backend.calls[1]["user_prompt"]
+    assert '"S002"' in backend.calls[1]["user_prompt"]
     assert "spec_refs must exactly match block retrieval output ['S001', 'S002']" in backend.calls[2]["user_prompt"]
 
 
@@ -2699,14 +3147,10 @@ def test_planner_runner_supports_stage5_subtask_codegen_workspace(tmp_path):
     ]
     backend = QueueBackend(
         [
-            make_structure_payload(md_path),
-            make_interface_payload(md_path),
-            make_timing_payload(md_path, image_paths[0]),
-            make_control_payload(md_path, image_paths[0]),
-            make_datapath_payload(md_path),
-            make_planning_facts_payload(md_path),
             make_repo_skeleton_payload(),
+            make_module_spec_context_payload("aes_key_expand_128", key_spec),
             make_stage3_module_skeleton_doc("aes_key_expand_128", key_spec),
+            make_module_spec_context_payload("aes_cipher_top", top_spec),
             make_stage3_module_skeleton_doc("aes_cipher_top", top_spec),
             make_block_spec_retrieval_payload("aes_key_expand_128"),
             key_plan,
@@ -2762,14 +3206,10 @@ def test_planner_runner_supports_stage6_per_module_merge(tmp_path):
     ]
     backend = QueueBackend(
         [
-            make_structure_payload(md_path),
-            make_interface_payload(md_path),
-            make_timing_payload(md_path, image_paths[0]),
-            make_control_payload(md_path, image_paths[0]),
-            make_datapath_payload(md_path),
-            make_planning_facts_payload(md_path),
             make_repo_skeleton_payload(),
+            make_module_spec_context_payload("aes_key_expand_128", key_spec),
             make_stage3_module_skeleton_doc("aes_key_expand_128", key_spec),
+            make_module_spec_context_payload("aes_cipher_top", top_spec),
             make_stage3_module_skeleton_doc("aes_cipher_top", top_spec),
             make_block_spec_retrieval_payload("aes_key_expand_128"),
             key_plan,
@@ -2802,13 +3242,22 @@ def test_planner_runner_supports_stage6_per_module_merge(tmp_path):
     )
     assert stage6_manifest["module_files"][0]["merged_file"].endswith("workspace/merged/aes_key_expand_128.v")
     stage6_call_indices = [
-        index for index, call in enumerate(backend.calls) if call["system_prompt"] == "You are an RTL Merge Agent."
+        index for index, call in enumerate(backend.calls) if "RTL Merge Agent" in call["system_prompt"]
     ]
-    assert len(stage6_call_indices) == 2
-    first_merge_index = stage6_call_indices[0]
-    assert "B5_comb_output_path" in backend.calls[first_merge_index - 1]["user_prompt"]
-    assert "B1_decl_state_and_keys" in backend.calls[first_merge_index + 1]["user_prompt"]
-    assert "STAGE5_SUBTASK_BEGIN B1_decl_state_and_keys" in backend.calls[first_merge_index]["user_prompt"]
+    key_merge_indices = [
+        index
+        for index in stage6_call_indices
+        if '"module": "aes_key_expand_128"' in backend.calls[index]["user_prompt"]
+    ]
+    top_merge_indices = [
+        index for index in stage6_call_indices if '"module": "aes_cipher_top"' in backend.calls[index]["user_prompt"]
+    ]
+    assert key_merge_indices
+    assert top_merge_indices
+    assert min(key_merge_indices) < min(top_merge_indices)
+    first_key_merge_index = min(key_merge_indices)
+    assert "B5_comb_output_path" in backend.calls[first_key_merge_index - 1]["user_prompt"]
+    assert "STAGE5_SUBTASK_BEGIN B1_decl_state_and_keys" in backend.calls[first_key_merge_index]["user_prompt"]
 
 
 def test_stage2_agent_builds_repo_skeleton_from_modules_artifact(tmp_path):
@@ -2824,8 +3273,640 @@ def test_stage2_agent_builds_repo_skeleton_from_modules_artifact(tmp_path):
     assert artifact.stage2_status == "repo_skeleton_planned"
     assert artifact.top_module == "aes_cipher_top"
     assert artifact.planning_decisions.generation_order == ["aes_key_expand_128", "aes_cipher_top"]
-    assert '"module_order": [' not in backend.calls[0]["user_prompt"]
-    assert '"repository_structure"' in backend.calls[0]["user_prompt"]
+    assert '"schema_version": "stage2_planning_input_v1"' in backend.calls[0]["user_prompt"]
+    assert '"legacy_contract_projection"' in backend.calls[0]["user_prompt"]
+    assert '"compat_module_candidates"' in backend.calls[0]["user_prompt"]
+    assert '"fact_ledger"' in backend.calls[0]["user_prompt"]
+
+
+def test_build_stage2_planning_input_from_task_includes_specs_without_legacy_stage1(tmp_path):
+    task, md_path, _ = make_task_input(tmp_path, image_count=1)
+
+    stage2_input = build_stage2_planning_input_from_task(task_input=task)
+
+    assert isinstance(stage2_input, Stage2PlanningInput)
+    assert stage2_input.schema_version == "stage2_planning_input_v1"
+    assert stage2_input.source_specs[0].path == str(md_path.resolve())
+    assert "Top module: aes_cipher_top" in stage2_input.source_specs[0].markdown
+    assert stage2_input.spec_index == {"aes_cipher_top": str(md_path.resolve())}
+    assert stage2_input.fact_ledger.source_files == [str(md_path.resolve())]
+    assert stage2_input.fact_ledger.facts == []
+    assert stage2_input.legacy_contract_projection is None
+    assert stage2_input.compat_module_candidates == []
+
+
+def test_build_stage2_planning_input_includes_specs_and_compat_candidates(tmp_path):
+    task, md_path, image_paths = make_task_input(tmp_path, image_count=1)
+    stage1_artifact = make_stage1_contract_artifact(md_path, image_paths)
+    compat_modules = build_module_organized_artifact(stage1_artifact)
+
+    stage2_input = build_stage2_planning_input(
+        stage1_artifact=stage1_artifact,
+        task_input=task,
+        compat_modules=compat_modules,
+    )
+
+    assert isinstance(stage2_input, Stage2PlanningInput)
+    assert stage2_input.schema_version == "stage2_planning_input_v1"
+    assert stage2_input.source_specs[0].stem == "aes_cipher_top"
+    assert "Top module: aes_cipher_top" in stage2_input.source_specs[0].markdown
+    assert "aes_cipher_top" in stage2_input.compat_module_candidates
+    assert stage2_input.legacy_contract_projection.task_id == task.task_id
+
+
+def test_stage2_prompt_uses_planning_input_not_modules_primary_source(tmp_path):
+    task, md_path, image_paths = make_task_input(tmp_path, image_count=1)
+    stage1_artifact = make_stage1_contract_artifact(md_path, image_paths)
+    stage2_input = build_stage2_planning_input(
+        stage1_artifact=stage1_artifact,
+        task_input=task,
+        compat_modules=build_module_organized_artifact(stage1_artifact),
+    )
+    agent = Stage2Agent(PlannerLLMClient(backend=QueueBackend([])))
+
+    prompt, _ = agent.build_prompt(task, {"stage2_input": stage2_input}, {})
+
+    assert "stage2_planning_input_v1" in prompt
+    assert "Use modules.json as the primary source of truth" not in prompt
+    assert "source spec markdown" in prompt
+    assert "compatibility module candidates" in prompt
+    assert "aes_unified_functional_spec" in prompt
+    assert "not treated as RTL modules" in prompt
+
+
+def test_stage2_validation_allows_planned_modules_not_in_compat_candidates(tmp_path):
+    task, md_path, image_paths = make_task_input(tmp_path, image_count=1)
+    stage1_artifact = make_stage1_contract_artifact(md_path, image_paths)
+    stage2_input = build_stage2_planning_input(
+        stage1_artifact=stage1_artifact,
+        task_input=task,
+        compat_modules=build_module_organized_artifact(stage1_artifact),
+    )
+    stage2_input.compat_module_candidates = ["aes_cipher_top"]
+    artifact = validate_model(
+        Stage2RepoSkeletonArtifact,
+        {
+            "task_id": task.task_id,
+            "source_schema_version": "stage2_planning_input_v1",
+            "stage2_status": "repo_skeleton_planned",
+            "top_module": "aes_cipher_top",
+            "global_invariants": {
+                "hierarchy": [
+                    {
+                        "parent": "aes_cipher_top",
+                        "child": "aes_sbox",
+                        "source_kind": "inferred_from_spec",
+                        "rationale": "SubBytes behavior is isolated enough to plan as a reusable S-box module.",
+                    },
+                    {
+                        "parent": "aes_cipher_top",
+                        "child": "aes_key_expand_128",
+                        "source_kind": "explicit",
+                        "rationale": "Preserved from explicit Stage1 fact.",
+                    },
+                ],
+                "file_map": {
+                    "aes_sbox": "rtl/aes_sbox.v",
+                    "aes_key_expand_128": "rtl/aes_key_expand_128.v",
+                    "aes_cipher_top": "rtl/aes_cipher_top.v",
+                },
+            },
+            "modules": [
+                {
+                    "module": "aes_sbox",
+                    "file_path": "rtl/aes_sbox.v",
+                    "role": "byte substitution helper",
+                    "kind": "leaf_combinational",
+                    "source_kind": "inferred_from_spec",
+                    "rationale": "SubBytes uses byte substitution.",
+                    "parents": ["aes_cipher_top"],
+                    "children": [],
+                    "instance_hints": [],
+                },
+                {
+                    "module": "aes_key_expand_128",
+                    "file_path": "rtl/aes_key_expand_128.v",
+                    "role": "round key provider",
+                    "kind": "iterative_engine",
+                    "parents": ["aes_cipher_top"],
+                    "children": [],
+                    "instance_hints": [],
+                },
+                {
+                    "module": "aes_cipher_top",
+                    "file_path": "rtl/aes_cipher_top.v",
+                    "role": "top controller",
+                    "kind": "top_controller",
+                    "parents": [],
+                    "children": ["aes_sbox", "aes_key_expand_128"],
+                    "instance_hints": [],
+                },
+            ],
+            "planning_decisions": {
+                "generation_order": ["aes_sbox", "aes_key_expand_128", "aes_cipher_top"],
+                "leaf_first": True,
+                "shared_modules": [],
+            },
+            "open_issues": [],
+        },
+    )
+    agent = Stage2Agent(PlannerLLMClient(backend=QueueBackend([])))
+
+    errors = agent.validate_quality(artifact, task, {"stage2_input": stage2_input})
+
+    assert errors == []
+
+
+def test_stage2_validation_accepts_inferred_from_spec_with_empty_fact_ledger(tmp_path):
+    task, _, _ = make_task_input(tmp_path, image_count=1)
+    stage2_input = build_stage2_planning_input_from_task(task_input=task)
+    artifact = validate_model(
+        Stage2RepoSkeletonArtifact,
+        {
+            "task_id": task.task_id,
+            "source_schema_version": "stage2_planning_input_v1",
+            "stage2_status": "repo_skeleton_planned",
+            "top_module": "aes_cipher_top",
+            "global_invariants": {
+                "hierarchy": [
+                    {
+                        "parent": "aes_cipher_top",
+                        "child": "aes_sbox",
+                        "source_kind": "inferred_from_spec",
+                        "rationale": "The source spec describes a reusable S-box function used by the cipher datapath.",
+                    }
+                ],
+                "file_map": {
+                    "aes_sbox": "rtl/aes_sbox.v",
+                    "aes_cipher_top": "rtl/aes_cipher_top.v",
+                },
+            },
+            "modules": [
+                {
+                    "module": "aes_sbox",
+                    "file_path": "rtl/aes_sbox.v",
+                    "role": "byte substitution helper",
+                    "kind": "leaf_combinational",
+                    "source_kind": "inferred_from_spec",
+                    "rationale": "Reusable byte substitution from the spec.",
+                    "parents": ["aes_cipher_top"],
+                    "children": [],
+                    "instance_hints": [],
+                },
+                {
+                    "module": "aes_cipher_top",
+                    "file_path": "rtl/aes_cipher_top.v",
+                    "role": "top controller",
+                    "kind": "top_controller",
+                    "source_kind": "inferred_from_spec",
+                    "rationale": "Top-level module named by the source spec.",
+                    "parents": [],
+                    "children": ["aes_sbox"],
+                    "instance_hints": [
+                        {
+                            "module": "aes_sbox",
+                            "count": 16,
+                            "usage": "SubBytes byte substitution",
+                            "source_kind": "inferred_from_spec",
+                            "rationale": "The spec calls for parallel byte substitutions.",
+                        }
+                    ],
+                },
+            ],
+            "planning_decisions": {
+                "generation_order": ["aes_sbox", "aes_cipher_top"],
+                "leaf_first": True,
+                "shared_modules": [],
+            },
+            "open_issues": [],
+        },
+    )
+    agent = Stage2Agent(PlannerLLMClient(backend=QueueBackend([])))
+
+    errors = agent.validate_quality(artifact, task, {"stage2_input": stage2_input})
+
+    assert errors == []
+
+
+def test_stage2_validation_rejects_single_module_when_partitioning_guidance_exists(tmp_path):
+    md_path = tmp_path / "hard_system.md"
+    md_path.write_text(
+        "\n".join(
+            [
+                "# Hard System",
+                "Top module: hard_top",
+                "## Functional Decomposition",
+                "The design has natural boundaries and reusable implementation units.",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    task = PlannerTaskInput(
+        task_id="hard_demo",
+        spec_md_files=[str(md_path)],
+        spec_images=[],
+        project_type="light_repo_spec2rtl",
+        notes="hard partitioning test",
+    )
+    stage2_input = build_stage2_planning_input_from_task(task_input=task)
+    artifact = validate_model(
+        Stage2RepoSkeletonArtifact,
+        {
+            "task_id": task.task_id,
+            "source_schema_version": "stage2_planning_input_v1",
+            "stage2_status": "repo_skeleton_planned",
+            "top_module": "hard_top",
+            "global_invariants": {
+                "hierarchy": [],
+                "file_map": {"hard_top": "rtl/hard_top.v"},
+            },
+            "modules": [
+                {
+                    "module": "hard_top",
+                    "file_path": "rtl/hard_top.v",
+                    "role": "top controller",
+                    "kind": "top_controller",
+                    "source_kind": "inferred_from_spec",
+                    "rationale": "Only top module planned.",
+                    "parents": [],
+                    "children": [],
+                    "instance_hints": [],
+                }
+            ],
+            "planning_decisions": {
+                "generation_order": ["hard_top"],
+                "leaf_first": True,
+                "shared_modules": [],
+            },
+            "open_issues": [],
+        },
+    )
+    agent = Stage2Agent(PlannerLLMClient(backend=QueueBackend([])))
+
+    errors = agent.validate_quality(artifact, task, {"stage2_input": stage2_input})
+
+    assert any("partitioning guidance" in error for error in errors)
+
+
+def test_stage2_repo_skeleton_normalizes_object_open_issues():
+    artifact = validate_model(
+        Stage2RepoSkeletonArtifact,
+        {
+            "task_id": "open_issue_demo",
+            "source_schema_version": "stage2_planning_input_v1",
+            "stage2_status": "repo_skeleton_planned",
+            "top_module": "aes_cipher_top",
+            "global_invariants": {
+                "hierarchy": [],
+                "file_map": {"aes_cipher_top": "rtl/aes_cipher_top.v"},
+            },
+            "modules": [
+                {
+                    "module": "aes_cipher_top",
+                    "file_path": "rtl/aes_cipher_top.v",
+                    "role": "top controller",
+                    "kind": "top_controller",
+                    "parents": [],
+                    "children": [],
+                    "instance_hints": [],
+                }
+            ],
+            "planning_decisions": {
+                "generation_order": ["aes_cipher_top"],
+                "leaf_first": True,
+                "shared_modules": [],
+            },
+            "open_issues": [
+                {
+                    "issue": "Round constant generation boundary is uncertain",
+                    "options": ["local helper", "separate round_const_gen"],
+                },
+                {
+                    "issue": "MixColumns/xtime boundary is uncertain",
+                    "decision": "prefer local helper unless timing requires module split",
+                },
+            ],
+        },
+    )
+
+    assert artifact.open_issues == [
+        "Round constant generation boundary is uncertain. options: local helper; separate round_const_gen",
+        "MixColumns/xtime boundary is uncertain. decision: prefer local helper unless timing requires module split",
+    ]
+
+
+def test_build_modules_artifact_from_repo_skeleton_filters_spec_filename_module(tmp_path):
+    task, md_path, image_paths = make_task_input(tmp_path, image_count=1)
+    stage1_artifact = make_stage1_contract_artifact(md_path, image_paths)
+    repo_skeleton = validate_model(
+        Stage2RepoSkeletonArtifact,
+        {
+            "task_id": task.task_id,
+            "source_schema_version": "stage2_planning_input_v1",
+            "stage2_status": "repo_skeleton_planned",
+            "top_module": "aes_cipher_top",
+            "global_invariants": {
+                "hierarchy": [
+                    {"parent": "aes_cipher_top", "child": "aes_sbox", "source_kind": "inferred_from_spec"}
+                ],
+                "file_map": {
+                    "aes_sbox": "rtl/aes_sbox.v",
+                    "aes_cipher_top": "rtl/aes_cipher_top.v",
+                },
+            },
+            "modules": [
+                {
+                    "module": "aes_sbox",
+                    "file_path": "rtl/aes_sbox.v",
+                    "role": "byte substitution helper",
+                    "kind": "leaf_combinational",
+                    "parents": ["aes_cipher_top"],
+                    "children": [],
+                    "instance_hints": [],
+                },
+                {
+                    "module": "aes_cipher_top",
+                    "file_path": "rtl/aes_cipher_top.v",
+                    "role": "top controller",
+                    "kind": "top_controller",
+                    "parents": [],
+                    "children": ["aes_sbox"],
+                    "instance_hints": [],
+                },
+            ],
+            "planning_decisions": {
+                "generation_order": ["aes_sbox", "aes_cipher_top"],
+                "leaf_first": True,
+                "shared_modules": [],
+            },
+            "open_issues": [],
+        },
+    )
+
+    modules_artifact = build_module_organized_artifact_from_repo_skeleton(
+        stage1_artifact=stage1_artifact,
+        repo_skeleton=repo_skeleton,
+    )
+
+    assert modules_artifact.module_order == ["aes_sbox", "aes_cipher_top"]
+    assert "aes_unified_functional_spec" not in modules_artifact.module_order
+    assert modules_artifact.modules[0].parent_modules == ["aes_cipher_top"]
+    assert modules_artifact.modules[1].child_modules == ["aes_sbox"]
+
+
+def test_build_modules_artifact_from_repo_skeleton_only_uses_repo_skeleton_order(tmp_path):
+    task, _, _ = make_task_input(tmp_path, image_count=1)
+    repo_skeleton = validate_model(
+        Stage2RepoSkeletonArtifact,
+        {
+            "task_id": task.task_id,
+            "source_schema_version": "stage2_planning_input_v1",
+            "stage2_status": "repo_skeleton_planned",
+            "top_module": "aes_cipher_top",
+            "global_invariants": {
+                "hierarchy": [
+                    {
+                        "parent": "aes_cipher_top",
+                        "child": "aes_sbox",
+                        "source_kind": "inferred_from_spec",
+                        "rationale": "S-box is a reusable helper.",
+                    }
+                ],
+                "file_map": {
+                    "aes_sbox": "rtl/aes_sbox.v",
+                    "aes_cipher_top": "rtl/aes_cipher_top.v",
+                },
+            },
+            "modules": [
+                {
+                    "module": "aes_sbox",
+                    "file_path": "rtl/aes_sbox.v",
+                    "role": "byte substitution helper",
+                    "kind": "leaf_combinational",
+                    "parents": ["aes_cipher_top"],
+                    "children": [],
+                    "instance_hints": [],
+                },
+                {
+                    "module": "aes_cipher_top",
+                    "file_path": "rtl/aes_cipher_top.v",
+                    "role": "top controller",
+                    "kind": "top_controller",
+                    "parents": [],
+                    "children": ["aes_sbox"],
+                    "instance_hints": [],
+                },
+            ],
+            "planning_decisions": {
+                "generation_order": ["aes_sbox", "aes_cipher_top"],
+                "leaf_first": True,
+                "shared_modules": [],
+            },
+            "open_issues": [],
+        },
+    )
+
+    modules_artifact = build_module_organized_artifact_from_repo_skeleton_only(
+        task_input=task,
+        repo_skeleton=repo_skeleton,
+    )
+
+    assert modules_artifact.source_schema_version == "repo_skeleton_v1"
+    assert modules_artifact.module_order == ["aes_sbox", "aes_cipher_top"]
+    assert modules_artifact.fact_ledger.facts == []
+    assert modules_artifact.modules[0].parent_modules == ["aes_cipher_top"]
+    assert modules_artifact.modules[1].child_modules == ["aes_sbox"]
+
+
+def test_debug_contract_builder_accepts_missing_stage1_contracts():
+    payload = json.loads(
+        build_debug_contract_json(
+            module_name="aes_cipher_top",
+            stage1_contracts=None,
+            spec_text="The aes_cipher_top module asserts done after encryption completes.",
+        )
+    )
+
+    assert payload["module_name"] == "aes_cipher_top"
+    assert payload["io"] == []
+    assert any("encryption" in item for item in payload["functional_summary"])
+
+
+def test_stage2_accepts_fact_ledger_inferred_hierarchy_with_supporting_facts(tmp_path):
+    task, md_path, _ = make_task_input(tmp_path)
+    facts = [
+        _fact(
+            md_path,
+            module="aes_cipher_top",
+            category="module_identity",
+            subject="aes_cipher_top",
+            predicate="is_top_module",
+            obj={"module": "aes_cipher_top", "modules": ["aes_cipher_top", "aes_sbox"]},
+        ),
+        _fact(
+            md_path,
+            module="aes_cipher_top",
+            category="resource_requirement",
+            subject="SubBytes",
+            predicate="uses_parallel_units",
+            obj={"unit": "aes_sbox", "count": 16},
+        ),
+    ]
+    stage1_artifact = Stage1Agent(
+        PlannerLLMClient(
+            backend=QueueBackend([{"fact_ledger": {"source_files": [str(md_path.resolve())], "facts": facts, "ambiguous_items": []}}])
+        )
+    ).run_incremental(task, {})
+    modules_artifact = build_module_organized_artifact(stage1_artifact)
+    support_id = next(fact.fact_id for fact in stage1_artifact.fact_ledger.facts if fact.category == "resource_requirement")
+    repo_payload = {
+        "task_id": task.task_id,
+        "stage2_status": "repo_skeleton_planned",
+        "top_module": "aes_cipher_top",
+        "global_invariants": {
+            "system_role": "AES system",
+            "clocking_model": {},
+            "hierarchy": [
+                {
+                    "parent": "aes_cipher_top",
+                    "child": "aes_sbox",
+                    "source_kind": "inferred_from_fact_ledger",
+                    "supporting_fact_ids": [support_id],
+                    "rationale": "SubBytes requires S-box units.",
+                }
+            ],
+            "file_map": {
+                "aes_cipher_top": "rtl/aes_cipher_top.v",
+                "aes_sbox": "rtl/aes_sbox.v",
+            },
+            "cross_module_alignment": [],
+            "global_data_conventions": [],
+        },
+        "modules": [
+            {
+                "module": "aes_sbox",
+                "file_path": "rtl/aes_sbox.v",
+                "role": "S-box substitution unit",
+                "kind": "leaf_combinational",
+                "parents": ["aes_cipher_top"],
+                "children": [],
+                "instance_hints": [],
+                "repo_notes": [],
+            },
+            {
+                "module": "aes_cipher_top",
+                "file_path": "rtl/aes_cipher_top.v",
+                "role": "top controller",
+                "kind": "top_controller",
+                "parents": [],
+                "children": ["aes_sbox"],
+                "instance_hints": [
+                    {
+                        "module": "aes_sbox",
+                        "count": 16,
+                        "usage": "SubBytes parallel substitution",
+                        "source_kind": "inferred_from_fact_ledger",
+                        "supporting_fact_ids": [support_id],
+                        "rationale": "Resource fact states 16 S-box units.",
+                    }
+                ],
+                "repo_notes": [],
+            },
+        ],
+        "planning_decisions": {
+            "generation_order": ["aes_sbox", "aes_cipher_top"],
+            "leaf_first": True,
+            "shared_modules": [],
+            "top_level_integration_notes": [],
+        },
+        "open_issues": [],
+    }
+    agent = Stage2Agent(PlannerLLMClient(backend=QueueBackend([repo_payload])))
+
+    artifact = agent.run(task, {"modules": modules_artifact})
+
+    assert artifact.global_invariants.hierarchy[0].source_kind == "inferred_from_fact_ledger"
+    assert artifact.modules[1].instance_hints[0].supporting_fact_ids == [support_id]
+
+
+def test_stage2_rejects_fact_ledger_inferred_hierarchy_without_supporting_facts(tmp_path):
+    task, md_path, _ = make_task_input(tmp_path)
+    facts = [
+        _fact(
+            md_path,
+            module="aes_cipher_top",
+            category="module_identity",
+            subject="aes_cipher_top",
+            predicate="is_top_module",
+            obj={"module": "aes_cipher_top", "modules": ["aes_cipher_top", "aes_sbox"]},
+        ),
+        _fact(
+            md_path,
+            module="aes_cipher_top",
+            category="resource_requirement",
+            subject="SubBytes",
+            predicate="uses_parallel_units",
+            obj={"unit": "aes_sbox", "count": 16},
+        ),
+    ]
+    stage1_artifact = Stage1Agent(
+        PlannerLLMClient(
+            backend=QueueBackend([{"fact_ledger": {"source_files": [str(md_path.resolve())], "facts": facts, "ambiguous_items": []}}])
+        )
+    ).run_incremental(task, {})
+    modules_artifact = build_module_organized_artifact(stage1_artifact)
+    artifact = validate_model(
+        Stage2RepoSkeletonArtifact,
+        {
+            "task_id": task.task_id,
+            "stage2_status": "repo_skeleton_planned",
+            "top_module": "aes_cipher_top",
+            "global_invariants": {
+                "hierarchy": [
+                    {
+                        "parent": "aes_cipher_top",
+                        "child": "aes_sbox",
+                        "source_kind": "inferred_from_fact_ledger",
+                    }
+                ],
+                "file_map": {
+                    "aes_cipher_top": "rtl/aes_cipher_top.v",
+                    "aes_sbox": "rtl/aes_sbox.v",
+                },
+            },
+            "modules": [
+                {
+                    "module": "aes_sbox",
+                    "file_path": "rtl/aes_sbox.v",
+                    "role": "S-box substitution unit",
+                    "kind": "leaf_combinational",
+                    "parents": ["aes_cipher_top"],
+                    "children": [],
+                    "instance_hints": [],
+                },
+                {
+                    "module": "aes_cipher_top",
+                    "file_path": "rtl/aes_cipher_top.v",
+                    "role": "top controller",
+                    "kind": "top_controller",
+                    "parents": [],
+                    "children": ["aes_sbox"],
+                    "instance_hints": [],
+                },
+            ],
+            "planning_decisions": {
+                "generation_order": ["aes_sbox", "aes_cipher_top"],
+                "leaf_first": True,
+                "shared_modules": [],
+            },
+            "open_issues": [],
+        },
+    )
+    agent = Stage2Agent(PlannerLLMClient(backend=QueueBackend([])))
+
+    errors = agent.validate_quality(artifact, task, {"modules": modules_artifact})
+
+    assert any("supporting_fact_ids" in error for error in errors)
 
 
 def test_stage3_agent_builds_module_skeletons_incrementally(tmp_path):
@@ -2837,8 +3918,10 @@ def test_stage3_agent_builds_module_skeletons_incrementally(tmp_path):
     stage2_artifact = validate_model(Stage2RepoSkeletonArtifact, make_repo_skeleton_payload())
     backend = QueueBackend(
         [
-            make_stage3_module_skeleton_doc("aes_cipher_top", top_spec),
+            make_module_spec_context_payload("aes_key_expand_128", key_spec),
             make_stage3_module_skeleton_doc("aes_key_expand_128", key_spec),
+            make_module_spec_context_payload("aes_cipher_top", top_spec),
+            make_stage3_module_skeleton_doc("aes_cipher_top", top_spec),
         ]
     )
     agent = Stage3Agent(PlannerLLMClient(backend=backend))
@@ -2857,21 +3940,25 @@ def test_stage3_agent_builds_module_skeletons_incrementally(tmp_path):
     assert artifact.module_records[0].export_schema_version == "module_skeleton_export_v1"
     assert artifact.module_records[0].doc_file == "module_skeleton_docs/aes_key_expand_128.md"
     assert artifact.module_records[0].export_file == "module_skeleton_json/aes_key_expand_128.json"
+    assert artifact.module_records[0].spec_context_file == "module_spec_context_json/aes_key_expand_128.json"
     assert len(persisted) == 3
     assert persisted[0]["manifest"]["completed_modules"] == ["aes_key_expand_128"]
     assert persisted[0]["doc_file"] == "module_skeleton_docs/aes_key_expand_128.md"
     assert persisted[0]["export_file"] == "module_skeleton_json/aes_key_expand_128.json"
+    assert persisted[0]["spec_context_file"] == "module_spec_context_json/aes_key_expand_128.json"
+    assert persisted[0]["spec_context_payload"]["schema_version"] == "module_spec_context_retrieval_v1"
     assert persisted[1]["manifest"]["completed_modules"] == ["aes_key_expand_128", "aes_cipher_top"]
+    assert persisted[1]["spec_context_file"] == "module_spec_context_json/aes_cipher_top.json"
     assert persisted[2]["manifest"]["stage3_status"] == "module_skeletons_planned"
-    assert "KEYEXP UNIQUE SPEC MARKER" in backend.calls[0]["user_prompt"]
-    assert "TOP UNIQUE SPEC MARKER" not in backend.calls[0]["user_prompt"]
-    assert "TOP UNIQUE SPEC MARKER" in backend.calls[1]["user_prompt"]
-    assert '"module": "aes_key_expand_128"' in backend.calls[0]["user_prompt"]
-    assert '"module": "aes_cipher_top"' in backend.calls[1]["user_prompt"]
-    assert "generation order:" in backend.calls[0]["user_prompt"]
-    assert "MODULE_SKELETON_DOC v1" in backend.calls[0]["user_prompt"]
-    assert "block_kind" in backend.calls[0]["user_prompt"]
-    assert '"module_skeleton"' not in backend.calls[0]["user_prompt"]
+    assert "KEYEXP UNIQUE SPEC MARKER" in backend.calls[1]["user_prompt"]
+    assert "TOP UNIQUE SPEC MARKER" not in backend.calls[1]["user_prompt"]
+    assert "TOP UNIQUE SPEC MARKER" in backend.calls[3]["user_prompt"]
+    assert '"module": "aes_key_expand_128"' in backend.calls[1]["user_prompt"]
+    assert '"module": "aes_cipher_top"' in backend.calls[3]["user_prompt"]
+    assert "generation order:" in backend.calls[1]["user_prompt"]
+    assert "MODULE_SKELETON_DOC v1" in backend.calls[1]["user_prompt"]
+    assert "block_kind" in backend.calls[1]["user_prompt"]
+    assert '"module_skeleton"' not in backend.calls[1]["user_prompt"]
 
 
 def test_stage3_agent_resolves_specs_from_directory_input(tmp_path):
@@ -2891,7 +3978,9 @@ def test_stage3_agent_resolves_specs_from_directory_input(tmp_path):
     stage2_artifact = validate_model(Stage2RepoSkeletonArtifact, make_repo_skeleton_payload())
     backend = QueueBackend(
         [
+            make_module_spec_context_payload("aes_key_expand_128", key_spec),
             make_stage3_module_skeleton_doc("aes_key_expand_128", key_spec),
+            make_module_spec_context_payload("aes_cipher_top", top_spec),
             make_stage3_module_skeleton_doc("aes_cipher_top", top_spec),
         ]
     )
@@ -2901,23 +3990,48 @@ def test_stage3_agent_resolves_specs_from_directory_input(tmp_path):
 
     assert artifact.stage3_status == "module_skeletons_planned"
     assert [item.module for item in artifact.module_records] == ["aes_key_expand_128", "aes_cipher_top"]
-    assert "KEYEXP UNIQUE SPEC MARKER" in backend.calls[0]["user_prompt"]
-    assert "TOP UNIQUE SPEC MARKER" in backend.calls[1]["user_prompt"]
+    assert "KEYEXP UNIQUE SPEC MARKER" in backend.calls[1]["user_prompt"]
+    assert "TOP UNIQUE SPEC MARKER" in backend.calls[3]["user_prompt"]
 
 
-def test_stage3_agent_requires_standalone_module_spec_files(tmp_path):
+def test_stage3_agent_falls_back_to_unified_spec_when_module_spec_is_missing(tmp_path):
     task, md_path, image_paths = make_task_input(tmp_path, image_count=1)
     stage1_artifact = make_stage1_contract_artifact(md_path, image_paths)
     modules_artifact = build_module_organized_artifact(stage1_artifact)
     stage2_artifact = validate_model(Stage2RepoSkeletonArtifact, make_repo_skeleton_payload())
-    backend = QueueBackend([make_stage3_module_skeleton_doc("aes_cipher_top", md_path)])
+    backend = QueueBackend(
+        [
+            {
+                "schema_version": "module_spec_context_retrieval_v1",
+                "module": "aes_key_expand_128",
+                "blocks": [
+                    {
+                        "block_id": "S001",
+                        "text": "## Submodules\naes_key_expand_128 is an explicit helper block used by aes_cipher_top.",
+                        "source_file": str(md_path.resolve()),
+                        "source_chunk_ids": ["C006"],
+                        "relevance_reason": ["Submodule section names aes_key_expand_128."],
+                        "confidence": "medium",
+                    }
+                ],
+                "fallback_used": False,
+            },
+            make_stage3_module_skeleton_doc("aes_key_expand_128", md_path),
+            make_module_spec_context_payload("aes_cipher_top", md_path),
+            make_stage3_module_skeleton_doc("aes_cipher_top", md_path),
+        ]
+    )
     agent = Stage3Agent(PlannerLLMClient(backend=backend))
 
-    with pytest.raises(FileNotFoundError, match="aes_key_expand_128"):
-        agent.run_incremental(
-            task,
-            {"modules": modules_artifact, "stage2": stage2_artifact},
-        )
+    artifact = agent.run_incremental(
+        task,
+        {"modules": modules_artifact, "stage2": stage2_artifact},
+    )
+
+    assert artifact.stage3_status == "module_skeletons_planned"
+    assert backend.calls[0]["mode"] == "complete"
+    assert "MODULE SPEC CONTEXT RETRIEVAL" not in backend.calls[1]["user_prompt"]
+    assert "Top module: aes_cipher_top" in backend.calls[3]["user_prompt"]
 
 
 def test_stage3_agent_resume_regenerates_missing_sidecars(tmp_path):
@@ -2959,8 +4073,10 @@ def test_stage3_agent_resume_regenerates_missing_sidecars(tmp_path):
     }
     backend = QueueBackend(
         [
-            make_stage3_module_skeleton_doc("aes_cipher_top", top_spec),
+            make_module_spec_context_payload("aes_key_expand_128", key_spec),
             make_stage3_module_skeleton_doc("aes_key_expand_128", key_spec),
+            make_module_spec_context_payload("aes_cipher_top", top_spec),
+            make_stage3_module_skeleton_doc("aes_cipher_top", top_spec),
         ]
     )
     agent = Stage3Agent(PlannerLLMClient(backend=backend), output_root=tmp_path / "outputs")
@@ -2973,7 +4089,7 @@ def test_stage3_agent_resume_regenerates_missing_sidecars(tmp_path):
     assert artifact.stage3_status == "module_skeletons_planned"
     assert artifact.module_order == ["aes_key_expand_128", "aes_cipher_top"]
     assert [item.module for item in artifact.module_records] == ["aes_key_expand_128", "aes_cipher_top"]
-    assert len(backend.calls) == 2
+    assert len(backend.calls) == 4
 
 
 def test_stage3_agent_resume_uses_cursor_and_skips_completed_sidecar(tmp_path):
@@ -3034,7 +4150,12 @@ def test_stage3_agent_resume_uses_cursor_and_skips_completed_sidecar(tmp_path):
         "open_issues": [],
         "quality_report": None,
     }
-    backend = QueueBackend([make_stage3_module_skeleton_doc("aes_cipher_top", top_spec)])
+    backend = QueueBackend(
+        [
+            make_module_spec_context_payload("aes_cipher_top", top_spec),
+            make_stage3_module_skeleton_doc("aes_cipher_top", top_spec),
+        ]
+    )
     agent = Stage3Agent(PlannerLLMClient(backend=backend), output_root=output_root)
 
     artifact = agent.run_incremental(
@@ -3045,9 +4166,9 @@ def test_stage3_agent_resume_uses_cursor_and_skips_completed_sidecar(tmp_path):
     assert artifact.stage3_status == "module_skeletons_planned"
     assert artifact.completed_modules == ["aes_key_expand_128", "aes_cipher_top"]
     assert artifact.resume_cursor == 2
-    assert len(backend.calls) == 1
-    assert "TOP UNIQUE SPEC MARKER" in backend.calls[0]["user_prompt"]
-    assert "KEYEXP UNIQUE SPEC MARKER" not in backend.calls[0]["user_prompt"]
+    assert len(backend.calls) == 2
+    assert "TOP UNIQUE SPEC MARKER" in backend.calls[1]["user_prompt"]
+    assert "KEYEXP UNIQUE SPEC MARKER" not in backend.calls[1]["user_prompt"]
 
 
 def test_stage3_agent_reuses_definition_only_undecided_export(tmp_path):
@@ -3189,6 +4310,209 @@ def test_spec_block_splitter_extracts_module_from_unified_spec():
     assert [item.block_id for item in blocks] == ["S001", "S002"]
     assert "Inverse sbox intro." in blocks[0].text
     assert "Inverse lookup table." in blocks[1].text
+
+
+def test_module_spec_context_retriever_falls_back_when_llm_returns_non_source_text(tmp_path):
+    spec_path = tmp_path / "aes_cipher_system.md"
+    spec_path.write_text(
+        "\n".join(
+            [
+                "# AES Unified Spec",
+                "",
+                "## SubBytes",
+                "The SubBytes step uses S-box substitution for each state byte.",
+                "",
+                "## RCON",
+                "The round constant output changes only in the MSB.",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    backend = QueueBackend(
+        [
+            {
+                "schema_version": "module_spec_context_retrieval_v1",
+                "module": "aes_sbox",
+                "blocks": [
+                    {
+                        "block_id": "S001",
+                        "text": "This hallucinated text is not copied from the source.",
+                        "source_file": str(spec_path),
+                        "source_chunk_ids": ["C001"],
+                        "relevance_reason": ["bad output"],
+                        "confidence": "high",
+                    }
+                ],
+                "fallback_used": False,
+            }
+        ]
+    )
+    retriever = ModuleSpecContextRetriever(PlannerLLMClient(backend=backend))
+
+    result = retriever.select_module_spec_context(
+        module_name="aes_sbox",
+        spec_md_files=[str(spec_path)],
+        repo_module={"role": "S-box substitution unit", "parents": ["aes_cipher_top"], "children": []},
+    )
+
+    assert result.fallback_used is True
+    assert result.blocks
+    assert "SubBytes" in result.blocks[0].text
+    assert result.open_issues
+
+
+def test_stage4_spec_blocks_uses_module_context_retrieval_for_unified_spec_without_section(tmp_path):
+    spec_path = tmp_path / "aes_cipher_system.md"
+    spec_path.write_text(
+        "\n".join(
+            [
+                "# AES Unified Spec",
+                "",
+                "## Top",
+                "Top module: aes_cipher_top",
+                "The top controller sequences AES rounds.",
+                "",
+                "## SubBytes",
+                "SubBytes requires S-box substitution for every state byte.",
+                "The S-box maps an input byte to an output byte through combinational lookup.",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    task = PlannerTaskInput(
+        task_id="aes_demo_001",
+        spec_md_files=[str(spec_path)],
+        spec_images=[],
+        project_type="light_repo_spec2rtl",
+        notes="unified spec retrieval test",
+    )
+    stage2_artifact = validate_model(
+        Stage2RepoSkeletonArtifact,
+        {
+            "task_id": task.task_id,
+            "stage2_status": "repo_skeleton_planned",
+            "top_module": "aes_cipher_top",
+            "global_invariants": {
+                "hierarchy": [{"parent": "aes_cipher_top", "child": "aes_sbox"}],
+                "file_map": {
+                    "aes_sbox": "rtl/aes_sbox.v",
+                    "aes_cipher_top": "rtl/aes_cipher_top.v",
+                },
+            },
+            "modules": [
+                {
+                    "module": "aes_sbox",
+                    "file_path": "rtl/aes_sbox.v",
+                    "role": "S-box byte substitution lookup",
+                    "kind": "leaf_combinational",
+                    "parents": ["aes_cipher_top"],
+                    "children": [],
+                    "instance_hints": [],
+                },
+                {
+                    "module": "aes_cipher_top",
+                    "file_path": "rtl/aes_cipher_top.v",
+                    "role": "top controller",
+                    "kind": "top_controller",
+                    "parents": [],
+                    "children": ["aes_sbox"],
+                    "instance_hints": [],
+                },
+            ],
+            "planning_decisions": {
+                "generation_order": ["aes_sbox", "aes_cipher_top"],
+                "leaf_first": True,
+                "shared_modules": [],
+            },
+            "open_issues": [],
+        },
+    )
+    stage3_artifact = validate_model(
+        Stage3ModuleSkeletonArtifact,
+        {
+            "task_id": task.task_id,
+            "source_schema_versions": {
+                "modules": "module_contracts_v1",
+                "repo_skeleton": stage2_artifact.schema_version,
+            },
+            "stage3_status": "module_skeletons_planned",
+            "top_module": "aes_cipher_top",
+            "module_order": ["aes_sbox", "aes_cipher_top"],
+            "completed_modules": ["aes_sbox", "aes_cipher_top"],
+            "resume_cursor": 2,
+            "global_summary": ["unified spec"],
+            "module_records": [
+                {
+                    "module": "aes_sbox",
+                    "doc_file": "module_skeleton_docs/aes_sbox.md",
+                    "export_file": "module_skeleton_json/aes_sbox.json",
+                    "export_schema_version": "module_skeleton_export_v1",
+                    "source_refs": {
+                        "module_contract_ref": "module_contracts_v1::aes_sbox",
+                        "repo_skeleton_ref": "repo_skeleton_v1::aes_sbox",
+                        "module_spec_file": str(spec_path.resolve()),
+                    },
+                    "planning_note": "S-box lookup skeleton.",
+                    "block_ids": ["B1"],
+                },
+                {
+                    "module": "aes_cipher_top",
+                    "doc_file": "module_skeleton_docs/aes_cipher_top.md",
+                    "export_file": "module_skeleton_json/aes_cipher_top.json",
+                    "export_schema_version": "module_skeleton_export_v1",
+                    "source_refs": {
+                        "module_contract_ref": "module_contracts_v1::aes_cipher_top",
+                        "repo_skeleton_ref": "repo_skeleton_v1::aes_cipher_top",
+                        "module_spec_file": str(spec_path.resolve()),
+                    },
+                    "planning_note": "Top controller skeleton.",
+                    "block_ids": ["B1"],
+                },
+            ],
+            "open_issues": [],
+        },
+    )
+    backend = QueueBackend(
+        [
+            {
+                "schema_version": "module_spec_context_retrieval_v1",
+                "module": "aes_sbox",
+                "blocks": [
+                    {
+                        "block_id": "S001",
+                        "text": "## SubBytes\nSubBytes requires S-box substitution for every state byte.\nThe S-box maps an input byte to an output byte through combinational lookup.",
+                        "source_file": str(spec_path.resolve()),
+                        "source_chunk_ids": ["C003"],
+                        "relevance_reason": ["SubBytes text describes the S-box module role."],
+                        "confidence": "high",
+                    }
+                ],
+                "fallback_used": False,
+            },
+            {
+                "schema_version": "module_spec_context_retrieval_v1",
+                "module": "aes_cipher_top",
+                "blocks": [
+                    {
+                        "block_id": "S001",
+                        "text": "## Top\nTop module: aes_cipher_top\nThe top controller sequences AES rounds.",
+                        "source_file": str(spec_path.resolve()),
+                        "source_chunk_ids": ["C002"],
+                        "relevance_reason": ["Top section describes the controller."],
+                        "confidence": "high",
+                    }
+                ],
+                "fallback_used": False,
+            },
+        ]
+    )
+    agent = Stage4SpecBlocksAgent(PlannerLLMClient(backend=backend))
+
+    artifact = agent.run(task, {"stage2": stage2_artifact, "stage3": stage3_artifact})
+
+    assert artifact.module_order == ["aes_sbox", "aes_cipher_top"]
+    assert "S-box maps an input byte" in artifact.modules[0].blocks[0].text
+    assert "top controller sequences" in artifact.modules[1].blocks[0].text
 
 
 def test_spec_block_splitter_merges_heading_only_parent_blocks():

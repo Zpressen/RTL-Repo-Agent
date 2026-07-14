@@ -357,7 +357,10 @@ def _extract_mapping_list(content: str, key: str) -> List[dict]:
                 items.append(current)
             nested_value = _nested_list_value(line)
             if ":" not in nested_value:
-                raise ValueError(f"mapping list field `{key}` entry must be `name: value`, got `{nested_value}`")
+                # Tolerate free-form entries (e.g. "No registers; fully combinational")
+                items.append({"_note": nested_value.strip()})
+                cursor += 1
+                continue
             key_name, value = nested_value.split(":", 1)
             current = {key_name.strip(): value.strip()}
             cursor += 1

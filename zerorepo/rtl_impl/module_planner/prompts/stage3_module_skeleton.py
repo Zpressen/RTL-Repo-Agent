@@ -42,6 +42,8 @@ Hard rules:
   2. block-local overlays
 - Behavioral overlay must constrain later code generation:
   describe obligations, touched/shared objects, coupling rules, and anti-hallucination boundaries.
+- Inside `### Block Behavioral Overlay`, each block entry MUST begin with a `- block_id:` line (e.g. `- block_id: B1`).
+  Do NOT use `####`, `**`, or any other heading/markup to introduce block entries — only `- block_id:` is recognized.
 - Do not copy example block labels or example block decomposition unless the current spec independently justifies them.
 - Do not settle unresolved implementation choices in the skeleton.
   If the spec leaves a choice open, record the structural role and uncertainty instead of choosing a concrete implementation form.
@@ -133,6 +135,20 @@ endmodule
 - forbidden_drift:
   - do not invent unsupported resources or interfaces
 
+- block_id: B2
+- responsibilities:
+  - perform main update logic using declared objects
+- timing_semantics:
+  - registered update on clock edge
+- touched_objects:
+  - primary_state
+  - control_signals
+- coupling_rules:
+  - reads declared objects from B1
+  - must not bypass or duplicate declarations
+- forbidden_drift:
+  - do not access undeclared shared state
+
 ## 4. Decision Ledger
 ### Chosen Decision
 - topic: organizing principle
@@ -175,7 +191,7 @@ Formatting rules:
    - `## 3. Behavioral Overlay`
    - `## 4. Decision Ledger`
 3. In `Structural Skeleton`, use repeated `### Block` subsections.
-4. In `Behavioral Overlay`, include exactly one `### Module-Level Behavioral Summary` plus one or more `### Block Behavioral Overlay`.
+4. In `Behavioral Overlay`, include exactly one `### Module-Level Behavioral Summary` and exactly one `### Block Behavioral Overlay` subsection. Inside `### Block Behavioral Overlay`, write one entry per structural block. Each entry MUST start with a `- block_id:` line (e.g. `- block_id: B1`). Multiple block overlays are separated by repeating `- block_id:` — do NOT use `####` subheadings to separate blocks.
 5. In `Decision Ledger`, use only:
    - `### Chosen Decision`
    - `### Deferred Decision`

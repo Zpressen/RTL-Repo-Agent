@@ -124,12 +124,27 @@ class ModuleDebugRecord(BaseModel):
     reason: str = Field(default="")
 
 
+class SystemDebugRecord(BaseModel):
+    top_module: str = Field(default="")
+    status: Literal["disabled", "skipped", "pass", "fixed", "fail", "error"] = "skipped"
+    mismatch_count: int = Field(default=0)
+    debug_trials: int = Field(default=0)
+    workdir: str = Field(default="")
+    generated_dir: str = Field(default="")
+    verify_dir: str = Field(default="")
+    verify_script: str = Field(default="")
+    sim_output_path: str = Field(default="")
+    trace_report_path: str = Field(default="")
+    reason: str = Field(default="")
+
+
 class Stage6MergeArtifact(BaseModel):
     schema_version: str = Field(default="stage6_merge_v1")
     task_id: str = Field(..., min_length=1)
     module_order: List[str] = Field(..., min_length=1)
     module_files: List[ModuleMergeRecord] = Field(..., min_length=1)
     debug_files: List[ModuleDebugRecord] = Field(default_factory=list)
+    system_debug: SystemDebugRecord | None = None
 
     @model_validator(mode="after")
     def validate_structure(self) -> "Stage6MergeArtifact":

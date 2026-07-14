@@ -1,6 +1,13 @@
 from .block_spec_retriever import BlockSpecRetriever
 from .merge_context_retriever import MergeContextRetriever
-from .schemas import BlockSpecRetrievalResult, BlockSpecSelection, MergeContextRetrievalResult
+from .module_spec_context_retriever import ModuleSpecContextRetriever
+from .schemas import (
+    BlockSpecRetrievalResult,
+    BlockSpecSelection,
+    MergeContextRetrievalResult,
+    ModuleSpecContextBlock,
+    ModuleSpecContextRetrievalResult,
+)
 
 __all__ = [
     "BlockSpecRetrievalResult",
@@ -8,4 +15,7 @@ __all__ = [
     "BlockSpecSelection",
     "MergeContextRetrievalResult",
     "MergeContextRetriever",
+    "ModuleSpecContextBlock",
+    "ModuleSpecContextRetrievalResult",
+    "ModuleSpecContextRetriever",
 ]

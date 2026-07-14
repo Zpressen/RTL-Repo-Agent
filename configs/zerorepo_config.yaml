@@ -5,13 +5,13 @@
 # LLM Configuration
 # ============================================================================
 llm:
-  model: "deepseek-v4-pro"
+  model: "gpt-5.6-sol"
   max_tokens: 65536
   temperature: 0.6
   reasoning_effort: "high"
   provider: "openai"
-  api_key: "sk-69b2599638a24105962d6b186788d6ce"
-  base_url: "https://api.deepseek.com"
+  api_key: "sk-uQLg5J4Xnlf6RYcIoSwEOuCn6JKa7JtC"
+  base_url: "https://xtoken.work/v1"
   # api_version: ""
   # tenant_id: ""
   # token_scope: ""

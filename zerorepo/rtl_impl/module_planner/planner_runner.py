@@ -16,6 +16,10 @@ from zerorepo.rtl_impl.debug_agent.debug_runner import (
     RtlDebugConfig,
     module_debug_result_to_dict,
 )
+from zerorepo.rtl_impl.debug_agent.system_debug_runner import (
+    SystemDebugRunner,
+    system_debug_result_to_dict,
+)
 from zerorepo.rtl_impl.kg_agent import ModuleResultWriter
 
 from .agents import (
@@ -34,7 +38,10 @@ from .interfaces import (
     PlanningArtifactSink,
     PlanningContextProvider,
 )
-from .module_organizer import build_module_organized_artifact
+from .module_organizer import (
+    build_module_organized_artifact_from_repo_skeleton_only,
+    build_stage2_planning_input_from_task,
+)
 from .schemas import (
     ModuleCodegenRecord,
     ModuleMergeRecord,
@@ -125,6 +132,7 @@ class PlannerRunner:
             self.context_provider,
             self.artifact_sink,
             self.logger,
+            output_root=self.output_root,
         )
         self.stage4_module_plans = Stage4ModulePlanAgent(
             self.llm_client,
@@ -167,6 +175,14 @@ class PlannerRunner:
             kg_service=self.kg_service,
             initial_result_recorder=self._record_initial_kg_module_result,
         )
+        self.system_debug_runner = SystemDebugRunner(
+            config=debug_config,
+            workspace_root=self.stage6.workspace_root,
+            output_root=self.output_root,
+            repo_root=Path.cwd(),
+            logger=self.logger,
+            kg_service=self.kg_service,
+        )
         self.kg_result_writer = (
             ModuleResultWriter(
                 kg_service=self.kg_service,
@@ -189,31 +205,10 @@ class PlannerRunner:
 
         task = task_input if isinstance(task_input, PlannerTaskInput) else validate_model(PlannerTaskInput, task_input)
         artifacts: Dict[str, Any] = {}
+        stage2_input = build_stage2_planning_input_from_task(task_input=task)
 
-        existing_artifact = None
-        if resume:
-            existing_artifact = self._read_contracts_if_valid()
-            if existing_artifact is not None and not self.stage1.validate_quality(existing_artifact, task, {}):
-                self.logger.info(
-                    "[rtl_module_planner] Resume reused stage1 contracts artifact from %s",
-                    self._contracts_path(),
-                )
-                artifacts["stage1"] = existing_artifact
-            elif existing_artifact is not None:
-                self.logger.info(
-                    "[rtl_module_planner] Resume ignored semantically invalid stage1 contracts artifact at %s",
-                    self._contracts_path(),
-                )
-
-        artifact = self.stage1.run_incremental(
-            task,
-            artifacts,
-            persist_callback=self._write_payload,
-        )
-        modules_artifact = build_module_organized_artifact(artifact)
-        self._write_modules_payload(model_dump(modules_artifact))
         if end_stage == "stage1":
-            return artifact
+            return self._build_minimal_stage1_artifact(task, stage2_input)
 
         if resume:
             existing_repo_skeleton = self._read_repo_skeleton_if_valid()
@@ -228,15 +223,21 @@ class PlannerRunner:
             else:
                 repo_skeleton = self.stage2.run(
                     task,
-                    {"modules": modules_artifact},
+                    {"stage2_input": stage2_input},
                 )
                 self._write_repo_skeleton_payload(model_dump(repo_skeleton))
         else:
             repo_skeleton = self.stage2.run(
                 task,
-                {"modules": modules_artifact},
+                {"stage2_input": stage2_input},
             )
             self._write_repo_skeleton_payload(model_dump(repo_skeleton))
+
+        modules_artifact = build_module_organized_artifact_from_repo_skeleton_only(
+            task_input=task,
+            repo_skeleton=repo_skeleton,
+        )
+        self._write_modules_payload(model_dump(modules_artifact))
 
         if end_stage == "stage2":
             return repo_skeleton
@@ -264,6 +265,7 @@ class PlannerRunner:
             module_skeletons = self.stage3.run_incremental(
                 task,
                 {
+                    "stage2_input": stage2_input,
                     "modules": modules_artifact,
                     "stage2": repo_skeleton,
                     **({"stage3": artifacts["stage3"]} if "stage3" in artifacts else {}),
@@ -274,6 +276,7 @@ class PlannerRunner:
             return module_skeletons
 
         spec_stage_inputs = {
+            "stage2_input": stage2_input,
             "modules": modules_artifact,
             "stage2": repo_skeleton,
             "stage3": module_skeletons,
@@ -330,7 +333,6 @@ class PlannerRunner:
             return module_plans
 
         codegen_stage_inputs = {
-            "stage1": artifact,
             "modules": modules_artifact,
             "stage2": repo_skeleton,
             "stage3": module_skeletons,
@@ -345,6 +347,25 @@ class PlannerRunner:
             )
 
         return self._run_stage6_per_module(task, codegen_stage_inputs, spec_blocks)
+
+    def _build_minimal_stage1_artifact(
+        self,
+        task: PlannerTaskInput,
+        stage2_input: Any,
+    ) -> Stage1ContractsArtifact:
+        payload = {
+            "task_id": task.task_id,
+            "stage1_status": "contracts_completed",
+            "completed_rounds": ["facts"],
+            "completed_batches": [],
+            "completed_modules": [],
+            "spec_index": dict(getattr(stage2_input, "spec_index", {}) or {}),
+            "fact_ledger": model_dump(getattr(stage2_input, "fact_ledger", {})),
+        }
+        artifact = validate_model(Stage1ContractsArtifact, payload)
+        self._write_payload(model_dump(artifact))
+        self.artifact_sink.record_stage_output(self.stage1.stage_name, artifact, task)
+        return artifact
 
     def _read_contracts_if_valid(self) -> Any | None:
         path = self._contracts_path()
@@ -553,6 +574,8 @@ class PlannerRunner:
             export_file = payload["export_file"]
             self._write_text_payload(payload["doc_text"], self.output_root / doc_file)
             self._write_json_payload(payload["export_payload"], self.output_root / export_file)
+            if "spec_context_file" in payload and "spec_context_payload" in payload:
+                self._write_json_payload(payload["spec_context_payload"], self.output_root / payload["spec_context_file"])
             self.logger.info(
                 "[rtl_module_planner] Wrote stage3 module doc/json sidecars for %s",
                 module_name,
@@ -660,19 +683,19 @@ class PlannerRunner:
             stage6_records.append(stage6_record)
             if not stage6_record.merged_file:
                 self.logger.warning(
-                    "[rtl_module_planner] Skipping debug for %s: no merged RTL (stage5 or stage6 failed)",
+                    "[rtl_module_planner] Skipping syntax gate for %s: no merged RTL (stage5 or stage6 failed)",
                     module_name,
                 )
                 debug_result = ModuleDebugResult(
                     module=module_name,
                     status="skipped",
                     final_rtl_path="",
-                    reason="Stage5 or Stage6 failed; no merged RTL to debug.",
+                    reason="Stage5 or Stage6 failed; no merged RTL to syntax-check.",
                 )
                 debug_records.append(debug_result)
-                self._record_kg_module_result(module_name, "", debug_result)
+                self._record_kg_module_result(module_name, "", debug_result, stage="post_module_syntax")
                 continue
-            self.logger.info("[rtl_module_planner] Debug checking module %s after stage6", module_name)
+            self.logger.info("[rtl_module_planner] Syntax checking module %s after stage6", module_name)
             module_spec_text = build_module_spec_text(module_name=module_name, spec_blocks=spec_blocks)
             debug_spec_source_path = ""
             debug_spec_text = module_spec_text
@@ -681,7 +704,7 @@ class PlannerRunner:
             except FileNotFoundError:
                 debug_spec_source_path = ""
             try:
-                debug_result = self.debug_runner.run_module(
+                debug_result = self.debug_runner.run_module_syntax_gate(
                     module_name=module_name,
                     merged_file=stage6_record.merged_file,
                     task=task,
@@ -700,22 +723,32 @@ class PlannerRunner:
                     final_rtl_path=stage6_record.merged_file,
                     reason=f"{type(exc).__name__}: {exc}",
                 )
-                self._record_kg_module_result(module_name, stage6_record.merged_file, debug_result)
+                self._record_kg_module_result(
+                    module_name,
+                    stage6_record.merged_file,
+                    debug_result,
+                    stage="post_module_syntax",
+                )
                 self.logger.warning(
-                    "[rtl_module_planner] Debug failed for module %s (continuing): %s",
+                    "[rtl_module_planner] Syntax gate failed for module %s (continuing): %s",
                     module_name, exc,
                 )
             debug_records.append(debug_result)
-            self._record_kg_module_result(module_name, stage6_record.merged_file, debug_result)
+            self._record_kg_module_result(
+                module_name,
+                stage6_record.merged_file,
+                debug_result,
+                stage="post_module_syntax",
+            )
             self.logger.info(
-                "[rtl_module_planner] Debug result for %s: %s%s",
+                "[rtl_module_planner] Syntax gate result for %s: %s%s",
                 module_name,
                 debug_result.status,
                 f" ({debug_result.reason})" if debug_result.reason else "",
             )
             if debug_result.status in {"fail", "error"} and not self.debug_runner.config.allow_failure:
                 self.logger.warning(
-                    "[rtl_module_planner] RTL debug %s for %s (tolerated per resilience policy): %s",
+                    "[rtl_module_planner] RTL syntax gate %s for %s (tolerated per resilience policy): %s",
                     debug_result.status,
                     module_name,
                     debug_result.reason,
@@ -735,11 +768,41 @@ class PlannerRunner:
         self._write_stage5_codegen_payload(model_dump(stage5_artifact))
         self.artifact_sink.record_stage_output(self.stage5.stage_name, stage5_artifact, task)
 
+        repo_skeleton = codegen_stage_inputs.get("stage2")
+        top_module = str(getattr(repo_skeleton, "top_module", "") or "")
+        system_debug_result = None
+        try:
+            system_spec_text = self._build_system_spec_text(task)
+            system_debug_result = self.system_debug_runner.run_system(
+                top_module=top_module,
+                task=task,
+                spec_text=system_spec_text,
+                contract_json=build_debug_contract_json(
+                    module_name=top_module or (spec_blocks.module_order[-1] if spec_blocks.module_order else ""),
+                    stage1_contracts=codegen_stage_inputs.get("stage1"),
+                    spec_text=system_spec_text,
+                ),
+                merged_records=stage6_records,
+            )
+            self.logger.info(
+                "[rtl_module_planner] System debug result for %s: %s%s",
+                top_module or "<unknown>",
+                system_debug_result.status,
+                f" ({system_debug_result.reason})" if system_debug_result.reason else "",
+            )
+        except Exception as exc:
+            self.logger.warning(
+                "[rtl_module_planner] System debug failed for %s (continuing): %s",
+                top_module or "<unknown>",
+                exc,
+            )
+
         stage6_artifact = Stage6MergeArtifact(
             task_id=task.task_id,
             module_order=list(spec_blocks.module_order),
             module_files=stage6_records,
             debug_files=[module_debug_result_to_dict(item) for item in debug_records],
+            system_debug=system_debug_result_to_dict(system_debug_result) if system_debug_result is not None else None,
         )
         stage6_quality_errors = self.stage6.validate_quality(stage6_artifact, task, codegen_stage_inputs)
         if stage6_quality_errors:
@@ -800,6 +863,20 @@ class PlannerRunner:
             debug_result=debug_result,
             stage="post_initial_sim",
         )
+
+    def _build_system_spec_text(self, task: PlannerTaskInput) -> str:
+        chunks: list[str] = []
+        for item in task.spec_md_files:
+            path = Path(item)
+            try:
+                if path.is_dir():
+                    for md_path in sorted(path.rglob("*.md")):
+                        chunks.append(f"// spec source: {md_path}\n{md_path.read_text(encoding='utf-8')}")
+                elif path.is_file():
+                    chunks.append(f"// spec source: {path}\n{path.read_text(encoding='utf-8')}")
+            except OSError:
+                continue
+        return "\n\n".join(chunks)
 
     def _reuse_stage5_fragment_if_valid(
         self,
@@ -882,17 +959,19 @@ class PlannerRunner:
         )
 
     def _compact_stage1_payload(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        return self._drop_text_grounding(payload)
+        return self._drop_text_grounding(payload, preserve_fact_ledger=True)
 
-    def _drop_text_grounding(self, value: Any) -> Any:
+    def _drop_text_grounding(self, value: Any, *, preserve_fact_ledger: bool = False) -> Any:
         if isinstance(value, dict):
+            if preserve_fact_ledger and {"facts", "ambiguous_items", "source_files"}.issubset(value.keys()):
+                return value
             return {
-                key: self._drop_text_grounding(item)
+                key: self._drop_text_grounding(item, preserve_fact_ledger=preserve_fact_ledger)
                 for key, item in value.items()
                 if key != "text_grounding"
             }
         if isinstance(value, list):
-            return [self._drop_text_grounding(item) for item in value]
+            return [self._drop_text_grounding(item, preserve_fact_ledger=preserve_fact_ledger) for item in value]
         return value
 
     def _compact_repo_skeleton_payload(self, payload: Dict[str, Any]) -> Dict[str, Any]:

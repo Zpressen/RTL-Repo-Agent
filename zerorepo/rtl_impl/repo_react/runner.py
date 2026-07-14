@@ -17,23 +17,31 @@ from zerorepo.rtl_impl.debug_agent.model import make_formatter, make_openai_mode
 from zerorepo.rtl_impl.debug_agent.sim_reviewer import SimReviewer
 from zerorepo.rtl_impl.debug_agent.trace_report import build_trace_report
 
+from .compact import build_llm_compact_memory
 from .context import DebugContextRouter
 from .journal import RepoReActJournal
 from .prompt import SYSTEM_PROMPT, build_compact_prompt, build_continue_prompt, build_initial_prompt
 from .schemas import DebugContextGoal, Diagnosis, RepoReActInput, RepoReActResult, SimSnapshot
 from .tools import RepoReActToolState, RepoReActTools, _extract_first_fail_time, _summarize_command_json
+from .tools import stage_artifact_help_text
 
 CompactDecision = Literal["none", "light", "checkpoint", "deep"]
 
 LIGHT_READONLY_CALLS = 8
 LIGHT_TOOL_CHARS = 24_000
 CHECKPOINT_WRITES = 3
-CHECKPOINT_TOOL_CHARS = 96_000
-CHECKPOINT_LIGHTS = 3
-CHECKPOINT_AFTER_LIGHT_CHARS = 64_000
+CHECKPOINT_TOOL_CHARS = 48_000
+CHECKPOINT_LIGHTS = 1
+CHECKPOINT_AFTER_LIGHT_CHARS = 32_000
 DEEP_CHECKPOINTS = 2
 DEEP_TOOL_CHARS = 160_000
 DEEP_REMAINING_BUDGET_RATIO = 0.2
+
+READONLY_TRACE_INTENT_FIELDS: dict[str, Any] = {
+    "purpose": {"type": "string", "description": "Optional reason for this observation; used only for decision trace."},
+    "question": {"type": "string", "description": "Optional question this observation should answer; used only for decision trace."},
+    "expected_evidence": {"type": "string", "description": "Optional expected evidence; used only for decision trace."},
+}
 
 
 def _tool_schema(name: str, description: str, properties: dict[str, Any], required: list[str] | None = None) -> dict[str, Any]:
@@ -88,12 +96,7 @@ class RepoReActRunner:
         "route_debug_context",
     }
     ACTION_TOOLS = {"apply_patch", "replace_block", "record_correction"}
-    ROUTER_FIRST_TOOLS = {
-        "read_context",
-        "search_context",
-        "list_vcd_signals",
-        "probe_vcd",
-    }
+    ROUTER_FIRST_TOOLS: set[str] = set()
 
     def __init__(
         self,
@@ -120,10 +123,13 @@ class RepoReActRunner:
         self._readonly_calls_since_action = 0
         self._readonly_calls_since_light = 0
         self._route_calls_since_action = 0
+        self._route_allowed_reads: list[dict[str, Any]] = []
+        self._route_read_count = 0
         self._light_consolidations_since_checkpoint = 0
         self._checkpoint_count = 0
+        self._readonly_budget_from_env = "ZEROREPO_REACT_READONLY_BUDGET" in os.environ
         self._max_readonly_calls_since_action = int(os.environ.get("ZEROREPO_REACT_READONLY_BUDGET", "16"))
-        self._router_first_enabled = os.environ.get("ZEROREPO_REACT_ROUTER_FIRST", "1").lower() not in {"0", "false", "no"}
+        self._router_first_enabled = os.environ.get("ZEROREPO_REACT_ROUTER_FIRST", "0").lower() not in {"0", "false", "no"}
 
         toolkit = Toolkit()
         toolkit.register_tool_function(
@@ -148,8 +154,15 @@ class RepoReActRunner:
                     "path": {"type": ["string", "null"]},
                     "start": {"type": ["integer", "null"]},
                     "end": {"type": ["integer", "null"]},
-                    "artifact_name": {"type": ["string", "null"]},
+                    "artifact_name": {
+                        "type": ["string", "null"],
+                        "description": (
+                            "Only used with kind='stage_artifact'. Valid names: "
+                            f"{stage_artifact_help_text()}. Do not pass module names here."
+                        ),
+                    },
                     "max_chars": {"type": "integer"},
+                    **READONLY_TRACE_INTENT_FIELDS,
                 },
                 ["kind"],
             ),
@@ -165,6 +178,7 @@ class RepoReActRunner:
                     "file_glob": {"type": "string"},
                     "max_results": {"type": "integer"},
                     "context_lines": {"type": "integer"},
+                    **READONLY_TRACE_INTENT_FIELDS,
                 },
                 ["pattern"],
             ),
@@ -187,6 +201,7 @@ class RepoReActRunner:
                     "module_name": {"type": "string"},
                     "signal_name": {"type": ["string", "null"]},
                     "instance_name": {"type": ["string", "null"]},
+                    **READONLY_TRACE_INTENT_FIELDS,
                 },
                 ["query_type", "module_name"],
             ),
@@ -200,6 +215,7 @@ class RepoReActRunner:
                     "module_name": {"type": ["string", "null"]},
                     "path": {"type": ["string", "null"]},
                     "max_chars": {"type": "integer"},
+                    **READONLY_TRACE_INTENT_FIELDS,
                 },
                 [],
             ),
@@ -214,6 +230,7 @@ class RepoReActRunner:
                     "query": {"type": ["string", "null"]},
                     "block_id": {"type": ["string", "null"]},
                     "max_results": {"type": "integer"},
+                    **READONLY_TRACE_INTENT_FIELDS,
                 },
                 ["module_name"],
             ),
@@ -226,6 +243,7 @@ class RepoReActRunner:
                 {
                     "path": {"type": "string"},
                     "max_chars": {"type": "integer"},
+                    **READONLY_TRACE_INTENT_FIELDS,
                 },
                 ["path"],
             ),
@@ -239,6 +257,7 @@ class RepoReActRunner:
                     "pattern": {"type": "string"},
                     "scope": {"type": "string"},
                     "limit": {"type": "integer"},
+                    **READONLY_TRACE_INTENT_FIELDS,
                 },
                 [],
             ),
@@ -255,6 +274,7 @@ class RepoReActRunner:
                     "edge": {"type": ["string", "null"]},
                     "mode": {"type": "string", "enum": ["sample", "changes"]},
                     "max_rows": {"type": "integer"},
+                    **READONLY_TRACE_INTENT_FIELDS,
                 },
                 ["signals"],
             ),
@@ -269,6 +289,7 @@ class RepoReActRunner:
                     "module_name": {"type": ["string", "null"]},
                     "signals": {"type": ["array", "null"], "items": {"type": "string"}},
                     "time_window": {"type": ["array", "null"], "items": {"type": "integer"}, "minItems": 2, "maxItems": 2},
+                    **READONLY_TRACE_INTENT_FIELDS,
                 },
                 ["mode"],
             ),
@@ -323,6 +344,7 @@ class RepoReActRunner:
                     "focus_blocks": {"type": ["array", "null"], "items": {"type": "string"}},
                     "missing_evidence": {"type": ["array", "null"], "items": {"type": "string"}},
                     "max_items": {"type": "integer"},
+                    **READONLY_TRACE_INTENT_FIELDS,
                 },
                 ["goal"],
             ),
@@ -437,21 +459,135 @@ class RepoReActRunner:
         self._readonly_calls_since_action = 0
         self._readonly_calls_since_light = 0
         self._route_calls_since_action = 0
+        self._route_allowed_reads = []
+        self._route_read_count = 0
         self._light_consolidations_since_checkpoint = 0
         self._checkpoint_count = 0
 
-    def _tool_response(self, name: str, payload: dict[str, Any]) -> ToolResponse:
+    def _configure_scope_defaults(self, inp: RepoReActInput) -> None:
+        if inp.repair_scope == "repo" and not self._readonly_budget_from_env:
+            self._max_readonly_calls_since_action = max(self._max_readonly_calls_since_action, 32)
+
+    def _clip_trace_value(self, value: Any, max_chars: int = 900) -> Any:
+        if isinstance(value, str):
+            return value if len(value) <= max_chars else value[:max_chars] + "\n...<snip>..."
+        if isinstance(value, list):
+            return [self._clip_trace_value(item, max_chars=max_chars) for item in value[:8]]
+        if isinstance(value, dict):
+            return {
+                str(key): self._clip_trace_value(item, max_chars=max_chars)
+                for key, item in list(value.items())[:12]
+                if key not in {"content", "new_text"}
+            }
+        return value
+
+    def _tool_kind(self, name: str) -> str:
+        if name in self.ACTION_TOOLS:
+            return "action"
+        if name == "route_debug_context":
+            return "route"
+        return "read"
+
+    def _trace_intent(self, purpose: str = "", question: str = "", expected_evidence: str = "") -> dict[str, str]:
+        return {
+            key: value
+            for key, value in {
+                "purpose": purpose,
+                "question": question,
+                "expected_evidence": expected_evidence,
+            }.items()
+            if value
+        }
+
+    def _observation_summary(self, name: str, payload: dict[str, Any]) -> dict[str, Any]:
+        summary: dict[str, Any] = {
+            "status": payload.get("status"),
+        }
+        for key in (
+            "kind",
+            "mode",
+            "path",
+            "module_name",
+            "tool_name",
+            "reason",
+            "rollback_reason",
+            "effect",
+            "is_pass",
+            "mismatch_count",
+            "first_fail_time",
+            "pack_path",
+            "context_pack_path",
+        ):
+            if key in payload:
+                summary[key] = self._clip_trace_value(payload.get(key), max_chars=500)
+        if "content" in payload:
+            text = str(payload.get("content") or "")
+            summary["content_excerpt"] = self._clip_trace_value(text, max_chars=700)
+            summary["content_chars"] = len(text)
+        if "results" in payload and isinstance(payload.get("results"), list):
+            summary["result_count"] = len(payload["results"])
+            summary["results_excerpt"] = self._clip_trace_value(payload["results"][:3], max_chars=500)
+        if "rows" in payload and isinstance(payload.get("rows"), list):
+            summary["row_count"] = len(payload["rows"])
+            summary["rows_excerpt"] = self._clip_trace_value(payload["rows"][:3], max_chars=500)
+        if "lint_output_excerpt" in payload:
+            summary["lint_output_excerpt"] = self._clip_trace_value(payload.get("lint_output_excerpt"), max_chars=700)
+        if not any(value not in (None, "", [], {}) for value in summary.values()):
+            summary["payload_excerpt"] = self._clip_trace_value(payload, max_chars=700)
+        summary["tool"] = name
+        return summary
+
+    def _decision_evidence_refs(self, payload: dict[str, Any]) -> list[dict[str, Any]]:
+        refs: list[dict[str, Any]] = [{"kind": "journal", "path": "react_trace.jsonl"}]
+        for key in ("path", "pack_path", "context_pack_path", "trace_report_path", "sim_output_path"):
+            value = payload.get(key)
+            if value:
+                refs.append({"kind": key, "path": str(value)})
+        target = payload.get("target") if isinstance(payload.get("target"), dict) else {}
+        if target.get("path"):
+            refs.append({"kind": "target", "path": str(target.get("path"))})
+        if payload.get("step") is not None:
+            refs.append({"kind": "patch_step", "step": payload.get("step")})
+        if self._latest_context_pack and self._latest_context_pack.get("pack_path"):
+            refs.append({"kind": "context_pack", "path": str(self._latest_context_pack.get("pack_path"))})
+        return refs[:6]
+
+    def _write_decision_trace(self, name: str, payload: dict[str, Any], trace_meta: dict[str, Any] | None = None) -> None:
+        if self._state is None:
+            return
+        trace_meta = trace_meta or {}
+        intent = trace_meta.get("intent") if isinstance(trace_meta.get("intent"), dict) else {}
+        args = trace_meta.get("args") if isinstance(trace_meta.get("args"), dict) else {}
+        row = {
+            "schema": "repo_react_decision_trace.v1",
+            "step": int(self._state.action_calls),
+            "action_calls": int(self._state.action_calls),
+            "tool_name": name,
+            "tool_kind": self._tool_kind(name),
+            "intent": intent,
+            "tool_args": self._clip_trace_value(args, max_chars=500),
+            "observation_summary": self._observation_summary(name, payload),
+            "effect": payload.get("effect") or payload.get("status"),
+            "readonly_calls_since_action": int(self._readonly_calls_since_action),
+            "evidence_refs": self._decision_evidence_refs(payload),
+        }
+        self._state.journal.append_jsonl("decision_trace.jsonl", row)
+
+    def _tool_response(self, name: str, payload: dict[str, Any], trace_meta: dict[str, Any] | None = None) -> ToolResponse:
         if self._state is not None:
             self._state.journal.append_jsonl(
                 "react_trace.jsonl",
                 {"role": "tool", "tool_name": name, "tool_result": payload},
             )
+            self._write_decision_trace(name, payload, trace_meta=trace_meta)
         text = json.dumps(payload, indent=2, ensure_ascii=False)
         self._tool_result_chars_since_compact += len(text)
         self._tool_result_chars_since_light += len(text)
         if name in self.ACTION_TOOLS:
             self._readonly_calls_since_action = 0
             self._route_calls_since_action = 0
+            self._route_allowed_reads = []
+            self._route_read_count = 0
         elif name == "route_debug_context":
             self._route_calls_since_action += 1
             self._readonly_calls_since_action += 1
@@ -494,34 +630,100 @@ class RepoReActRunner:
         return self._tool_response(tool_name, payload)
 
     def _router_first_required_response(self, tool_name: str) -> ToolResponse | None:
-        if not self._router_first_enabled:
-            return None
-        if tool_name not in self.ROUTER_FIRST_TOOLS:
-            return None
-        if self._route_calls_since_action > 0:
-            return None
-        pack = self._latest_context_pack or {}
+        del tool_name
+        return None
+
+    def _compact_route_debug_context_result(self, pack: dict[str, Any]) -> dict[str, Any]:
+        """Return only the conclusion and minimal evidence index for the main agent.
+
+        The full DebugContextPack is still persisted to pack_path and kept in
+        ``self._latest_context_pack``.  This tool-facing shape intentionally
+        avoids returning full evidence bodies that the main agent will reread.
+        """
         task_frame = pack.get("task_frame") if isinstance(pack.get("task_frame"), dict) else {}
+        system_triage = pack.get("system_triage") if isinstance(pack.get("system_triage"), dict) else {}
         timing = pack.get("timing_evidence") if isinstance(pack.get("timing_evidence"), dict) else {}
-        payload = {
-            "status": "route_debug_context_required",
-            "tool_name": tool_name,
-            "required_tool": "route_debug_context",
-            "suggested_call": {
-                "goal": "specific_question",
-                "focus_signals": [timing.get("signal")] if timing.get("signal") else [],
-                "focus_blocks": [timing.get("block_id")] if timing.get("block_id") else [],
-                "missing_evidence": [f"Need {tool_name} evidence not covered by current context pack."],
-                "max_items": 5,
-            },
-            "current_context_pack_path": pack.get("pack_path") or "",
-            "task_frame": task_frame,
-            "message": (
-                "Delegate broad context gathering to DebugContextRouter first. "
-                "After route_debug_context returns a focused pack, call this raw read tool only for one cited missing artifact."
-            ),
+        evidence = pack.get("evidence_pack") if isinstance(pack.get("evidence_pack"), list) else []
+        recommended = system_triage.get("recommended_tool_calls") if isinstance(system_triage, dict) else []
+        if not isinstance(recommended, list):
+            recommended = []
+
+        def clipped_list(value: Any, *, limit: int, max_chars: int) -> list[Any]:
+            if not isinstance(value, list):
+                return []
+            return [self._clip_trace_value(item, max_chars=max_chars) for item in value[:limit]]
+
+        slim_triage = {
+            "category": system_triage.get("category"),
+            "confidence": system_triage.get("confidence"),
+            "symptom": self._clip_trace_value(system_triage.get("symptom"), max_chars=400),
+            "root_signal": system_triage.get("root_signal"),
+            "root_time": system_triage.get("root_time"),
+            "suspect_modules": system_triage.get("suspect_modules") or [],
+            "patch_scope": self._clip_trace_value(system_triage.get("patch_scope"), max_chars=400),
+            "reason": self._clip_trace_value(system_triage.get("reason"), max_chars=400),
+            "signal_path": clipped_list(system_triage.get("signal_path"), limit=3, max_chars=250),
+            "evidence": clipped_list(system_triage.get("evidence"), limit=4, max_chars=250),
+            "missing_evidence": clipped_list(system_triage.get("missing_evidence"), limit=3, max_chars=250),
+            "recommended_tool_calls": recommended[:4],
         }
-        return self._tool_response(tool_name, payload)
+
+        refs: list[dict[str, Any]] = []
+        for item in evidence[:6]:
+            if not isinstance(item, dict):
+                continue
+            artifact = item.get("artifact_ref") if isinstance(item.get("artifact_ref"), dict) else {}
+            refs.append(
+                {
+                    "id": item.get("evidence_id") or artifact.get("artifact_id") or "",
+                    "kind": item.get("kind") or artifact.get("kind") or "",
+                    "path": artifact.get("path") or "",
+                    "summary": self._clip_trace_value(item.get("summary") or "", max_chars=250),
+                    "salient": item.get("salient") if isinstance(item.get("salient"), dict) else {},
+                }
+            )
+
+        analysis = str(task_frame.get("router_analysis") or "")
+        return {
+            "schema_version": "route_debug_context_summary_v1",
+            "status": "ok",
+            "pack_path": pack.get("pack_path") or "",
+            "system_triage": slim_triage,
+            "timing_evidence": timing,
+            "router_analysis": analysis[:400],
+            "evidence_refs": refs[:4],
+            "recommended_tool_calls": recommended[:4],
+            "raw_read_policy": {
+                "max_followup_reads": 4,
+                "allowed_calls": recommended[:4],
+                "message": "Use only these recommended_tool_calls for raw follow-up evidence before patching.",
+            },
+        }
+
+    def _set_route_allowed_reads(self, summary: dict[str, Any]) -> None:
+        recommended = summary.get("recommended_tool_calls")
+        self._route_allowed_reads = recommended[:6] if isinstance(recommended, list) else []
+        self._route_read_count = 0
+
+    def _route_read_restricted_response(self, tool_name: str, args: dict[str, Any]) -> ToolResponse | None:
+        del tool_name, args
+        return None
+
+    def _matches_recommended_read(self, tool_name: str, args: dict[str, Any], item: dict[str, Any]) -> bool:
+        if str(item.get("tool") or "") != tool_name:
+            return False
+        expected = item.get("args") if isinstance(item.get("args"), dict) else {}
+        for key, value in expected.items():
+            if value in (None, "", [], {}):
+                continue
+            if str(args.get(key)) != str(value):
+                return False
+        return True
+
+    def _record_route_read_if_recommended(self, tool_name: str, args: dict[str, Any]) -> None:
+        allowed = getattr(self, "_route_allowed_reads", [])
+        if any(self._matches_recommended_read(tool_name, args, item) for item in allowed if isinstance(item, dict)):
+            self._route_read_count = int(getattr(self, "_route_read_count", 0)) + 1
 
     def _memory_summary(self, snapshot: dict[str, Any]) -> dict[str, Any]:
         if isinstance(snapshot.get("causal_memory_brief"), dict):
@@ -562,12 +764,7 @@ class RepoReActRunner:
         action_calls = int(self._state.action_calls)
         writes_since_checkpoint = action_calls - int(self._last_checkpoint_action_calls)
         if action_calls > 0:
-            if (
-                int(self._checkpoint_count) >= DEEP_CHECKPOINTS
-                or self._remaining_budget_ratio() <= DEEP_REMAINING_BUDGET_RATIO
-                or int(self._tool_result_chars_since_compact) >= DEEP_TOOL_CHARS
-            ):
-                return "deep"
+            # ── Checkpoint first: preserve more evidence at moderate cost ──
             if self._has_real_divergence_for_checkpoint() and (
                 writes_since_checkpoint >= CHECKPOINT_WRITES
                 or int(self._tool_result_chars_since_compact) >= CHECKPOINT_TOOL_CHARS
@@ -577,6 +774,13 @@ class RepoReActRunner:
                 )
             ):
                 return "checkpoint"
+            # ── Deep: last-resort aggressive cut, only when truly desperate ──
+            if (
+                int(self._checkpoint_count) >= DEEP_CHECKPOINTS
+                or self._remaining_budget_ratio() <= DEEP_REMAINING_BUDGET_RATIO
+                or int(self._tool_result_chars_since_compact) >= DEEP_TOOL_CHARS
+            ):
+                return "deep"
         if (
             self._route_calls_since_action > 0
             or self._readonly_calls_since_light >= LIGHT_READONLY_CALLS
@@ -592,29 +796,38 @@ class RepoReActRunner:
     async def _light_consolidate_context(self) -> dict[str, Any]:
         if self._tools is None or self._state is None:
             return {}
-        goal: DebugContextGoal = "after_patch" if int(self._state.action_calls) > 0 else "before_patch"
-        pack = await asyncio.to_thread(self._route_context_pack, goal)
         self._tool_result_chars_since_light = 0
         self._readonly_calls_since_light = 0
         self._light_consolidations_since_checkpoint += 1
         self._last_compacted_action_calls = int(self._state.action_calls)
         self._route_calls_since_action = 0
         self._state.journal.append_jsonl(
-            "react_trace.jsonl",
-            {
-                "role": "system",
-                "compact": "light",
-                "context_pack_path": pack.get("pack_path") or "",
-                "action_calls": int(self._state.action_calls),
-            },
-        )
-        return pack
+                "react_trace.jsonl",
+                {
+                    "role": "system",
+                    "compact": "light",
+                    "context_pack_path": (self._latest_context_pack or {}).get("pack_path") or "",
+                    "action_calls": int(self._state.action_calls),
+                },
+            )
+        return self._latest_context_pack or {}
 
     async def _compact_agent_memory(self, mode: Literal["checkpoint", "deep"] = "checkpoint") -> None:
         if self._tools is None or self._state is None:
             return
-        context_pack = await asyncio.to_thread(self._route_context_pack, "compact_resume")
-        prompt = build_compact_prompt(context_pack, mode=mode)
+        context_pack = self._latest_context_pack or {}
+        snapshot = self._tools.persist_memory_snapshot()
+        llm_compact = await build_llm_compact_memory(
+            cfg=self.cfg,
+            journal_root=self._state.journal.root,
+            mode=mode,
+            memory_snapshot=snapshot,
+            context_pack=context_pack,
+            logger=self.logger,
+        )
+        if llm_compact:
+            self._state.journal.write_json("repo_react_llm_compact.json", llm_compact)
+        prompt = build_compact_prompt(context_pack, mode=mode, llm_compact_memory=llm_compact)
         clear_memory_safely(self._agent)
         self._last_compacted_action_calls = int(self._state.action_calls)
         self._last_checkpoint_action_calls = int(self._state.action_calls)
@@ -638,6 +851,7 @@ class RepoReActRunner:
         focus_blocks: list[str] | None = None,
         missing_evidence: list[str] | None = None,
         max_items: int = 5,
+        allow_investigator: bool = True,
     ) -> dict[str, Any]:
         pack = self._require_context_router().route(
             goal=goal,
@@ -645,6 +859,7 @@ class RepoReActRunner:
             focus_blocks=focus_blocks,
             missing_evidence=missing_evidence,
             max_items=max_items,
+            allow_investigator=allow_investigator,
         )
         self._latest_context_pack = pack
         if self._state is not None:
@@ -672,11 +887,23 @@ class RepoReActRunner:
         end: int | None = None,
         artifact_name: str | None = None,
         max_chars: int = 12000,
+        purpose: str = "",
+        question: str = "",
+        expected_evidence: str = "",
     ) -> ToolResponse:
         """Read repository tree, files, line ranges, specs, testbench, stage artifacts, trace reports, or journals."""
         blocked = self._readonly_budget_exceeded_response("read_context")
         if blocked is not None:
             return blocked
+        router_required = self._router_first_required_response("read_context")
+        if router_required is not None:
+            return router_required
+        route_restricted = self._route_read_restricted_response(
+            "read_context",
+            {"kind": kind, "path": path, "start": start, "end": end, "artifact_name": artifact_name},
+        )
+        if route_restricted is not None:
+            return route_restricted
         result = await asyncio.to_thread(
             self._require_tools().read_context,
             kind,
@@ -686,7 +913,15 @@ class RepoReActRunner:
             artifact_name,
             max_chars,
         )
-        return self._tool_response("read_context", result)
+        self._record_route_read_if_recommended("read_context", {"kind": kind, "path": path, "start": start, "end": end, "artifact_name": artifact_name})
+        return self._tool_response(
+            "read_context",
+            result,
+            trace_meta={
+                "intent": self._trace_intent(purpose, question, expected_evidence),
+                "args": {"kind": kind, "path": path, "start": start, "end": end, "artifact_name": artifact_name},
+            },
+        )
 
     async def search_context(
         self,
@@ -695,11 +930,20 @@ class RepoReActRunner:
         file_glob: str = "**/*",
         max_results: int = 50,
         context_lines: int = 2,
+        purpose: str = "",
+        question: str = "",
+        expected_evidence: str = "",
     ) -> ToolResponse:
         """Search RTL, testbench, spec, or all context with a regex pattern."""
         blocked = self._readonly_budget_exceeded_response("search_context")
         if blocked is not None:
             return blocked
+        router_required = self._router_first_required_response("search_context")
+        if router_required is not None:
+            return router_required
+        route_restricted = self._route_read_restricted_response("search_context", {"pattern": pattern, "scope": scope, "max_results": max_results})
+        if route_restricted is not None:
+            return route_restricted
         result = await asyncio.to_thread(
             self._require_tools().search_context,
             pattern,
@@ -708,7 +952,15 @@ class RepoReActRunner:
             max_results,
             context_lines,
         )
-        return self._tool_response("search_context", result)
+        self._record_route_read_if_recommended("search_context", {"pattern": pattern, "scope": scope, "max_results": max_results})
+        return self._tool_response(
+            "search_context",
+            result,
+            trace_meta={
+                "intent": self._trace_intent(purpose, question, expected_evidence),
+                "args": {"pattern": pattern, "scope": scope, "file_glob": file_glob, "max_results": max_results},
+            },
+        )
 
     async def query_rtl_kg(
         self,
@@ -721,11 +973,23 @@ class RepoReActRunner:
         module_name: str,
         signal_name: str | None = None,
         instance_name: str | None = None,
+        purpose: str = "",
+        question: str = "",
+        expected_evidence: str = "",
     ) -> ToolResponse:
         """Run a fixed-template RTL KG query for interface, instances, connections, or signal drivers."""
         blocked = self._readonly_budget_exceeded_response("query_rtl_kg")
         if blocked is not None:
             return blocked
+        router_required = self._router_first_required_response("query_rtl_kg")
+        if router_required is not None:
+            return router_required
+        route_restricted = self._route_read_restricted_response(
+            "query_rtl_kg",
+            {"query_type": query_type, "module_name": module_name, "signal_name": signal_name, "instance_name": instance_name},
+        )
+        if route_restricted is not None:
+            return route_restricted
         result = await asyncio.to_thread(
             self._require_tools().query_rtl_kg,
             query_type,
@@ -733,20 +997,48 @@ class RepoReActRunner:
             signal_name,
             instance_name,
         )
-        return self._tool_response("query_rtl_kg", result)
+        self._record_route_read_if_recommended(
+            "query_rtl_kg",
+            {"query_type": query_type, "module_name": module_name, "signal_name": signal_name, "instance_name": instance_name},
+        )
+        return self._tool_response(
+            "query_rtl_kg",
+            result,
+            trace_meta={
+                "intent": self._trace_intent(purpose, question, expected_evidence),
+                "args": {"query_type": query_type, "module_name": module_name, "signal_name": signal_name, "instance_name": instance_name},
+            },
+        )
 
     async def read_spec(
         self,
         module_name: str | None = None,
         path: str | None = None,
         max_chars: int = 12000,
+        purpose: str = "",
+        question: str = "",
+        expected_evidence: str = "",
     ) -> ToolResponse:
         """Read the original spec document or current module spec excerpt."""
         blocked = self._readonly_budget_exceeded_response("read_spec")
         if blocked is not None:
             return blocked
+        router_required = self._router_first_required_response("read_spec")
+        if router_required is not None:
+            return router_required
+        route_restricted = self._route_read_restricted_response("read_spec", {"module_name": module_name, "path": path})
+        if route_restricted is not None:
+            return route_restricted
         result = await asyncio.to_thread(self._require_tools().read_spec, module_name, path, max_chars)
-        return self._tool_response("read_spec", result)
+        self._record_route_read_if_recommended("read_spec", {"module_name": module_name, "path": path})
+        return self._tool_response(
+            "read_spec",
+            result,
+            trace_meta={
+                "intent": self._trace_intent(purpose, question, expected_evidence),
+                "args": {"module_name": module_name, "path": path},
+            },
+        )
 
     async def retrieve_spec_block(
         self,
@@ -754,11 +1046,23 @@ class RepoReActRunner:
         query: str | None = None,
         block_id: str | None = None,
         max_results: int = 8,
+        purpose: str = "",
+        question: str = "",
+        expected_evidence: str = "",
     ) -> ToolResponse:
         """Retrieve relevant module spec blocks from spec_blocks.json by block id or query."""
         blocked = self._readonly_budget_exceeded_response("retrieve_spec_block")
         if blocked is not None:
             return blocked
+        router_required = self._router_first_required_response("retrieve_spec_block")
+        if router_required is not None:
+            return router_required
+        route_restricted = self._route_read_restricted_response(
+            "retrieve_spec_block",
+            {"module_name": module_name, "query": query, "block_id": block_id, "max_results": max_results},
+        )
+        if route_restricted is not None:
+            return route_restricted
         result = await asyncio.to_thread(
             self._require_tools().retrieve_spec_block,
             module_name,
@@ -766,32 +1070,77 @@ class RepoReActRunner:
             block_id,
             max_results,
         )
-        return self._tool_response("retrieve_spec_block", result)
+        self._record_route_read_if_recommended(
+            "retrieve_spec_block",
+            {"module_name": module_name, "query": query, "block_id": block_id, "max_results": max_results},
+        )
+        return self._tool_response(
+            "retrieve_spec_block",
+            result,
+            trace_meta={
+                "intent": self._trace_intent(purpose, question, expected_evidence),
+                "args": {"module_name": module_name, "query": query, "block_id": block_id, "max_results": max_results},
+            },
+        )
 
     async def read_long_term_memory(
         self,
         path: str,
         max_chars: int = 8000,
+        purpose: str = "",
+        question: str = "",
+        expected_evidence: str = "",
     ) -> ToolResponse:
         """Read a selected RTL long-term memory markdown file."""
         blocked = self._readonly_budget_exceeded_response("read_long_term_memory")
         if blocked is not None:
             return blocked
+        router_required = self._router_first_required_response("read_long_term_memory")
+        if router_required is not None:
+            return router_required
+        route_restricted = self._route_read_restricted_response("read_long_term_memory", {"path": path})
+        if route_restricted is not None:
+            return route_restricted
         result = await asyncio.to_thread(self._require_tools().read_long_term_memory, path, max_chars)
-        return self._tool_response("read_long_term_memory", result)
+        self._record_route_read_if_recommended("read_long_term_memory", {"path": path})
+        return self._tool_response(
+            "read_long_term_memory",
+            result,
+            trace_meta={
+                "intent": self._trace_intent(purpose, question, expected_evidence),
+                "args": {"path": path},
+            },
+        )
 
     async def list_vcd_signals(
         self,
         pattern: str = "",
         scope: str = "",
         limit: int = 100,
+        purpose: str = "",
+        question: str = "",
+        expected_evidence: str = "",
     ) -> ToolResponse:
         """List VCD signal names matching an optional pattern and scope."""
         blocked = self._readonly_budget_exceeded_response("list_vcd_signals")
         if blocked is not None:
             return blocked
+        router_required = self._router_first_required_response("list_vcd_signals")
+        if router_required is not None:
+            return router_required
+        route_restricted = self._route_read_restricted_response("list_vcd_signals", {"pattern": pattern, "scope": scope, "limit": limit})
+        if route_restricted is not None:
+            return route_restricted
         result = await asyncio.to_thread(self._require_tools().list_vcd_signals, pattern, scope, limit)
-        return self._tool_response("list_vcd_signals", result)
+        self._record_route_read_if_recommended("list_vcd_signals", {"pattern": pattern, "scope": scope, "limit": limit})
+        return self._tool_response(
+            "list_vcd_signals",
+            result,
+            trace_meta={
+                "intent": self._trace_intent(purpose, question, expected_evidence),
+                "args": {"pattern": pattern, "scope": scope, "limit": limit},
+            },
+        )
 
     async def probe_vcd(
         self,
@@ -801,11 +1150,23 @@ class RepoReActRunner:
         edge: str | None = None,
         mode: str = "sample",
         max_rows: int = 80,
+        purpose: str = "",
+        question: str = "",
+        expected_evidence: str = "",
     ) -> ToolResponse:
         """Sample VCD signals at a time or over a time window with optional edge filtering."""
         blocked = self._readonly_budget_exceeded_response("probe_vcd")
         if blocked is not None:
             return blocked
+        router_required = self._router_first_required_response("probe_vcd")
+        if router_required is not None:
+            return router_required
+        route_restricted = self._route_read_restricted_response(
+            "probe_vcd",
+            {"signals": signals, "time": time, "time_range": time_range, "edge": edge, "mode": mode},
+        )
+        if route_restricted is not None:
+            return route_restricted
         result = await asyncio.to_thread(
             self._require_tools().probe_vcd,
             signals,
@@ -815,7 +1176,15 @@ class RepoReActRunner:
             mode,
             max_rows,
         )
-        return self._tool_response("probe_vcd", result)
+        self._record_route_read_if_recommended("probe_vcd", {"signals": signals, "time": time, "time_range": time_range, "edge": edge, "mode": mode})
+        return self._tool_response(
+            "probe_vcd",
+            result,
+            trace_meta={
+                "intent": self._trace_intent(purpose, question, expected_evidence),
+                "args": {"signals": signals, "time": time, "time_range": time_range, "edge": edge, "mode": mode},
+            },
+        )
 
     async def run_check(
         self,
@@ -823,11 +1192,20 @@ class RepoReActRunner:
         module_name: str | None = None,
         signals: list[str] | None = None,
         time_window: tuple[int, int] | None = None,
+        purpose: str = "",
+        question: str = "",
+        expected_evidence: str = "",
     ) -> ToolResponse:
         """Run lint, module simulation, trace summary, or v1 placeholder checks."""
         blocked = self._readonly_budget_exceeded_response("run_check")
         if blocked is not None:
             return blocked
+        router_required = self._router_first_required_response("run_check")
+        if router_required is not None:
+            return router_required
+        route_restricted = self._route_read_restricted_response("run_check", {"mode": mode, "module_name": module_name, "signals": signals, "time_window": time_window})
+        if route_restricted is not None:
+            return route_restricted
         result = await asyncio.to_thread(
             self._require_tools().run_check,
             mode,
@@ -835,7 +1213,15 @@ class RepoReActRunner:
             signals,
             time_window,
         )
-        return self._tool_response("run_check", result)
+        self._record_route_read_if_recommended("run_check", {"mode": mode, "module_name": module_name, "signals": signals, "time_window": time_window})
+        return self._tool_response(
+            "run_check",
+            result,
+            trace_meta={
+                "intent": self._trace_intent(purpose, question, expected_evidence),
+                "args": {"mode": mode, "module_name": module_name, "signals": signals, "time_window": time_window},
+            },
+        )
 
     async def read_memory(
         self,
@@ -870,6 +1256,9 @@ class RepoReActRunner:
         focus_blocks: list[str] | None = None,
         missing_evidence: list[str] | None = None,
         max_items: int = 5,
+        purpose: str = "",
+        question: str = "",
+        expected_evidence: str = "",
     ) -> ToolResponse:
         """Ask the read-only DebugContextRouter for a short context pack."""
         blocked = self._readonly_budget_exceeded_response("route_debug_context")
@@ -883,12 +1272,22 @@ class RepoReActRunner:
             missing_evidence,
             max_items,
         )
-        # Surface the investigator's analysis at the top level so the main agent
-        # can read it directly without digging through the full pack JSON.
-        analysis = result.get("task_frame", {}).get("router_analysis")
-        if analysis:
-            result["router_analysis"] = analysis
-        return self._tool_response("route_debug_context", result)
+        summary = self._compact_route_debug_context_result(result)
+        self._set_route_allowed_reads(summary)
+        return self._tool_response(
+            "route_debug_context",
+            summary,
+            trace_meta={
+                "intent": self._trace_intent(purpose, question, expected_evidence),
+                "args": {
+                    "goal": goal,
+                    "focus_signals": focus_signals,
+                    "focus_blocks": focus_blocks,
+                    "missing_evidence": missing_evidence,
+                    "max_items": max_items,
+                },
+            },
+        )
 
     async def apply_patch(
         self,
@@ -901,6 +1300,9 @@ class RepoReActRunner:
         rollback_on_fail: bool = True,
     ) -> ToolResponse:
         """Apply a controlled RTL patch with automatic lint/sim/trace verification and rollback."""
+        router_required = self._router_first_required_response("apply_patch")
+        if router_required is not None:
+            return router_required
         result = await asyncio.to_thread(
             self._require_tools().apply_patch,
             patches,
@@ -911,7 +1313,22 @@ class RepoReActRunner:
             verify,
             rollback_on_fail,
         )
-        return self._tool_response("apply_patch", result)
+        return self._tool_response(
+            "apply_patch",
+            result,
+            trace_meta={
+                "intent": {"reason": reason, "expected_effect": expected_effect},
+                "args": {
+                    "patches": [
+                        {key: patch.get(key) for key in ("path", "start_line", "end_line")}
+                        for patch in patches
+                        if isinstance(patch, dict)
+                    ],
+                    "verify": verify,
+                    "rollback_on_fail": rollback_on_fail,
+                },
+            },
+        )
 
     async def replace_block(
         self,
@@ -925,6 +1342,9 @@ class RepoReActRunner:
         rollback_on_fail: bool = True,
     ) -> ToolResponse:
         """Replace one complete RTL block with automatic verification and rollback."""
+        router_required = self._router_first_required_response("replace_block")
+        if router_required is not None:
+            return router_required
         result = await asyncio.to_thread(
             self._require_tools().replace_block,
             block_id,
@@ -936,7 +1356,14 @@ class RepoReActRunner:
             verify,
             rollback_on_fail,
         )
-        return self._tool_response("replace_block", result)
+        return self._tool_response(
+            "replace_block",
+            result,
+            trace_meta={
+                "intent": {"reason": reason, "expected_effect": expected_effect},
+                "args": {"block_id": block_id, "verify": verify, "rollback_on_fail": rollback_on_fail},
+            },
+        )
 
     async def record_correction(
         self,
@@ -955,6 +1382,9 @@ class RepoReActRunner:
         override: dict[str, Any],
     ) -> ToolResponse:
         """Record a planning correction overlay without editing original stage artifacts."""
+        router_required = self._router_first_required_response("record_correction")
+        if router_required is not None:
+            return router_required
         result = await asyncio.to_thread(
             self._require_tools().record_correction,
             correction_type,
@@ -964,7 +1394,14 @@ class RepoReActRunner:
             evidence,
             override,
         )
-        return self._tool_response("record_correction", result)
+        return self._tool_response(
+            "record_correction",
+            result,
+            trace_meta={
+                "intent": {"reason": problem, "expected_effect": "record planning correction overlay"},
+                "args": {"correction_type": correction_type, "module_name": module_name, "original_artifact": original_artifact},
+            },
+        )
 
     def _build_initial_trace(self, inp: RepoReActInput) -> dict[str, Any]:
         try:
@@ -1018,6 +1455,7 @@ class RepoReActRunner:
 
     async def chat(self, inp: RepoReActInput) -> RepoReActResult:
         self.reset()
+        self._configure_scope_defaults(inp)
         inp.debug_workdir.mkdir(parents=True, exist_ok=True)
         journal = RepoReActJournal(inp.workspace_root / "repo_react" / inp.module_name)
         first_fail = _extract_first_fail_time(inp.sim_failed_log)
@@ -1050,7 +1488,8 @@ class RepoReActRunner:
         corrections = self._tools.load_known_corrections()
         memory_snapshot = self._tools.persist_memory_snapshot()
         memory_brief = self._memory_summary(memory_snapshot)
-        context_pack = await asyncio.to_thread(self._route_context_pack, "initial_triage")
+        context_pack = inp.context_pack_json if isinstance(inp.context_pack_json, dict) else {}
+        self._latest_context_pack = context_pack
         first_prompt = build_initial_prompt(
             module_name=inp.module_name,
             repair_mode=inp.repair_mode,
@@ -1097,10 +1536,7 @@ class RepoReActRunner:
                     context_pack = {}
                 snapshot = await asyncio.to_thread(self._tools.persist_memory_snapshot)
                 if not context_pack:
-                    context_pack = await asyncio.to_thread(
-                        self._route_context_pack,
-                        "after_patch" if int(state.action_calls) > 0 else "before_patch",
-                    )
+                    context_pack = self._latest_context_pack or {}
                 prompt = build_continue_prompt(
                     memory_summary=self._memory_summary(snapshot),
                     readonly_calls_since_action=self._readonly_calls_since_action,

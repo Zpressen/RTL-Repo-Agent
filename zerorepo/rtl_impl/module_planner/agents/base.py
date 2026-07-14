@@ -33,7 +33,7 @@ class BaseStageAgent:
     stage_name: str = ""
     output_model: Type[BaseModel]
     system_role: str = ""
-    max_parse_attempts: int = 2
+    max_parse_attempts: int = 3
     max_quality_attempts: int = 5
     allow_best_effort_quality_fallback: bool = True
     memory_context_window: int = 8
@@ -147,6 +147,14 @@ class BaseStageAgent:
             if parse_attempt > 1:
                 self._log_retry_prompt(retry_prompt, reason=f"parse_failure_attempt_{parse_attempt - 1}")
             memory.add_message(UserMessage(content=retry_prompt))
+            self.logger.info(
+                "[%s] Calling LLM backend for parse attempt %d/%d (prompt_chars=%d, images=%d)",
+                self.stage_name,
+                parse_attempt,
+                parse_attempt_limit,
+                len(retry_prompt),
+                len(images or []),
+            )
             raw = self.llm_client.complete_with_memory(memory=memory, images=images or None)
             if parse_attempt == 1:
                 self._log_llm_raw_output(raw, attempt_label="initial")
@@ -194,6 +202,14 @@ class BaseStageAgent:
             retry_prompt = self._build_retry_prompt(prompt, current_errors)
             self._log_retry_prompt(retry_prompt, reason=f"quality_failure_attempt_{quality_attempt - 1}")
             memory.add_message(UserMessage(content=retry_prompt))
+            self.logger.info(
+                "[%s] Calling LLM backend for quality retry %d/%d (prompt_chars=%d, images=%d)",
+                self.stage_name,
+                quality_attempt,
+                quality_attempt_limit,
+                len(retry_prompt),
+                len(images or []),
+            )
             raw = self.llm_client.complete_with_memory(memory=memory, images=images or None)
             self._log_llm_raw_output(raw, attempt_label=f"retry_after_quality_failure_{quality_attempt - 1}")
             memory.add_message(AssistantMessage(content=raw if isinstance(raw, str) else self.to_pretty_json(raw)))

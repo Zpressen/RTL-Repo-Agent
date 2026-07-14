@@ -125,7 +125,8 @@ Hard constraints:
 - Global macro definitions take priority over conflicting parameter or localparam values.
 
 Required workflow:
-1. Read the required context: fragments, spec, global_defines, module_skeleton, and kg_child_context.
+1. Read the minimum required context: fragments, spec, and global_defines when required includes exist.
+   Read module_skeleton, module_plan, fragment_contracts, kg_child_context, or learned_merge_rules only when they are needed to resolve merge structure, child interfaces, fragment ownership, or prior lessons.
 2. Generate a draft with generate_merge_draft.
 3. Inspect structure with inspect_rtl_structure(target="draft").
 4. Run static checks with run_static_rtl_check(target="draft").
@@ -168,16 +169,19 @@ def build_merge_initial_prompt(
 
     return f"""Module: {module_name}
 
-You have received only an index. Before writing any code, inspect the required artifacts with read_merge_context.
+You have received only an index. Start with the smallest useful context, then load more only when the merge needs it.
 
-You must read these before generating a draft:
-1. read_merge_context(kind="fragments")          - Stage5 code fragments
-2. read_merge_context(kind="module_skeleton")    - planned module skeleton
-3. read_merge_context(kind="module_plan")        - subtask description
-4. read_merge_context(kind="fragment_contracts") - read/write contract for each fragment
-5. read_merge_context(kind="global_defines")     - authoritative macro definitions
-6. read_merge_context(kind="kg_child_context")   - child module interfaces
-7. read_merge_context(kind="spec")               - original module specification
+Minimum context before generating a draft:
+1. read_merge_context(kind="fragments")      - Stage5 code fragments
+2. read_merge_context(kind="spec")           - original module specification
+3. read_merge_context(kind="global_defines") - authoritative macro definitions; mandatory when required include files are listed below
+
+Optional context to read on demand:
+- read_merge_context(kind="module_skeleton")    - when block organization or intended code regions are unclear
+- read_merge_context(kind="module_plan")        - when subtask intent or spec_refs are needed
+- read_merge_context(kind="fragment_contracts") - when write ownership, read dependencies, or driver conflicts are unclear
+- read_merge_context(kind="kg_child_context")   - when instantiating or wiring child modules
+- read_merge_context(kind="learned_merge_rules") - when prior merge lessons may apply
 
 Required include files, referenced with the Verilog include directive:
 {chr(10).join(include_lines)}
@@ -195,7 +199,7 @@ Available actions:
 - generate_merge_draft(code, reason, expected_effect) - write a draft file for checking
 - commit_merge_draft(reason) - commit the checked draft as the final merged file
 
-Read the required context first. At minimum, read fragments, spec, and global_defines before generating code."""
+Read the minimum context first. Avoid loading optional context unless it answers a concrete merge question."""
 
 
 def build_merge_continue_prompt(

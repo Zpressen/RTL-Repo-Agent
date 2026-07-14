@@ -464,3 +464,6 @@ zerorepo/code_gen/
 
 # Trae agent artifacts
 rtl_outputs/rtl_spec_/trae-agent-artifacts/
+
+# Generated RTL outputs (large, not version-controlled)
+rtl_outputs/

@@ -1,13 +1,8 @@
-STRUCTURE_SYSTEM_ROLE = "You extract explicit RTL repository structure facts only. If the spec does not state a fact, leave it blank."
-INTERFACE_SYSTEM_ROLE = "You extract explicit RTL module interface facts only. If the spec does not state a fact, leave it blank."
-TIMING_SYSTEM_ROLE = (
-    "You are extracting timing semantics from an RTL module specification. "
-    "Extract only explicit timing facts and record unclear timing details as underspecified."
+FACTS_SYSTEM_ROLE = (
+    "You extract explicit RTL specification facts into a flexible fact ledger. "
+    "Do not infer hierarchy, missing ports, or implementation choices."
 )
-CONTROL_SYSTEM_ROLE = "You extract explicit RTL control facts only. If the spec does not state a fact, leave it blank."
-DATAPATH_SYSTEM_ROLE = "You extract explicit RTL datapath facts only. If the spec does not state a fact, leave it blank."
-PLANNING_FACTS_SYSTEM_ROLE = "You extract explicit RTL planning facts only. If the spec does not state a fact, leave it blank."
-SYSTEM_ROLE = STRUCTURE_SYSTEM_ROLE
+SYSTEM_ROLE = FACTS_SYSTEM_ROLE
 
 TEXT_GROUNDING_EXAMPLE = """
 {
@@ -26,283 +21,103 @@ IMAGE_GROUNDING_EXAMPLE = """
 }
 """.strip()
 
-STRUCTURE_EXAMPLE = """
+FACT_LEDGER_EXAMPLE = """
 {
-  "structure_contract": {
-    "system": "Packet Router Repository",
-    "top_module": "packet_router_top",
-    "files": ["packet_router_top.v", "route_table.v", "output_scheduler.v"],
-    "modules": ["packet_router_top", "route_table", "output_scheduler"],
-    "file_map": {
-      "packet_router_top.v": ["packet_router_top"],
-      "route_table.v": ["route_table"],
-      "output_scheduler.v": ["output_scheduler"]
-    },
-    "hierarchy": [
+  "fact_ledger": {
+    "source_files": ["/abs/path/aes_cipher_top.md"],
+    "facts": [
       {
-        "parent": "packet_router_top",
-        "child": "route_table",
+        "fact_id": "",
+        "module": "aes_cipher_top",
+        "category": "module_identity",
+        "subject": "aes_cipher_top",
+        "predicate": "is_top_module",
+        "object": {"module": "aes_cipher_top"},
+        "source_kind": "explicit_text",
         "text_grounding": [
           {
-            "source_md_file": "/abs/path/packet_router_top.md",
-            "section_path": "Packet Router Specification > 6. Submodules",
-            "start_line_anchor": "The top module instantiates route_table and output_scheduler.",
-            "end_line_anchor": "The top module instantiates route_table and output_scheduler."
+            "source_md_file": "/abs/path/aes_cipher_top.md",
+            "section_path": "AES Cipher > Introduction",
+            "start_line_anchor": "The aes_cipher_top module is the core control module",
+            "end_line_anchor": "The aes_cipher_top module is the core control module"
           }
         ],
-        "image_grounding": []
-      }
-    ],
-    "instantiation_graph": [],
-    "generation_order_candidate": [],
-    "text_grounding": [
+        "image_grounding": [],
+        "notes": ""
+      },
       {
-        "source_md_file": "/abs/path/packet_router_top.md",
-        "section_path": "Packet Router Specification > 1. Overview",
-        "start_line_anchor": "Top module: packet_router_top",
-        "end_line_anchor": "Modules: packet_router_top, route_table, output_scheduler"
-      }
-    ],
-    "image_grounding": []
-  }
-}
-""".strip()
-
-INTERFACE_EXAMPLE = """
-{
-  "interface_contracts": [
-    {
-      "module": "packet_router_top",
-      "ports": [
-        {
-          "name": "in_valid",
-          "direction": "input",
-          "width": "1",
-          "role": "packet_valid",
-          "active": "",
-          "meaning": "input packet valid flag"
-        },
-        {
+        "fact_id": "",
+        "module": "aes_cipher_top",
+        "category": "interface",
+        "subject": "clk",
+        "predicate": "is_port",
+        "object": {
           "name": "clk",
           "direction": "input",
           "width": "1",
           "role": "clock",
-          "active": "",
-          "meaning": "clock input"
-        }
-      ],
-      "params": [],
-      "clock": "clk",
-      "reset": "rst",
-      "reset_polarity": "high",
-      "handshakes": ["in_valid to out_valid"],
-      "parameter_constraints": [],
-      "bus_roles": [],
-      "text_grounding": [
-        {
-          "source_md_file": "/abs/path/packet_router_top.md",
-          "section_path": "Packet Router Specification > 2. Interface",
-          "start_line_anchor": "The module exposes clk, rst, in_valid, in_data, out_valid, and out_port.",
-          "end_line_anchor": "The module exposes clk, rst, in_valid, in_data, out_valid, and out_port."
-        }
-      ],
-      "image_grounding": []
-    }
-  ]
-}
-""".strip()
-
-TIMING_EXAMPLE = """
-{
-  "timing_contracts": [
-    {
-      "module": "packet_router_top",
-      "clocking": {
-        "clock": "clk",
-        "update_edge": "rising clock edge",
-        "statement": "in_valid is sampled on the rising clock edge"
-      },
-      "reset_behavior": {
-        "signal": "rst",
-        "active": "high",
-        "effect": "returns the router control to IDLE"
-      },
-      "registered_objects": [
-        {
-          "name": "route_state",
-          "timing_role": "registered state",
-          "timing": "updated on the rising clock edge and held between cycles"
-        }
-      ],
-      "phase_timing": [
-        {
-          "phase": "DONE",
-          "timing": "out_valid is asserted for one cycle after forwarding completes"
-        }
-      ],
-      "timing_rules": [
-        "in_valid is sampled on the rising clock edge",
-        "out_valid is asserted for one cycle after forwarding completes",
-        "route decode remains combinational between registered updates"
-      ],
-      "underspecified": [
-        "reset release timing is not stated"
-      ]
-    }
-  ]
-}
-""".strip()
-
-TIMING_NEGATIVE_EXAMPLE = """
-{
-  "timing_contracts": []
-}
-""".strip()
-
-CONTROL_EXAMPLE = """
-{
-  "control_contracts": [
-    {
-      "module": "packet_router_top",
-      "abstract_states": ["IDLE", "LOOKUP", "FORWARD", "DONE"],
-      "transitions": [
-        {
-          "from_state": "IDLE",
-          "to_state": "LOOKUP",
-          "condition": "in_valid is asserted",
-          "text_grounding": [
-            {
-              "source_md_file": "/abs/path/packet_router_top.md",
-              "section_path": "Packet Router Specification > 5. Control",
-              "start_line_anchor": "Transition: IDLE -> LOOKUP when in_valid is asserted.",
-              "end_line_anchor": "Transition: IDLE -> LOOKUP when in_valid is asserted."
-            }
-          ]
-        }
-      ],
-      "control_signals": [
-        {
-          "name": "out_valid",
-          "meaning": "forwarding result valid pulse",
-          "text_grounding": [
-            {
-              "source_md_file": "/abs/path/packet_router_top.md",
-              "section_path": "Packet Router Specification > 5. Control",
-              "start_line_anchor": "out_valid means forwarding result valid pulse.",
-              "end_line_anchor": "out_valid means forwarding result valid pulse."
-            }
-          ]
-        }
-      ],
-      "bypass_conditions": [],
-      "exception_conditions": [],
-      "counter_rules": [
-        {
-          "counter": "lookup_cnt",
-          "rule": "increments by one on each successful route lookup",
-          "text_grounding": [
-            {
-              "source_md_file": "/abs/path/packet_router_top.md",
-              "section_path": "Packet Router Specification > 5. Control",
-              "start_line_anchor": "lookup_cnt increments by one on each successful route lookup.",
-              "end_line_anchor": "lookup_cnt increments by one on each successful route lookup."
-            }
-          ]
-        }
-      ],
-      "text_grounding": [
-        {
-          "source_md_file": "/abs/path/packet_router_top.md",
-          "section_path": "Packet Router Specification > 5. Control",
-          "start_line_anchor": "States: IDLE, LOOKUP, FORWARD, DONE",
-          "end_line_anchor": "States: IDLE, LOOKUP, FORWARD, DONE"
-        }
-      ],
-      "image_grounding": []
-    }
-  ]
-}
-""".strip()
-
-DATAPATH_EXAMPLE = """
-{
-  "datapath_contracts": [
-    {
-      "module": "packet_router_top",
-      "input_data": ["in_header", "in_payload"],
-      "main_flow": ["header_decode", "route_lookup", "port_select", "output_forward"],
-      "intermediate_objects": [
-        {
-          "name": "route_index",
-          "role": "selected route table entry index",
-          "text_grounding": [
-            {
-              "source_md_file": "/abs/path/packet_router_top.md",
-              "section_path": "Packet Router Specification > 6. Datapath",
-              "start_line_anchor": "route_index stores the selected route table entry index.",
-              "end_line_anchor": "route_index stores the selected route table entry index."
-            }
-          ]
-        }
-      ],
-      "path_annotations": [],
-      "registered_paths": [],
-      "combinational_paths": [],
-      "special_paths": [],
-      "text_grounding": [
-        {
-          "source_md_file": "/abs/path/packet_router_top.md",
-          "section_path": "Packet Router Specification > 6. Datapath",
-          "start_line_anchor": "Main flow: header_decode, route_lookup, port_select, output_forward",
-          "end_line_anchor": "Main flow: header_decode, route_lookup, port_select, output_forward"
-        }
-      ],
-      "image_grounding": []
-    }
-  ]
-}
-""".strip()
-
-PLANNING_FACTS_EXAMPLE = """
-{
-  "planning_facts": [
-    {
-      "module": "packet_router_top",
-      "registers": [
-        {
-          "name": "route_index_r",
-          "width": "4",
-          "role": "selected route table index register"
-        }
-      ],
-      "state_names": ["IDLE", "LOOKUP", "FORWARD", "DONE"],
-      "submodule_facts": [
-        {
-          "module": "route_table",
-          "count": 1,
-          "usage": "destination lookup"
+          "meaning": "Clock signal"
         },
-        {
-          "module": "output_scheduler",
-          "count": 1,
-          "usage": "egress arbitration"
-        }
-      ],
-      "local_mappings": [
-        "in_header[15:12] -> route_index lookup key",
-        "header decode output maps to output port selector"
-      ],
-      "text_grounding": [
-        {
-          "source_md_file": "/abs/path/packet_router_top.md",
-          "section_path": "Packet Router Specification > 6. Datapath",
-          "start_line_anchor": "Registers: route_index_r tracks selected route entries.",
-          "end_line_anchor": "The module uses route_table and output_scheduler."
-        }
-      ],
-      "image_grounding": []
-    }
-  ]
+        "source_kind": "table_row",
+        "text_grounding": [
+          {
+            "source_md_file": "/abs/path/aes_cipher_top.md",
+            "section_path": "AES Cipher > Interface",
+            "start_line_anchor": "| clk | input | 1 | Clock signal |",
+            "end_line_anchor": "| clk | input | 1 | Clock signal |"
+          }
+        ],
+        "image_grounding": [],
+        "notes": ""
+      },
+      {
+        "fact_id": "",
+        "module": "aes_cipher_top",
+        "category": "resource_requirement",
+        "subject": "SubBytes",
+        "predicate": "uses_parallel_units",
+        "object": {
+          "unit": "S-box",
+          "count": 16,
+          "purpose": "process all state matrix bytes simultaneously"
+        },
+        "source_kind": "explicit_text",
+        "text_grounding": [
+          {
+            "source_md_file": "/abs/path/aes_cipher_top.md",
+            "section_path": "AES Cipher > SubBytes Transformation",
+            "start_line_anchor": "16 parallel S-box units",
+            "end_line_anchor": "Process all state matrix bytes simultaneously"
+          }
+        ],
+        "image_grounding": [],
+        "notes": "Do not infer aes_cipher_top instantiates aes_sbox in Stage 1; keep this as a resource fact."
+      },
+      {
+        "fact_id": "",
+        "module": "aes_cipher_top",
+        "category": "data_dependency",
+        "subject": "AddRoundKey",
+        "predicate": "uses_provider_output",
+        "object": {
+          "data": "round key",
+          "provider": "key expansion module"
+        },
+        "source_kind": "explicit_text",
+        "text_grounding": [
+          {
+            "source_md_file": "/abs/path/aes_cipher_top.md",
+            "section_path": "AES Cipher > AddRoundKey Transformation",
+            "start_line_anchor": "Round key provided by key expansion module",
+            "end_line_anchor": "Round key provided by key expansion module"
+          }
+        ],
+        "image_grounding": [],
+        "notes": "Do not infer key expansion module ports in Stage 1."
+      }
+    ],
+    "ambiguous_items": []
+  }
 }
 """.strip()
 
@@ -313,7 +128,7 @@ Stage1 round: {round_name}
 Rules:
 - Extract only facts directly supported by the provided spec text.
 - The provided markdown is one batch of the full repository specification, not necessarily the complete repository.
-- Emit complete module-local contracts only for modules whose primary specification appears in this batch.
+- Emit complete module-local facts only for modules whose primary specification appears in this batch.
 - If this batch mentions modules whose primary specification is outside the batch, record them only as referenced submodules or relationship candidates, not as full contracts.
 - Do not delete, overwrite, or reinterpret previously completed batch results; use existing contracts only for terminology consistency.
 - If a field is not explicitly supported, leave it blank or empty.
@@ -336,274 +151,47 @@ Additional stage context:
 """.strip()
 
 
-def build_structure_prompt(
+def build_facts_prompt(
     *,
     document_markdown: str,
     current_contracts_json: str,
     stage_context: str = "",
 ) -> str:
     return f"""
-{_shared_prompt_prefix(round_name="structure", current_contracts_json=current_contracts_json, stage_context=stage_context)}
+{_shared_prompt_prefix(round_name="facts", current_contracts_json=current_contracts_json, stage_context=stage_context)}
 
-Return JSON with exactly one key: `structure_contract`.
+Return JSON with exactly one key: `fact_ledger`.
 
-Extract explicitly stated structure candidate facts from this batch:
-- system
-- top_module
-- files
-- modules
-- file_map
-- hierarchy
-- instantiation_graph
-- generation_order_candidate
+Stage 1 now produces a flexible evidence-backed fact ledger. Do not force facts into a rigid contract shape.
+Extract explicit facts and clear textual hints from this batch. Do not perform design inference.
 
-Treat `top_module`, `hierarchy`, `instantiation_graph`, and `generation_order_candidate` as batch-local evidence. The final global structure will be reduced after all batches complete, so do not force a complete repository-wide hierarchy from this batch alone.
+Fact object schema:
+- fact_id: leave blank; the runner will assign stable IDs.
+- module: the module the fact belongs to, or empty for repository/system facts.
+- category: free-form string. Prefer these category names when they fit:
+  module_identity, interface, register, state_machine, control_behavior, datapath,
+  timing, resource_requirement, data_dependency, mapping_rule, algorithm_step,
+  special_case, open_question.
+- subject: concrete signal, module, state, datapath step, resource, or behavior.
+- predicate: concise relation/action such as is_port, has_width, uses_parallel_units, transitions_to.
+- object: JSON object with the extracted attributes. Keep useful details here instead of inventing new schema fields.
+- source_kind: one of explicit_text, table_row, figure_text, section_heading, ambiguous_text.
+- text_grounding: grounding objects supporting this fact.
+- image_grounding: leave empty unless image-derived text is represented.
+- notes: short clarification when useful.
 
-For every relationship in `hierarchy` or `instantiation_graph`, include grounding.
-If the spec does not explicitly describe a field, leave it empty.
-Do not output section-path strings directly inside `text_grounding`; each item must be a grounding object.
+Important boundaries:
+- Extract "16 parallel S-box units" as a resource_requirement fact. Do not infer a parent-child hierarchy.
+- Extract "round key provided by key expansion module" as a data_dependency fact. Do not infer an instantiation relation.
+- Extract only explicitly listed ports. Do not infer missing child module ports.
+- Only create hierarchy/instantiation-like facts when the text explicitly says instantiates, contains, includes, is composed of, or an equivalent direct structural statement.
+- Put unclear but potentially useful text into `ambiguous_items`, not into a forced contract field.
+
+Every fact and ambiguous item must include at least one grounding object.
+If no facts are present, return an empty fact_ledger with source_files populated when possible.
 
 Example:
-{STRUCTURE_EXAMPLE}
-
-Current batch markdown source:
-{document_markdown}
-""".strip()
-
-
-def build_interface_prompt(
-    *,
-    document_markdown: str,
-    current_contracts_json: str,
-    stage_context: str = "",
-) -> str:
-    return f"""
-{_shared_prompt_prefix(round_name="interface", current_contracts_json=current_contracts_json, stage_context=stage_context)}
-
-Return JSON with exactly one key: `interface_contracts`.
-
-Each list item must describe one module-level interface contract.
-Extract only explicit facts about:
-- module
-- ports
-- params
-- clock
-- reset
-- reset_polarity
-- handshakes
-- parameter_constraints
-- bus_roles
-
-Put text evidence at the module level:
-- `interface_contracts[*].text_grounding` should cover the interface table/section for the module.
-- Do not add `text_grounding` inside individual `ports` or `params`.
-- If all ports come from the same interface table, cite that table once at the module level instead of repeating evidence per signal.
-
-If no module interface is explicitly described, return an empty list.
-Every non-empty interface contract must include at least one grounding object in `text_grounding` or `image_grounding`.
-
-Example:
-{INTERFACE_EXAMPLE}
-
-Current batch markdown source:
-{document_markdown}
-""".strip()
-
-
-def build_timing_prompt(
-    *,
-    document_markdown: str,
-    current_contracts_json: str,
-    stage_context: str = "",
-) -> str:
-    return f"""
-{_shared_prompt_prefix(round_name="timing", current_contracts_json=current_contracts_json, stage_context=stage_context)}
-
-Return JSON with exactly one key: `timing_contracts`.
-
-Each list item must use this schema exactly:
-{{
-  "module": "string",
-  "clocking": {{}},
-  "reset_behavior": {{}},
-  "registered_objects": [],
-  "phase_timing": [],
-  "timing_rules": [],
-  "underspecified": []
-}}
-
-You are extracting timing semantics from an RTL module specification.
-
-Goal:
-Extract only timing-related facts that are explicitly stated in the spec.
-Do not infer implementation details that are not directly supported by the text.
-
-Focus on:
-- clocking and update edge
-- reset behavior only if explicitly stated
-- registered objects and their timing roles
-- phase/state timing described in the spec
-- timing rules such as one-round-per-cycle, synchronous update, combinational blocks, writeback behavior, completion behavior
-- explicitly stated timing-related submodule interface meanings
-
-Rules:
-1. Be faithful to the text.
-2. Do not invent cycle-by-cycle behavior unless the spec explicitly says so.
-3. If the spec is unclear, record it in `underspecified`.
-4. Prefer concrete textual rules over abstract labels.
-5. Keep output concise and structured.
-
-Field guidance:
-- `clocking`: use a compact object for stated clock, domain, edge, synchronous/combinational wording, or update style.
-- `reset_behavior`: use `{{}}` unless reset timing behavior is explicitly stated.
-- `registered_objects`: use short objects that capture the object name and the timing role explicitly stated in the spec.
-- `phase_timing`: use short objects for state, stage, or phase timing statements.
-- `timing_rules`: use concise textual rules for explicit timing behaviors.
-- `underspecified`: use short strings for timing details the spec leaves unclear.
-
-Do not treat the following as timing evidence by themselves:
-- signal names alone (`ld`, `start`, `done`, `enable`, `kld`)
-- generic control-flow wording without update, hold, visibility, or cycle semantics
-- module familiarity or domain knowledge
-- figures, layouts, or section titles alone
-
-Timing evidence may appear in:
-- interface notes
-- register or object descriptions
-- state or phase descriptions
-- data loading descriptions
-- output generation descriptions
-- timing constraints
-- child module interface descriptions
-
-If a state or phase description explicitly says something is loaded, held, updated, skipped, written back, or made visible in that phase, extract the timing-relevant part.
-
-If timing is explicit but partial, extract the known part and place the missing detail in `underspecified`.
-Do not drop a valid fact just because polarity, edge direction, or exact cycle count is only partially described.
-
-Do not emit placeholder or shell contracts.
-If a module has no explicit timing facts and no timing-related underspecification worth recording, omit that module from `timing_contracts`.
-If no timing facts are explicitly described anywhere, return:
-{TIMING_NEGATIVE_EXAMPLE}
-
-Positive example:
-{TIMING_EXAMPLE}
-
-Additional positive examples of timing evidence:
-- "synchronous loading to state matrix registers"
-- "register updates on clock rising edge"
-- "pure combinational logic implementation"
-- "one round per clock cycle"
-- "writeback occurs in the final state"
-- "done is asserted for one cycle after completion"
-
-Current batch markdown source:
-{document_markdown}
-""".strip()
-
-
-def build_control_prompt(
-    *,
-    document_markdown: str,
-    current_contracts_json: str,
-    stage_context: str = "",
-) -> str:
-    return f"""
-{_shared_prompt_prefix(round_name="control", current_contracts_json=current_contracts_json, stage_context=stage_context)}
-
-Return JSON with exactly one key: `control_contracts`.
-
-Each list item must describe one module-level control contract.
-Extract only explicit facts about:
-- module
-- abstract_states
-- transitions
-- control_signals
-- bypass_conditions
-- exception_conditions
-- counter_rules
-
-Use the following object shapes:
-- `bypass_conditions[*]`: `{{"condition": "...", "text_grounding": [{{...}}]}}`
-- `exception_conditions[*]`: `{{"condition": "...", "text_grounding": [{{...}}]}}`
-- `counter_rules[*]`: `{{"counter": "...", "rule": "...", "text_grounding": [{{...}}]}}`
-
-If the spec only hints at control without explicit contract detail, leave the unsupported fields empty.
-Every non-empty control contract must include at least one grounding object in `text_grounding` or `image_grounding`.
-
-Example:
-{CONTROL_EXAMPLE}
-
-Current batch markdown source:
-{document_markdown}
-""".strip()
-
-
-def build_datapath_prompt(
-    *,
-    document_markdown: str,
-    current_contracts_json: str,
-    stage_context: str = "",
-) -> str:
-    return f"""
-{_shared_prompt_prefix(round_name="datapath", current_contracts_json=current_contracts_json, stage_context=stage_context)}
-
-Return JSON with exactly one key: `datapath_contracts`.
-
-Each list item must describe one module-level datapath contract.
-Extract only explicit facts about:
-- module
-- input_data
-- main_flow
-- intermediate_objects
-- path_annotations
-- registered_paths
-- combinational_paths
-- special_paths
-
-Do not infer hidden datapath stages from domain knowledge.
-Every non-empty datapath contract must include at least one grounding object in `text_grounding` or `image_grounding`.
-
-Example:
-{DATAPATH_EXAMPLE}
-
-Current batch markdown source:
-{document_markdown}
-""".strip()
-
-
-def build_planning_facts_prompt(
-    *,
-    document_markdown: str,
-    current_contracts_json: str,
-    stage_context: str = "",
-) -> str:
-    return f"""
-{_shared_prompt_prefix(round_name="planning_facts", current_contracts_json=current_contracts_json, stage_context=stage_context)}
-
-Return JSON with exactly one key: `planning_facts`.
-
-Each list item must describe one module-level planning facts contract.
-Extract only explicit, local, implementation-helpful facts:
-- module
-- registers (name, width, role)
-- state_names
-- submodule_facts (module, count, usage)
-- local_mappings
-
-Rules specific to this round:
-- Do not infer new facts from previously generated contracts.
-- Do not rewrite high-level control summaries into register declarations.
-- Do not infer submodule count from hierarchy alone.
-- Do not rewrite high-level datapath flow as local mapping rules unless the mapping is explicitly stated.
-- If the spec does not explicitly state a field, leave it empty.
-
-Grounding requirements:
-- Each non-empty `planning_facts` item must include module-level `text_grounding` (or `image_grounding`, though images are not provided in this stage).
-- Do not add per-register or per-state grounding fields.
-
-Example:
-{PLANNING_FACTS_EXAMPLE}
+{FACT_LEDGER_EXAMPLE}
 
 Current batch markdown source:
 {document_markdown}

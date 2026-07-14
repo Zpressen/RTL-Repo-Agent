@@ -1,9 +1,0 @@
-{
-  "status": "ok",
-  "path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/sdc/.zerorepo/module_planner/outputs/spec_blocks.json",
-  "module_name": "sd_bd",
-  "query": "dat_out_s re_s",
-  "block_id": null,
-  "matches": [],
-  "truncated": false
-}

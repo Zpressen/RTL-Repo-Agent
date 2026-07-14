@@ -1,21 +1,21 @@
 REPO_SKELETON_SYSTEM_ROLE = """
 You are a repository skeleton planning agent for RTL spec-to-repo generation.
 
-Your task is to construct a compact repo_skeleton_v1 object from a stage1 modules.json input.
+Your task is to infer a compact repo_skeleton_v1 architecture from source specs.
 
 This stage only builds the repository-level skeleton.
 Do not design module-internal code skeletons.
 
 Primary input:
-- modules.json from stage1 extraction
+- stage2_planning_input_v1 containing source spec markdown plus optional legacy fact/context fields
 
 Your job is to:
-1. preserve stable stage1 facts
-2. organize global invariants
-3. assign simple file paths
-4. decide generation order
-5. assign lightweight module kinds
-6. summarize repo-level instance hints
+1. decide the final RTL module decomposition
+2. assign each module a responsibility and lightweight kind
+3. infer hierarchy and instance hints from explicit facts plus justified data/resource dependencies
+4. organize global invariants
+5. assign simple file paths
+6. decide generation order
 7. record cross-module alignment
 8. record unresolved repo-level issues
 
@@ -35,16 +35,18 @@ Do NOT include:
 
 Planning policy:
 - prefer simple repository layout suitable for a research prototype
-- preserve extracted facts unless there is a strong inconsistency
+- preserve optional extracted facts unless there is a strong inconsistency
 - use leaf-first generation order by default
 - mark shared reusable modules explicitly
 - if something is uncertain, put it into open_issues instead of over-planning
 
 Before output, internally check:
-- every module appears in file_map
+- every planned module appears in file_map
 - hierarchy references only known modules
 - generation_order respects dependencies
 - shared modules are consistent with hierarchy and instance hints
+- inferred hierarchy or instance hints cite supporting fact IDs only when they come from fact_ledger evidence
+- source spec file stems are not treated as RTL modules unless supported by module facts or RTL behavior evidence
 
 Output exactly one JSON object that follows repo_skeleton_v1.
 Do not output prose before or after the JSON.
@@ -55,7 +57,7 @@ REPO_SKELETON_EXAMPLE = """
 {
   "schema_version": "repo_skeleton_v1",
   "task_id": "packet_router_top",
-  "source_schema_version": "module_contracts_v1",
+  "source_schema_version": "stage2_planning_input_v1",
   "stage2_status": "repo_skeleton_planned",
   "top_module": "packet_router_top",
   "global_invariants": {
@@ -68,11 +70,17 @@ REPO_SKELETON_EXAMPLE = """
     "hierarchy": [
       {
         "parent": "packet_router_top",
-        "child": "route_table"
+        "child": "route_table",
+        "source_kind": "explicit",
+        "supporting_fact_ids": [],
+        "rationale": "Preserved from explicit source-spec hierarchy."
       },
       {
         "parent": "packet_router_top",
-        "child": "output_scheduler"
+        "child": "output_scheduler",
+        "source_kind": "explicit",
+        "supporting_fact_ids": [],
+        "rationale": "Preserved from explicit source-spec hierarchy."
       }
     ],
     "file_map": {
@@ -120,12 +128,18 @@ REPO_SKELETON_EXAMPLE = """
         {
           "module": "route_table",
           "count": 1,
-          "usage": "destination lookup"
+          "usage": "destination lookup",
+          "source_kind": "explicit",
+          "supporting_fact_ids": [],
+          "rationale": "Preserved from explicit source-spec planning evidence."
         },
         {
           "module": "output_scheduler",
           "count": 1,
-          "usage": "egress arbitration"
+          "usage": "egress arbitration",
+          "source_kind": "explicit",
+          "supporting_fact_ids": [],
+          "rationale": "Preserved from explicit source-spec planning evidence."
         }
       ],
       "repo_notes": [
@@ -146,19 +160,23 @@ REPO_SKELETON_EXAMPLE = """
 """.strip()
 
 
-def build_repo_skeleton_prompt(modules_json: str, stage_context: str = "") -> str:
+def build_repo_skeleton_prompt(stage2_planning_input_json: str, stage_context: str = "") -> str:
     return f"""
 Input:
-A stage1 modules.json object.
+A stage2_planning_input_v1 object containing:
+- source spec markdown
+- optional fact ledger
+- optional legacy contract projection
+- optional compatibility module candidates
 
 Task:
-Build repo_skeleton_v1 from this input only.
+Infer repo_skeleton_v1 from the evidence.
 
 Requirements:
-1. Use modules.json as the primary source of truth.
-2. Produce repository-level planning only.
-3. Keep the schema compact and directly usable in a research prototype.
-4. Preserve stage1 extracted facts whenever possible.
+1. Treat source spec markdown as the primary evidence.
+2. Treat optional fact ledger, compatibility module candidates, and legacy contract projection as hints only, not as hard module-set constraints.
+3. Produce repository-level architecture planning only.
+4. Keep the schema compact and directly usable in a research prototype.
 5. Fill the following fields:
    - top_module
    - global_invariants
@@ -174,10 +192,23 @@ Important constraints:
 - Do not emit a separate `module_order` field. Use `planning_decisions.generation_order` as the only execution order.
 - Keep `modules` in the same order as `planning_decisions.generation_order`.
 - If something is uncertain, put it into open_issues instead of inventing details.
+- Stage1 facts may be absent; when they are absent, infer final module decomposition from `source_specs.markdown`.
+- For system-level specs, derive modules from functional decomposition, resource reuse, state ownership, clocked boundaries, and explicit partitioning guidance.
+- If explicit hierarchy is sparse or empty, derive likely dependencies from inferred relations, dataflow facts, submodule_facts, module roles, resource_requirement, data_dependency, datapath, and source spec behavior.
+- Only infer hierarchy or instance_hints from grounded facts or source-spec evidence such as resource_requirement, data_dependency, module_identity, algorithm_step, or explicit module role facts.
+- Mark fact-derived hierarchy and instance_hints with `source_kind: "inferred_from_fact_ledger"`, cite `supporting_fact_ids`, and explain the rationale.
+- Preserve explicit fact-ledger instantiates/contains hierarchy as `source_kind: "explicit"`.
+- Do not treat a fact-derived relation as explicit; if supporting facts are weak, include an open_issue.
+- Source document stems are not treated as RTL modules just because they are filenames. For example, `aes_unified_functional_spec` is a spec document name unless facts/spec text support an RTL module with that name.
+- Decide whether resource requirements become child modules, repeated instances, local helper functions, or internal unrolled logic; record low-confidence decisions in open_issues.
+- Prefer compact module sets; localize simple single-use combinational helpers such as xtime or MixColumns when spec guidance says so.
+- For every modules[] entry, fill `source_kind`, `supporting_fact_ids`, `rationale`, `confidence`, and `module_decision` when the module is inferred or selected from weak evidence.
 
 Field guidance:
 - global_invariants: stable facts reused in later stages
 - modules[].role/kind: lightweight planning hints only
+- modules[].source_kind: explicit, inferred_from_fact_ledger, inferred_from_spec, or compatibility_hint
+- modules[].module_decision: required, optional, internalized, rejected, or uncertain
 - planning_decisions: repo-level decisions made in this stage
 - open_issues: unresolved repo-level uncertainties
 
@@ -186,8 +217,8 @@ Return exactly one JSON object and no prose.
 Example:
 {REPO_SKELETON_EXAMPLE}
 
-modules.json input:
-{modules_json}
+stage2_planning_input:
+{stage2_planning_input_json}
 
 Additional stage context:
 {stage_context or "None"}

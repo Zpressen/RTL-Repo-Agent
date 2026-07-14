@@ -206,3 +206,79 @@ def test_run_module_runs_pre_debug_syntax_gate_before_sim_review(tmp_path: Path,
     assert result.status == "pass"
     assert events == ["syntax:m", "review"]
     assert (Path(result.workdir) / "pre_debug_syntax_repair.json").exists()
+
+
+def test_run_module_syntax_gate_does_not_require_oracle_or_sim_review(tmp_path: Path, monkeypatch) -> None:
+    workspace = tmp_path / "workspace"
+    merged_dir = workspace / "merged"
+    merged_dir.mkdir(parents=True)
+    merged_file = merged_dir / "m.v"
+    merged_file.write_text("module m(output y);\nassign y = 1'b0;\nendmodule\n", encoding="utf-8")
+    (merged_dir / "child.v").write_text("module child(output y);\nassign y = 1'b0;\nendmodule\n", encoding="utf-8")
+    events: list[str] = []
+
+    class FailingReviewer:
+        def __init__(self, *_args, **_kwargs) -> None:
+            events.append("reviewer_constructed")
+
+        def review(self) -> tuple[bool, int, str]:
+            events.append("review")
+            return False, 1, "{}"
+
+    def fake_check_syntax(_path: str, top_module=None) -> tuple[bool, str]:
+        events.append(f"syntax:{top_module}")
+        return True, "{}"
+
+    monkeypatch.setattr(debug_runner_module, "check_syntax", fake_check_syntax)
+    monkeypatch.setattr(debug_runner_module, "SimReviewer", FailingReviewer)
+    monkeypatch.setattr(ModuleDebugRunner, "_ensure_toolchain_path", lambda self: None)
+    runner = ModuleDebugRunner(
+        config=RtlDebugConfig(openai_config=None, oracle_root=str(tmp_path / "missing_oracle")),
+        workspace_root=workspace,
+    )
+
+    result = runner.run_module_syntax_gate(
+        module_name="m",
+        merged_file=merged_file,
+        task=None,
+        spec_text="spec",
+        contract_json='{"module_name": "m"}',
+    )
+
+    assert result.status == "pass"
+    assert events == ["syntax:m"]
+    assert "module child" in (Path(result.workdir) / "support.sv").read_text(encoding="utf-8")
+
+
+def test_run_module_syntax_gate_repairs_and_writes_back_to_merged(tmp_path: Path, monkeypatch) -> None:
+    workspace = tmp_path / "workspace"
+    merged_dir = workspace / "merged"
+    merged_dir.mkdir(parents=True)
+    merged_file = merged_dir / "m.v"
+    merged_file.write_text("module m(output y)\nassign y = 1'b0;\nendmodule\n", encoding="utf-8")
+    syntax_results = iter([(False, "%Error: syntax"), (True, "{}")])
+
+    def fake_check_syntax(_path: str, top_module=None) -> tuple[bool, str]:
+        return next(syntax_results)
+
+    def fake_repair(self, *, workdir: Path, **_kwargs) -> tuple[bool, str, int]:
+        repaired = "module m(output y);\nassign y = 1'b1;\nendmodule\n"
+        (workdir / "rtl.sv").write_text(repaired, encoding="utf-8")
+        return True, repaired, 1
+
+    monkeypatch.setattr(debug_runner_module, "check_syntax", fake_check_syntax)
+    monkeypatch.setattr(ModuleDebugRunner, "_ensure_toolchain_path", lambda self: None)
+    monkeypatch.setattr(ModuleDebugRunner, "_run_repo_react_syntax_repair", fake_repair)
+    runner = ModuleDebugRunner(config=RtlDebugConfig(openai_config=None), workspace_root=workspace)
+
+    result = runner.run_module_syntax_gate(
+        module_name="m",
+        merged_file=merged_file,
+        task=None,
+        spec_text="spec",
+        contract_json='{"module_name": "m"}',
+    )
+
+    assert result.status == "fixed"
+    assert result.debug_trials == 1
+    assert "assign y = 1'b1;" in merged_file.read_text(encoding="utf-8")

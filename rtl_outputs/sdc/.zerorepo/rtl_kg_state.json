@@ -1,8 +1,0 @@
-{
-  "enabled": true,
-  "mode": "required",
-  "repo_uid": "merged@8f5589b1691e",
-  "neo4j_uri": "bolt://localhost:7687",
-  "kg_root": "/home/mokita/RTL-Agent/RTL-Fix-Agent/knowledge_graph",
-  "initialized": true
-}

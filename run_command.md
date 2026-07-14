@@ -22,10 +22,18 @@ bash scripts/run_main.sh /home/mokita/RPG-ZeroRepo/rtl_dataset/sdc
   api_key: "sk-69b2599638a24105962d6b186788d6ce"
   base_url: "https://api.deepseek.com"
 
-  model: "gpt-5.5"
+  model: "gpt-5.6-sol"
   max_tokens: 65536
   temperature: 0.6
   reasoning_effort: "high"
   provider: "openai"
   api_key: "sk-8bce642542af301d17a07e0c979514bac29524d8acc922f57bf00325876f3b22"
   base_url: "https://www.inroi.shop/v1"
+
+  model: "gpt-5.6-sol"
+  max_tokens: 65536
+  temperature: 0.6
+  reasoning_effort: "high"
+  provider: "openai"
+  api_key: "sk-uQLg5J4Xnlf6RYcIoSwEOuCn6JKa7JtC"
+  base_url: "https://xtoken.work/v1"
