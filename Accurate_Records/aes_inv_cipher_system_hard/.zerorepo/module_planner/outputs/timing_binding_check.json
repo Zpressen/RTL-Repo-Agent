@@ -1,0 +1,32 @@
+{
+  "schema_version": "timing_binding_check_v1",
+  "task_id": "aes_inv_cipher_system_hard",
+  "input_fingerprint": "2c7d4a127682658a23955879515cc08b8ceae1aeabd1ce7a045e8971b1dac276",
+  "status": "warning",
+  "issues": [
+    {
+      "code": "UNRESOLVED_TEMPORAL_AMBIGUITY",
+      "severity": "WARNING",
+      "module": "",
+      "block_id": "",
+      "obligation_id": "",
+      "message": "The number of clock cycles from ld to done is not explicitly stated; the round counter reaching 11 can be interpreted as either 10 edge-distance cycles or 11 inclusive cycles."
+    },
+    {
+      "code": "UNRESOLVED_GUARD",
+      "severity": "WARNING",
+      "module": "aes_inv_cipher_top",
+      "block_id": "B4",
+      "obligation_id": "OBL_TOP_KEYEXPANSION_READ",
+      "message": "The obligation contains a guard string that v1 records but does not solve."
+    },
+    {
+      "code": "PLANNED_SIGNAL_NAMES_REQUIRE_CODEGEN_CHECK",
+      "severity": "WARNING",
+      "module": "",
+      "block_id": "",
+      "obligation_id": "",
+      "message": "Physical signal names are planning bindings and must be checked against Stage5 output."
+    }
+  ]
+}

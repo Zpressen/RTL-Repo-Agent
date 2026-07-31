@@ -175,6 +175,11 @@ class RTLNeo4jIngestor:
                 for label in labels:
                     cypher = f"CREATE CONSTRAINT {label.lower()}_uid IF NOT EXISTS FOR (n:{label}) REQUIRE n.uid IS UNIQUE"
                     session.run(cypher)
+                if "Module" in labels:
+                    session.run(
+                        "CREATE CONSTRAINT module_repo_name IF NOT EXISTS "
+                        "FOR (n:Module) REQUIRE (n.repo_uid, n.name) IS UNIQUE"
+                    )
 
                 # Some helpful indexes (create only if label exists)
                 # NOTE: These are optional; feel free to add/remove based on your query workload.

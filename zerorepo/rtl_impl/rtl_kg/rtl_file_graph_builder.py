@@ -43,6 +43,7 @@ from .graph_types_rtl import (
     ParamNode,
     PortNode,
     SignalNode,
+    canonical_module_uid,
     make_eid,
     make_uid,
 )
@@ -722,7 +723,9 @@ class RTLFileGraphBuilder:
                 sl = n.start_point[0] + 1
                 el = n.end_point[0] + 1
 
-                mod_uid = make_uid(self.repo_uid, "module", mname, rel_path)
+                # Module is the sole planning/code alignment anchor.  Its identity
+                # must therefore survive the Stage2 placeholder -> Stage6 file move.
+                mod_uid = canonical_module_uid(self.repo_uid, mname)
                 mod = KnowledgeGraphNode(
                     uid=mod_uid,
                     repo_uid=self.repo_uid,

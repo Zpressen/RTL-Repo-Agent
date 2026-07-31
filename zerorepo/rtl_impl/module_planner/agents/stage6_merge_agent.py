@@ -55,12 +55,14 @@ class Stage6MergeAgent(BaseStageAgent):
         output_root: str | Path | None = None,
         workspace_root: str | Path | None = None,
         kg_service: Any | None = None,
+        planning_context_retriever: Any | None = None,
     ):
         super().__init__(llm_client, context_provider, artifact_sink, logger)
         self.output_root = Path(output_root) if output_root is not None else None
         self.workspace_root = Path(workspace_root) if workspace_root is not None else self._default_workspace_root()
         self.merge_context_retriever = MergeContextRetriever(llm_client=self.llm_client, logger=self.logger)
         self.kg_service = kg_service
+        self.planning_context_retriever = planning_context_retriever
         self.kg_retriever = (
             KGRetriever(kg_service)
             if kg_service is not None and getattr(kg_service, "is_enabled", lambda: False)()
@@ -199,9 +201,38 @@ class Stage6MergeAgent(BaseStageAgent):
             spec_by_module[module_name],
             retrieval_result.selected_spec_refs,
         )
+        planning_kg_context = ""
+        if self.planning_context_retriever is not None:
+            try:
+                context = self.planning_context_retriever.get_module_context(
+                    module_name,
+                    require_spec=True,
+                    require_skeleton=True,
+                    require_plan=True,
+                    include_code_interface=True,
+                    expected_fingerprints={
+                        "spec_context": str(getattr(stage3, "input_fingerprint", "") or ""),
+                        "skeleton": str(getattr(stage3, "input_fingerprint", "") or ""),
+                        "plan": str(
+                            getattr(self._get_stage4_artifact(partial_artifacts), "input_fingerprint", "") or ""
+                        ),
+                    },
+                )
+                planning_kg_context = self.planning_context_retriever.to_prompt_json(context)
+            except Exception as exc:
+                mode = str(getattr(self.planning_context_retriever.kg_service, "mode", "required"))
+                if mode == "required":
+                    raise
+                self.logger.warning(
+                    "[%s] Planning KG context unavailable for %s; using sidecars: %s",
+                    self.stage_name,
+                    module_name,
+                    exc,
+                )
         prompt = stage6_merge.build_prompt(
             module_spec=module_spec,
             module_skeleton=module_skeleton,
+            planning_kg_context=planning_kg_context,
             kg_child_context=(
                 self._format_kg_child_context_for_prompt(kg_child_context)
                 if kg_child_context.get("retrieval_requested")
@@ -487,10 +518,16 @@ class Stage6MergeAgent(BaseStageAgent):
         return stripped
 
     def _validate_raw_module(self, code: str, module_name: str) -> List[str]:
-        """Minimal validation — only check that code is not empty."""
+        """Reject structural forms that the Stage6 contract explicitly forbids."""
         errors: List[str] = []
         if not code.strip():
             errors.append("merged module code must not be empty")
+            return errors
+        declarations = re.findall(r"(?m)^\s*(?:wire|reg|logic)\b[^;]*;", code)
+        if any(re.search(r"\]\s*[A-Za-z_]\w*\s*\[", item) for item in declarations):
+            errors.append("merged module must not contain an unpacked array declaration")
+        if re.search(r"\b(?:generate|endgenerate|genvar)\b", code):
+            errors.append("merged module must not contain generate/genvar constructs")
         return errors
 
     def _summarize_syntax_output(self, syntax_output: str) -> str:
@@ -926,10 +963,9 @@ class Stage6MergeAgent(BaseStageAgent):
                         child_module,
                         exc,
                     )
-                payload["children"].append(
-                    {
+                fallback = {
                         "module": child_module,
-                        "child_status": "candidate",
+                        "child_status": "planned",
                         "ports": [],
                         "parameters": [],
                         "file_path": "",
@@ -940,7 +976,18 @@ class Stage6MergeAgent(BaseStageAgent):
                         "full_code_included": False,
                         "lookup_error": str(exc),
                     }
-                )
+                if self.planning_context_retriever is not None:
+                    try:
+                        planned = self.planning_context_retriever.get_module_context(
+                            child_module,
+                            require_skeleton=True,
+                        )
+                        fallback["planned_module"] = planned.get("module") or {}
+                        fallback["planned_skeleton"] = planned.get("skeleton_artifact") or planned.get("skeleton") or {}
+                        fallback["code_mode"] = "planned_skeleton_fallback"
+                    except Exception as planning_exc:
+                        fallback["planning_lookup_error"] = str(planning_exc)
+                payload["children"].append(fallback)
         return payload
 
     def _child_modules_from_dependency_context(

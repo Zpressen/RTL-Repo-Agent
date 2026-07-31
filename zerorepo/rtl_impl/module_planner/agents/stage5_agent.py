@@ -12,8 +12,10 @@ from ..schemas import (
     ModulePlanArtifact,
     ModulePlanSubtask,
     ModuleSpecBlocks,
+    ModuleTimingBindingArtifact,
     PlannerTaskInput,
     Stage3ModuleSkeletonArtifact,
+    Stage3TimingBindingsArtifact,
     Stage4ModulePlansArtifact,
     Stage4SpecBlocksArtifact,
     Stage5CodegenArtifact,
@@ -39,10 +41,12 @@ class Stage5Agent(BaseStageAgent):
         logger=None,
         output_root: str | Path | None = None,
         workspace_root: str | Path | None = None,
+        planning_context_retriever: Any | None = None,
     ):
         super().__init__(llm_client, context_provider, artifact_sink, logger)
         self.output_root = Path(output_root) if output_root is not None else None
         self.workspace_root = Path(workspace_root) if workspace_root is not None else self._default_workspace_root()
+        self.planning_context_retriever = planning_context_retriever
 
     def run(self, task_input: Any, partial_artifacts: Dict[str, Any]) -> Stage5CodegenArtifact:
         return self.run_incremental(task_input, partial_artifacts)
@@ -69,6 +73,7 @@ class Stage5Agent(BaseStageAgent):
 
         artifact = Stage5CodegenArtifact(
             task_id=task.task_id,
+            input_fingerprint=str(partial_artifacts.get("stage5_input_fingerprint") or ""),
             module_order=module_order,
             module_files=records,
         )
@@ -111,6 +116,38 @@ class Stage5Agent(BaseStageAgent):
         module_skeleton, module_skeleton_file = self._read_module_skeleton_context(
             skeleton_record_by_module.get(module_name)
         )
+        timing_binding = self._read_timing_binding_for_module(partial_artifacts, module_name)
+        timing_obligation_by_id = (
+            {item.obligation_id: item for item in timing_binding.block_obligations}
+            if timing_binding is not None
+            else {}
+        )
+        planning_kg_context = ""
+        if self.planning_context_retriever is not None:
+            try:
+                context = self.planning_context_retriever.get_module_context(
+                    module_name,
+                    require_spec=True,
+                    require_skeleton=True,
+                    require_plan=True,
+                    include_code_interface=True,
+                    expected_fingerprints={
+                        "spec_context": str(getattr(stage3, "input_fingerprint", "") or ""),
+                        "skeleton": str(getattr(stage3, "input_fingerprint", "") or ""),
+                        "plan": str(getattr(stage4, "input_fingerprint", "") or ""),
+                    },
+                )
+                planning_kg_context = self.planning_context_retriever.to_prompt_json(context)
+            except Exception as exc:
+                mode = str(getattr(self.planning_context_retriever.kg_service, "mode", "required"))
+                if mode == "required":
+                    raise
+                self.logger.warning(
+                    "[%s] Planning KG context unavailable for %s; using sidecars: %s",
+                    self.stage_name,
+                    module_name,
+                    exc,
+                )
 
         workspace_file = self._workspace_file(module_name)
         repo_skeleton = partial_artifacts.get("stage2") or partial_artifacts.get("repo_skeleton")
@@ -143,6 +180,7 @@ class Stage5Agent(BaseStageAgent):
                             "analysis": {"mode": "official_copy", "source": entry["source"]},
                         }
                     ],
+                    input_fingerprint=str(partial_artifacts.get("stage5_input_fingerprint") or ""),
                 )
                 return ModuleCodegenRecord(
                     module=module_name,
@@ -154,6 +192,18 @@ class Stage5Agent(BaseStageAgent):
         contract_entries: List[Dict[str, Any]] = []
         global_defines_context = self._build_global_defines_context()
         for subtask in module_plan.subtasks:
+            timing_obligations = [
+                timing_obligation_by_id[item]
+                for item in subtask.timing_obligation_ids
+                if item in timing_obligation_by_id
+            ]
+            missing_timing_ids = [
+                item for item in subtask.timing_obligation_ids if item not in timing_obligation_by_id
+            ]
+            if missing_timing_ids:
+                raise ValueError(
+                    f"Stage5 missing timing obligations for {module_name}/{subtask.id}: {missing_timing_ids}"
+                )
             previous_snippets = self._read_text_if_exists(workspace_file)
             selected_blocks = self._select_spec_blocks(module_spec, subtask.spec_refs)
             selected_block_ids = {item["block_id"] for item in selected_blocks}
@@ -173,6 +223,7 @@ class Stage5Agent(BaseStageAgent):
                 "module_skeleton_chars": len(module_skeleton),
                 "previous_module_snippets_chars": len(previous_snippets),
                 "global_define_files": self._global_define_file_names(),
+                "timing_obligation_ids": list(subtask.timing_obligation_ids),
             }
             prompt = stage5_subtask_codegen.build_prompt(
                 task_id=task.task_id,
@@ -182,7 +233,9 @@ class Stage5Agent(BaseStageAgent):
                 selected_spec_blocks=self.to_pretty_json(selected_blocks),
                 module_interface_spec_blocks=self.to_pretty_json(supplemental_interface_blocks),
                 previous_module_snippets=previous_snippets,
+                timing_obligations=self.to_pretty_json(timing_obligations),
                 global_defines_context=global_defines_context,
+                planning_kg_context=planning_kg_context,
                 stage_context=self.to_pretty_json(stage_context),
             )
             self.logger.info(
@@ -199,10 +252,35 @@ class Stage5Agent(BaseStageAgent):
                 task,
                 partial_artifacts,
                 output_model=SubtaskCodeArtifact,
-                quality_validator=lambda candidate, expected_module=module_name, expected_subtask=subtask: (
-                    self._validate_subtask_code(candidate, task, expected_module, expected_subtask)
+                quality_validator=lambda candidate, expected_module=module_name, expected_subtask=subtask, expected_timing=timing_obligations: (
+                    self._validate_subtask_code(
+                        candidate,
+                        task,
+                        expected_module,
+                        expected_subtask,
+                        expected_timing,
+                    )
                 ),
             )
+            if subtask.timing_obligation_ids and self._last_quality_errors:
+                hard_errors = [
+                    item
+                    for item in self._last_quality_errors
+                    if not self._is_nonfatal_timing_diagnostic(item)
+                ]
+                if hard_errors:
+                    raise ValueError(
+                        f"Stage5 timing-constrained subtask {module_name}/{subtask.id} "
+                        f"failed validation: {hard_errors}"
+                    )
+                self.logger.warning(
+                    "[%s] Timing diagnostics remain for %s/%s; continuing with the "
+                    "best-effort local fragment: %s",
+                    self.stage_name,
+                    module_name,
+                    subtask.id,
+                    self._last_quality_errors,
+                )
             updated_text = self._upsert_subtask_section(previous_snippets, subtask, artifact.code)
             self._write_text(workspace_file, updated_text)
             contract_entries.append(
@@ -211,7 +289,11 @@ class Stage5Agent(BaseStageAgent):
                     subtask=subtask,
                 )
             )
-            self._write_contracts_file(module_name, contract_entries)
+            self._write_contracts_file(
+                module_name,
+                contract_entries,
+                input_fingerprint=str(partial_artifacts.get("stage5_input_fingerprint") or ""),
+            )
             completed_subtasks.append(subtask.id)
 
         return ModuleCodegenRecord(
@@ -236,6 +318,7 @@ class Stage5Agent(BaseStageAgent):
             "subtask_id": subtask.id,
             "target": subtask.target,
             "spec_refs": list(subtask.spec_refs),
+            "timing_obligation_ids": list(subtask.timing_obligation_ids),
             "contract": contract,
             "analysis": {
                 "extracted_writes": extracted.writes,
@@ -243,11 +326,18 @@ class Stage5Agent(BaseStageAgent):
             },
         }
 
-    def _write_contracts_file(self, module_name: str, entries: List[Dict[str, Any]]) -> Path:
+    def _write_contracts_file(
+        self,
+        module_name: str,
+        entries: List[Dict[str, Any]],
+        *,
+        input_fingerprint: str = "",
+    ) -> Path:
         path = self._contracts_file(module_name)
         payload = {
             "schema_version": "stage5_fragment_contracts_v1",
             "module": module_name,
+            "input_fingerprint": input_fingerprint,
             "contracts": entries,
         }
         self._write_text(path, json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
@@ -343,6 +433,7 @@ class Stage5Agent(BaseStageAgent):
         task: PlannerTaskInput,
         expected_module: str,
         expected_subtask: ModulePlanSubtask,
+        expected_timing_obligations: List[Any] | None = None,
     ) -> List[str]:
         errors: List[str] = []
         if artifact.task_id != task.task_id:
@@ -355,6 +446,10 @@ class Stage5Agent(BaseStageAgent):
             errors.append(f"target must equal {expected_subtask.target}")
         if artifact.spec_refs != expected_subtask.spec_refs:
             errors.append(f"spec_refs must equal {expected_subtask.spec_refs}")
+        if artifact.timing_obligation_ids != expected_subtask.timing_obligation_ids:
+            errors.append(
+                f"timing_obligation_ids must equal {expected_subtask.timing_obligation_ids}"
+            )
         if not artifact.code.strip():
             errors.append("code must not be empty")
         if "```" in artifact.code:
@@ -371,7 +466,42 @@ class Stage5Agent(BaseStageAgent):
             errors.append("code must not use multidimensional signal references; flatten arrays into scalar signals")
         if re.search(r"\b(?:generate|endgenerate|genvar)\b", code_without_comments):
             errors.append("code must not use generate/genvar; explicitly unroll repeated logic and instances")
+        obligations = expected_timing_obligations or []
+        contract_clocking = str(artifact.contract.clocking if artifact.contract is not None else "")
+        for obligation in obligations:
+            has_post_edge_write = any(
+                access.at == "POST_EDGE" for access in obligation.writes
+            )
+            has_edge_access = has_post_edge_write or any(
+                access.at in {"PRE_EDGE", "POST_EDGE"}
+                for access in [
+                    *obligation.reads,
+                    *obligation.combinational_outputs,
+                ]
+            )
+            has_comb_output = any(
+                access.at == "COMB" for access in obligation.combinational_outputs
+            )
+            if has_post_edge_write and (
+                "posedge" not in contract_clocking and "negedge" not in contract_clocking
+            ):
+                errors.append(
+                    f"{obligation.obligation_id}: POST_EDGE writes require a clocked fragment contract"
+                )
+            if has_comb_output and not has_edge_access and (
+                "posedge" in contract_clocking or "negedge" in contract_clocking
+            ):
+                errors.append(
+                    f"{obligation.obligation_id}: pure combinational obligation uses registered clocking"
+                )
         return errors
+
+    @staticmethod
+    def _is_nonfatal_timing_diagnostic(message: str) -> bool:
+        return (
+            "POST_EDGE writes require a clocked fragment contract" in message
+            or "pure combinational obligation uses registered clocking" in message
+        )
 
     def _validate_inputs(
         self,
@@ -591,6 +721,28 @@ class Stage5Agent(BaseStageAgent):
         if isinstance(candidate, Stage3ModuleSkeletonArtifact):
             return candidate
         return validate_model(Stage3ModuleSkeletonArtifact, candidate)
+
+    def _read_timing_binding_for_module(
+        self,
+        partial_artifacts: Dict[str, Any],
+        module_name: str,
+    ) -> ModuleTimingBindingArtifact | None:
+        candidate = partial_artifacts.get("timing_bindings")
+        if candidate is None:
+            return None
+        manifest = (
+            candidate
+            if isinstance(candidate, Stage3TimingBindingsArtifact)
+            else validate_model(Stage3TimingBindingsArtifact, candidate)
+        )
+        record = next((item for item in manifest.module_binding_files if item.module == module_name), None)
+        if record is None:
+            raise ValueError(f"Stage5 timing bindings missing module `{module_name}`")
+        path = self._resolve_output_path(record.binding_file)
+        if not path.exists():
+            raise FileNotFoundError(f"missing module timing binding sidecar: {path}")
+        with open(path, "r", encoding="utf-8") as f:
+            return validate_model(ModuleTimingBindingArtifact, json.load(f))
 
     def _get_spec_blocks_artifact(self, partial_artifacts: Dict[str, Any]) -> Stage4SpecBlocksArtifact:
         candidate = partial_artifacts.get("spec_blocks")

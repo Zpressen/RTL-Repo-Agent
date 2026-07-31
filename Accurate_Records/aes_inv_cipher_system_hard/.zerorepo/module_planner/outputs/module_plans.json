@@ -1,0 +1,37 @@
+{
+  "schema_version": "module_plans_v1",
+  "task_id": "aes_inv_cipher_system_hard",
+  "input_fingerprint": "8ef714e462c7bee8b508201a86c60c9482b3e47fd7f20502cdd0661b2e8a559b",
+  "module_order": [
+    "aes_sbox",
+    "aes_inv_sbox",
+    "aes_key_expand",
+    "aes_inv_cipher_top"
+  ],
+  "stage4_status": "module_plans_planned",
+  "completed_modules": [
+    "aes_sbox",
+    "aes_inv_sbox",
+    "aes_key_expand",
+    "aes_inv_cipher_top"
+  ],
+  "resume_cursor": 4,
+  "module_plan_files": [
+    {
+      "module": "aes_sbox",
+      "plan_file": "module_plan_json/aes_sbox.json"
+    },
+    {
+      "module": "aes_inv_sbox",
+      "plan_file": "module_plan_json/aes_inv_sbox.json"
+    },
+    {
+      "module": "aes_key_expand",
+      "plan_file": "module_plan_json/aes_key_expand.json"
+    },
+    {
+      "module": "aes_inv_cipher_top",
+      "plan_file": "module_plan_json/aes_inv_cipher_top.json"
+    }
+  ]
+}

@@ -103,7 +103,7 @@ Do not output internal reasoning.
 
 {module_skeleton}
 
-{kg_child_context_section}{global_defines_section}# GENERATED FRAGMENTS
+{planning_kg_context_section}{kg_child_context_section}{global_defines_section}# GENERATED FRAGMENTS
 
 {generated_fragments}
 """.strip()
@@ -235,12 +235,18 @@ def build_prompt(
     module_spec: str,
     module_skeleton: str,
     generated_fragments: str,
+    planning_kg_context: str = "",
     kg_child_context: str = "",
     global_defines_context: str = "",
 ) -> str:
     kg_child_context_section = (
         f"# KG CHILD MODULE CONTEXT\n\n{kg_child_context}\n\n"
         if kg_child_context
+        else ""
+    )
+    planning_kg_context_section = (
+        f"# MODULE-CENTRED PLANNING KG CONTEXT\n\n{planning_kg_context}\n\n"
+        if planning_kg_context
         else ""
     )
     global_defines_section = (
@@ -251,6 +257,7 @@ def build_prompt(
     return PROMPT_TEMPLATE.format(
         module_spec=module_spec or "None",
         module_skeleton=module_skeleton or "None",
+        planning_kg_context_section=planning_kg_context_section,
         kg_child_context_section=kg_child_context_section,
         global_defines_section=global_defines_section,
         generated_fragments=generated_fragments or "None",

@@ -13,6 +13,8 @@ from .explicit_boundaries import extract_explicit_submodule_names
 from .entity_normalization import build_entity_alias_groups, canonicalize_entities, canonicalize_entity
 from .skeleton_doc import parse_module_skeleton_doc
 from .spec_block_splitter import extract_module_section, resolve_module_spec_text, split_spec_blocks
+from .temporal import canonical_fingerprint
+from .temporal_binding_checker import check_temporal_bindings
 
 __all__ = [
     "expand_markdown_inputs",
@@ -34,4 +36,6 @@ __all__ = [
     "extract_module_section",
     "resolve_module_spec_text",
     "split_spec_blocks",
+    "canonical_fingerprint",
+    "check_temporal_bindings",
 ]

@@ -158,7 +158,7 @@ class DebugContextRouterInput(BaseModel):
 class RepoReActInput(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    module_name: str
+    module_name: str = Field(description="Planner logical module name used for artifacts, specs, and KG queries.")
     repair_mode: Literal["syntax", "functional"] = "functional"
     repair_scope: Literal["module", "repo"] = "module"
     workspace_root: Path
@@ -166,7 +166,10 @@ class RepoReActInput(BaseModel):
     rtl_path: Path
     merged_file: Path
     rtl_root: Path | None = None
-    top_module: str = ""
+    top_module: str = Field(
+        default="",
+        description="Runtime simulation top used for RTL, testbench, VCD, and verifier lookup; defaults to module_name.",
+    )
     verify_dir: Path | None = None
     verify_script: Path | None = None
     output_root: Path | None = None
@@ -178,6 +181,7 @@ class RepoReActInput(BaseModel):
     sim_failed_log: str = ""
     initial_mismatch_count: int = 0
     max_steps: int = 30
+    max_agent_turns: int | None = Field(default=None, ge=1)
     kg_hop_depth: int = 3
     stage_artifacts: dict[str, str] = Field(default_factory=dict)
     context_pack_path: str = ""
@@ -189,7 +193,9 @@ class RepoReActResult(BaseModel):
     is_pass: bool = False
     rtl_code: str = ""
     steps: int = 0
+    agent_turns: int = 0
     action_calls: int = 0
+    patch_attempts: int = 0
     mismatch_count: int = 0
     trace_report_path: str = ""
     sim_output_path: str = ""

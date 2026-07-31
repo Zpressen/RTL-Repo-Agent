@@ -11,6 +11,8 @@ class ModulePlanSubtask(BaseModel):
     description: str = Field(..., min_length=1)
     spec_refs: List[str] = Field(..., min_length=1)
     constraints: List[str] = Field(default_factory=list, max_length=3)
+    timing_obligation_ids: List[str] = Field(default_factory=list)
+    logical_value_tags: List[str] = Field(default_factory=list)
 
 
 class ModulePlanArtifact(BaseModel):
@@ -27,6 +29,7 @@ class ModulePlanRecord(BaseModel):
 class Stage4ModulePlansArtifact(BaseModel):
     schema_version: str = Field(default="module_plans_v1")
     task_id: str = Field(..., min_length=1)
+    input_fingerprint: str = Field(default="")
     module_order: List[str] = Field(..., min_length=1)
     stage4_status: Literal["module_plans_in_progress", "module_plans_planned"] = Field(default="module_plans_planned")
     completed_modules: List[str] = Field(default_factory=list)
@@ -82,6 +85,7 @@ class SubtaskCodeArtifact(BaseModel):
     subtask_id: str = Field(..., min_length=1)
     target: str = Field(..., min_length=1)
     spec_refs: List[str] = Field(..., min_length=1)
+    timing_obligation_ids: List[str] = Field(default_factory=list)
     code: str = Field(..., min_length=1)
     contract: FragmentContract | None = None
 
@@ -95,6 +99,7 @@ class ModuleCodegenRecord(BaseModel):
 class Stage5CodegenArtifact(BaseModel):
     schema_version: str = Field(default="stage5_codegen_v1")
     task_id: str = Field(..., min_length=1)
+    input_fingerprint: str = Field(default="")
     module_order: List[str] = Field(..., min_length=1)
     module_files: List[ModuleCodegenRecord] = Field(..., min_length=1)
 

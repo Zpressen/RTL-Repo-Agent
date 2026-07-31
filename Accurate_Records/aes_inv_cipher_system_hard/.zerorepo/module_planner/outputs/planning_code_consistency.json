@@ -1,0 +1,128 @@
+{
+  "schema_version": "planning_code_consistency_v1",
+  "planned_modules": [
+    "aes_sbox",
+    "aes_inv_sbox",
+    "aes_key_expand",
+    "aes_inv_cipher_top"
+  ],
+  "materialized_modules": [
+    "aes_inv_cipher_top",
+    "aes_inv_sbox",
+    "aes_key_expand",
+    "aes_sbox"
+  ],
+  "missing_actual_modules": [],
+  "unexpected_actual_modules": [],
+  "planned_child_not_instantiated": [],
+  "interface_width_mismatches": [
+    {
+      "module": "aes_inv_cipher_top",
+      "port": "clk",
+      "planned_width": "",
+      "actual_width": "",
+      "reason": "port missing from skeleton frame"
+    },
+    {
+      "module": "aes_inv_cipher_top",
+      "port": "done",
+      "planned_width": "",
+      "actual_width": "",
+      "reason": "port missing from skeleton frame"
+    },
+    {
+      "module": "aes_inv_cipher_top",
+      "port": "key",
+      "planned_width": "",
+      "actual_width": "[127:0]",
+      "reason": "port missing from skeleton frame"
+    },
+    {
+      "module": "aes_inv_cipher_top",
+      "port": "kld",
+      "planned_width": "",
+      "actual_width": "",
+      "reason": "port missing from skeleton frame"
+    },
+    {
+      "module": "aes_inv_cipher_top",
+      "port": "ld",
+      "planned_width": "",
+      "actual_width": "",
+      "reason": "port missing from skeleton frame"
+    },
+    {
+      "module": "aes_inv_cipher_top",
+      "port": "rst",
+      "planned_width": "",
+      "actual_width": "",
+      "reason": "port missing from skeleton frame"
+    },
+    {
+      "module": "aes_inv_cipher_top",
+      "port": "text_in",
+      "planned_width": "",
+      "actual_width": "[127:0]",
+      "reason": "port missing from skeleton frame"
+    },
+    {
+      "module": "aes_inv_cipher_top",
+      "port": "text_out",
+      "planned_width": "",
+      "actual_width": "[127:0]",
+      "reason": "port missing from skeleton frame"
+    },
+    {
+      "module": "aes_inv_sbox",
+      "port": "byte_in",
+      "planned_width": "",
+      "actual_width": "[7:0]",
+      "reason": "port missing from skeleton frame"
+    },
+    {
+      "module": "aes_inv_sbox",
+      "port": "byte_out",
+      "planned_width": "",
+      "actual_width": "[7:0]",
+      "reason": "port missing from skeleton frame"
+    },
+    {
+      "module": "aes_key_expand",
+      "port": "clk",
+      "planned_width": "",
+      "actual_width": "",
+      "reason": "port missing from skeleton frame"
+    },
+    {
+      "module": "aes_key_expand",
+      "port": "initial_key",
+      "planned_width": "",
+      "actual_width": "[127:0]",
+      "reason": "port missing from skeleton frame"
+    },
+    {
+      "module": "aes_key_expand",
+      "port": "kld",
+      "planned_width": "",
+      "actual_width": "",
+      "reason": "port missing from skeleton frame"
+    },
+    {
+      "module": "aes_key_expand",
+      "port": "round_key",
+      "planned_width": "",
+      "actual_width": "[127:0]",
+      "reason": "port missing from skeleton frame"
+    },
+    {
+      "module": "aes_key_expand",
+      "port": "rst",
+      "planned_width": "",
+      "actual_width": "",
+      "reason": "port missing from skeleton frame"
+    }
+  ],
+  "unmaterialized_skeleton_blocks": [],
+  "query_errors": [],
+  "status": "warn"
+}

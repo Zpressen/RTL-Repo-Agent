@@ -1,1822 +1,583 @@
-# ZeroRepo RTL Agent 系统架构文档
+# 仓库级 RTL 代码生成 Agent：功能架构、方法机制与论文审计
 
-> **版本**: v2.0 — 基于 2026-06-20 代码库分析（含 RepoReAct 重构更新）
-> **作者**: 系统架构分析
-> **范围**: `/zerorepo/rtl_impl/` 完整子系统
+> 本报告从系统功能、阶段协作和论文方法三个层面描述当前 RTL Agent。为突出整体设计，正文不展开源码文件、函数、类和变量名。
 
----
+## 1. 审计范围与结论概览
 
-## 目录
+### 1.1 系统目标
 
-1. [系统概述](#1-系统概述)
-2. [顶层架构](#2-顶层架构)
-3. [RTL 知识图谱子系统](#3-rtl-知识图谱子系统)
-4. [Module Planner 规划管线](#4-module-planner-规划管线)
-5. [Debug Agent 调试子系统](#5-debug-agent-调试子系统)
-6. [RepoReAct Runner 仓库级自主 ReAct 调试环](#5b-reporeact-runner仓库级自主-react-调试环) (NEW — v2)
-7. [Trace Report 追踪报告](#5c-trace-report追踪报告)
-8. [KG Agent 知识图谱查询子系统](#6-kg-agent-知识图谱查询子系统)
-9. [Retrieval Agent 检索子系统](#7-retrieval-agent-检索子系统)
-10. [工具系统设计](#8-工具系统设计)
-11. [上下文管理设计](#9-上下文管理设计)
-12. [记忆系统设计](#10-记忆系统设计)
-13. [模型与格式化层](#11-模型与格式化层)
-14. [完整任务协作流程](#12-完整任务协作流程)
-15. [持久化与检查点机制](#13-持久化与检查点机制)
-16. [错误处理与韧性设计](#14-错误处理与韧性设计)
-17. [配置系统](#15-配置系统)
-18. [附录：文件索引](#16-附录文件索引)
+该系统处理的不是单模块代码补全，而是仓库级 RTL 生成：输入可能是一份统一系统规格，也可能是多份模块规格；输出包含若干相互实例化的 Verilog/SystemVerilog 模块。生成结果需要同时满足模块职责、端口连接、位宽、握手、复位、数据语义和周期关系，并在外部 testbench 下表现正确。若验证失败，系统还要利用日志、波形和结构依赖修改一个或多个 RTL 文件。
 
----
+因此，系统的目标可以概括为：**将自然语言硬件规格逐步转化为仓库结构、模块结构、周期约束、局部实现任务和完整 RTL，再通过仿真反馈完成仓库级修复。**
 
-## 1. 系统概述
+### 1.2 整体架构
 
-### 1.1 项目定位
+当前系统采用“固定规划流水线 + 局部自主 Agent”的混合架构。固定流水线负责规格组织、时序抽取、仓库规划、模块规划、代码生成顺序、产物保存和恢复；模块整合、语法修复和系统功能修复则采用 ReAct 式循环，Agent 可以主动读取证据、运行检查、修改代码并反复验证。
 
-ZeroRepo RTL Agent 是一个 **从自然语言规范到可综合 SystemVerilog RTL 代码的全自动生成与调试系统**。它接收 Markdown 格式的硬件设计规范（可附带框图/流程图/时序图等图片），通过多阶段 LLM 协作管线，最终产出经过 Verilator 仿真验证的可综合 RTL 代码。
+主流程依次完成：
 
-### 1.2 核心能力
+1. 读取和组织规格，抽取全局时序事实；
+2. 规划顶层、模块集合、层次和叶到根生成顺序；
+3. 将跨模块时序要求分配到模块、信号和结构块；
+4. 为每个模块建立结构骨架并拆成局部实现任务；
+5. 逐任务生成 RTL 片段，再重构为完整模块；
+6. 对模块做静态检查和语法门禁；
+7. 对完整仓库做系统仿真；
+8. 失败时从首个真实波形分歧开始进行跨模块修复。
 
-| 能力 | 描述 |
-|------|------|
-| **规范理解** | 从 Markdown 规范+图片中提取接口、时序、控制流、数据通路等结构化契约 |
-| **架构规划** | 自动将规范分解为模块层级，生成仓库骨架和模块骨架 |
-| **代码生成** | 基于规划结果，按子任务逐步生成 SystemVerilog RTL 代码 |
-| **仿真验证** | 使用 Verilator 进行语法检查与功能仿真 |
-| **自动调试** | 基于 VCD 波形追踪、知识图谱切片、LLM 驱动的迭代修复循环 |
-| **知识积累** | 将代码结构、仿真结果持久化到 Neo4j 图数据库，支持跨任务查询 |
+### 1.3 核心结论
 
-### 1.3 技术栈
+系统目前最成熟的能力有五项。第一，仓库、模块和实现任务构成逐层收窄的规划链。第二，自然语言中的事件、相位、延迟和跨模块周期关系会逐步绑定到模块、物理信号和局部代码块。第三，模块按叶到根顺序生成，使父模块能够看到已经物化的子模块接口。第四，完整模块不是机械拼接片段，而是由整合 Agent 结合规格、计划、子模块和静态检查进行重构。第五，系统级失败会被转化为 DUT 与参考设计的首个真实分歧，并沿驱动关系和端口边界逐跳追踪。
 
-- **语言**: Python 3.10+
-- **LLM 框架**: AgentScope (ReAct Agent)
-- **图数据库**: Neo4j (Bolt 协议)
-- **RTL 解析**: tree-sitter-verilog
-- **仿真引擎**: Verilator
-- **波形分析**: vcdvcd (VCD 解析)
-- **数据建模**: Pydantic v2
+主要不足也很明确：规划约束尚未全部程序化强制；模块级主流程以语法门禁为主，功能验证主要集中于系统级；系统验证依赖外部 benchmark；时序和规划—代码一致性错误通常只告警；长期记忆能够写入但自动召回没有闭环；没有形式验证，也缺少成熟的批量实验、token 和耗时统计。
 
----
+### 1.4 论文主线
 
-## 2. 顶层架构
+最适合的论文主线是：**面向仓库级 RTL 生成的分层架构规划与周期约束细化，结合叶到根模块实现，以及由波形首分歧驱动的仓库级修复。**
 
-### 2.1 子系统划分
+这条主线包含三个相互支撑的贡献：从系统规格建立多模块仓库结构；将跨模块周期语义逐级细化到局部实现；用动态波形与静态结构证据修复生成错误。
 
-整个 `rtl_impl` 系统由 **七个核心子系统** 组成，呈层次化协作关系：
+## 2. 仓库结构与核心入口
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     RTL Agent 系统架构                            │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                   │
-│  ┌─────────────────────┐  ┌──────────────────────┐               │
-│  │   Module Planner     │  │    Retrieval Agent    │               │
-│  │   (6-stage pipeline) │──│    (context selector) │               │
-│  └──────────┬──────────┘  └──────────────────────┘               │
-│             │                                                      │
-│             │ Stage6: merge + debug                                │
-│             ▼                                                      │
-│  ┌─────────────────────┐  ┌──────────────────────┐               │
-│  │    Debug Agent       │  │     KG Agent          │               │
-│  │  (workdir + oracle)  │──│   (query + record)    │               │
-│  └──────────┬──────────┘  └──────────┬───────────┘               │
-│             │                         │                             │
-│             │ mismatch detected       │ cypher queries              │
-│             ▼                         ▼                             │
-│  ┌─────────────────────────────────────────────────┐              │
-│  │           RepoReAct Runner (NEW)                 │              │
-│  │   repository-level autonomous ReAct debug loop   │              │
-│  │   11 tools: read/search/KG/VCD/check/patch/      │              │
-│  │   correct + evidence gate + rollback              │              │
-│  └──────────────────────┬──────────────────────────┘              │
-│                         │                                          │
-│                         │ verilator sim + trace                     │
-│                         ▼                                          │
-│  ┌─────────────────────────────────────────────────┐              │
-│  │              RTL Knowledge Graph                 │              │
-│  │    (Neo4j: code structure + sim results)         │              │
-│  └─────────────────────────────────────────────────┘              │
-│                                                                   │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### 2.2 子系统职责矩阵
-
-| 子系统 | 核心职责 | 关键文件 |
-|--------|---------|---------|
-| **RTL Knowledge Graph** | RTL 代码解析、图数据库构建与查询 | `rtl_kg/`, `rtl_kg_service.py` |
-| **Module Planner** | 6 阶段规范→代码规划管线 | `module_planner/` |
-| **Debug Agent** | 工作目录准备、oracle TB 拷贝、语法修复、初始仿真 | `debug_agent/` |
-| **RepoReAct Runner** (NEW) | 仓库级自主 ReAct 调试环：观察→诊断→patch→验证→回滚 | `repo_react/` |
-| **KG Agent** | 知识图谱模板化查询与结果写入 | `kg_agent/` |
-| **Retrieval Agent** | 为代码生成/合并阶段检索相关规范片段 | `retrieval_agent/` |
-
-### 2.3 数据流向图
-
-```
-Spec (.md + images)
-    │
-    ▼
-[Stage 1: Ingest & Extract] ─── contracts.json, modules.json
-    │
-    ▼
-[Stage 2: Repo Skeleton] ─── repo_skeleton.json
-    │
-    ▼
-[Stage 3: Module Skeletons] ─── module_skeletons.json + .md skeleton docs
-    │
-    ▼
-[Stage 4: Spec Blocks + Module Plans] ─── spec_blocks.json, module_plans.json
-    │                                        │
-    │                          ┌─────────────┘
-    │                          ▼
-    │               [Retrieval Agent] ─── block_spec_retrieval_json/
-    │
-    ▼
-[Stage 5: Codegen] ─── stage5_codegen.json (per-module fragments)
-    │
-    ▼
-[Stage 6: Merge] ─── merged .sv files
-    │
-    ▼
-[ModuleDebugRunner] ─── 准备 debug workdir, oracle TB, support.sv
-    │
-    ├── pre-debug syntax/interface repair (LLM 驱动, 最多 5 次)
-    ├── 初始 SimReviewer.review()
-    │   ├── PASS → 结束, 记录结果到 KG
-    │   └── FAIL (has mismatches) → 进入 RepoReActRunner
-    │
-    ▼
-[RepoReActRunner] ─── 仓库级自主 ReAct 调试环 (v2)
-    │
-    ├── 工具集: read_context, search_context, query_rtl_kg,
-    │   read_spec, retrieve_spec_block, list_vcd_signals, probe_vcd,
-    │   run_check, route_debug_context, read_long_term_memory,
-    │   apply_patch, replace_block, record_correction
-    │
-    ├── 子代理: DebugInvestigator (独立上下文, 只读调查员)
-    │   └── 主代理通过 route_debug_context 启动, 返回 <3000字符分析报告
-    │
-    ├── Evidence gate: patch 前必须满足六道关卡
-    ├── apply_patch: 自动 snapshot → lint → sim → trace → 回滚判断
-    ├── record_correction: 写 planning_corrections/ overlay, 不改原文件
-    ├── Observation budget: 最多 16 次只读调用后强制行动
-    ├── Three-tier compaction: Light(刷新) → Checkpoint(清空+快照) → Deep(削减)
-    │
-    ├── PASS → 复制 rtl.sv 到 merged_file, 记录 SIMULATION PASS 到 KG
-    └── max_steps_exceeded/give_up/error → 记录失败原因到 KG
-    │
-    ▼
-[KG Agent] ─── SimulationResult 节点 + HAS_SIM_RESULT 边写入 Neo4j
-    │
-    ▼
-Final verified RTL (.sv files) + KG state
-```
-
----
-
-## 3. RTL 知识图谱子系统
-
-### 3.1 设计目标
-
-RTL 知识图谱是整个系统的 **结构化记忆核心**。它将 RTL 代码仓库转化为可查询的图结构，为 Agent 提供对代码库的精确、结构化的理解能力。
-
-### 3.2 图谱本体 (Ontology)
-
-#### 节点类型 (12 种)
-
-| 节点类型 | Neo4j Label | 含义 | 示例 |
-|---------|------------|------|------|
-| `RepoNode` | `Repo` | 仓库根节点 | `name: "my_cpu"` |
-| `FileNode` | `File` | 文件/目录节点 | `path: "rtl/alu.sv"` |
-| `ModuleNode` | `Module` | Verilog 模块定义 | `name: "alu", sl: 10, el: 85` |
-| `PackageNode` | `Package` | SystemVerilog package 定义 | `name: "my_pkg"` |
-| `InstanceNode` | `Instance` | 模块实例化点 | `name: "u_adder"` |
-| `PortNode` | `Port` | 模块端口 | `name: "clk", dir: "input"` |
-| `SignalNode` | `Signal` | 内部信号 | `name: "counter", decl_kind: "reg"` |
-| `ParamNode` | `Param` | 参数/局部参数 | `name: "WIDTH", pkind: "parameter"` |
-| `AlwaysBlockNode` | `AlwaysBlock` | always 过程块 | `bkind: "ff"` |
-| `AssignNode` | `Assign` | 连续赋值语句 | `lhs_short: "result"` |
-| `GenerateNode` | `Generate` | generate 块骨架 | `gkind: "for"` |
-| `FuncNode` | `Func` | 模块内函数声明 | `name: "clog2"` |
-
-#### 关系类型 (10 种)
-
-| 关系类型 | 方向 | 含义 |
-|---------|------|------|
-| `CONTAINS` | Repo→File, File(dir)→File | 文件系统包含关系 |
-| `DEFINES` | File→Module/Package | 文件定义模块/包 |
-| `HAS` | Module→Port/Signal/Param/Always/Assign/Generate/Func | 模块拥有子元素 |
-| `INSTANTIATES` | Module→Instance | 模块包含实例化 |
-| `OF_MODULE` | Instance→Module | 实例化指向被实例化的模块 |
-| `CONNECTS` | Instance→Signal/Port/Expr | 实例端口连接 |
-| `DRIVES` | Always/Assign→Signal/Port | 驱动关系 (仅 LHS) |
-| `INCLUDES` | File→File | ``` `include ``` 引用 |
-| `IMPORTS` | Module/File→Package | SystemVerilog import |
-| `CALLS` | Always/Assign→Func | 函数调用关系 |
-
-### 3.3 图谱构建流程
-
-```
-KnowledgeGraphRTL.build(repo_root)
-│
-├── 1. 创建 Repo 节点 (uid = repo_name@commit_sha)
-├── 2. DFS 遍历目录树
-│   ├── 为每个目录/文件创建 File 节点
-│   └── 创建 CONTAINS 边 (带 order 属性)
-├── 3. 对每个 RTL 文件, 调用 RTLFileGraphBuilder.build_file_graph()
-│   ├── tree-sitter-verilog 解析 AST
-│   ├── 提取模块声明 → Module 节点 + DEFINES 边
-│   ├── 提取端口列表 → Port 节点 + HAS 边
-│   ├── 提取参数声明 → Param 节点 + HAS 边
-│   ├── 提取内部信号 → Signal 节点 + HAS 边
-│   ├── 提取 always 块 → AlwaysBlock 节点 + HAS 边 + DRIVES 边
-│   ├── 提取 assign 语句 → Assign 节点 + HAS 边 + DRIVES 边
-│   ├── 提取模块实例化 → Instance 节点 + INSTANTIATES 边 + CONNECTS 边
-│   ├── 提取函数声明 → Func 节点 + HAS 边
-│   ├── 提取函数调用 → CALLS 边
-│   ├── 提取 generate 块 → Generate 节点 + HAS 边
-│   ├── 提取 package 声明 → Package 节点 + IMPORTS 边
-│   └── 提取 import 语句 → IMPORTS 边
-├── 4. 后处理 (Post-pass resolution)
-│   ├── _resolve_of_module(): Instance → Module (按 module_ref 匹配)
-│   ├── _resolve_imports(): 将占位 Package 节点替换为实际 Package 节点
-│   └── _resolve_includes(): 解析 `include 创建 INCLUDES 边
-└── 5. 文本回退 (text fallback)
-    └── 对 tree-sitter 无法解析的模块, 用正则表达式提取并补充节点
-```
-
-### 3.4 核心设计决策
-
-#### 3.4.1 精简的 DRIVES 关系 (LHS-only)
-
-系统只记录 **左值 (LHS) 驱动关系**，不展开完整的表达式 AST。这样做的原因：
-- **避免图爆炸**: 完整 AST 会导致节点数指数增长
-- **保留可追溯性**: LHS 信息足够支持 COI (Cone of Influence) 反向追踪
-- **与调试流程对齐**: 调试时主要关心"谁驱动了这个信号"
-
-#### 3.4.2 双解析器策略
-
-```
-优先级 1: tree-sitter-verilog (AST-based)
-    ↓ 失败时
-优先级 2: 正则表达式文本回退 (text-based fallback)
-```
-
-文本回退解析器 (`_fallback_*` 方法族) 能处理 tree-sitter 不兼容但 Verilator 合法的 RTL 代码，确保系统韧性。
-
-#### 3.4.3 稳定唯一标识符 (UID)
-
-每个节点/边都有稳定的 UID，格式为 `repo_uid:kind:name:path[:sl:el]`，支持：
-- Neo4j MERGE 去重
-- 跨管道阶段引用
-- 增量更新
-
-### 3.5 RTL KG Service (服务封装层)
-
-`RTLKgService` 是对底层 KG 的服务化封装：
-
-```
-RTLKgService
-├── 连接管理: Neo4jConnection (Bolt)
-├── 初始化: initialize() → 验证连接, 创建模式约束
-├── 快照同步: sync_plan_snapshot() / refresh_repo_files()
-│   ├── 构建增强快照 (_build_augmented_snapshot)
-│   ├── 文本回退补充 (_augment_snapshot_with_text_fallback)
-│   ├── 按规划骨架过滤 (_filter_snapshot_to_planned_skeleton)
-│   └── 注入规划元数据 (file_kind, implementation_status 等)
-├── 查询接口: query(cypher, params, limit)
-│   ├── 只读强制 (禁止 CREATE/MERGE/SET/DELETE/CALL db.*)
-│   ├── 自动 repo_uid 注入
-│   └── 自动 LIMIT 追加
-├── 批量上下文: build_batch_context(batch)
-│   ├── 文件元数据查询
-│   ├── 模块信息查询
-│   └── 实例关系查询
-└── 查询工具: QueryRtlKgTool (Agent 可调用的工具封装)
-```
-
-### 3.6 Neo4j 摄入器
-
-`RTLNeo4jIngestor` 负责将内存中的图数据批量写入 Neo4j：
-
-- **批量 UNWIND**: 按标签/关系类型分组，使用 `UNWIND $rows AS row MERGE` 模式
-- **模式管理**: `ensure_schema()` 自动创建唯一性约束和常用索引
-- **两种模式**:
-  - `full`: 先按 `repo_uid` 分区删除，再全量摄入
-  - `delta`: MERGE 增量更新
-- **值规范化**: 自动将 dict/list 转为 JSON 字符串，截断超长文本，处理 Path 等非基本类型
+### 2.1 功能边界
 
----
+与 RTL 主流程直接相关的能力可以分为七类：
 
-## 4. Module Planner 规划管线
+| 子系统 | 主要职责 |
+| --- | --- |
+| 任务入口 | 解析规格来源、运行模式、模型、恢复选项和外部服务 |
+| 规格与规划 | 将 Markdown 规格转成仓库结构、模块骨架和实现任务 |
+| 时序建模 | 抽取事件、阶段、延迟、逻辑值及跨模块周期义务 |
+| 代码生成与整合 | 生成局部片段，再重构为完整模块 |
+| 知识图谱 | 保存规划关系、模块层次和实际 RTL 静态结构 |
+| 验证与 Debug | 执行 lint、仿真、波形分析、补丁验证和回滚 |
+| 长期记忆 | 保存成功补丁、失败方向和规划修正经验 |
 
-### 4.1 总体设计
+仓库中还有通用软件生成和评测组件，但它们不属于当前 RTL 主链。早期遗留的其他 RTL 入口也不再完整，当前推荐方式是直接运行仓库级 RTL Planner。
 
-Module Planner 是系统的 **中央规划引擎**，采用 **6 阶段流水线** 架构，将自然语言规范逐步转化为可综合的 RTL 代码。每个阶段产出结构化 JSON 产物，下游阶段消费上游产物。
+### 2.2 输入与输出
 
-### 4.2 阶段详解
+输入可以是单个 Markdown、包含多份 Markdown 的目录或一个项目名，并可附带模型配置、恢复开关、知识图谱配置、时序规划配置和外部验证环境。入口能够发现规格中的图片路径，但当前规划 Agent 没有真正消费这些图片，因此图示规格理解尚未形成有效能力。
 
-#### Stage 1: 规范摄取与契约提取 (Ingest & Extract)
+输出包括仓库计划、时序约束、模块骨架、模块实现计划、局部片段、完整 RTL、模块语法结果、系统仿真结果，以及 Debug 产生的波形、首分歧报告、补丁历史和长期记忆。
 
-**Agent**: `Stage1Agent`
-**输入**: Markdown 规范文件 + 图片
-**输出**: `Stage1ContractsArtifact` (contracts.json + modules.json)
+### 2.3 恢复与任务隔离
 
-```
-任务:
-├── 解析 Markdown 规范文本 → SpecFragment 列表
-├── 预扫描图片 → ImagePrescan + ImageCard
-├── 提取实体别名 → EntityAliasGroup
-├── 构建文档组织画像 → DocumentOrganizationProfile
-├── 提取接口契约 → InterfaceContract (ports, directions, widths)
-├── 提取时序契约 → TimingContract (clock, reset, latency)
-├── 提取控制契约 → ControlContract (FSM states, transitions)
-├── 提取数据通路契约 → DatapathContract
-├── 提取结构契约 → StructureContract (submodule hints)
-├── 提取规划事实 → PlanningFactsContract
-└── 构建项目记忆卡 → ProjectMemoryCard
-```
-
-**核心 Schema**:
-- `InterfaceContract`: 端口名称、方向、位宽、角色、含义
-- `TimingContract`: 时钟名、边沿、复位行为、各输出延迟周期数
-- `ControlContract`: 控制条件、状态转换、计数器规则
-- `DatapathContract`: 中间对象、路径注解
+每个任务拥有独立工作区。多个规划和生成阶段保存已完成模块、执行位置、输入内容指纹和模块级结果。恢复时不仅检查文件是否存在，还检查上游输入是否变化、结构是否合法、依赖文件是否完整，从而避免盲目复用陈旧结果。
 
-#### Stage 2: 仓库骨架规划 (Repo Skeleton)
+## 3. 系统整体执行流程
 
-**Agent**: `Stage2Agent`
-**输入**: Stage1 contracts + modules
-**输出**: `Stage2RepoSkeletonArtifact` (repo_skeleton.json)
+### 3.1 顶层流程
 
+```mermaid
+flowchart TD
+    A[自然语言 RTL 规格] --> B[规格组织与时序抽取]
+    B --> C[仓库架构规划]
+    C --> D[跨模块时序分配]
+    D --> E[模块结构骨架]
+    E --> F[信号与结构块时序绑定]
+    F --> G[局部实现任务规划]
+    G --> H[RTL 片段生成]
+    H --> I[完整模块重构]
+    I --> J[静态检查与语法门禁]
+    J --> K{全部模块完成?}
+    K -->|否| H
+    K -->|是| L[系统级仿真]
+    L -->|通过| M[完成]
+    L -->|失败| N[波形与结构证据驱动修复]
+    N --> L
 ```
-任务:
-├── 确定模块实例化层次结构
-├── 为每个模块分配 File 文件
-├── 建立模块间依赖关系
-└── 生成全局不变量 (GlobalInvariants)
-```
-
-**核心 Schema**:
-- `RepoModuleSkeleton`: 模块名、负责文件、子实例列表、端口列表
-- `SkeletonHierarchyEdge`: 父子模块关系
 
-#### Stage 3: 模块骨架生成 (Module Skeleton)
+### 3.2 分阶段设计的作用
 
-**Agent**: `Stage3Agent`
-**输入**: Stage2 repo skeleton + modules
-**输出**: `Stage3ModuleSkeletonArtifact` (module_skeletons.json + .md docs)
-
-```
-任务 (每个模块):
-├── 生成模块接口声明 (端口、参数)
-├── 生成内部信号声明
-├── 生成 always_ff / always_comb / assign 块骨架
-├── 为每个块标注目标功能 (block_label, block_kind)
-├── 生成子模块实例化骨架
-├── 输出 Markdown 文档 (module_skeleton_docs/)
-└── 输出结构化 JSON (module_skeleton_json/)
-```
+一次性生成整个仓库时，模型很难同时维持全局模块关系和局部 always 块细节；各模块即使单独合理，也可能在连接、位宽或周期上不一致；失败后更难判断问题来自规格理解、模块划分、局部实现还是顶层集成。
 
-**核心 Schema**:
-- `ModuleSkeletonExport`: 完整的 SystemVerilog 骨架文本 + 结构化块列表
-- `StructuralBlock`: block_id, block_kind (decl/ff/comb/assign/inst), raw_text
-- `BlockBehaviorOverlay`: purpose, code_shape, retrieval_focus
+分阶段设计为每个层次建立明确中间表示：仓库层描述模块和层次，时序层描述周期关系，模块层描述代码结构，任务层描述局部实现，代码层描述实际 RTL，验证层描述动态行为差异。这些产物既是下一阶段输入，也是恢复、审计和 Debug 的证据。
 
-#### Stage 4: 规范块分配与模块计划 (Spec Blocks + Module Plans)
+### 3.3 固定流程与自主 Agent
 
-**Stage 4 分为两个子阶段:**
+固定流程决定阶段顺序、模块顺序、恢复规则和验证时机；自主 Agent 则用于处理不适合一次性预测的任务，包括模块重构、lint 修复和系统功能修复。这种结构比完全自主 Agent 更可控，又比纯流水线更能应对复杂错误。
 
-##### 4a. Spec Blocks (规范块切分)
+### 3.4 逐模块交错执行
 
-**Agent**: `Stage4SpecBlocksAgent`
-**输入**: Stage3 skeletons + 原始规范
-**输出**: `Stage4SpecBlocksArtifact` (spec_blocks.json)
+系统不是先生成所有片段、再统一整合所有模块，而是对每个模块连续执行“片段生成—完整模块重构—语法门禁—结构更新”，然后进入下一个模块。由于顺序是叶到根，父模块整合时可以读取已经物化的子模块接口和代码。
 
-```
-任务:
-├── 将原始规范文本切分为独立的 SpecBlock
-├── 每个 SpecBlock 包含 block_id, text, 相关端口/参数
-├── 标注 interface_block 和 implementation_block
-└── 建立 SpecBlock → Module 的映射
-```
+## 4. 规格处理与结构化表示
 
-##### 4b. Module Plans (模块实现计划)
+### 4.1 规格组织
 
-**Agent**: `Stage4ModulePlanAgent`
-**输入**: Stage3 skeletons + SpecBlocks
-**输出**: `Stage4ModulePlansArtifact` (module_plans.json + 每个模块的计划 JSON)
+系统递归读取任务范围内的 Markdown，保存来源、名称和正文。统一系统规格会在后续为不同模块选择不同片段；多文件规格则会综合当前文件和同目录相关材料。
 
-```
-任务 (每个模块):
-├── 为每个骨架块匹配相关 SpecBlock (通过 Retrieval Agent)
-├── 生成候选实现方案 (ModuleCandidate × N)
-├── 多维度评估 (checklist scoring):
-│   ├── 接口兼容性
-│   ├── 时序正确性
-│   ├── 控制逻辑完整性
-│   ├── 数据通路正确性
-│   └── 代码可实现性
-├── 两两对比 (PairwiseTieBreak)
-├── 选择最优方案 → FinalModulePlan
-└── 将计划分解为子任务 (ModulePlanSubtask)
-```
+规格切分优先利用 Markdown 标题、子标题、编号章节和粗体编号段落，而不是简单固定长度切块。系统先形成带来源的章节块，再依据模块名、职责、父子关系和实例用途排序。模型选出的文本必须能在源规格中找到，否则结果会被拒绝，并退化为启发式选择。
 
-**评估体系**:
-- `CHECKLIST_DIMENSIONS`: 5 个评估维度
-- `CHECKLIST_RUBRIC`: 每个维度的评分标准
-- `CHECKLIST_ANSWER_SCORES`: "yes"/"partial"/"no"/"unknown" → 数值分数
-- `compute_dimension_scores()`: 维度得分计算
-- `compute_macro_score()`: 综合评分
+### 4.2 模块规格块
 
-#### Stage 5: 逐子任务代码生成 (Codegen)
+模块相关原文会被进一步拆成较细的规格块，并赋予模块局部编号。这些块用于绑定模块结构块、限定代码生成上下文、形成可追踪的实现任务，并在 Debug 时重新定位需求。正常情况下，每个任务只携带相关规格；检索失败时则退化为使用当前模块的全部规格块，以召回率换取上下文成本。
 
-**Agent**: `Stage5Agent`
-**输入**: Stage4 module plans + spec_blocks + stage3 skeletons
-**输出**: `Stage5CodegenArtifact` (stage5_codegen.json + per-module fragment .sv + fragment contracts)
+### 4.3 全局时序事实
 
-```
-任务 (每个模块):
-├── 检查是否为 define-only 模块 (sd_defines 等)
-│   ├── is_define_only_module() 检测
-│   └── 如果是 → copy_official_define_file() 从 RealBench 直接复制
-│        └── 写入 global_defines_manifest.json
-│
-├── 对每个子任务 (ModulePlanSubtask):
-│   ├── 选择相关规范块 (_select_spec_blocks)
-│   ├── 选择模块接口规范块 (_select_interface_spec_blocks)
-│   ├── 读取 Module Skeleton "Module Frame" 段
-│   ├── 构建 prompt (CURRENT_SUBTASK + SELECTED_SPEC_BLOCKS +
-│   │   MODULE_INTERFACE_SPEC_BLOCKS + PREVIOUS_MODULE_SNIPPETS)
-│   ├── LLM 生成 SubtaskCodeArtifact
-│   │   └── 包含 code + FragmentContract (writes/reads/clocking/reset/latency/assumptions)
-│   ├── 自动提取 Fragment Contract (_extract_fragment_contract)
-│   │   └── 从代码中自动提取 writes/reads/clocking 作为 fallback
-│   ├── upsert 子任务代码到 fragment 文件 (STAGE5_SUBTASK_BEGIN/END 标记)
-│   └── 写入 fragment contracts (workspace/fragments/{module}_contracts.json)
-│
-├── 质量验证:
-│   ├── 禁止 unpacked array 声明
-│   ├── 禁止多维信号引用
-│   ├── 禁止 generate/genvar
-│   └── 代码不能包含 Markdown fences 或 stage5 标记注释
-└── 输出: workspace/fragments/{module}_fragments.v + {module}_contracts.json
-```
+系统单独抽取主时钟、复位方式、关键事件、协议或算法阶段、事件先后关系、周期延迟、逻辑值序列、不变量、规格歧义和暂不支持的时序特性。这些内容组成与具体信号名相对解耦的逻辑时序模型，随后被仓库规划、模块划分和局部代码生成共同消费。
 
-**新增功能: Fragment Contract**
-
-每个子任务生成时自动附带结构化契约:
-
-```json
-{
-  "subtask_id": "...",
-  "target": "...",
-  "spec_refs": ["..."],
-  "contract": {
-    "writes": ["sig_a", "sig_b"],
-    "reads": ["sig_c"],
-    "clocking": "posedge clk",
-    "reset_behavior": "synchronous reset to 0",
-    "hold_behavior": "holds previous value when !en",
-    "latency": "one-cycle",
-    "assumptions": ["dependent on upstream valid signal"]
-  }
-}
-```
+### 4.4 旧版完整契约的真实状态
 
-契约数据被 Stage6 Semantic Merge 用于静态检查（多 writer 冲突检测等）。
+系统中曾设计过更广泛的接口、参数、状态转移、控制信号、数据通路、寄存器和子模块契约，部分生成逻辑仍然存在。但当前主流程并不先生成一套完整契约；真正贯穿主链的是原始规格片段、仓库结构、模块骨架、时序事实与模块实现计划。
 
-**新增功能: Define-Only 模块处理**
+因此，当前系统不能被描述为“先建立完整形式化规格契约，再生成 RTL”，更准确的说法是“用结构化规划和时序中间表示逐步约束生成”。
 
-`global_defines.py` 模块自动识别并处理纯宏定义模块:
-- 通过模块名后缀 (`_defines`) 或 `repo_notes` 中的标记词检测
-- 从 RealBench 官方源直接复制，不经过 LLM 生成
-- 写入 `workspace/global_defines_manifest.json` 供 Stage6 使用
+### 4.5 覆盖性与冲突处理
 
-#### Stage 6: 语义合并 (Semantic Merge + Raw Fallback)
+当前系统能够验证来源文本、对象引用、模块层次、规格引用和结构块—任务对齐，但尚未实现规格条款全覆盖率、多文档冲突求解、同一信号跨章节语义冲突检测、图示与文本交叉验证，以及对未解决问题的强制阻断。
 
-**Agent**: `Stage6MergeAgent`
-**输入**: Stage5 fragments + fragment contracts + stage3 skeletons + spec + KG
-**输出**: `Stage6MergeArtifact` (merged .sv files in workspace/merged/)
+因此，它能够保证“选出的信息有来源、结构引用基本一致”，但不能保证“所有规格要求均被完整且无冲突地理解”。
 
-```
-任务 (每个模块):
-├── 检查是否为 define-only 模块
-│   └── 如果是 → copy_official_define_file() 直接复制, 跳过合并
-│
-├── 准备上下文:
-│   ├── MergeContextRetriever: 选择合并所需规范块
-│   │   └── 缓存到 merge_retrieval_json/{module}.json (支持 resume)
-│   ├── 可选 KG 子模块上下文:
-│   │   ├── 若 retrieval 请求 KG → 查询子模块接口 + 参数 + 仿真状态
-│   │   ├── 附加子模块完整代码 (verified + small enough 时)
-│   │   └── 缓存到 merge_child_context_json/{module}.json
-│   ├── Global Defines 上下文:
-│   │   ├── 检测 global defines 模块
-│   │   ├── 读取已生成的 defines 文件
-│   │   └── 提取活跃 `define 值作为权威数据注入 prompt
-│   └── 读取 module_skeleton "Module Frame" 段
-│
-├── 语义合并 (Stage6MergeRunner — SafeReActAgent + 6 个工具) [优先路径]:
-│   ├── 渐进式初始 prompt (仅索引, 不含完整 spec/fragments)
-│   ├── Agent 按 workflow 使用工具:
-│   │   ├── read_merge_context(kind) × 8:
-│   │   │   fragments, fragment_contracts, module_plan, module_skeleton,
-│   │   │   spec, kg_child_context, global_defines, learned_merge_rules
-│   │   ├── inspect_rtl_structure(target="draft")
-│   │   │   └── 解析: includes, module_count, outputs, blocks, driver_map,
-│   │   │       output_drivers, forbidden_wildcard_always, assignment convention
-│   │   ├── run_static_rtl_check(target="draft")
-│   │   │   └── 验证: 单 module, required includes, 无通配符 always,
-│   │   │       输出驱动检查, Stage5 多 writer 冲突, 赋值惯例
-│   │   ├── run_lint(target="draft") → Verilator lint
-│   │   ├── generate_merge_draft(code, reason, expected_effect)
-│   │   │   ├── Evidence gate: must have read fragments + spec + global_defines
-│   │   │   ├── 自动注入 required includes
-│   │   │   ├── Pre-check lint (Verilator fatal error → reject)
-│   │   │   └── 写入 workspace/merge_drafts/{module}_draft.v
-│   │   └── commit_merge_draft(reason)
-│   │       ├── Evidence gate: must have draft + inspected structure
-│   │       ├── Final check: static_rtl_check + lint
-│   │       └── 复制 draft → workspace/merged/{module}.v
-│   ├── 跨模块学习: read_merge_context(kind="learned_merge_rules")
-│   │   └── 加载前序模块的 merge report (已合并模块的经验)
-│   ├── Observation budget: 最多 16 次只读调用后强制行动
-│   └── Journal: workspace/merge_journal/{module}/
-│       ├── merge_trace.jsonl (完整 ReAct 对话追踪)
-│       ├── draft_journal.jsonl (draft 生成/提交记录)
-│       └── snapshots/ (draft 前后快照)
-│
-├── Raw Merge Fallback [降级路径]:
-│   ├── 当 ReAct agent 初始化失败/循环异常时触发
-│   ├── 一次性 LLM 调用 + Verilator lint 检查
-│   ├── 语法错误 → 写入 stage6_syntax_repair/{module}.json 诊断
-│   │   └── 标记 delegated_to: "ModuleDebugRunner.repo_react_syntax"
-│   └── 语法修复责任移交给 RepoReActRunner
-│
-├── Merge Report: workspace/merge_reports/{module}_merge_report.json
-│   ├── signal_ownership, always_block_responsibility
-│   ├── static_check_summary, lint_summary
-│   └── draft_committed, total_action_calls
-└── 输出: workspace/merged/{module}.v
-```
+## 5. 仓库级规划
 
-**Semantic Merge 工具集:**
+### 5.1 仓库骨架
 
-| 工具 | 类型 | 功能 | 证据门槛 |
-|------|------|------|---------|
-| `read_merge_context` | Readonly | 读取 8 种合并上下文 | - |
-| `inspect_rtl_structure` | Readonly | 解析 RTL 结构 (includes/block/driver_map/赋值风格) | - |
-| `run_static_rtl_check` | Readonly | 静态结构验证 (module 数量/multi-driver/通配符 always/多 writer) | - |
-| `run_lint` | Readonly | Verilator lint 检查 | - |
-| `generate_merge_draft` | Action | 生成合并草稿 → draft 文件 | 必须已读 fragments + spec + global_defines |
-| `commit_merge_draft` | Action | 提交草稿 → merged 文件 | 必须已生成 draft + inspected structure + static_check pass + lint pass |
+仓库规划回答五个问题：顶层是什么、需要哪些模块、每个模块负责什么、模块如何实例化、模块按什么顺序生成。结果包含顶层、模块列表、目标文件、模块角色和类型、父子关系、实例用途、共享模块、全局时钟复位、数据约定、跨模块对齐要求和未解决问题。
 
-**Semantic Merge vs Raw Merge 对比:**
+模块集合主要依据规格中的明确模块名、功能分区、数据通路边界、独立控制职责、重复使用功能、顶层实例化描述和文件结构建议产生。模型给出候选结构后，系统确定性检查顶层归属、模块唯一性、父子关系闭合、层次无环和生成顺序完整性。
 
-| 维度 | Semantic Merge (优先) | Raw Merge (降级) |
-|------|----------------------|-----------------|
-| 决策模型 | SafeReActAgent + 6 工具渐进式 | 一次性 LLM 调用 |
-| 验证方式 | read → draft → inspect → check → lint → commit | 生成后 lint, 失败则委派 |
-| 错误处理 | Agent 自行分析失败原因并修改 draft | 委派给 RepoReActRunner syntax repair |
-| 跨模块学习 | learned_merge_rules | 不支持 |
-| 草稿管理 | draft_journal.jsonl + snapshots | 直接写入 merged |
-| 回滚 | draft 被 reject 后可重新生成 | N/A |
+### 5.2 叶到根生成
 
-### 4.3 PlannerRunner 执行引擎
+叶模块先于父模块生成。叶模块通过语法门禁后，实际接口和静态代码结构进入共享知识；父模块随后基于这些实际信息整合，而不是完全依赖先验计划猜测子模块。
 
-`PlannerRunner` 是整个管线的 **编排器 (Orchestrator)**：
+叶到根顺序能够降低父子接口漂移，但当前叶模块在进入父模块前通常只保证语法可解析，不一定已经通过模块级功能仿真。
 
-```
-PlannerRunner.run(task_input, resume, end_stage)
-│
-├── 阶段调度: stage1 → stage2 → stage3 → stage4 → stage5 → stage6
-├── 断点续传: 每个阶段支持 resume (检查已有产物有效性)
-├── 增量运行: stage3/stage4 支持 run_incremental (逐模块推进)
-├── 质量门控: 每个阶段输出经过 validate_quality()
-├── KG 同步: stage1 后 sync_plan_snapshot(), stage6 后记录仿真结果
-└── 产物持久化: 所有中间产物写入 output_root/
-```
+### 5.3 三层规划
 
-**产物目录结构**:
-```
-outputs/
-├── contracts.json
-├── modules.json
-├── repo_skeleton.json
-├── module_skeletons.json
-├── spec_blocks.json
-├── module_plans.json
-├── module_skeleton_docs/          # Markdown 骨架文档
-├── module_skeleton_json/          # 结构化骨架 JSON
-├── module_plan_json/              # 每个模块的实现计划
-├── block_spec_retrieval_json/     # 规范块检索结果
-├── merge_retrieval_json/          # Stage6 合并规范检索结果 (NEW)
-├── merge_child_context_json/      # Stage6 KG 子模块上下文 (NEW)
-├── stage5_codegen.json
-├── stage6_merge.json
-├── stage6_syntax_repair/          # Stage6 语法诊断 (委派给 RepoReAct)
-├── merge_reports/                 # Stage6 语义合并报告 (NEW)
-├── planning_corrections/          # RepoReAct 规划修正 overlays
-├── global_defines_manifest.json   # 全局宏定义清单 (NEW)
-│
-workspace/
-├── fragments/                     # Stage5 per-module fragment .v + contracts
-│   ├── {module}_fragments.v
-│   └── {module}_contracts.json    # Fragment contracts (NEW)
-├── merged/                        # Stage6 最终合并 .sv 文件
-│   └── {module}.v
-├── merge_drafts/                  # Stage6 语义合并草稿 (NEW)
-│   └── {module}_draft.v
-├── merge_journal/                 # Stage6 语义合并日志 (NEW)
-│   └── {module}/
-│       ├── merge_trace.jsonl
-│       ├── draft_journal.jsonl
-│       └── snapshots/
-├── merge_reports/                 # Stage6 合并报告 (NEW)
-│   └── {module}_merge_report.json
-├── global_defines_manifest.json   # 全局宏定义清单 (NEW)
-├── repo_react/                    # RepoReAct 调试日志
-│   └── {module}/
-│       ├── react_trace.jsonl
-│       ├── patch_journal.jsonl
-│       ├── correction_journal.jsonl
-│       └── snapshots/
-└── debug/                         # ModuleDebugRunner 调试工作目录
-    └── {module}/
-        ├── rtl.sv, tb.sv, support.sv
-        ├── contract.json
-        ├── trace_report.json
-        └── repo_react_memory_snapshot.json
+```mermaid
+flowchart LR
+    A[仓库骨架<br/>模块、层次、文件、顺序] --> B[模块骨架<br/>模块头、结构块、行为职责]
+    B --> C[实现计划<br/>结构块对应局部任务]
+    C --> D[局部 RTL 片段]
+    D --> E[完整 RTL 模块]
 ```
-
----
-
-## 5. Debug Agent 调试子系统
 
-### 5.1 总体设计
-
-Debug Agent 在 v2 架构中的角色已重新定义。它**不再包含功能修复逻辑**，而是负责 **调试环境的准备和前处理**：
-
-- 查找 oracle verification 目录（黄金测试平台来源）
-- 准备 `debug/<module>/` 工作目录（复制 rtl.sv, tb.sv, support.sv）
-- Pre-debug 语法/接口修复（LLM 驱动，最多 5 次尝试）
-- 初始仿真（SimReviewer）
-- 若初始仿真通过 → 直接结束
-- 若初始仿真有 mismatch → **委托给 RepoReActRunner** 进行功能修复
-
-功能修复（原 RTLEditor debug loop）已被 **RepoReActRunner** 完全替代。
-
-### 5.2 ModuleDebugRunner
-
-`ModuleDebugRunner` 是 Planner 管线中调用调试的 **标准入口**，负责环境准备和流程编排：
-
-```
-run_module(module_name, merged_file, task, spec_text, contract_json)
-│
-├── 1. 解析 oracle 目录
-│   ├── 直接查找: oracle_root/<module_name>/verification/
-│   └── 动态查找: oracle_root/<subdir>/<module_name>/verification/
-├── 2. 准备调试工作目录 (_prepare_workdir)
-│   ├── 复制 merged RTL → rtl.sv
-│   ├── 查找并复制黄金 testbench → tb.sv
-│   ├── 收集子模块文件 → support.sv
-│   ├── 复制 `include 引用的文件
-│   ├── 写入 contract.json 和 stage1_contract.json
-│   └── 写入 debug_input_manifest.json
-├── 3. 语法修复 (_repair_debug_workspace_syntax)
-│   ├── 构建 support_interface_index (子模块接口索引)
-│   ├── 构建 macro_table (宏定义表)
-│   ├── 最多 5 次 LLM 驱动的语法修复尝试
-│   │   ├── 每次: Verilator lint → 提取错误 → LLM 修复 → 重新 lint
-│   │   └── 日志记录每次尝试 (pre_debug_syntax_repair.json)
-│   └── 修复原则: support.sv 是权威子模块接口来源，只修改 rtl.sv
-├── 4. 初始仿真 (SimReviewer)
-│   ├── PASS → 返回 ModuleDebugResult(status="pass")
-│   ├── FAIL (mismatch_count > 0) → 调用 _run_repo_react()
-│   └── FAIL (mismatch_count <= 0) → 返回 ModuleDebugResult(status="fail")
-└── 5. 结果处理
-    ├── pass → 复制 rtl.sv 回 merged_file
-    └── 记录结果到 KG (通过 initial_result_recorder 和 kg_result_writer)
-```
+仓库骨架约束模块之间的关系，模块骨架约束模块内部组织，实现计划约束局部生成。仓库计划还会直接影响规格检索、子模块上下文、系统顶层选择、知识图谱关系和 Debug 时的模块邻接。
 
-### 5.3 Support Interface Index（子模块接口索引）
-
-`_build_support_interface_index()` 是语法修复的关键辅助数据。它解析 `support.sv` 中所有子模块的接口声明：
-
-```json
-{
-  "source": "debug/<module>/support.sv",
-  "modules": {
-    "sub_fifo": {
-      "name": "sub_fifo",
-      "parameters": [{"name": "WIDTH", "default": "8"}],
-      "ports": [
-        {"name": "clk", "direction": "input", "width": ""},
-        {"name": "wr_en", "direction": "input", "width": ""}
-      ],
-      "declaration": "module sub_fifo #(parameter WIDTH=8) (input clk, input wr_en, ...);"
-    }
-  }
-}
-```
+### 5.4 时序规划与周期约束细化
 
-此索引被注入到 pre-debug 语法修复 prompt 中，确保 LLM 不会：
-- 连接不存在的端口
-- 传递不存在的参数
-- 对子模块实例化使用错误的参数覆盖
+RTL 正确性依赖数据在哪个边沿采样、状态何时更新、输出是组合还是寄存可见、子模块结果在当前还是下一周期使用，以及握手信号之间相隔多少周期。因此系统将时序建模独立为三层：
 
-### 5.4 状态保持
+| 层级 | 表达内容 |
+| --- | --- |
+| 全局逻辑时序 | 事件、阶段、延迟、逻辑对象、值标签和不变量 |
+| 架构时序分配 | 状态所有者、事件处理者、跨模块传输、可见与采样时刻 |
+| 物理实现绑定 | 逻辑对象对应的信号、结构块以及局部读写时刻 |
 
-`ModuleDebugRunner` 仍然产出 `ModuleDebugResult`（状态协议不变）：
+完成绑定后，系统检查模块覆盖、生产者和消费者、逻辑对象与物理信号、义务与结构块、边沿后写入位置以及同边沿跨模块传输。相关义务会继续进入局部实现任务，使模型知道当前任务应在什么时刻读取、写入或组合输出数据。
 
-| 状态 | 含义 |
-|------|------|
-| `disabled` | RTL 调试被配置禁用 |
-| `skipped` | Oracle 目录未找到 |
-| `pass` | 初始仿真直接通过（无需调试） |
-| `fixed` | RepoReActRunner 成功修复（原 RTLEditor 逻辑） |
-| `fail` | 调试尝试后仍失败 |
-| `error` | 调试过程中发生异常 |
+该链路已经进入主流程，但严重错误通常只形成告警，最终 RTL 也没有逐条证明所有义务已实现。因此它提供的是显式建模和传播，而不是严格的时序正确性保证。
 
-### 5.5 TopAgent（旧独立入口，保留不动）
+### 5.5 当前规划局限
 
-`TopAgent` 是 Debug Agent 的旧独立入口，采用多 Agent 协作模式（Architect → Verifier → Coder → Debugger）。在 v2 架构中：
-- **planner 主路径不再使用** TopAgent
-- TopAgent 对 RTLEditor 的引用保留不动（避免扩大影响面）
-- 作为独立 RTL 生成实验的参考入口保留
+仓库架构仍主要由一次模型推理决定，没有系统搜索多个候选，也没有把面积、接口复杂度、验证成本等作为优化目标。未解决问题不会自动触发重规划，端口级跨模块契约仍较弱，很多模块职责还是自然语言而非可执行约束。
 
-### 5.6 RTLEditor（旧实现，保留为参考）
+## 6. 知识图谱设计与实际使用
 
-`RTLEditor` 及其 `_EditSession` 是 v1 的固定 block-edit 调试器实现。在 v2 架构中：
-- **planner 主路径不再调用** RTLEditor
-- 文件保留不删除，作为旧路径/参考实现
-- 所有新调试流量走 RepoReActRunner
+### 6.1 图谱内容
 
----
+系统将规划信息与实际代码结构组织到共享图中。规划侧保存模块、相关规格片段、模块骨架、实现计划、层次和预期文件；代码侧保存文件、模块、端口、参数、信号、实例、always 块、连续赋值、函数及其包含、实例化、连接和驱动关系。
 
-## 5b. RepoReAct Runner（仓库级自主 ReAct 调试环）
+规划和代码使用同一个模块身份，因此单个模块节点可以同时连接“规格要求、计划结构、实际 RTL 和验证状态”。Debug 可以从一个模块入口比较“计划是什么”和“代码实际是什么”。
 
-> **这是 v2 架构的核心新增子系统**，完整替代了 v1 中 RTLEditor 的固定 block-edit 调试循环。
+### 6.2 更新时间与消费方式
 
-### 5b.1 设计哲学
+仓库规划完成后创建模块锚点；模块规格、骨架和实现计划随后逐步关联；模块通过语法门禁后解析实际 RTL；验证完成后记录状态。模块整合使用图谱获取子模块接口、实例、端口连接和验证状态，Debug 使用它查找端口、实例、信号驱动、父子边界和模块规划语义。
 
-RepoReAct Runner 将调试模型从 **"固定流水线步骤"** 转变为 **"自主仓库观察与证据驱动修复"**：
+### 6.3 能力边界
 
-| 维度 | v1 RTLEditor | v2 RepoReActRunner |
-|------|-------------|-------------------|
-| **编辑模型** | 固定 block-edit（替换预解析的 always/assign 块） | 自由行范围 patch（可改任意 RTL 行） |
-| **观察范围** | 仅当前模块的 trace_report + suspect blocks | 全仓库（RTL、TB、spec、stage artifacts、KG、VCD） |
-| **行动决策** | 硬编码流水线步骤（读 block → 改 block → 仿真） | LLM 自主决策（观察 → 诊断 → patch/correction/stop） |
-| **证据门槛** | 无强制要求 | 三要素 gate：必须已读 RTL + trace/sim + TB/spec/KG |
-| **回滚策略** | mismatch 显著增加时回滚 | lint fail / mismatch 增加 / fail_time 提前 / 过多 neutral 均回滚 |
-| **规划修正** | 不支持 | `record_correction` 写 overlay，不修改原始文件 |
+当前图谱更适合称为“模块锚点统一的规划—代码联合索引”，而不是完整因果知识图谱。规划侧尚未把每个端口、信号和结构块建成细粒度节点，规格条款与具体 RTL 赋值之间没有精确边，驱动关系主要来自静态语法，波形因果也不直接存储在图中。跨模块回溯仍依赖 Agent 逐跳查询。
 
-### 5b.2 核心组件
+## 7. 模块级代码生成
 
-```
-repo_react/
-├── __init__.py          # 导出 RepoReActRunner, RepoReActInput, RepoReActResult
-├── runner.py            # RepoReActRunner: SafeReActAgent + 11 个注册工具
-├── tools.py             # RepoReActTools: 所有工具的实现逻辑 + RepoReActToolState
-├── schemas.py           # Pydantic 模型: Diagnosis, Patch, Correction, StepRecord, SimSnapshot
-├── prompt.py            # SYSTEM_PROMPT + build_initial_prompt + build_continue_prompt + build_compact_prompt
-└── journal.py           # RepoReActJournal: JSONL 日志 + 文件快照
-```
+### 7.1 模块规格检索与骨架
 
-### 5b.3 工具集（11 个工具）
+为每个模块生成代码前，系统根据模块名、职责、父子模块、实例用途和时序义务选择相关规格。随后生成模块骨架，其中包括模块声明框架、预期端口和参数形式、内部声明、子模块实例化、时序逻辑、组合逻辑、辅助结构以及各块之间的依赖。
 
-#### 观察工具（Readonly Tools）
+每个结构块不仅标明代码种类，还描述功能职责、涉及的状态和信号、必须出现的对象、允许出现的对象、后续检索重点，以及不能发生的行为偏移。模块骨架还保存控制风格、状态对象、已决定与暂缓的设计选择和潜在风险。
 
-| 工具 | 功能 | 关键约束 |
-|------|------|---------|
-| `read_context` | 统一读仓库树、文件、行范围、spec、TB、stage artifact、trace_report、repair_journal | 8 种 kind，路径必须在 allowed roots 内 |
-| `search_context` | 正则搜索 RTL/TB/spec/all | scope 过滤，最多 50 结果 |
-| `query_rtl_kg` | 固定模板 KG 查询（4 种类型） | 仅允许 `module_interface`/`module_instances`/`instance_connections`/`signal_drivers` |
-| `read_spec` | 读取原始规范文档 | 支持 path 或 spec_paths |
-| `retrieve_spec_block` | 从 spec_blocks.json 按 block_id 或 query 检索 | 仅当前模块 |
-| `list_vcd_signals` | 列出 VCD 信号名（支持 pattern/scope 过滤） | 需要 wave.vcd |
-| `probe_vcd` | 采样 VCD 信号值（单时间点或时间窗口） | 最多 16 个信号，支持 edge 过滤 |
-| `run_check` | 运行 lint / module_sim / trace_summary | top_sim 和 wave_window 标记为 unsupported_in_v1 |
-| `read_memory` | 读修复记忆（snapshot / repair_journal / failed_directions / promising_directions） | 不消耗 observation budget |
+### 7.2 从结构块到实现任务
 
-#### 行动工具（Action Tools）
+每个结构块对应一个局部实现任务。任务携带目标结构、功能描述、相关规格块、少量关键约束、时序义务和逻辑值标签。声明任务必须包含接口相关规格；若块级检索失败，则使用当前模块全部规格。
 
-| 工具 | 功能 | 关键约束 |
-|------|------|---------|
-| `apply_patch` | 唯一 RTL 修改入口 | 自动 snapshot → lint → sim → trace → 回滚判断；默认仅修改当前 debug RTL |
-| `record_correction` | 写 planning_corrections/ overlay | 不修改原始 stage artifact；必须先读过 stage_artifact |
+这种“一结构块一任务”设计将完整模块生成拆成边界明确的局部问题，但任务边界仍由模型规划，没有形式化最优性。
 
-### 5b.4 Evidence Gate（证据门槛）
+### 7.3 局部 RTL 生成
 
-`apply_patch` 执行前强制通过三要素证据检查：
+局部任务按顺序生成。每次调用可以看到当前任务、相关规格、模块声明框架、前序片段、时序要求、宏定义和必要的子模块信息。后续任务能够复用前面已经决定的信号、状态表示和端口命名，从而形成模块内渐进共享。
 
-```
-apply_patch 前置条件:
-├── observed_rtl = True          (必须已读取当前 RTL 文件)
-├── observed_trace_or_sim = True (必须已读取 trace_report 或仿真结果)
-└── observed_tb_or_spec_or_kg = True (必须已读取 TB / spec / KG 之一)
-```
+每个片段还带有轻量契约，描述读写信号、时钟、复位、保持行为、延迟和假设。系统会从实际代码中提取读写信息进行补充，这些契约主要用于多驱动检查、信号所有权分析和模块整合，并不构成功能正确性的形式化证明。
 
-不满足任一条件 → `apply_patch` 返回 `status="rejected"`，reason 说明缺失哪类证据。
-
-### 5b.5 Observation Budget（观察预算）
-
-防止 Agent 陷入无限观察循环：
-
-- **预算**: 最多 16 次连续只读工具调用（可通过 `ZEROREPO_REACT_READONLY_BUDGET` 环境变量配置）
-- **重置**: 每次 `apply_patch`、`replace_block` 或 `record_correction` 后重置为 0；Checkpoint Compact 和 Deep Compact 也重置
-- **超限行为**: 返回 `observation_budget_exhausted` 错误，附带当前记忆摘要，强制 agent 立即行动或 `generate_response`
-- **渐进施压**: `build_continue_prompt` 在预算接近上限时注入 `ACTION PRESSURE` 提示
-
-### 5b.6 回滚规则
-
-| 条件 | 行为 |
-|------|------|
-| Lint 失败 | 必回滚 |
-| mismatch_count 增加 | 必回滚 |
-| first_fail_time 提前 | 必回滚 |
-| mismatch=0 但 sim 仍 fail | 必回滚（module_sim_failed_without_mismatch_count） |
-| 连续 2 次 neutral patch | 回滚（too_many_neutral_patches） |
-| Pass 且 mismatch=0 | 保留，结束调试 |
-| mismatch 降低 / fail_time 后移 | 保留（improved），继续 ReAct |
-
-### 5b.7 上下文包与记忆系统
-
-RepoReAct 使用 **上下文包（Context Pack）** 作为 Agent 状态的核心载体：
-
-```json
-{
-  "task_frame": { "current_target", "top_diagnosis", "protected_invariants", "unsafe_directions", "next_action_hint" },
-  "timing_evidence": { "signal", "time", "edge", "ref", "dut", "sampling_mode", "driver_assignment_kind", "block_id", "line_range" },
-  "evidence_pack": [ up to 5 EvidenceItems with short summaries ],
-  "causal_memory": { "repair_ledger_summary", "promising_directions", "protected_invariants", "unsafe_directions", "selected_long_term_memories", "negative_patterns" },
-  "active_working_set": { "active_hypotheses", "pinned_evidence", "pinned_code_slices", "waveform_facts", "rejected_hypotheses", "next_edit_candidates", "missing_evidence" },
-  "raw_artifacts": { file path references }
-}
-```
+### 7.4 全局宏与定义文件
 
-上下文包在每次 Light/Checkpoint/Deep 压缩时自动更新，并在每步 continue prompt 中注入。Agent 可在诊断 JSON 中显式声明工作集内容（假设、证据、候选编辑），系统自动累积到 active_working_set 中。
+只包含宏、常量或全局参数的文件不能按普通模块处理。系统会识别这类定义文件，维护 include 清单，并在生成、lint 和仿真时加入。当前还可以从外部基准工程复制权威定义文件，这解决了实际任务中的宏一致性问题，但也带来对特定目录布局的依赖。
 
-持久化日志：
-```
-workspace/repo_react/<module>/
-├── react_trace.jsonl            # 完整 ReAct 对话追踪
-├── patch_journal.jsonl          # 每次 patch 的结构化记录（含 per-signal metric delta）
-├── correction_journal.jsonl     # 每次 record_correction 记录
-├── debug_context_pack.json      # 当前上下文包快照
-├── context_packs/pack_NNN.json  # 每轮生成的上下文包归档
-├── evidence/                    # 证据文件目录
-├── snapshots/                   # patch 前后 RTL 快照
-└── initial_context.json         # 初始上下文
-```
+### 7.5 生成重试与恢复
 
-### 5b.8 调查子代理 (DebugInvestigator)
+结构化输出会经历解析和质量检查；模型输出不符合格式或违反局部约束时可重试。模块级产物独立保存，恢复时可以跳过已经完成且输入一致的模块。当前只有单次调用的输出上限，没有统一的任务级 token、费用和时间预算。
 
-主代理可通过 `route_debug_context` 工具启动一个独立的 LLM 调查子代理。子代理在**自己的独立上下文窗口**中调用最多 6 次只读工具，收集定向证据（根据 focus_signals/focus_blocks/missing_evidence 参数），最终返回一份 <3000 字符的纯文本分析报告。
+## 8. 局部生成与代码整合
 
-子代理工具权限与主代理观察层相同（12 个只读工具），但有硬性约束：不可提议 patch、不可修改代码。当 LLM 不可用时降级为确定性规则脚本。详见 `repo_react/context.py`。
+### 8.1 为什么需要重构
 
-### 5b.9 长期记忆系统 (RTLMemory)
+局部片段可能出现重复声明、不完整模块包装、多驱动、状态表示冲突、reset 与正常路径不一致、子模块端口错误或缺少胶合逻辑。因此完整模块不能靠机械拼接得到。
 
-跨会话的长期记忆以 Markdown 文件形式存储在 `workspace/rtl_memory/` 下，按四种类型分目录：`cases/`（修复案例）、`patterns/`（负面模式）、`corrections/`（规划修正）、`rules/`（合并规则）。每条记忆由 YAML 元数据头（20 个索引字段）和结构化 Markdown 正文组成。`MEMORY.md` 是自动维护的人类可读索引。
+整合 Agent 可以读取模块规格、骨架、实现计划、全部片段、片段契约、宏定义、父子关系、子模块实际接口和必要代码。其典型过程是：阅读上下文，检查片段和信号所有权，生成完整草稿，检查模块和实例结构，运行静态规则和 lint，根据错误修改，最后提交。
 
-写入通过确定性规则蒸馏器（`RTLMemoryDistiller`）在每次 patch/correction/merge 后自动触发。召回采用 LLM 语义选择为主、规则多维打分为降级的双层架构。选中的记忆以摘要形式进入上下文包；Agent 可通过 `read_long_term_memory(path)` 按需获取完整原文。详见 `rtl_memory/` 子系统。
+### 8.2 子模块上下文
 
-### 5b.10 Planning Corrections（规划修正）
+父模块整合时，已通过语法门禁且规模较小的子模块可以提供实际声明、参数、端口和必要代码；尚未验证或较大的模块通常只提供接口，以控制上下文和错误传播。是否读取子模块上下文由合并前的上下文选择决定。
 
-`record_correction` 允许 Agent 在不修改原始 stage artifact 的情况下记录上游规划问题：
+### 8.3 静态检查
 
-```
-output_root/planning_corrections/
-├── correction_journal.jsonl     # 所有 correction 的时序日志
-├── plan_overrides.json          # wrong_contract / wrong_module_plan / wrong_retrieval
-├── interface_overrides.json     # wrong_interface
-├── timing_overrides.json        # wrong_timing
-└── dependency_overrides.json    # wrong_dependency
-```
+整合阶段检查目标模块唯一性、模块名、必要 include、输出驱动、多驱动、片段多写者、不支持的复杂构造、可疑赋值风格和子模块结构。每次草稿修改保留前后快照和操作日志，lint 通过后才提交。
 
-**Correction 类型**:
-- `wrong_contract`: Stage1 合同有误
-- `wrong_module_plan`: Stage4 模块计划有误
-- `wrong_interface`: 接口定义有误
-- `wrong_timing`: 时序假设有误
-- `wrong_dependency`: 模块间依赖关系有误
-- `wrong_retrieval`: 规范块检索选择有误
+### 8.4 降级与语义边界
 
-已知 corrections 在每轮 ReAct prompt 中自动注入（通过 `load_known_corrections()`）。
+若工具增强整合未能提交，系统会降级为一次完整模块生成，提高流程完成率，但削弱片段复用、结构追踪和规划约束。正式实验应区分正常整合与降级整合。
 
-### 5b.11 RepoReActRunner 主循环
+当前机制明显强于文本拼接，但仍不是严格语义合成：Agent 可以重写或丢弃片段，系统没有证明每个实现任务和时序义务都体现在最终代码中。最准确的名称是“基于规划、规格和静态检查的工具增强模块重构”。
 
-```
-chat(inp: RepoReActInput) → RepoReActResult
-│
-├── 1. 初始化
-│   ├── reset() agent 记忆
-│   ├── 创建 RepoReActJournal (workspace/repo_react/<module>/)
-│   ├── 创建 RepoReActToolState (持有 SimSnapshot, 观察标志)
-│   ├── 创建 RepoReActTools (所有工具逻辑)
-│   └── 构建初始 trace_summary (build_trace_report)
-│
-├── 2. 发送初始 prompt
-│   ├── build_initial_prompt(module_name, rtl_path, spec, contract, sim_excerpt, trace, corrections, memory)
-│   └── agent(Msg("user", first_prompt))
-│
-├── 3. 主循环 (最多 max_steps 轮)
-│   ├── 检查 last_sim.is_pass → 提前退出
-│   ├── 检查 _needs_compact_checkpoint → compact agent memory
-│   ├── build_continue_prompt(memory_summary, readonly_calls, max_readonly_calls)
-│   │   └── 包含 observation_budget 状态 + ACTION PRESSURE
-│   ├── agent(Msg("user", continue_prompt))
-│   ├── 提取 diagnosis JSON（从 assistant 回复中解析）
-│   └── 写入 react_trace.jsonl
-│
-├── 4. 返回结果
-│   ├── status = "pass" | "max_steps_exceeded"
-│   └── RepoReActResult(status, is_pass, rtl_code, steps, action_calls, ...)
-│
-└── 5. 清理
-    ├── persist_memory_snapshot()
-    └── clear_memory_safely(agent)
-```
+## 9. 编译、仿真与验证
 
-### 5b.12 三层上下文压缩 (Three-Tier Context Compaction)
-
-采用渐进式压缩策略，根据 Agent 的实际状态动态选择压缩强度：
-
-| 层级 | 触发条件 | 操作 | 保留 |
-|------|---------|------|------|
-| **Light Consolidation** | 8次只读调用 或 24K字符 或 新写入 | 不删除对话，仅刷新上下文包 | 全部对话历史 + 最新摘要 |
-| **Checkpoint Compact** | 3次写入 或 96K字符 (需已有真实差异数据) | 清空对话，注入结构化快照 | 任务框架+时序证据+证据摘要+因果记忆+活跃工作集 |
-| **Deep Compact** | 2次Checkpoint已达 或 160K字符 或 预算≤20% | 同Checkpoint但摘要大幅削减 | 仅核心数据，evidence_pack全删，工作集减半 |
-
-**关键守卫**：Checkpoint 需要 Agent 已获取真实 DUT/ref 差异数据才触发，确保 Agent 在形成初步诊断之前不会被强制清除对话历史。Deep 仅在极端困境下启动，强制 Agent 基于有限精选数据做出最终决策。
-
-### 5b.13 Diagnosis 结构
-
-每轮 Agent 应在采取行动前输出结构化 diagnosis：
-
-```json
-{
-  "failure_type": "timing_bug | local_logic_bug | interface_bug | plan_bug | unknown",
-  "suspected_module": "fifo_ctrl",
-  "suspected_files": ["rtl/fifo_ctrl.sv"],
-  "suspected_signals": ["data_out", "empty"],
-  "evidence_summary": [
-    "trace shows data_out lagging expected by 1 cycle",
-    "VCD probe confirms wr_ptr updates on correct edge"
-  ],
-  "next_action": "patch | read_more | record_correction | stop"
-}
-```
+### 9.1 模块语法门禁
 
-### 5b.14 与 ModuleDebugRunner 的集成
-
-`ModuleDebugRunner._run_editor()` 已被替换为 `_run_repo_react()`：
-
-```python
-def _run_repo_react(self, *, sim_reviewer, spec_text, workdir, sim_output,
-                    mismatch_count, contract_json, task, module_name,
-                    merged_file, spec_source_path, behavior_source):
-    # 构建 RepoReActInput
-    repo_input = RepoReActInput(
-        module_name=module_name,
-        workspace_root=self.workspace_root,
-        debug_workdir=workdir,
-        rtl_path=workdir / "rtl.sv",
-        merged_file=merged_file,
-        output_root=output_root,
-        repo_root=self.repo_root,
-        spec_text=spec_text,
-        contract_json=contract_json,
-        sim_failed_log=sim_output,
-        initial_mismatch_count=int(mismatch_count),
-        max_steps=int(self.config.max_trials),
-    )
-    runner = RepoReActRunner(cfg, sim_reviewer=sim_reviewer, ...)
-    result = await runner.chat(repo_input)
-    return bool(result.is_pass), result.rtl_code, int(result.action_calls)
-```
+每个完整模块都会立即进行 Verilator lint。通过后，模块进入已物化状态，实际 RTL 结构写入共享知识；失败时启动语法修复 Agent，读取 lint、源码、宏和子模块接口，修改后重新检查。
 
-**外部协议完全不变**: `ModuleDebugRunner.run_module()` 仍然返回 `ModuleDebugResult`，stage6_merge.json 的 debug_files schema 不变。
-
----
-
-## 5c. Trace Report（追踪报告）
-
-> Trace Report 在 v2 中保持核心地位，被 RepoReActRunner 在初始化时调用，以及在每次 module_sim 后自动刷新。
-
-`build_trace_report()` 从仿真失败日志和 VCD 波形中提取结构化诊断信息。
-
-### 5c.1 输入
-
-- `rtl_path`: 当前 RTL 文件
-- `sim_log_json`: Verilator 仿真输出 (stdout + stderr)
-- `output_dir`: 包含 `wave.vcd` 和 `tb.sv` 的工作目录
-- `kg_service` (可选): 用于跨模块动态切片
-
-### 5c.2 输出结构
-
-```json
-{
-  "fail_time": 150,
-  "total_mismatches": 3,
-  "first_failure": {"sig": "data_out", "expected": "x", "actual": "z"},
-  "fail_outputs": [...],
-  "alignment_diagnosis": {
-    "data_out": {
-      "best_alignment": "dut_lag1",
-      "match_rate_dut_lag1": 0.95
-    }
-  },
-  "value_backtrace": {
-    "chains": [{
-      "sig": "data_out",
-      "expected": "42",
-      "actual": "00",
-      "chain": [{
-        "signal": "data_out",
-        "driver_block_id": "A3",
-        "assignment_id": "A3.S1",
-        "lhs_value": "00",
-        "classification": "lhs_matches_rhs_continue_upstream",
-        "reason": "LHS matches the current RHS value..."
-      }]
-    }]
-  },
-  "diagnostic_narrative": ["FIRST FAILURE: data_out failed: expected=42, actual=00..."],
-  "suspect_blocks": [
-    {"id": "A3", "kind": "always", "clocking": "seq", "writes": ["data_out"], "start_line": 45, "end_line": 52}
-  ],
-  "timing_hints": {"data_out": {"actual_matches_prev_expected": true, "prev_t": 140, "t": 150}}
-}
-```
+系统内部存在模块级 testbench 仿真和功能修复能力，但当前仓库主流程没有对所有模块默认执行。因此叶模块被父模块使用前通常只保证语法可解析，部分局部功能错误会在系统级仿真时才暴露。
 
-### 5c.3 诊断维度
+### 9.2 系统级验证
 
-1. **失败信号提取**: 解析仿真输出中的 mismatch hint 行，提取最早失败时间和失败信号列表
-2. **对齐诊断**: 比较 dut/ref 信号时序对齐，计算 lag1/lead1 对齐率，检测 1-cycle 移位
-3. **值回溯**: 从失败输出信号沿赋值链反向追踪，对每个驱动分配采样 RHS 值和条件值
-4. **动态切片**: 从失败信号沿驱动图反向传播（可选地使用 KG DRIVES + DEBUG_READS 跨模块切片）
-5. **时序提示**: 检测 actual 是否匹配 previous expected (1-cycle 延迟)
+所有模块完成后，系统确定规划顶层，在外部 benchmark 中寻找验证目录，复制生成 RTL，运行验证脚本，完成编译和仿真，并收集 pass/fail、mismatch、日志、波形和覆盖文件。若逻辑顶层名与验证顶层不同，系统可以选择唯一可验证候选；存在多个候选时拒绝猜测。
 
----
+| 验证类型 | 当前状态 |
+| --- | --- |
+| Verilator lint 与语法修复 | 已进入主流程 |
+| 模块功能仿真 | 有能力，但未作为默认门禁 |
+| 系统功能仿真 | 已进入主流程，依赖外部 benchmark |
+| assertion 仿真与 VCD | 工具支持 |
+| 行覆盖 | 可生成原始数据，未统一统计 |
+| 形式验证 | 未实现 |
 
-## 6. KG Agent 知识图谱查询子系统
+### 9.3 完成判定
 
-### 6.1 设计定位
+当前流程即使系统验证失败，也可能保存生成结果并结束。因此必须区分流程完成、模块语法通过、系统编译通过、初始仿真通过和 Debug 后通过。论文实验不能用“程序正常结束”代替功能成功。
 
-KG Agent 是位于 Debug Agent 和 RTL Knowledge Graph 之间的 **查询抽象层**，将常见的调试查询模式封装为模板化方法。
+## 10. Debug、回溯与代码修复
 
-### 6.2 KGRetriever
+### 10.1 首分歧而非最终 mismatch
 
-`KGRetriever` 提供 **固定模板的 Cypher 查询方法**：
+最终 mismatch 最大的信号不一定是根因：早期状态错误会传播到大量输出，testbench 计数器可能早于真实输出变化，稳定值相同也可能因边沿采样顺序不同而失败。因此系统先识别 DUT 和参考实例、比较输出、时钟与采样事件，再从 VCD 中寻找最早真实不一致。
 
-| 方法 | 查询模板 | 功能 |
-|------|---------|------|
-| `get_child_module_context(parent)` | `GET_CHILD_MODULE_CONTEXT` | 获取父模块的所有子实例及其接口 |
-| `get_module_interface(module)` | `GET_MODULE_INTERFACE` | 获取模块端口、参数、仿真状态 |
-| `get_instance_context(parent, child, inst)` | `GET_INSTANCE_CONTEXT` | 获取实例的连接详情 |
-| `get_signal_debug_context(module, signal)` | `GET_SIGNAL_DEBUG_CONTEXT` | 获取信号及其所有驱动源 |
-| `get_failure_context(error_log, module)` | `GET_FAILURE_MODULE_STATUS` + others | 从错误日志提取信号名并获取综合调试上下文 |
+首分歧会记录信号、时间、期望值、实际值和采样方式，并区分 DUT 提前、DUT 延后、稳定值错误、边沿活跃区差异以及波形无法解析等情况。
 
-### 6.3 信号名提取
+### 10.2 边沿采样与局部回溯
 
-`KGRetriever._extract_signal_names()` 使用三层正则模式从仿真日志中提取信号名：
-1. `signal <name>` 模式
-2. `fail/mismatch: <name>` 模式
-3. `<name>_dut` / `<name>_ref` 模式
+系统结合 testbench 采样边沿、blocking/nonblocking 赋值、边沿前后稳定值和驱动块类型，分析 active region 与 NBA 可见性差异。这是普通软件 Debug 不具备的 RTL 特有能力。
 
-### 6.4 ModuleResultWriter
+随后分析错误输出的直接驱动、右侧依赖、更新条件、多驱动和当前波形值。典型判断包括：右侧已经正确但左侧仍旧，可能是更新时机问题；左侧正确反映错误右侧，应继续向上游；条件阻止更新，应优先追踪条件；存在多驱动或缺少波形时，应补充结构证据。
 
-`ModuleResultWriter` 负责将 **模块生成和调试结果持久化到 KG**：
+### 10.3 跨模块单跳追踪
 
-```
-record_module_result(module_name, merged_file, debug_result)
-│
-├── 1. 构建 ModuleSimulationStatus 对象
-├── 2. 更新本地状态文件 (rtl_kg_module_statuses.json)
-├── 3. 触发 KG 文件刷新 (refresh_repo_files)
-└── 4. 摄入 SimulationResult 节点和 HAS_SIM_RESULT 边到 Neo4j
-```
+跨模块分析采用“一模块一跳”。系统先定位当前模块直接驱动；若值来自子模块输出，则返回实例和端口映射；若信号是子模块输入，则返回父模块实际连接；最后推荐下一次应在哪个模块追踪哪个信号。Agent 逐跳推进，避免一次加载整个仓库依赖图。
 
-**SimulationResult 节点属性**:
-- `status`: pass/fixed/fail/error/skipped/disabled
-- `passed`: boolean
-- `mismatch_count`: 不匹配数量
-- `debug_trials`: 调试尝试次数
-- `final_rtl_path`: 最终 RTL 文件路径
-- `trace_report_path`: 追踪报告路径
-- `sim_output_path`: 仿真输出路径
+### 10.4 规划证据与编辑对象
 
----
+Agent 可以按模块读取规格块、模块骨架、实现任务、实际端口和可编辑 RTL 块，并查看规划块与实际代码块的启发式对齐。系统明确区分“计划中的结构块”和“当前代码解析出的块”，防止把规划编号误当成代码编辑目标。
 
-## 7. Retrieval Agent 检索子系统
+### 10.5 补丁、验证和回滚
 
-### 7.1 设计定位
+功能修复可以修改单文件或多文件中的多个区间，也可以替换完整 always/assign 块；原始规格、testbench、参考设计、验证脚本和规划产物禁止修改。
 
-Retrieval Agent 解决了 **上下文窗口有限** 的问题：当规范文本很大时，不可能将所有规范块都塞入 LLM 上下文。它使用 LLM 驱动的选择性检索，为每个代码生成/合并任务选择最相关的规范片段。
+每个补丁会保存前置快照，先运行 lint，必要时做有限语法修正，再运行模块或系统仿真并重新生成首分歧。决策不仅比较总 mismatch，还比较逐信号 mismatch、首次失败时间、真实首分歧以及是否修复目标却破坏其他输出。
 
-### 7.2 BlockSpecRetriever (Stage 4/5 使用)
+仿真通过或明显改善通常保留，明显回归则回滚；局部改善但总体变差的补丁可以作为中间步骤保留，但必须记录风险。回滚目前是候选补丁级，而不是整个仓库级事务，因此长时间 Debug 最终失败时可能保留一个“有所改善但未通过”的版本。
 
-**功能**: 为每个骨架块选择相关的规范块
+### 10.6 规划修正
 
-```
-select_block_spec_refs(module_name, module_spec, module_skeleton, skeleton_blocks)
-│
-├── 1. 构建候选规范块列表 (block_id + text)
-├── 2. 构建必需块列表 (含 structured_context: purpose, code_shape, retrieval_focus)
-├── 3. LLM 推理: 为每个 skeleton block 选择相关 spec blocks
-├── 4. 验证结果: schema version, module name, count match, ref validity
-└── 5. 失败时回退到全量规范 (fallback_result)
-```
+当 Debug 发现问题根源是错误接口、错误模块计划、错误时序或错误检索时，可以记录规划修正及证据。但这些修正目前主要用于持久化和审计，尚未被规划阶段自动读取并触发重规划。
 
-**验证规则**:
-- interface_block refs 必须被引用（特别是第一个 declaration 块必须包含接口规范）
-- 所有 spec_refs 必须存在于候选列表中
-- selection 数量必须与 skeleton_blocks 数量匹配
+## 11. 上下文管理与记忆机制
 
-### 7.3 MergeContextRetriever (Stage 6 使用)
+### 11.1 分阶段收窄
 
-**功能**: 为合并阶段选择必要的规范块
+| 阶段 | 主要上下文 |
+| --- | --- |
+| 仓库规划 | 全部规格 |
+| 模块骨架 | 模块相关规格、仓库角色和时序切片 |
+| 实现任务 | 当前结构块和相关规格块 |
+| 局部生成 | 当前任务、接口和前序片段 |
+| 模块整合 | 片段、计划和按需子模块信息 |
+| Debug | 初始失败摘要与按需工具读取 |
 
-与 BlockSpecRetriever 类似，但额外考虑：
-- `generated_fragments`: 已生成的代码片段
-- `dependency_context`: 模块间依赖关系
-- `use_kg_child_context`: 是否需要从 KG 获取子模块上下文
+Debug 初始 Prompt 不直接塞入完整规格、规划、RTL 和历史记忆，只提供任务身份、压缩失败日志、首分歧种子和可读取产物类型。Agent 随后通过文件搜索、模块语义、知识图谱、VCD、trace 和验证工具主动补充证据。
 
----
+### 11.2 首分歧门禁与读取预算
 
-## 8. 工具系统设计
+功能修复若已有明确首分歧，系统要求 Agent 先完成对应的一跳信号追踪，再开放更宽泛的代码和波形读取。这减少了无目标浏览和仅凭最终 mismatch 猜测补丁的情况。
 
-### 8.1 工具分层
+连续只读操作有预算。如果 Agent 长时间只读不改，会被要求汇总证据、明确下一步、应用可验证补丁或停止。代码修改会重置连续观察预算。
 
-系统中有三个层次的工具：
+### 11.3 多级压缩
 
-#### 8.1.1 基础设施工具
+系统采用轻量整理、检查点压缩和深度压缩。触发因素包括连续只读次数、工具结果体积、补丁次数、已有压缩次数和剩余动作预算。深度压缩只保留首分歧、当前假设、关键证据、已接受补丁和必须保护的约束。
 
-| 工具 | 位置 | 功能 |
-|------|------|------|
-| `run_bash_command` | `bash_tools.py` | 安全执行 bash 命令，返回 (bool, CommandResult JSON) |
-| `check_syntax` | `sim_reviewer.py` | Verilator lint-only 语法检查 |
-| `sim_review` | `sim_reviewer.py` | 完整的 Verilator 编译+仿真流程 |
+会话状态还保存当前 RTL 指纹、最新仿真、信号追踪、补丁历史、改进与失败方向、受保护不变量、不安全修改方向和规划修正，用于恢复与回滚。
 
-#### 8.1.2 Agent 工具 (Tool API)
+### 11.4 长期记忆
 
-Agent 通过 AgentScope 的 `Toolkit` 机制注册工具函数：
+系统能够将成功修复、指标改善、回归方向、语法失败、规划修正和模块整合经验写成带适用条件的长期记忆。每条记忆包含模块或模块族、信号、失败类型、首分歧特征、补丁模式、结果、不适用条件、风险信号和来源证据。
 
-**QueryRtlKgTool** (`rtl_kg_service.py`):
-```python
-class QueryRtlKgTool(Tool):
-    name = "query_rtl_kg"
-    # 只读 Cypher 查询，自动注入 repo_uid scope
-    # 禁止写操作 (CREATE/MERGE/SET/DELETE/CALL db.*)
-```
+目前经验写入已实现，自动召回未闭环。记忆选择主要依赖独立上下文路由器，而该路由器没有成为主 Debug Agent 的默认入口；主 Agent 虽能读取指定记忆，却不一定知道应选择哪一条。
 
-**RepoReAct 工具集** (通过 `Toolkit.register_tool_function()` 注册):
+### 11.5 上下文路由器
 
-*观察工具 (Readonly Tools):*
+已有路由设计可以根据失败选择规格、代码、波形、图谱和历史证据，形成紧凑证据包、选择长期记忆并给出推荐工具。但当前主 Debug 仍主要直接调用底层工具，因此路由器更适合作为后续实验功能，而不是已部署核心贡献。
 
-| 工具 | 功能 | 关键约束 |
-|------|------|---------|
-| `read_context` | 统一读取：仓库树、文件、行范围、spec、TB、stage artifact、trace_report、repair_journal | 8 种 kind；路径限制在 allowed roots |
-| `search_context` | 正则搜索 RTL / TB / spec / all | scope 过滤；最多 50 结果 |
-| `query_rtl_kg` | 固定模板 KG 查询（4 种） | `module_interface` / `module_instances` / `instance_connections` / `signal_drivers` |
-| `read_spec` | 读取原始规范文档 | 支持 path 或 spec_paths |
-| `retrieve_spec_block` | 从 spec_blocks.json 检索规范块 | 按 block_id 或 query |
-| `list_vcd_signals` | 列出 VCD 信号名 | 支持 pattern/scope 过滤 |
-| `probe_vcd` | 采样 VCD 信号值 | 单时间点或时间窗口；最多 16 信号 |
-| `run_check` | lint / module_sim / trace_summary | top_sim 和 wave_window → unsupported_in_v1 |
-| `read_memory` | 读修复记忆 | snapshot / repair_journal / failed_directions / promising_directions |
+## 12. Agent、工具和中间产物
 
-*行动工具 (Action Tools):*
+### 12.1 Agent 分工
 
-| 工具 | 功能 | 关键约束 |
-|------|------|---------|
-| `apply_patch` | 唯一 RTL 修改入口 | 自动 snapshot → lint → sim → trace → 回滚；最多 2 patches |
-| `record_correction` | 写 planning_corrections/ overlay | 不修改原始 stage artifact；必须先读过 stage_artifact |
+| 角色 | 职责 | 当前状态 |
+| --- | --- | --- |
+| 中央调度器 | 阶段顺序、恢复、产物管理和模块循环 | 主流程 |
+| 全局时序 Agent | 抽取事件、阶段和周期关系 | 主流程 |
+| 仓库规划 Agent | 决定顶层、模块、层次和顺序 | 主流程 |
+| 架构时序 Agent | 分配跨模块传输和模块义务 | 主流程 |
+| 模块骨架与绑定 Agent | 规划结构块并绑定物理时序 | 主流程 |
+| 规格检索与实现计划 Agent | 选择规格并形成局部任务 | 主流程 |
+| 片段生成 Agent | 按任务生成 RTL 片段 | 主流程 |
+| 模块整合 Agent | 重构完整模块并反复检查 | 主流程 |
+| 语法修复与仓库 Debug Agent | 处理 lint 和系统功能失败 | 条件进入 |
+| 上下文路由 Agent | 选择证据和长期记忆 | 已实现但未默认接入 |
+| 旧版完整契约和旧 Debug Agent | 早期设计 | 不在当前主链 |
 
-*旧实现工具 (v1 RTLEditor — 保留不动，新路径不再使用):*
-- `list_suspect_blocks()`, `read_block(block_id)`, `replace_block(block_id, new_code)`
-- `read_rtl_context()`, `read_lines(start, end)`, `apply_patch_set(patches)`
-- `run_simulation()`, `probe_compare(pairs, range, edge)`
+工具分为只读、修改和记录三类。只读工具负责代码、规格、计划、图谱、VCD、lint 和仿真；修改工具负责多区间、多文件补丁和完整 RTL 块替换；记录工具负责补丁、快照、规划修正和长期记忆。Agent 之间没有开放消息总线，主要通过结构化产物、共享 RTL、知识图谱和日志交换状态。
 
-#### 8.1.3 设计约束
+### 12.2 关键中间产物
 
-- **只读安全**: Cypher 查询禁止写操作
-- **操作原子性**: 每次编辑后立即语法检查 + 仿真验证
-- **自动回滚**: 编辑导致退化时自动撤销
-- **速率限制**: `apply_patch_set` 每次只接受 1 个 patch
-- **范围限制**: `read_lines` 最多 160 行，`probe_vcd` 最多 16 个信号
+| 产物 | 核心内容 | 主要作用 |
+| --- | --- | --- |
+| 全局时序事实 | 事件、阶段、延迟和不变量 | 保存周期语义 |
+| 仓库骨架 | 模块、层次、文件和顺序 | 定义全局架构 |
+| 架构时序契约 | 跨模块传输和模块义务 | 分配周期责任 |
+| 模块规格上下文 | 相关原文和来源 | 限定局部证据 |
+| 模块骨架 | 声明框架、结构块、职责和风险 | 定义模块内部结构 |
+| 物理时序绑定 | 逻辑对象到信号和结构块 | 传播时序要求 |
+| 规格块与实现计划 | 局部需求、任务和约束 | 驱动片段生成 |
+| RTL 片段与契约 | 局部代码及其读写关系 | 支持整合和所有权分析 |
+| 完整 RTL 与合并报告 | 模块代码、静态检查和 lint | 形成可验证候选 |
+| 仿真与 Trace | mismatch、首分歧和驱动候选 | Debug 动态证据 |
+| 补丁与规划修正 | 修改效果、回滚和计划问题 | 会话记忆与审计 |
+| 长期记忆 | 成功案例和负面模式 | 跨任务经验 |
 
-### 8.2 工具执行模式
+## 13. 关键调用链
 
-#### RepoReAct 执行模式
+### 13.1 完整任务
 
+```text
+读取规格与任务
+→ 全局时序抽取
+→ 仓库架构规划
+→ 跨模块时序分配
+→ 模块骨架与物理绑定
+→ 局部任务和片段生成
+→ 完整模块重构
+→ 模块语法门禁
+→ 系统仿真
+→ 失败时仓库级修复
+→ 保存最终 RTL 与审计产物
 ```
-Agent call tool → runner._tool_* handler → RepoReActTools method → result
-                                               │
-                                               ├── 状态更新 (observed_* 标志)
-                                               ├── 日志写入 (react_trace.jsonl)
-                                               ├── readonly counter 递增
-                                               └── ToolResponse 返回
-```
-
-**关键设计约束**:
-- **只读安全**: KG 查询限制为 4 种固定模板，禁止自由 Cypher
-- **路径限制**: `read_context` 和 `search_context` 只能访问 allowed_read_roots 下的文件
-- **编辑限制**: `apply_patch` 默认仅允许修改当前 debug RTL（v1 限制）
-- **回滚机制**: 每次 patch 后自动 lint/sim/trace 验证，退化时回滚
-- **速率限制**: `apply_patch` 每次最多 2 个 patch；`record_correction` 必须先读过 stage_artifact
-- **观察预算**: 连续超过 8 次只读调用后，系统拒绝进一步的只读操作，强制 agent 行动或结束
 
-#### Evidence Gate（证据门槛）
+### 13.2 单模块
 
+```text
+读取模块角色
+→ 检索相关规格
+→ 生成结构骨架
+→ 绑定时序义务
+→ 选择结构块规格
+→ 生成局部片段
+→ 读取子模块实际接口
+→ 重构完整模块
+→ 静态检查与 lint
+→ 更新共享代码结构
 ```
-apply_patch 前置条件:
-├── observed_rtl = True          (必须已读取当前 RTL 文件)
-├── observed_trace_or_sim = True (必须已读取 trace_report 或仿真结果)
-└── observed_tb_or_spec_or_kg = True (必须已读取 TB / spec / KG 之一)
-```
 
-#### 旧 RTLEditor 执行模式 (v1, 保留为参考)
+### 13.3 Debug
 
-```
-Agent call tool → _tool_* handler → _EditSession method → result
-                                       │
-                                       ├── 语法检查 (check_syntax)
-                                       ├── 仿真运行 (sim_reviewer.review)
-                                       ├── 状态更新 (trace_report refresh)
-                                       └── 日志记录 (repair_journal append)
+```text
+系统仿真失败
+→ 识别 DUT 与参考输出
+→ 定位首个真实分歧
+→ 追踪直接驱动和条件
+→ 沿实例端口逐跳跨模块
+→ 读取相关规格与计划
+→ 形成局部修复假设
+→ 应用单文件或多文件补丁
+→ lint 与重新仿真
+→ 比较总量、逐信号和首分歧
+→ 保留或回滚
 ```
-
----
-
-## 9. 上下文管理设计
-
-### 9.1 三层上下文层次
-
-系统采用 **三层上下文管理** 策略：
-
-| 层次 | 载体 | 生命周期 | 内容 |
-|------|------|---------|------|
-| Pipeline Context | stage_context (PlanningContextProvider) | 管线全局 | 项目类型、历史产物、全局约束 |
-| Stage Context | partial_artifacts | 单阶段 | 所有上游阶段的产物 (contracts, skeletons, plans) |
-| Agent Context | InMemoryMemory + Context Pack | 单次 LLM 调用 | 系统提示 + 对话历史 + 上下文包摘要 |
-
-### 9.2 上下文包 (Context Pack)
 
-RepoReAct 使用上下文包作为 Agent 状态的核心载体，包含六个部分：任务框架（当前目标、诊断、保护项、禁止方向）、时序证据（第一分歧点的精确记录）、证据摘要（最多 5 条压缩项）、因果记忆摘要（修复账本、有希望方向、长期记忆）、活跃工作集（Agent 声明的假设/证据/候选编辑）、原始 artifact 路径引用。
+## 14. 已实现、部分实现与计划功能
 
-初始 prompt 故意不注入完整 spec/contract/corrections/memory 原文，仅通过上下文包中的路径引用和结构化摘要呈现。每步 continue prompt 刷新上下文包为最新版本并注入观察预算倒计时。上下文包是上下文压缩后唯一幸存的知识载体。
+### 14.1 已进入主流程
 
-### 9.3 三层上下文压缩
+已进入主流程的能力包括多 Markdown 读取、仓库划分、叶到根顺序、全局与跨模块时序、物理信号绑定、模块规格检索、模块骨架、一块一任务、局部片段生成、工具增强重构、静态检查、Verilator lint、模块语法修复、规划—代码联合索引、系统仿真、VCD 首分歧、单跳信号追踪、多文件补丁、补丁验证与候选级回滚，以及补丁经验持久化。
 
-详见 [5b.12 三层上下文压缩](#5b12-三层上下文压缩-three-tier-context-compaction)。
+### 14.2 部分实现或未完整接入
 
-### 9.4 KG 上下文注入
+规格图片理解、完整接口/控制/数据通路契约、模块级功能仿真默认门禁、多候选仓库架构评分、时序错误自动重规划、最终 RTL 义务覆盖、规划—代码一致性阻断、上下文路由、长期记忆自动召回、规划修正反馈、自动多跳因果搜索及统一成本统计，均属于部分实现。
 
-通过 `build_batch_context()` 方法，管道在处理每个 batch 时自动注入 KG 查询结果（文件元数据、模块信息、实例关系）。
+### 14.3 未实现
 
----
+当前没有形式验证、CDC 专项分析、综合后 PPA 优化、规格覆盖证明、规划约束下的语义正确性证明、自动测试生成、成熟的批量实验管理，也没有多 Agent 并行协商式仓库设计。
 
-## 10. 记忆系统设计
+## 15. 面向论文的方法抽象
 
-### 10.1 短期记忆（Session 级）
+研究问题可定义为：给定一个描述多模块硬件系统的自然语言规格，如何生成结构一致、周期关系合理且能够通过系统验证的 RTL 仓库，并在失败时利用动态和静态证据进行自动修复？
 
-#### AgentScope Memory
-每个 ReAct Agent 使用 `InMemoryMemory` 管理对话记忆，通过 `clear_memory_safely()` 在压缩时重置。
+建议将方法抽象为五个阶段：
 
-#### 上下文包作为工作记忆
-Agent 的修复状态通过上下文包（Context Pack）实时维护：任务框架、时序证据、因果记忆摘要（修复账本、受保护项、禁止方向、有希望方向、长期记忆）、活跃工作集。上下文包在每步循环中刷新，在压缩后作为唯一幸存的信息载体。
+| 阶段 | 输入与输出 | 核心机制 |
+| --- | --- | --- |
+| 仓库架构归纳 | 规格 → 模块、层次、文件和顺序 | 将系统描述转成可执行仓库计划 |
+| 时序约束细化 | 全局事件 → 传输、义务、物理绑定 | 将周期语义传播到局部实现 |
+| 证据约束的模块分解 | 模块规格 → 骨架和局部任务 | 用结构块降低生成复杂度 |
+| 叶到根代码实现 | 局部任务 → 片段和完整模块 | 基于已物化子模块逐层整合 |
+| 首分歧驱动修复 | 仿真失败 → 多文件补丁 | 用波形和结构证据闭环验证 |
 
-#### 短期持久化
-| 存储位置 | 内容 |
-|---------|------|
-| `repo_react/<module>/react_trace.jsonl` | 完整 ReAct 对话追踪 |
-| `repo_react/<module>/patch_journal.jsonl` | 每次 patch 的结构化记录（含 per-signal metric delta） |
-| `repo_react/<module>/correction_journal.jsonl` | 每次 record_correction 记录 |
-| `repo_react/<module>/debug_context_pack.json` | 当前上下文包快照 |
-| `repo_react/<module>/context_packs/` | 每轮生成的上下文包归档 |
-| `repo_react/<module>/evidence/` | 证据文件 + evidence_index.jsonl |
-| `repo_react/<module>/snapshots/` | patch 前后 RTL 文件快照 |
+与普通 Coding Agent 相比，该系统不以函数和堆栈为主要单位，而以模块、结构块和时序义务为单位；反馈不只是编译和单元测试，还包括 DUT/reference 波形、边沿采样和跨模块端口传播；补丁评价也不只看测试通过，而要比较 mismatch、首分歧和周期语义。
 
-### 10.2 长期记忆（跨 Session 级）
+## 16. 候选创新点及证据强度
 
-RTLMemory 子系统以 Markdown 文件形式存储在 `workspace/rtl_memory/`，按四种类型分目录：
+### 16.1 层次化周期约束细化
 
-| 类型 | 目录 | 内容 |
-|------|------|------|
-| 修复案例 | `cases/` | improved/passed 的正面经验 |
-| 负面模式 | `patterns/` | regressed/syntax_failed 的失败教训 |
-| 规划修正 | `corrections/` | 上游规划阶段的错误记录 |
-| 合并规则 | `rules/` | Stage6 结构性经验 |
+自然语言中的周期关系容易在多模块生成中丢失。系统将全局事件和阶段逐步转化为跨模块传输、模块义务、物理信号、结构块和局部任务，使时序要求成为可引用、可检查、可传播的对象，而不是一段笼统提示。
 
-每条记忆由 YAML 元数据头（20 个索引字段：module/signals/failure_type/alignment/confidence/trigger/anti_trigger 等）和结构化 Markdown 正文组成。`MEMORY.md` 是自动维护的人类可读索引。
+该机制的实现证据较强，是最适合作为主贡献的部分。论文前仍需让严重错误触发重试或阻断，检查最终 RTL 的义务实现情况，并完成有无时序细化的消融。
 
-**写入**：通过确定性规则蒸馏器（`RTLMemoryDistiller`）在每次 patch/correction/merge 后自动触发。只有 passed/improved/regressed/syntax_failed 写入，neutral 忽略。
+### 16.2 叶到根增量物化
 
-**召回**：采用 LLM 语义选择为主、规则多维打分为降级的双层架构。选中的记忆以摘要形式进入上下文包（body_excerpt 前 2400 字符 + 结构化元数据）；Agent 可通过 `read_long_term_memory(path)` 按需获取完整原文。
+父模块生成时若子模块尚未稳定，接口很容易漂移。系统先物化叶模块，再将实际接口和结构提供给父模块，区别于所有文件独立生成后统一拼接。
 
-### 10.3 跨会话 KG 记忆
+该机制证据中等偏强。需要比较 leaf-first、top-down 和随机顺序，并量化接口错误、父模块返工、token 与时间成本。
 
-通过 Neo4j 图数据库实现跨会话的知识持久化：SimulationResult 节点记录每个模块的仿真历史，DEBUG_READS 关系记录调试会话中的读依赖。
+### 16.3 结构块对齐的生成与重构
 
----
+模块骨架、一块一任务、局部片段和工具增强重构构成可追踪的实现链。它比一次性完整模块生成更容易控制局部职责，也比文本拼接多了规格、时序、所有权和 lint 检查。
 
-## 11. 模型与格式化层
+该机制证据中等。论文前应增加最终代码对任务和规格的覆盖检查，并与一次性生成、纯片段拼接进行对比。
 
-### 11.1 模型配置
+### 16.4 边沿感知的首分歧修复
 
-```python
-@dataclass(frozen=True)
-class OpenAIConfig:
-    model: str = "gpt-5.2"
-    api_key: str | None
-    base_url: str | None
-    organization: str | None
-    reasoning_effort: str | None  # low/medium/high/xhigh/max
-    stream: bool = False
-    generate_kwargs: dict  # temperature, top_p, max_completion_tokens, extra_body
-```
-
-支持通过环境变量配置:
-- `OPENAI_MODEL`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`
-- `OPENAI_ORGANIZATION`, `OPENAI_EXTRA_BODY`
-
-### 11.2 模型工厂
-
-`make_openai_model(cfg)` → `UsageTrackingModel(OpenAIChatModel(...))`
-
-`UsageTrackingModel` 是一个 **装饰器包装**，自动累计所有 LLM 调用的 input/output token 使用量。
-
-### 11.3 多模型格式化器
-
-系统支持三种消息格式化器，根据模型自动选择：
+系统不是从最终 mismatch 开始猜测，而是识别真实 DUT/reference 首分歧，分析稳定值与活跃区差异，再沿直接驱动和端口边界逐跳追踪。这是当前最鲜明的 RTL 特有能力。
 
-| 格式化器 | 适用模型 | 特性 |
-|---------|---------|------|
-| `OpenAIChatFormatter` | 默认 (GPT 系列) | 标准 OpenAI API 格式 |
-| `DeepSeekReasoningChatFormatter` | DeepSeek 系列 | 保留 `reasoning_content` (thinking blocks) |
-| `Llama4ChatFormatter` | Llama 4 系列 | 将 tool_result 转为 user 消息 (不支持 tool role) |
+代码和流程证据较强，但复杂多行分支的驱动抽取仍存在不完整情况。论文前需要首分歧标注、根因命中率、多跳定位准确率，以及日志 only、普通波形窗口和首分歧方法之间的对比。
 
-### 11.4 SafeReActAgent
+### 16.5 规划—代码联合索引
 
-继承 `ReActAgent`，增加 `generate_response` 的容错处理：
-- 如果模型返回 dict 而非 string，自动 JSON 序列化
-- 确保 agent 总能干净地终止
+同一模块身份同时连接规格、骨架、计划、接口、实例、驱动和验证结果，使生成与 Debug 可以比较预期结构和实际结构。它比纯代码图多了规划来源，但当前仍是工程雏形，不应夸大为完整因果图。
 
----
+需要进一步建立规格条款—时序义务—结构块—RTL 的细粒度关系，实现自动跨模块路径，并通过 KG 开关消融证明收益。
 
-## 12. 完整任务协作流程
+### 16.6 上下文路由与长期记忆
 
-### 12.1 端到端流程
+证据路由、多级压缩和成功/失败记忆针对长 Debug 的上下文膨胀问题，但当前自动召回没有闭环，因此不适合作为已验证主贡献。接入主链后，应记录候选记忆、实际读取、决策引用、token 节省、成功率和污染风险。
 
-以下展示一个完整的 "规范 → 验证 RTL" 任务流程：
+## 17. 当前局限与实现风险
 
-```
-Phase 0: 初始化
-├── 加载 LLM 配置 (OpenAI/DeepSeek/Llama)
-├── 初始化 Neo4j 连接 (如果启用)
-├── 构建/加载 RTL Knowledge Graph
-└── 初始化 PlannerRunner
-
-Phase 1: 规范理解 (Stage 1)
-├── PlannerTaskInput(spec_md_files=[...], spec_images=[...])
-├── Stage1Agent.run()
-│   ├── 解析 Markdown → SpecFragments
-│   ├── 预扫描图片 → ImageCards
-│   ├── 提取接口/时序/控制/数据通路契约
-│   └── 构建项目记忆卡
-├── build_module_organized_artifact() → modules.json
-└── KG snapshot sync (post_skeleton)
-
-Phase 2: 架构规划 (Stage 2-3)
-├── Stage2Agent.run() → RepoSkeleton (模块层次结构)
-├── Stage3Agent.run_incremental() → ModuleSkeletons (每个模块的代码骨架)
-│   ├── For each module:
-│   │   ├── 生成接口声明
-│   │   ├── 生成内部信号
-│   │   ├── 生成 always/assign 块骨架
-│   │   ├── 生成子模块实例化
-│   │   └── 输出 .md 文档 + .json 结构
-│   └── 支持断点续传 (resume_cursor)
-└── KG snapshot sync (post_skeleton)
-
-Phase 3: 详细规划 (Stage 4)
-├── Stage4SpecBlocksAgent.run() → SpecBlocks (规范块切分)
-├── Stage4ModulePlanAgent.run_incremental() → ModulePlans
-│   ├── For each module:
-│   │   ├── BlockSpecRetriever: 为每个骨架块选择相关规范
-│   │   ├── 生成 N 个候选方案
-│   │   ├── Checklist 多维度评估
-│   │   ├── PairwiseTieBreak 两两对比
-│   │   ├── 选择最优方案
-│   │   └── 分解为子任务 (ModulePlanSubtasks)
-│   └── 支持断点续传
-└── KG snapshot sync (post_module_plan)
-
-Phase 4: 代码生成 (Stage 5)
-├── Stage5Agent.run_incremental()
-│   ├── For each module in module_order:
-│   │   ├── [define-only 模块] → 从 RealBench 直接复制官方文件
-│   │   │   └── 写入 global_defines_manifest.json
-│   │   ├── For each subtask in module_plan.subtasks:
-│   │   │   ├── 选择相关规范块 + 接口规范块
-│   │   │   ├── 读取 Module Skeleton "Module Frame"
-│   │   │   ├── LLM 生成 SubtaskCodeArtifact (code + FragmentContract)
-│   │   │   ├── 自动提取 Fragment Contract (writes/reads/clocking)
-│   │   │   ├── Upsert 到 fragment 文件 (STAGE5_SUBTASK_BEGIN/END)
-│   │   │   └── 追加到 {module}_contracts.json
-│   │   └── 质量验证: 禁止 unpacked array/multi-dim/generate
-│   └── 输出: workspace/fragments/{module}_fragments.v + _contracts.json
-└── KG refresh (post_codegen)
-
-Phase 5: 合并与验证 (Stage 6)
-├── Stage6MergeAgent.run_module()
-│   ├── [define-only 模块] → 跳过合并, 直接使用已复制的官方文件
-│   │
-│   ├── 准备上下文:
-│   │   ├── MergeContextRetriever → merge_retrieval_json/{module}.json
-│   │   ├── KG 子模块上下文 (可选) → merge_child_context_json/{module}.json
-│   │   ├── Global defines 上下文 (提取活跃 define 值)
-│   │   └── Module Skeleton "Module Frame"
-│   │
-│   ├── [优先] Semantic Merge (Stage6MergeRunner):
-│   │   ├── 渐进式初始 prompt (仅索引, 不含完整 spec)
-│   │   ├── ReAct 循环 (最多 8 步):
-│   │   │   ├── Agent 自主: read_merge_context × 8 kinds
-│   │   │   ├── Agent 自主: inspect_rtl_structure / run_static_rtl_check / run_lint
-│   │   │   ├── Agent draft: generate_merge_draft (evidence gate → pre-check lint)
-│   │   │   │   └── 自动注入 required includes
-│   │   │   ├── Agent commit: commit_merge_draft (final check → copy to merged/)
-│   │   │   └── Observation budget: 16 次只读调用后强制行动
-│   │   ├── 跨模块学习: read learned_merge_rules (前序模块的经验)
-│   │   └── 输出: workspace/merged/{module}.v + merge_journal + merge_report
-│   │
-│   └── [降级] Raw Merge Fallback:
-│       ├── 一次性 LLM 调用, Verilator lint
-│       ├── 语法错误 → stage6_syntax_repair/{module}.json (委派标记)
-│       └── 语法修复责任移交给 RepoReActRunner
-│
-├── ModuleDebugRunner.run_module() [环境准备 + 前处理]
-│   ├── Oracle TB + support.sv, pre-debug syntax repair, 初始仿真
-│   └── Mismatch → RepoReActRunner (仓库级自主 ReAct 调试)
-│
-└── 输出: Stage6MergeArtifact + KG state + RepoReAct journals
-
-Phase 6: 产出
-├── 合并后的 .sv 文件
-├── 仿真通过的模块列表
-├── 调试报告 (trace_report.json, repair_journal.json)
-└── KG 中的仿真状态记录
-```
-
-### 12.2 Agent 间通信协议
-
-Agent 之间 **不直接通信**，而是通过以下方式间接协作：
+方法层面的主要问题是：仓库结构由单次模型规划；端口级契约较弱；时序和规划一致性错误不一定阻断；整合 Agent 可以重写片段；跨模块根因搜索依赖逐跳决策；首分歧映射依赖 testbench 与 VCD 命名；长期记忆召回未闭环；最终失败缺少整个仓库级事务回滚。
 
-1. **文件系统**: tb.sv, rtl.sv, trace_report.json, support.sv, support_interface_index.json
-2. **结构化对象**: Pydantic BaseModel 产物在各阶段间传递
-3. **知识图谱**: 仿真结果、模块状态通过 Neo4j 共享（SimulationResult 节点）
-4. **工作目录**: 每个模块的 `debug/<module>/` 作为共享工作空间
-5. **RepoReAct Journal**: `workspace/repo_react/<module>/` 下的 JSONL 日志和快照（NEW）
-6. **Planning Corrections**: `output_root/planning_corrections/` 下的 overlay JSON（NEW）
+工程层面的主要问题是：外部知识图谱和验证环境依赖本机服务，多处路径与 benchmark 布局绑定；配置的安全性和可移植性不足；历史产物缺少统一源码版本；旧流程和新流程并存；流程完成与功能通过没有完全分离。
 
-### 12.3 并发与隔离
+测试覆盖规划、时序、知识图谱、检索、生成、语法门禁、首分歧、信号追踪、补丁和系统验证，但整个测试套件目前无法无错误地完成收集，存在遗留测试、缺少依赖和接口漂移。核心定向测试大多数通过，但复杂多行条件分支的驱动抽取有已知失败，说明因果回溯完整性仍需加强。
 
-- **Stage 3-5**: 逐模块增量处理 (支持 resume)
-- **Stage 6**: 逐模块串行处理 (debug 需要独占 Verilator)
-- **KG 写入**: 使用 Neo4j 事务隔离
-- **工作目录**: 每个模块独立的 debug workdir
+## 18. 实验与消融设计支持
 
----
+### 18.1 现有指标
 
-## 13. 持久化与检查点机制
-
-### 13.1 产物持久化
-
-所有 Planner 产物通过 **原子写入** (tmp 文件 + rename) 持久化：
-
-```python
-tmp_path = path.with_name(f"{path.name}.tmp")
-with open(tmp_path, "w") as f:
-    json.dump(payload, f)
-tmp_path.replace(path)  # 原子替换
-```
+当前日志可统计模块语法通过率、系统仿真通过率、总 mismatch、逐信号 mismatch、首次失败时间、首个真实分歧时间、Debug 动作与补丁次数、回滚次数、补丁改善/回归比例、模块 lint 结果、时序检查问题，以及规划模块、实例和实际代码的差异。
 
-### 13.2 断点续传 (Resume)
+尚需补充每阶段 token、耗时和费用，规格覆盖率，时序义务最终实现率，模块级功能通过率，首分歧定位准确率，根因命中率，知识图谱查询收益，上下文路由节省量，长期记忆命中与污染率，以及综合后的面积、频率和资源使用。
 
-`PlannerRunner.run(resume=True)` 支持在每个阶段复用已有产物：
+### 18.2 建议消融
 
-```
-Stage 1: 检查 contracts.json 是否存在且通过 validate_quality()
-Stage 2: 检查 repo_skeleton.json
-Stage 3: 检查 module_skeletons.json + resume_cursor
-Stage 4: 检查 spec_blocks.json 和 module_plans.json + resume_cursor
-Stage 5: 检查 fragment 文件是否包含所有 STAGE5_SUBTASK_BEGIN/END 标记
-Stage 6: 检查 merged .sv 是否存在且通过 Verilator 语法检查
-```
+| 研究问题 | 对比设置 |
+| --- | --- |
+| 时序规划是否有效 | 有时序细化 vs 无时序细化 |
+| 叶到根是否有效 | leaf-first vs top-down vs 随机 |
+| 局部生成是否有效 | 结构块片段 vs 一次完整模块 |
+| 工具整合是否有效 | ReAct 重构 vs 单次合并 |
+| 知识图谱是否有效 | 开启 vs 关闭 |
+| 实际子模块上下文是否有效 | 实际接口/代码 vs 仅规划信息 |
+| 首分歧是否有效 | 日志 only vs 普通波形窗口 vs 首分歧 |
+| 规划语义是否帮助 Debug | 有模块语义读取 vs 无 |
+| 多级压缩是否有效 | 无压缩 vs 固定压缩 vs 多级压缩 |
+| 长期记忆是否有效 | 无记忆 vs 全量历史 vs 检索记忆 |
 
-每个阶段的 resume 检查包含：
-1. 文件存在性
-2. JSON 格式有效性
-3. Pydantic 模型验证
-4. 语义质量验证 (validate_quality)
-5. 完整性检查 (如 fragment 标记)
+### 18.3 建议最小埋点
 
-### 13.3 KG 状态持久化
+正式实验应为每次运行记录源码版本、工作树状态、配置、模型、数据集、工具版本和起止时间；为每次模型调用记录阶段、模块、token、耗时、重试和质量状态；为每个工具调用记录结果体积、耗时和是否影响下一补丁；为每个时序义务记录计划、绑定、最终实现和验证结果；为每次记忆检索记录候选、选中、实际引用和最终效果。
 
-```
-RTLKgService
-├── state_path: rtl_kg_state (连接状态)
-├── manifest_path: rtl_kg_manifest (同步事件日志)
-└── Neo4j 图数据库 (代码结构 + 仿真结果)
-```
+## 19. 论文叙事与章节组织建议
 
----
+### 19.1 叙事顺序
 
-## 14. 错误处理与韧性设计
+论文可以先说明单模块代码生成无法解决仓库层接口、层次和周期一致性；随后指出长规格必须转化为可传递的仓库结构和时序对象。方法部分依次介绍仓库架构归纳、时序细化、模块分解、叶到根实现、工具增强重构和首分歧修复。实验分别验证时序建模、生成顺序、局部任务、知识图谱和 Debug 证据的贡献。
 
-### 14.1 分层错误处理
+### 19.2 建议章节
 
+```text
+3 Method
+3.1 Repository-Level RTL Generation Problem
+3.2 Framework Overview
+3.3 Repository Architecture Induction
+3.4 Hierarchical Temporal Constraint Refinement
+3.5 Evidence-Grounded Module Decomposition
+3.6 Leaf-to-Root Fragment Synthesis
+3.7 Tool-Augmented Module Reconstruction
+3.8 Edge-Aware First-Divergence Localization
+3.9 Repository-Level Repair and Verification
 ```
-Level 1: 语法错误 (Verilator --lint-only)
-├── 自动 LLM 驱动修复 (pre-debug syntax repair)
-├── 最多 5 次修复尝试
-└── 每次尝试记录详细日志
-
-Level 2: 仿真不匹配 (Simulation mismatch)
-├── Trace Report 自动诊断
-├── Value Backtrace 定位根因
-├── Dynamic Slicing 缩小搜索空间
-└── RTLEditor 迭代修复 (最多 max_trials 次)
-
-Level 3: 解析错误 (LLM output parsing)
-├── JSON repair (repair_json_payload)
-├── 最多 max_parse_attempts 次重试
-└── 失败后抛出 ValueError
-
-Level 4: 质量错误 (Quality validation)
-├── 最多 max_quality_attempts 次重试
-├── 接受最佳努力结果 (best-effort fallback)
-└── 记录残余质量问题
-
-Level 5: 系统错误 (Exceptions)
-├── debug_runner 中 allow_failure=True 时容忍
-├── KG mode="optional" 时 KG 写入失败不阻塞
-├── 完整错误日志 (module, stage, exception type + message)
-└── 继续处理下一个模块
-```
-
-### 14.2 韧性策略
-
-| 策略 | 应用场景 | 机制 |
-|------|---------|------|
-| **文本回退解析** | tree-sitter 无法解析的 RTL | 正则表达式回退 |
-| **全量规范回退** | 检索失败 | fallback_result() → 使用所有 spec blocks |
-| **最佳努力质量** | 质量检查多次失败 | allow_best_effort_quality_fallback=True |
-| **自动回滚** | 编辑导致退化 | mismatch count 显著增加时回滚 |
-| **黄金 TB 回退** | LLM 生成的 TB 有问题 | 回退到 goldentestbench |
-| **RTL 重新生成** | 编辑循环前给一次重新生成机会 | `set_failed_trial()` → 重新生成 |
-
----
 
-## 15. 配置系统
+### 19.3 表述边界
 
-### 15.1 配置层次
+不建议声称“保证跨模块时序正确”“完整形式化契约驱动”“完整因果知识图谱”“自动根因定位”“最小充分上下文”“所有模块均经过功能验证”或“形式验证闭环”。
 
-```
-1. 代码默认值 (OpenAIConfig.model = "gpt-5.2")
-2. 环境变量 (OPENAI_MODEL, OPENAI_API_KEY, ...)
-3. Planner LLM Config (LLMConfig 对象)
-4. RTL Debug Config (ZEROREPO_RTL_DEBUG_* 环境变量)
-5. KG Config (rtl_agent_root, neo4j.*, batch_size, ...)
-```
-
-### 15.2 关键配置项
-
-#### RTL Debug 配置
-
-| 环境变量 | 默认值 | 描述 |
-|---------|--------|------|
-| `ZEROREPO_RTL_DEBUG` | `1` | 启用/禁用 RTL 调试 |
-| `ZEROREPO_RTL_DEBUG_ORACLE_ROOT` | `/home/mokita/RealBench` | 黄金测试平台根目录 |
-| `ZEROREPO_RTL_DEBUG_MAX_TRIALS` | `10` | 最大调试尝试次数 |
-| `ZEROREPO_RTL_DEBUG_ALLOW_FAILURE` | `0` | 是否允许调试失败不崩溃 |
-| `ZEROREPO_RTL_DEBUG_TOOLCHAIN_BIN` | `""` | Verilator 工具链路径 |
-
-#### KG 配置
-
-```python
-{
-    "enabled": True/False,
-    "mode": "optional" | "required",
-    "neo4j": {
-        "uri": "bolt://localhost:7687",
-        "user": "neo4j",
-        "password": "neo4j123456"
-    },
-    "batch_size": 2000,
-    "default_query_limit": 25,
-    "max_query_rows": 100
-}
-```
+更准确的表述是：显式建模并传播跨模块时序要求；使用模块锚点统一的规划—代码联合索引；由首分歧和逐跳结构证据引导修复；采用渐进式按需上下文；通过系统级仿真驱动仓库修复。
 
-#### Tree-sitter 配置
+## 20. 待确认问题
 
-| 环境变量 | 描述 |
-|---------|------|
-| `RTL_TS_LANG_SO` | 预编译的 tree-sitter 共享库路径 |
-| `RTL_TS_GRAMMAR_DIR` | tree-sitter-verilog 语法仓库路径 |
-| `RTL_TS_LANG_NAME` | 语言名称 (默认: verilog) |
+正式论文和实验前需要确认：
 
----
+1. 当前开发工作树是否就是正式实验版本，以及是否固定模型、知识图谱、Verilator、外部 benchmark 和 Python 环境；
+2. 是否恢复完整接口、控制和数据通路契约，并将模块级功能仿真纳入默认门禁；
+3. 严重时序错误是否阻断生成或触发重规划，最终 RTL 是否增加规格、结构块和时序义务覆盖检查；
+4. 模块整合降级为一次性生成时如何标记，上下文路由和长期记忆是否接回主链；
+5. 规划修正由哪个阶段消费，Debug 最终失败后保留最佳中间版本还是整体回滚；
+6. 本地验证器与外部 benchmark 哪个是权威，是否加入形式验证或综合后 PPA；
+7. 如何建立首分歧和根因定位的 ground truth，并记录完整复现实验元数据。
 
-## 16. 附录：文件索引
+## 总结
 
-### 16.1 完整文件清单
+当前系统已经形成一条完整的仓库级 RTL 生成原型链：
 
+```text
+长规格
+→ 仓库架构
+→ 周期约束
+→ 模块骨架
+→ 局部实现任务
+→ RTL 片段
+→ 完整模块
+→ 系统仿真
+→ 波形引导修复
 ```
-zerorepo/rtl_impl/
-├── __init__.py                          # 包入口 (延迟导入)
-├── rtl_kg_service.py                    # KG 服务封装 + QueryRtlKgTool
-│
-├── rtl_kg/                              # RTL 知识图谱核心
-│   ├── __init__.py                      # 导出 KnowledgeGraphRTL, RTLNeo4jIngestor 等
-│   ├── graph_types_rtl.py               # 节点/边类型定义 (12 种节点, 10 种关系)
-│   ├── rtl_knowledge_graph.py           # 图谱构建器 (DFS 遍历 + 后处理)
-│   ├── rtl_file_graph_builder.py        # 单文件 tree-sitter 解析器
-│   ├── neo4j_ingest.py                  # Neo4j 批量摄入器
-│   ├── ingest_rtl_kg_to_neo4j.py        # CLI 摄入工具
-│   └── ast_extract_example.py           # AST 提取示例
-│
-├── module_planner/                      # 6 阶段规划管线
-│   ├── __init__.py                      # 导出所有 schema 和 runner
-│   ├── planner_runner.py                # 管线编排器
-│   ├── interfaces.py                    # PlanningContextProvider/ArtifactSink 协议
-│   ├── module_organizer.py              # 模块组织 (Stage1 → ModuleOrganization)
-│   ├── compat.py                        # 向后兼容适配器
-│   ├── agents/
-│   │   ├── __init__.py
-│   │   ├── base.py                      # BaseStageAgent (LLM 调用 + 解析修复 + 质量修复)
-│   │   ├── stage1_agent.py              # 规范摄取与契约提取
-│   │   ├── stage2_agent.py              # 仓库骨架规划
-│   │   ├── stage3_agent.py              # 模块骨架生成
-│   │   ├── stage4_agent.py              # Stage4 基础类
-│   │   ├── stage4_spec_blocks_agent.py  # 规范块切分
-│   │   ├── stage4_module_plan_agent.py  # 模块实现计划
-│   │   ├── stage5_agent.py              # 逐子任务代码生成 (v2: +FragmentContract +define-only)
-│   │   ├── stage6_merge_agent.py        # 代码合并 (v2: +Semantic Merge +global defines +KG child)
-│   │   ├── stage6_semantic_merge.py     # Stage6 ReAct Merge Runner (NEW)
-│   │   └── global_defines.py            # 官方 define 文件处理 (NEW)
-│   ├── prompts/                         # 每个阶段的 LLM 提示模板
-│   ├── schemas/                         # 所有阶段的 Pydantic 数据模型
-│   │   ├── common.py, atoms.py          # 基础类型 + 原子类型
-│   │   ├── contracts.py                 # Stage1 契约模型
-│   │   ├── repo_skeleton.py             # Stage2 仓库骨架模型
-│   │   ├── module_skeleton.py           # Stage3 模块骨架模型
-│   │   ├── module_plan.py               # Stage4 模块计划模型
-│   │   ├── spec_blocks.py               # Stage4 规范块模型
-│   │   ├── codegen_plan.py              # Stage5/6 代码生成+合并模型 (NEW: FragmentContract)
-│   │   ├── artifacts.py                 # 阶段产物聚合模型
-│   │   └── responsibility.py            # 责任分配模型
-│   └── utils/                           # LLM 客户端、JSON 修复、日志等
-│
-├── debug_agent/                         # 调试子系统（环境准备 + 前处理）
-│   ├── __init__.py                      # 导出 ModuleDebugRunner, RtlDebugConfig
-│   ├── debug_runner.py                  # 模块调试运行器（v2: 委托给 RepoReActRunner）
-│   ├── top_agent.py                     # 多 Agent RTL 生成循环 (TopAgent, 旧独立入口, 保留)
-│   ├── rtl_editor.py                    # 交互式 RTL 编辑器 (RTLEditor + _EditSession, 旧实现, 保留)
-│   ├── architect_agent.py               # 合同生成 Agent (ArchitectAgent)
-│   ├── sim_reviewer.py                  # Verilator 仿真接口 (SimReviewer + check_syntax)
-│   ├── trace_report.py                  # 追踪报告生成器 + VCD 探测工具 (被 RepoReAct 复用)
-│   ├── trace_slicer.py                  # RTL 块解析 + 动态切片 (被 RepoReAct 复用)
-│   ├── kg_debug_reads.py                # KG 驱动的调试读依赖 (被 RepoReAct 复用)
-│   ├── contract_linter.py               # 合同 JSON 格式验证器
-│   ├── adapters.py                      # Planner→Debug 适配 (配置转换 + 数据构建)
-│   ├── agents.py                        # SafeReActAgent + 内存清理工具
-│   ├── model.py                         # 模型工厂 + 多格式化器 + UsageTracking
-│   ├── config.py                        # OpenAI 配置数据类 + 加载函数
-│   ├── bash_tools.py                    # 安全 Bash 命令执行
-│   ├── utils.py                         # 文本处理工具 (clip_text, extract_json 等)
-│   └── Debug_agent.md                   # 设计文档
-│
-├── repo_react/                          # 仓库级自主 ReAct 调试环 (NEW — v2 核心)
-│   ├── __init__.py                      # 导出 RepoReActRunner, RepoReActInput, RepoReActResult
-│   ├── runner.py                        # RepoReActRunner: SafeReActAgent + 11 个注册工具
-│   ├── tools.py                         # RepoReActTools: 全部工具实现 + RepoReActToolState
-│   ├── schemas.py                       # Pydantic 模型: Diagnosis, Patch, Correction, StepRecord, SimSnapshot
-│   ├── prompt.py                        # SYSTEM_PROMPT + initial/continue/compact prompt builders
-│   └── journal.py                       # RepoReActJournal: JSONL 日志 + before/after snapshots
-│
-├── kg_agent/                            # KG 查询子系统
-│   ├── __init__.py
-│   ├── kg_retriever.py                  # 模板化 KG 查询 (KGRetriever)
-│   ├── kg_query_templates.py            # 固定 Cypher 查询模板
-│   ├── module_result_writer.py          # 仿真结果写入 (ModuleResultWriter)
-│   └── schemas.py                       # ModuleSimulationStatus
-│
-└── retrieval_agent/                     # 检索子系统
-    ├── __init__.py
-    ├── block_spec_retriever.py           # 规范块检索 (Stage4/5)
-    ├── merge_context_retriever.py        # 合并上下文检索 (Stage6)
-    ├── schemas.py                        # 检索结果 Schema
-    ├── utils.py                          # 检索工具函数
-    └── prompts/                          # 检索 LLM 提示模板
-```
-
-### 16.2 关键数据流总结 (v2)
 
-```
-输入: Spec (.md + images)
-  │
-  ├──[Stage1]──► contracts.json + modules.json ──► [KG sync]
-  ├──[Stage2]──► repo_skeleton.json
-  ├──[Stage3]──► module_skeletons.json + .md docs
-  ├──[Stage4]──► spec_blocks.json + module_plans.json
-  │                  │
-  │                  └──[BlockSpecRetriever]──► block_spec_retrieval_json/
-  ├──[Stage5]──► stage5_codegen.json + fragment .sv files
-  ├──[Stage6]──► Merged .sv files
-  │                  │
-  │                  ├──[MergeContextRetriever]──► selected spec refs
-  │                  └──[ModuleDebugRunner]──► debug workdirs
-  │                        │
-  │                        ├──► Oracle TB + support.sv
-  │                        ├──► Pre-debug syntax repair (≤5 LLM attempts)
-  │                        ├──► Initial SimReviewer.review()
-  │                        │
-  │                        └──► [RepoReActRunner] (NEW — replaces RTLEditor)
-  │                              │
-  │                              ├──► Initial trace_report (build_trace_report)
-  │                              ├──► ReAct loop (max_steps rounds):
-  │                              │   ├── read_context / search_context / query_rtl_kg
-  │                              │   ├── read_spec / retrieve_spec_block
-  │                              │   ├── list_vcd_signals / probe_vcd
-  │                              │   ├── run_check (lint / module_sim / trace_summary)
-  │                              │   ├── read_memory (snapshot / journal / directions)
-  │                              │   ├── apply_patch (snapshot → lint → sim → trace → rollback)
-  │                              │   └── record_correction → planning_corrections/
-  │                              │
-  │                              ├──► react_trace.jsonl + patch_journal.jsonl
-  │                              ├──► correction_journal.jsonl + *_overrides.json
-  │                              ├──► snapshots/ (step_NNN_before/after)
-  │                              └──► repo_react_memory_snapshot.json
-  │
-  ├──[ModuleResultWriter]──► Neo4j SimulationResult + HAS_SIM_RESULT
-  │
-  └── 输出: Verified .sv files + KG state + RepoReAct journals
-```
+它区别于普通代码生成的关键，不是简单增加 Agent 数量，而是显式处理多模块层次、周期级时序、并发驱动、子模块物化顺序、DUT/reference 波形、边沿采样、跨模块信号传播以及有验证和回滚的多文件修改。
 
-### 16.3 v1 → v2 架构变更摘要
-
-#### 调试子系统 (debug_agent → repo_react)
-
-| 维度 | v1 | v2 |
-|------|----|----|
-| **调试模型** | RTLEditor: 固定 block-edit 流水线 | RepoReActRunner: 仓库级自主 ReAct |
-| **观察范围** | 当前模块 trace_report + suspect blocks | 全仓库 (RTL / TB / spec / stage artifacts / KG / VCD) |
-| **编辑模式** | replace_block / apply_patch_set (固定 block) | apply_patch (自由行范围) |
-| **证据要求** | 无强制前置条件 | 三要素 gate (RTL + trace + TB/spec/KG) |
-| **规划修正** | 不支持 | record_correction → planning_corrections/ |
-| **观察预算** | 无限制 | 连续 8 次只读后强制行动 |
-| **回滚策略** | mismatch 显著增加 | lint fail / mismatch↑ / fail_time↓ / 2×neutral |
-| **日志系统** | repair_journal.json | react_trace.jsonl + patch_journal.jsonl + correction_journal.jsonl |
-| **快照** | 无 | step_NNN_before/after 完整 RTL 副本 |
-| **Toolkit 工具数** | 10 (RTLEditor) | 11 (RepoReAct) |
-| **外部协议** | ModuleDebugResult 不变 | **完全兼容** |
-
-#### 代码生成子系统 (Stage 5)
-
-| 维度 | v1 | v2 |
-|------|----|----|
-| **Fragment 追踪** | 仅 STAGE5_SUBTASK_BEGIN/END 标记 | 标记 + FragmentContract (writes/reads/clocking/reset/latency/assumptions) |
-| **契约持久化** | 无 | workspace/fragments/{module}_contracts.json |
-| **Contract 提取** | LLM 输出 (可选) | 自动代码分析 fallback (_extract_fragment_contract) |
-| **语法约束** | 无特殊限制 | 禁止 unpacked array / multi-dim / generate/genvar |
-| **Define-Only 处理** | 不支持 | 自动检测 + 从 RealBench 直接复制 |
-| **模块骨架上下文** | 未使用 | 提取 "Module Frame" 段注入 prompt |
-
-#### 代码合并子系统 (Stage 6)
-
-| 维度 | v1 | v2 |
-|------|----|----|
-| **合并模型** | 一次性 LLM 调用 | Semantic Merge (ReAct Agent + 6 工具) 优先, Raw Merge 降级 |
-| **工具集** | 无 | read_merge_context × 8, inspect_rtl_structure, run_static_rtl_check, run_lint, generate_merge_draft, commit_merge_draft |
-| **证据门槛** | 无 | draft 前必须读 fragments + spec + global_defines; commit 前必须 inspected + checks pass |
-| **Required Includes** | 未处理 | 自动检测 + 自动注入 + static check 验证 |
-| **Global Defines** | 未处理 | 官方文件直接复制 + manifest + 活跃值提取注入 prompt |
-| **KG 子模块上下文** | 不支持 | 可选检索 (接口 + 参数 + 仿真状态 + 完整代码) |
-| **跨模块学习** | 不支持 | learned_merge_rules (前序模块 merge report) |
-| **草稿管理** | 直接写入 merged | draft → inspect → check → lint → commit 渐进式 |
-| **回滚** | 不可回滚 | draft reject 后可重新生成 |
-| **观察预算** | 无限制 | 连续 16 次只读后强制行动 |
-| **语法修复** | Stage6 自己重试 | **委派给** RepoReActRunner (syntax repair mode) |
-| **日志系统** | 无 | merge_trace.jsonl + draft_journal.jsonl + snapshots + merge_report |
-| **Define-Only 处理** | 不支持 | 自动检测 + 跳过合并 + 直接使用官方副本 |
-
----
-
-> **文档结束** — 本文档基于对 `/home/mokita/RPG-ZeroRepo/zerorepo/rtl_impl/` 目录下全部 Python 源文件的详细阅读与分析，涵盖约 60 个源文件、超过 15,000 行代码。文档系统性地描述了 RTL Agent 的架构设计、组件职责、协作流程、数据模型、工具系统、上下文管理、记忆机制、错误处理与配置管理等各个方面。
+从论文角度看，最成熟的贡献是“层次化周期约束细化”和“首分歧驱动的仓库级修复”；规划—代码联合索引可以作为重要支撑；上下文路由和长期记忆目前更适合作为后续增强。正式发表前最需要补强的是最终约束覆盖、模块级功能门禁、可复现实验记录和核心组件消融。

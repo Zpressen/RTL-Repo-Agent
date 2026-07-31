@@ -1,0 +1,363 @@
+{
+  "schema_version": "global_temporal_facts_v1",
+  "task_id": "aes_inv_cipher_system_hard",
+  "input_fingerprint": "ec8152225b63e84061c19735d2121bfb5e8b4b98f1dc78c5aacb0b7ea8d8baec",
+  "planning_status": "complete",
+  "degradation_reasons": [],
+  "clock": {
+    "name": "clk",
+    "edge": "posedge"
+  },
+  "reset": {
+    "name": "rst",
+    "polarity": "unspecified",
+    "kind": "synchronous"
+  },
+  "events": [
+    {
+      "id": "EV_RESET",
+      "name": "reset_assertion",
+      "kind": "reset",
+      "trigger": "rst == 1",
+      "guard": "",
+      "text_grounding": [
+        {
+          "source_md_file": "aes_inv_cipher_system_hard.md",
+          "section_path": "3. Registers",
+          "start_line_anchor": "",
+          "end_line_anchor": ""
+        }
+      ]
+    },
+    {
+      "id": "EV_KLD",
+      "name": "key_load_start",
+      "kind": "start",
+      "trigger": "rise(kld)",
+      "guard": "",
+      "text_grounding": [
+        {
+          "source_md_file": "aes_inv_cipher_system_hard.md",
+          "section_path": "AES-128 Key Expansion Functional Requirements > 3.1 Key Loading Operation",
+          "start_line_anchor": "",
+          "end_line_anchor": ""
+        }
+      ]
+    },
+    {
+      "id": "EV_KLD_DEASSERT",
+      "name": "key_expansion_start",
+      "kind": "start",
+      "trigger": "fall(kld)",
+      "guard": "",
+      "text_grounding": [
+        {
+          "source_md_file": "aes_inv_cipher_system_hard.md",
+          "section_path": "AES-128 Key Expansion Functional Requirements > 3.2 Key Expansion Operation",
+          "start_line_anchor": "",
+          "end_line_anchor": ""
+        }
+      ]
+    },
+    {
+      "id": "EV_KEY_EXP_DONE",
+      "name": "key_expansion_done",
+      "kind": "completion",
+      "trigger": "kcnt == 0",
+      "guard": "",
+      "text_grounding": [
+        {
+          "source_md_file": "aes_inv_cipher_system_hard.md",
+          "section_path": "5.1 Operational Phases",
+          "start_line_anchor": "",
+          "end_line_anchor": ""
+        }
+      ]
+    },
+    {
+      "id": "EV_LD",
+      "name": "data_load_start",
+      "kind": "start",
+      "trigger": "rise(ld)",
+      "guard": "",
+      "text_grounding": [
+        {
+          "source_md_file": "aes_inv_cipher_system_hard.md",
+          "section_path": "5.1 Operational Phases",
+          "start_line_anchor": "",
+          "end_line_anchor": ""
+        }
+      ]
+    },
+    {
+      "id": "EV_DONE",
+      "name": "decryption_done",
+      "kind": "completion",
+      "trigger": "rise(done)",
+      "guard": "",
+      "text_grounding": [
+        {
+          "source_md_file": "aes_inv_cipher_system_hard.md",
+          "section_path": "5.2 Round Counter and Control Logic",
+          "start_line_anchor": "",
+          "end_line_anchor": ""
+        }
+      ]
+    }
+  ],
+  "phases": [
+    {
+      "id": "PH_IDLE",
+      "name": "IDLE",
+      "order": 0,
+      "trigger_event_id": "EV_RESET",
+      "cycles": null,
+      "guard": "",
+      "text_grounding": [
+        {
+          "source_md_file": "aes_inv_cipher_system_hard.md",
+          "section_path": "5.1 Operational Phases",
+          "start_line_anchor": "",
+          "end_line_anchor": ""
+        }
+      ]
+    },
+    {
+      "id": "PH_KEY_LOAD",
+      "name": "KeyLoad",
+      "order": 1,
+      "trigger_event_id": "EV_KLD",
+      "cycles": null,
+      "guard": "kld == 1",
+      "text_grounding": [
+        {
+          "source_md_file": "aes_inv_cipher_system_hard.md",
+          "section_path": "5.1 Operational Phases",
+          "start_line_anchor": "",
+          "end_line_anchor": ""
+        }
+      ]
+    },
+    {
+      "id": "PH_KEY_EXPANSION",
+      "name": "KeyExpansion",
+      "order": 2,
+      "trigger_event_id": "EV_KLD_DEASSERT",
+      "cycles": null,
+      "guard": "kld == 0",
+      "text_grounding": [
+        {
+          "source_md_file": "aes_inv_cipher_system_hard.md",
+          "section_path": "5.1 Operational Phases",
+          "start_line_anchor": "",
+          "end_line_anchor": ""
+        }
+      ]
+    },
+    {
+      "id": "PH_KEY_STORED",
+      "name": "KeyStored",
+      "order": 3,
+      "trigger_event_id": "EV_KEY_EXP_DONE",
+      "cycles": null,
+      "guard": "ld == 0",
+      "text_grounding": [
+        {
+          "source_md_file": "aes_inv_cipher_system_hard.md",
+          "section_path": "5.1 Operational Phases",
+          "start_line_anchor": "",
+          "end_line_anchor": ""
+        }
+      ]
+    },
+    {
+      "id": "PH_INITIAL_ROUND",
+      "name": "InitialRound",
+      "order": 4,
+      "trigger_event_id": "EV_LD",
+      "cycles": null,
+      "guard": "ld == 1",
+      "text_grounding": [
+        {
+          "source_md_file": "aes_inv_cipher_system_hard.md",
+          "section_path": "5.1 Operational Phases",
+          "start_line_anchor": "",
+          "end_line_anchor": ""
+        }
+      ]
+    },
+    {
+      "id": "PH_STANDARD_ROUND",
+      "name": "StandardRound",
+      "order": 5,
+      "trigger_event_id": "",
+      "cycles": null,
+      "guard": "",
+      "text_grounding": [
+        {
+          "source_md_file": "aes_inv_cipher_system_hard.md",
+          "section_path": "5.1 Operational Phases",
+          "start_line_anchor": "",
+          "end_line_anchor": ""
+        }
+      ]
+    },
+    {
+      "id": "PH_FINAL_ROUND",
+      "name": "FinalRound",
+      "order": 6,
+      "trigger_event_id": "",
+      "cycles": null,
+      "guard": "",
+      "text_grounding": [
+        {
+          "source_md_file": "aes_inv_cipher_system_hard.md",
+          "section_path": "5.1 Operational Phases",
+          "start_line_anchor": "",
+          "end_line_anchor": ""
+        }
+      ]
+    },
+    {
+      "id": "PH_DONE",
+      "name": "Done",
+      "order": 7,
+      "trigger_event_id": "EV_DONE",
+      "cycles": null,
+      "guard": "",
+      "text_grounding": [
+        {
+          "source_md_file": "aes_inv_cipher_system_hard.md",
+          "section_path": "5.1 Operational Phases",
+          "start_line_anchor": "",
+          "end_line_anchor": ""
+        }
+      ]
+    }
+  ],
+  "latency_constraints": [
+    {
+      "id": "LAT_LD_DONE",
+      "start_event_id": "EV_LD",
+      "end_event_id": "EV_DONE",
+      "cycles": null,
+      "counting_basis": "unspecified",
+      "raw_statement": "When the round counter reaches 11, it transitions to the Done state, asserting done.",
+      "status": "ambiguous",
+      "text_grounding": [
+        {
+          "source_md_file": "aes_inv_cipher_system_hard.md",
+          "section_path": "5.2 Round Counter and Control Logic",
+          "start_line_anchor": "",
+          "end_line_anchor": ""
+        }
+      ]
+    }
+  ],
+  "logical_value_sequences": [
+    {
+      "object": "round_key",
+      "tags": [
+        "RK10",
+        "RK9",
+        "RK8",
+        "RK7",
+        "RK6",
+        "RK5",
+        "RK4",
+        "RK3",
+        "RK2",
+        "RK1",
+        "RK0"
+      ],
+      "text_grounding": [
+        {
+          "source_md_file": "aes_inv_cipher_system_hard.md",
+          "section_path": "5.5 Key Expansion Buffer",
+          "start_line_anchor": "",
+          "end_line_anchor": ""
+        }
+      ]
+    },
+    {
+      "object": "round_constant",
+      "tags": [
+        "RC0",
+        "RC1",
+        "RC2",
+        "RC3",
+        "RC4",
+        "RC5",
+        "RC6",
+        "RC7",
+        "RC8",
+        "RC9"
+      ],
+      "text_grounding": [
+        {
+          "source_md_file": "aes_inv_cipher_system_hard.md",
+          "section_path": "Round Constant Generation Functional Requirements > 3.3 Round Constant Sequence Derivation",
+          "start_line_anchor": "",
+          "end_line_anchor": ""
+        }
+      ]
+    }
+  ],
+  "relations": [
+    {
+      "id": "REL_KLD_BEFORE_LD",
+      "source_id": "EV_KLD",
+      "target_id": "EV_LD",
+      "relation": "BEFORE",
+      "delay_cycles": null,
+      "guard": "",
+      "text_grounding": [
+        {
+          "source_md_file": "aes_inv_cipher_system_hard.md",
+          "section_path": "7. Constraints",
+          "start_line_anchor": "",
+          "end_line_anchor": ""
+        }
+      ]
+    },
+    {
+      "id": "REL_KEY_EXP_DONE_BEFORE_LD",
+      "source_id": "EV_KEY_EXP_DONE",
+      "target_id": "EV_LD",
+      "relation": "BEFORE",
+      "delay_cycles": null,
+      "guard": "",
+      "text_grounding": [
+        {
+          "source_md_file": "aes_inv_cipher_system_hard.md",
+          "section_path": "7. Constraints",
+          "start_line_anchor": "",
+          "end_line_anchor": ""
+        }
+      ]
+    }
+  ],
+  "invariants": [],
+  "ambiguities": [
+    {
+      "id": "AMB_DECRYPT_LATENCY",
+      "statement": "The number of clock cycles from ld to done is not explicitly stated; the round counter reaching 11 can be interpreted as either 10 edge-distance cycles or 11 inclusive cycles.",
+      "alternatives": [
+        "edge distance 10 cycles",
+        "inclusive cycle count 11 cycles"
+      ],
+      "related_ids": [
+        "LAT_LD_DONE"
+      ],
+      "text_grounding": [
+        {
+          "source_md_file": "aes_inv_cipher_system_hard.md",
+          "section_path": "5.2 Round Counter and Control Logic",
+          "start_line_anchor": "",
+          "end_line_anchor": ""
+        }
+      ]
+    }
+  ],
+  "unsupported_features": []
+}

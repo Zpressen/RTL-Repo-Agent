@@ -1,0 +1,51 @@
+{
+  "schema_version": "stage5_codegen_v1",
+  "task_id": "aes_inv_cipher_system_hard",
+  "input_fingerprint": "f9cdf16fda89d074f4c5a56618d1b0da4b7c45977d48758b4a3b44d1afec641e",
+  "module_order": [
+    "aes_sbox",
+    "aes_inv_sbox",
+    "aes_key_expand",
+    "aes_inv_cipher_top"
+  ],
+  "module_files": [
+    {
+      "module": "aes_sbox",
+      "workspace_file": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_inv_cipher_system_hard/.zerorepo/workspace/fragments/aes_sbox_fragments.v",
+      "completed_subtasks": [
+        "B1_sbox_lut_decl",
+        "B2_sbox_output_comb"
+      ]
+    },
+    {
+      "module": "aes_inv_sbox",
+      "workspace_file": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_inv_cipher_system_hard/.zerorepo/workspace/fragments/aes_inv_sbox_fragments.v",
+      "completed_subtasks": [
+        "B1_decl_lookup_table",
+        "B2_comb_table_lookup"
+      ]
+    },
+    {
+      "module": "aes_key_expand",
+      "workspace_file": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_inv_cipher_system_hard/.zerorepo/workspace/fragments/aes_key_expand_fragments.v",
+      "completed_subtasks": [
+        "B1_decl_state_and_regs",
+        "B2_inst_sbox",
+        "B3_comb_round_const_gen",
+        "B4_comb_key_expand_next",
+        "B5_seq_update"
+      ]
+    },
+    {
+      "module": "aes_inv_cipher_top",
+      "workspace_file": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_inv_cipher_system_hard/.zerorepo/workspace/fragments/aes_inv_cipher_top_fragments.v",
+      "completed_subtasks": [
+        "B1_decl_core_state",
+        "B2_inst_child_modules",
+        "B3_comb_round_network",
+        "B4_seq_control",
+        "B5_final_output"
+      ]
+    }
+  ]
+}

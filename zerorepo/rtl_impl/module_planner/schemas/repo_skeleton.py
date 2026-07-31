@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .contracts import Stage1ContractsArtifact, Stage1FactLedger
+from .temporal import GlobalTemporalFactsArtifact
 
 
 ModuleKind = Literal["top_controller", "iterative_engine", "leaf_combinational", "leaf_stateful"]
@@ -75,6 +76,7 @@ class Stage2PlanningInput(BaseModel):
     fact_ledger: Stage1FactLedger = Field(default_factory=Stage1FactLedger)
     legacy_contract_projection: Stage1ContractsArtifact | None = Field(default=None)
     compat_module_candidates: List[str] = Field(default_factory=list)
+    temporal_facts: GlobalTemporalFactsArtifact | None = Field(default=None)
 
 
 class PlanningDecisions(BaseModel):
@@ -87,6 +89,7 @@ class PlanningDecisions(BaseModel):
 class Stage2RepoSkeletonArtifact(BaseModel):
     schema_version: str = Field(default="repo_skeleton_v1")
     task_id: str = Field(..., min_length=1)
+    input_fingerprint: str = Field(default="")
     source_schema_version: str = Field(default="stage2_planning_input_v1")
     stage2_status: str = Field(default="repo_skeleton_planned", min_length=1)
     top_module: str = Field(default="")

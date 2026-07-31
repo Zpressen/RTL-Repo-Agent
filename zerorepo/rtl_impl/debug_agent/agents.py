@@ -51,6 +51,22 @@ def clear_memory_safely(agent: ReActAgent) -> None:
             __import__("asyncio").run(ret)  # type: ignore[arg-type]
 
 
+async def clear_memory_safely_async(agent: ReActAgent) -> None:
+    """Clear AgentScope memory and wait until the clear has completed."""
+    mem = getattr(agent, "memory", None)
+    if mem is None:
+        return
+    clear = getattr(mem, "clear", None)
+    if clear is None:
+        return
+    try:
+        ret = clear()
+    except TypeError:
+        return
+    if inspect.isawaitable(ret):
+        await ret
+
+
 async def close_model_safely(agent: ReActAgent) -> None:
     """Close short-lived AgentScope model clients before their event loop exits."""
     model = getattr(agent, "model", None)

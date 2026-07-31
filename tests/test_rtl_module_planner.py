@@ -1794,7 +1794,7 @@ def test_planner_runner_writes_contracts_json_and_resume_reuses_it(tmp_path):
     task, md_path, image_paths = make_task_input(tmp_path, image_count=1)
     output_root = tmp_path / "outputs"
     backend = QueueBackend([])
-    runner = PlannerRunner(output_root=output_root, llm_backend=backend)
+    runner = PlannerRunner(output_root=output_root, llm_backend=backend, temporal_planning_enabled=False)
 
     first = runner.run(task, end_stage="stage1")
     second = runner.run(task, resume=True, end_stage="stage1")
@@ -1829,7 +1829,7 @@ def test_planner_runner_resume_continues_from_partial_contracts_json(tmp_path):
     (output_root / "contracts.json").write_text(json.dumps(partial_payload, indent=2), encoding="utf-8")
 
     backend = QueueBackend([])
-    runner = PlannerRunner(output_root=output_root, llm_backend=backend)
+    runner = PlannerRunner(output_root=output_root, llm_backend=backend, temporal_planning_enabled=False)
 
     artifact = runner.run(task, resume=True, end_stage="stage1")
 
@@ -1867,7 +1867,7 @@ def test_planner_runner_resume_ignores_legacy_six_round_contracts_json(tmp_path)
     (output_root / "contracts.json").write_text(json.dumps(legacy_payload, indent=2), encoding="utf-8")
 
     backend = QueueBackend([])
-    runner = PlannerRunner(output_root=output_root, llm_backend=backend)
+    runner = PlannerRunner(output_root=output_root, llm_backend=backend, temporal_planning_enabled=False)
 
     artifact = runner.run(task, resume=True, end_stage="stage1")
 
@@ -1880,7 +1880,7 @@ def test_planner_runner_writes_repo_skeleton_for_stage2(tmp_path):
     task, md_path, image_paths = make_task_input(tmp_path, image_count=1)
     output_root = tmp_path / "outputs"
     backend = QueueBackend([make_repo_skeleton_payload()])
-    runner = PlannerRunner(output_root=output_root, llm_backend=backend)
+    runner = PlannerRunner(output_root=output_root, llm_backend=backend, temporal_planning_enabled=False)
 
     artifact = runner.run(task, end_stage="stage2")
 
@@ -1905,7 +1905,7 @@ def test_planner_runner_resume_reuses_repo_skeleton_json(tmp_path):
         encoding="utf-8",
     )
     backend = QueueBackend([])
-    runner = PlannerRunner(output_root=output_root, llm_backend=backend)
+    runner = PlannerRunner(output_root=output_root, llm_backend=backend, temporal_planning_enabled=False)
 
     artifact = runner.run(task, resume=True, end_stage="stage2")
 
@@ -1928,7 +1928,7 @@ def test_planner_runner_resume_reruns_facts_when_legacy_partial_rounds_exist(tmp
     (output_root / "contracts.json").write_text(json.dumps(partial_payload, indent=2), encoding="utf-8")
 
     backend = QueueBackend([])
-    runner = PlannerRunner(output_root=output_root, llm_backend=backend)
+    runner = PlannerRunner(output_root=output_root, llm_backend=backend, temporal_planning_enabled=False)
 
     artifact = runner.run(task, resume=True, end_stage="stage1")
 
@@ -1941,7 +1941,7 @@ def test_planner_runner_writes_incremental_contract_statuses(tmp_path):
     task, md_path, image_paths = make_task_input(tmp_path, image_count=1)
     output_root = tmp_path / "outputs"
     backend = QueueBackend([])
-    runner = PlannerRunner(output_root=output_root, llm_backend=backend)
+    runner = PlannerRunner(output_root=output_root, llm_backend=backend, temporal_planning_enabled=False)
 
     writes = []
     original_write_payload = runner._write_payload
@@ -1969,7 +1969,11 @@ def test_planner_runner_supports_stage3_execution(tmp_path):
             make_stage3_module_skeleton_doc("aes_cipher_top", top_spec),
         ]
     )
-    runner = PlannerRunner(output_root=tmp_path / "outputs", llm_backend=backend)
+    runner = PlannerRunner(
+        output_root=tmp_path / "outputs",
+        llm_backend=backend,
+        temporal_planning_enabled=False,
+    )
 
     artifact = runner.run(task, end_stage="stage3")
 
@@ -2156,7 +2160,7 @@ def test_planner_runner_supports_stage4_spec_block_splitting(tmp_path):
         ]
     )
     output_root = tmp_path / "outputs"
-    runner = PlannerRunner(output_root=output_root, llm_backend=backend)
+    runner = PlannerRunner(output_root=output_root, llm_backend=backend, temporal_planning_enabled=False)
 
     artifact = runner.run(task, end_stage="stage4")
 
@@ -3160,7 +3164,7 @@ def test_planner_runner_supports_stage5_subtask_codegen_workspace(tmp_path):
         ]
     )
     output_root = tmp_path / ".zerorepo" / "module_planner" / "outputs"
-    runner = PlannerRunner(output_root=output_root, llm_backend=backend)
+    runner = PlannerRunner(output_root=output_root, llm_backend=backend, temporal_planning_enabled=False)
 
     artifact = runner.run(task, end_stage="stage5")
 
@@ -3224,7 +3228,7 @@ def test_planner_runner_supports_stage6_per_module_merge(tmp_path):
         ]
     )
     output_root = tmp_path / ".zerorepo" / "module_planner" / "outputs"
-    runner = PlannerRunner(output_root=output_root, llm_backend=backend)
+    runner = PlannerRunner(output_root=output_root, llm_backend=backend, temporal_planning_enabled=False)
 
     artifact = runner.run(task, end_stage="stage6")
 
@@ -4359,6 +4363,58 @@ def test_module_spec_context_retriever_falls_back_when_llm_returns_non_source_te
     assert result.blocks
     assert "SubBytes" in result.blocks[0].text
     assert result.open_issues
+
+
+def test_module_spec_context_prompt_preserves_source_chunk_order_after_ranking(tmp_path):
+    spec_path = tmp_path / "aes_spec.md"
+    spec_path.write_text(
+        "\n".join(
+            [
+                "# AES Spec",
+                "",
+                "## Interface",
+                "The S-box substitution unit has input byte_in and output byte_out.",
+                "",
+                "## Background",
+                "This project overview mentions AES rounds.",
+                "",
+                "## Validation",
+                "aes_sbox sbox S-box SubBytes substitution combinational lookup validates the output byte.",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    interface_text = "## Interface\nThe S-box substitution unit has input byte_in and output byte_out."
+    backend = QueueBackend(
+        [
+            {
+                "schema_version": "module_spec_context_retrieval_v1",
+                "module": "aes_sbox",
+                "blocks": [
+                    {
+                        "block_id": "S001",
+                        "text": interface_text,
+                        "source_file": str(spec_path.resolve()),
+                        "source_chunk_ids": ["C002"],
+                        "relevance_reason": ["Interface section constrains aes_sbox ports."],
+                        "confidence": "high",
+                    }
+                ],
+                "fallback_used": False,
+            }
+        ]
+    )
+    retriever = ModuleSpecContextRetriever(PlannerLLMClient(backend=backend), max_chunks=3)
+
+    result = retriever.select_module_spec_context(
+        module_name="aes_sbox",
+        spec_md_files=[str(spec_path)],
+        repo_module={"role": "S-box substitution unit", "parents": ["aes_cipher_top"], "children": []},
+    )
+
+    prompt = backend.calls[0]["user_prompt"]
+    assert result.fallback_used is False
+    assert prompt.index('"chunk_id": "C002"') < prompt.index('"chunk_id": "C004"')
 
 
 def test_stage4_spec_blocks_uses_module_context_retrieval_for_unified_spec_without_section(tmp_path):

@@ -1,0 +1,231 @@
+{
+  "schema_version": "module_timing_binding_v1",
+  "task_id": "aes_inv_cipher_system_hard",
+  "module": "aes_inv_cipher_top",
+  "input_fingerprint": "8d53c629478e06b89459f44a4cb77dbc64ba36de5e15ebf5496ee4ebe1a6c95e",
+  "signal_bindings": [
+    {
+      "logical_object": "round_key",
+      "physical_signal": "round_key_reg",
+      "kind": "register",
+      "owner_block_id": "B1",
+      "logical_value_tags": [
+        "RK10",
+        "RK9",
+        "RK8",
+        "RK7",
+        "RK6",
+        "RK5",
+        "RK4",
+        "RK3",
+        "RK2",
+        "RK1",
+        "RK0"
+      ]
+    },
+    {
+      "logical_object": "round_key",
+      "physical_signal": "round_key_inst_out",
+      "kind": "wire",
+      "owner_block_id": "B2",
+      "logical_value_tags": [
+        "RK10",
+        "RK9",
+        "RK8",
+        "RK7",
+        "RK6",
+        "RK5",
+        "RK4",
+        "RK3",
+        "RK2",
+        "RK1",
+        "RK0"
+      ]
+    },
+    {
+      "logical_object": "initial_key",
+      "physical_signal": "key",
+      "kind": "input",
+      "owner_block_id": "",
+      "logical_value_tags": []
+    },
+    {
+      "logical_object": "inv_sbox_byte_request",
+      "physical_signal": "inv_sbox_byte_request",
+      "kind": "wire",
+      "owner_block_id": "B3",
+      "logical_value_tags": []
+    },
+    {
+      "logical_object": "inv_sbox_byte_response",
+      "physical_signal": "inv_sbox_byte_response",
+      "kind": "wire",
+      "owner_block_id": "B2",
+      "logical_value_tags": []
+    },
+    {
+      "logical_object": "text_in",
+      "physical_signal": "text_in",
+      "kind": "input",
+      "owner_block_id": "",
+      "logical_value_tags": []
+    },
+    {
+      "logical_object": "text_out",
+      "physical_signal": "text_out",
+      "kind": "output",
+      "owner_block_id": "",
+      "logical_value_tags": []
+    },
+    {
+      "logical_object": "done_out",
+      "physical_signal": "done",
+      "kind": "output",
+      "owner_block_id": "",
+      "logical_value_tags": []
+    }
+  ],
+  "transfer_bindings": [
+    {
+      "transfer_id": "XFER_INV_SBOX_REQ",
+      "endpoint": "producer",
+      "physical_signal": "inv_sbox_byte_request",
+      "block_id": "B3"
+    },
+    {
+      "transfer_id": "XFER_INV_SBOX_RESP",
+      "endpoint": "consumer",
+      "physical_signal": "inv_sbox_byte_response",
+      "block_id": "B3"
+    },
+    {
+      "transfer_id": "XFER_INITIAL_KEY",
+      "endpoint": "producer",
+      "physical_signal": "key",
+      "block_id": ""
+    },
+    {
+      "transfer_id": "XFER_ROUND_KEY",
+      "endpoint": "consumer",
+      "physical_signal": "round_key_inst_out",
+      "block_id": "B4"
+    }
+  ],
+  "block_obligations": [
+    {
+      "obligation_id": "OBL_TOP_KEYEXPANSION_READ",
+      "block_id": "B4",
+      "reads": [
+        {
+          "signal": "round_key_reg",
+          "at": "PRE_EDGE",
+          "logical_object": "round_key",
+          "logical_value_tag": ""
+        }
+      ],
+      "writes": [],
+      "combinational_outputs": [],
+      "guard": "kcnt > 0"
+    },
+    {
+      "obligation_id": "OBL_TOP_INITIAL_ROUND",
+      "block_id": "B4",
+      "reads": [
+        {
+          "signal": "inv_sbox_byte_response",
+          "at": "COMB",
+          "logical_object": "inv_sbox_byte_response",
+          "logical_value_tag": ""
+        },
+        {
+          "signal": "text_in",
+          "at": "PRE_EDGE",
+          "logical_object": "text_in",
+          "logical_value_tag": ""
+        }
+      ],
+      "writes": [],
+      "combinational_outputs": [
+        {
+          "signal": "inv_sbox_byte_request",
+          "at": "COMB",
+          "logical_object": "inv_sbox_byte_request",
+          "logical_value_tag": ""
+        }
+      ],
+      "guard": ""
+    },
+    {
+      "obligation_id": "OBL_TOP_STANDARD_ROUND",
+      "block_id": "B4",
+      "reads": [
+        {
+          "signal": "inv_sbox_byte_response",
+          "at": "COMB",
+          "logical_object": "inv_sbox_byte_response",
+          "logical_value_tag": ""
+        }
+      ],
+      "writes": [],
+      "combinational_outputs": [
+        {
+          "signal": "inv_sbox_byte_request",
+          "at": "COMB",
+          "logical_object": "inv_sbox_byte_request",
+          "logical_value_tag": ""
+        }
+      ],
+      "guard": ""
+    },
+    {
+      "obligation_id": "OBL_TOP_FINAL_ROUND",
+      "block_id": "B5",
+      "reads": [
+        {
+          "signal": "inv_sbox_byte_response",
+          "at": "COMB",
+          "logical_object": "inv_sbox_byte_response",
+          "logical_value_tag": ""
+        }
+      ],
+      "writes": [
+        {
+          "signal": "text_out",
+          "at": "POST_EDGE",
+          "logical_object": "text_out",
+          "logical_value_tag": ""
+        }
+      ],
+      "combinational_outputs": [
+        {
+          "signal": "inv_sbox_byte_request",
+          "at": "COMB",
+          "logical_object": "inv_sbox_byte_request",
+          "logical_value_tag": ""
+        }
+      ],
+      "guard": ""
+    },
+    {
+      "obligation_id": "OBL_TOP_DONE",
+      "block_id": "B5",
+      "reads": [],
+      "writes": [
+        {
+          "signal": "done",
+          "at": "POST_EDGE",
+          "logical_object": "done_out",
+          "logical_value_tag": ""
+        }
+      ],
+      "combinational_outputs": [],
+      "guard": ""
+    }
+  ],
+  "assumptions": [
+    "Decryption latency from EV_LD to EV_DONE is 11 cycles (inclusive of load edge)",
+    "Key expansion round keys are output registered on POST_EDGE",
+    "InvMixColumns is internal to aes_inv_cipher_top",
+    "Initial key is provided combinationally from top input to aes_key_expand during PH_KEY_LOAD"
+  ]
+}

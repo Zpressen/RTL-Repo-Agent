@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import difflib
 import json
 import re
 import shutil
 import hashlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Literal
 
@@ -14,14 +15,18 @@ from zerorepo.rtl_impl.debug_agent.sim_reviewer import SimReviewer, check_syntax
 from zerorepo.rtl_impl.debug_agent.trace_report import (
     _find_clock_signal,
     _resolve_ref_instance as _resolve_ref_instance_static,
+    _vcd_time_values,
+    _vcd_value_at,
     _vcd_time_range,
+    build_assignment_trace_step,
     build_first_divergence_report,
     build_trace_report,
     list_vcd_signals_query,
     resolve_vcd_signal,
     sample_vcd_signals,
 )
-from zerorepo.rtl_impl.debug_agent.trace_slicer import parse_rtl_blocks
+from zerorepo.rtl_impl.debug_agent.trace_slicer import parse_rtl_assignments, parse_rtl_blocks
+from zerorepo.rtl_impl.kg_agent import PlanningContextRetriever
 from zerorepo.rtl_impl.kg_agent import kg_query_templates as kg_templates
 
 from .journal import RepoReActJournal
@@ -66,8 +71,6 @@ def stage_artifact_help() -> dict[str, Any]:
         "valid_artifact_names": sorted([*STAGE_ARTIFACTS.keys(), *special]),
         "common_repo_debug_artifacts": [
             "repo_skeleton",
-            "spec_blocks",
-            "module_plans",
             "stage5_codegen",
             "stage6_merge",
             "contracts",
@@ -102,6 +105,84 @@ def _clip(value: Any, *, max_chars: int = 12000) -> str:
         return text
     half = max(1, max_chars // 2)
     return text[:half] + "\n...<snip>...\n" + text[-half:]
+
+
+def _json_attrs(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return dict(value)
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return {"raw": value}
+        return dict(parsed) if isinstance(parsed, dict) else {"raw": parsed}
+    return {}
+
+
+def _signal_leaf(value: str) -> str:
+    leaf = str(value or "").strip().split(".")[-1]
+    return re.sub(r"\s*\[[^\]]+\]\s*$", "", leaf)
+
+
+def _expression_mentions_signal(expression: str, signal_name: str) -> bool:
+    return bool(re.search(rf"(?<![A-Za-z0-9_$]){re.escape(signal_name)}(?![A-Za-z0-9_$])", expression))
+
+
+def _simple_connection_signal(expression: str) -> str | None:
+    match = re.fullmatch(
+        r"\s*([A-Za-z_][A-Za-z0-9_$]*)(?:\s*\[[^\]]+\])?\s*",
+        str(expression or ""),
+    )
+    return match.group(1) if match else None
+
+
+def _clip_nested_strings(value: Any, *, max_chars: int) -> Any:
+    if isinstance(value, str):
+        return _clip(value, max_chars=max_chars)
+    if isinstance(value, list):
+        return [_clip_nested_strings(item, max_chars=max_chars) for item in value]
+    if isinstance(value, dict):
+        return {key: _clip_nested_strings(item, max_chars=max_chars) for key, item in value.items()}
+    return value
+
+
+def _budget_json_items(items: list[Any], *, max_chars: int) -> tuple[list[Any], bool]:
+    if not items:
+        return [], False
+    per_string = max(200, min(1600, max_chars // max(1, len(items))))
+    output: list[Any] = []
+    used = 2
+    content_clipped = False
+    for item in items:
+        clipped = _clip_nested_strings(item, max_chars=per_string)
+        content_clipped = content_clipped or clipped != item
+        size = len(json.dumps(clipped, ensure_ascii=False, default=str))
+        if output and used + size > max_chars:
+            break
+        if not output and size > max_chars:
+            clipped = _clip_nested_strings(item, max_chars=max(100, max_chars // 8))
+            content_clipped = True
+            size = len(json.dumps(clipped, ensure_ascii=False, default=str))
+        if not output and size > max_chars:
+            identity = {}
+            if isinstance(item, dict):
+                for key in ("id", "block_id", "block_label", "target", "source_file"):
+                    if item.get(key) not in (None, ""):
+                        identity[key] = item.get(key)
+            clipped = {
+                **identity,
+                "content_excerpt": _clip(
+                    json.dumps(item, ensure_ascii=False, default=str),
+                    max_chars=max(100, max_chars - 200),
+                ),
+            }
+            content_clipped = True
+            size = len(json.dumps(clipped, ensure_ascii=False, default=str))
+        output.append(clipped)
+        used += size + 1
+        if used >= max_chars:
+            break
+    return output, content_clipped or len(output) < len(items)
 
 
 def _extract_first_fail_time(sim_log_json: str) -> int | None:
@@ -247,16 +328,131 @@ def _promising_mixed_signal_delta(before: dict[str, Any], after: dict[str, Any])
 def _build_patch_acceptance_prompt(payload: dict[str, Any]) -> str:
     return (
         "You are judging whether an RTL repair patch should be kept as the new debugging baseline or rolled back.\n"
+        "The authoritative spec and testbench context outrank the patch author's explanation. The fields reason, expected_effect, and preserve_plan are hypotheses, not independent evidence.\n"
         "Lint/syntax failures are handled outside this judge. For functional simulation failures, do not use a single total mismatch counter mechanically.\n"
         "Keep a patch when it is a plausible stepping stone: it fixes the target timing/value, moves the first real failure much later, preserves known good changes, or reveals a missing spec/clear condition that should be repaired next.\n"
         "Rollback a patch when it clearly destroys a protected invariant, only makes the target worse, has no plausible causal progress, or masks the original bug with unrelated behavior.\n"
-        "Pay attention to conflicts between aggregate mismatch counters and per-signal deltas. Testbench metric signals named errors_* are less important than real DUT/ref outputs.\n"
+        "Base the decision on patch_diff, rtl_surrounding_context, authoritative_context, metrics/trace, and recent_repair_ledger. Pay attention to conflicts between aggregate mismatch counters and per-signal deltas. Testbench metric signals named errors_* are less important than real DUT/ref outputs.\n"
         "Return only JSON with this shape:\n"
-        "{\"decision\":\"keep|rollback\",\"confidence\":0.0,\"reason\":\"brief\",\"next_focus\":\"brief next repair target if kept\"}\n\n"
+        "{\"decision\":\"keep|rollback\",\"confidence\":0.0,\"reason\":\"brief\",\"next_focus\":\"brief next repair target if kept\",\"evidence_refs\":[\"brief references to payload evidence\"]}\n\n"
         "<patch_acceptance_payload_json>\n"
         f"{json.dumps(payload, indent=2, ensure_ascii=False)}\n"
         "</patch_acceptance_payload_json>\n"
     )
+
+
+def _complete_patch_diff(path: Path, patch: Patch, old_text: str) -> str:
+    """Build an untruncated unified diff for one replaced patch range."""
+    old_lines = old_text.splitlines()
+    new_lines = patch.new_text.rstrip("\n").splitlines()
+    context = max(len(old_lines), len(new_lines), 1)
+    rows = list(
+        difflib.unified_diff(
+            old_lines,
+            new_lines,
+            fromfile=f"{path}:before",
+            tofile=f"{path}:candidate",
+            n=context,
+            lineterm="",
+        )
+    )
+    for idx, row in enumerate(rows):
+        if row.startswith("@@"):
+            rows[idx] = (
+                f"@@ -{patch.start_line},{len(old_lines)} "
+                f"+{patch.start_line},{len(new_lines)} @@"
+            )
+            break
+    return "\n".join(rows)
+
+
+def _numbered_lines(lines: list[str], start_index: int, end_index: int) -> str:
+    lo = max(0, int(start_index))
+    hi = min(len(lines), max(lo, int(end_index)))
+    return "\n".join(f"{idx + 1}: {lines[idx]}" for idx in range(lo, hi))
+
+
+def _patch_surrounding_context(
+    path: Path,
+    patch: Patch,
+    baseline_lines: list[str],
+    *,
+    context_lines: int = 20,
+) -> dict[str, Any]:
+    start_idx = max(0, int(patch.start_line) - 1)
+    end_idx = min(len(baseline_lines), int(patch.end_line))
+    window = max(0, int(context_lines))
+    return {
+        "path": str(path),
+        "target_start_line": int(patch.start_line),
+        "target_end_line": int(patch.end_line),
+        "context_lines": window,
+        "above": _numbered_lines(baseline_lines, start_idx - window, start_idx),
+        "below": _numbered_lines(baseline_lines, end_idx, end_idx + window),
+    }
+
+
+def _bounded_authoritative_excerpt(
+    text: str,
+    *,
+    keywords: list[str],
+    max_chars: int = 6000,
+    context_lines: int = 3,
+) -> dict[str, Any]:
+    """Return full short text or deterministic keyword windows for long sources."""
+    value = str(text or "")
+    limit = max(1, int(max_chars))
+    if len(value) <= limit:
+        return {"content": value, "truncated": False, "selection": "full"}
+
+    lines = value.splitlines()
+    normalized: list[str] = []
+    seen_keywords: set[str] = set()
+    for keyword in keywords:
+        item = str(keyword or "").strip().lower()
+        if not item or item in seen_keywords:
+            continue
+        seen_keywords.add(item)
+        normalized.append(item)
+
+    hit_indexes: set[int] = set()
+    radius = max(0, int(context_lines))
+    for keyword in normalized:
+        identifier_pattern = None
+        if re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_$]*", keyword):
+            identifier_pattern = re.compile(
+                rf"(?<![a-zA-Z0-9_$]){re.escape(keyword)}(?![a-zA-Z0-9_$])",
+                re.IGNORECASE,
+            )
+        for idx, line in enumerate(lines):
+            matched = bool(identifier_pattern.search(line)) if identifier_pattern else keyword in line.lower()
+            if not matched:
+                continue
+            hit_indexes.update(range(max(0, idx - radius), min(len(lines), idx + radius + 1)))
+
+    selection = "keyword_windows" if hit_indexes else "head_tail"
+    if hit_indexes:
+        indexes = sorted(hit_indexes)
+    else:
+        edge_count = min(40, max(1, len(lines) // 2))
+        indexes = sorted(set(range(edge_count)) | set(range(max(0, len(lines) - edge_count), len(lines))))
+
+    rendered: list[str] = []
+    used = 0
+    previous: int | None = None
+    for idx in indexes:
+        prefix = "...\n" if previous is not None and idx > previous + 1 else ""
+        row = f"{idx + 1}: {lines[idx]}\n"
+        addition = prefix + row
+        if used + len(addition) > limit:
+            remaining = limit - used
+            if remaining > 0:
+                rendered.append(addition[:remaining])
+            break
+        rendered.append(addition)
+        used += len(addition)
+        previous = idx
+    return {"content": "".join(rendered).rstrip("\n"), "truncated": True, "selection": selection}
 
 
 def _summarize_command_json(command_json: str, *, max_chars: int = 4000) -> str:
@@ -278,6 +474,35 @@ def _summarize_command_json(command_json: str, *, max_chars: int = 4000) -> str:
     return _clip("\n".join(interesting).strip() or text.strip(), max_chars=max_chars)
 
 
+def _extract_syntax_errors(command_json: str, *, limit: int = 20) -> list[dict[str, Any]]:
+    """Extract structured Verilator errors while retaining raw output as fallback."""
+    try:
+        obj = CommandResult.model_validate_json(command_json)
+        text = "\n".join(part for part in [obj.stdout, obj.stderr] if part)
+    except Exception:  # noqa: BLE001
+        text = str(command_json or "")
+    pattern = re.compile(
+        r"^%?Error(?:-[^:]+)?:\s+(?P<path>.*?):(?P<line>\d+):(?P<column>\d+):\s*(?P<message>.*)$",
+        re.MULTILINE,
+    )
+    errors: list[dict[str, Any]] = []
+    seen: set[tuple[str, int, int, str]] = set()
+    for match in pattern.finditer(text):
+        item = (
+            match.group("path").strip(),
+            int(match.group("line")),
+            int(match.group("column")),
+            match.group("message").strip(),
+        )
+        if item in seen:
+            continue
+        seen.add(item)
+        errors.append({"path": item[0], "line": item[1], "column": item[2], "message": item[3]})
+        if len(errors) >= max(1, int(limit)):
+            break
+    return errors
+
+
 @dataclass
 class RepoReActToolState:
     input: RepoReActInput
@@ -289,6 +514,8 @@ class RepoReActToolState:
     last_sim: SimSnapshot = field(default_factory=SimSnapshot)
     last_sim_output: str = ""
     action_calls: int = 0
+    patch_attempt_id: int = 0
+    syntax_candidates: dict[str, dict[str, Any]] = field(default_factory=dict)
     neutral_kept: int = 0
     observed_rtl: bool = False
     observed_trace_or_sim: bool = False
@@ -298,6 +525,9 @@ class RepoReActToolState:
     observed_real_divergence: bool = False
     last_trace_summary: dict[str, Any] = field(default_factory=dict)
     last_divergence_summary: dict[str, Any] = field(default_factory=dict)
+    last_signal_trace: dict[str, Any] = field(default_factory=dict)
+    last_signal_trace_action_calls: int = -1
+    pending_post_patch_trace: dict[str, Any] = field(default_factory=dict)
 
 
 class RepoReActTools:
@@ -344,6 +574,9 @@ class RepoReActTools:
             "reason": str(payload.get("reason") or ""),
             "next_focus": str(payload.get("next_focus") or ""),
         }
+        evidence_refs = payload.get("evidence_refs")
+        if isinstance(evidence_refs, list):
+            out["evidence_refs"] = [str(item) for item in evidence_refs if str(item).strip()][:12]
         return out
 
     def _llm_patch_acceptance_decision(self, payload: dict[str, Any]) -> dict[str, Any] | None:
@@ -523,6 +756,72 @@ class RepoReActTools:
             f"Requested path: {path}"
         )
 
+    def _authoritative_context_for_acceptance(self, keywords: list[str]) -> dict[str, Any]:
+        inp = self.state.input
+        spec_chunks: list[str] = []
+        spec_sources: list[str] = []
+        seen_paths: set[Path] = set()
+        for raw_path in [inp.spec_source_path, *inp.spec_paths]:
+            if not raw_path:
+                continue
+            resolved = self._resolve_read_path(raw_path)
+            if resolved is None or not resolved.is_file() or resolved in seen_paths:
+                continue
+            seen_paths.add(resolved)
+            try:
+                spec_body = resolved.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            spec_sources.append(str(resolved))
+            spec_chunks.append(f"// spec source: {resolved}\n" + spec_body)
+        if spec_chunks:
+            spec_text = "\n\n".join(spec_chunks)
+            spec_source: str | list[str] = spec_sources
+        else:
+            spec_text = inp.spec_text
+            spec_source = "spec_text" if spec_text else "unavailable"
+        spec_excerpt = _bounded_authoritative_excerpt(
+            spec_text,
+            keywords=keywords,
+            max_chars=6000,
+        )
+        spec_context = {
+            "available": bool(spec_text),
+            "source": spec_source,
+            **spec_excerpt,
+        }
+
+        tb_path = inp.debug_workdir / "tb.sv"
+        tb_available = False
+        if tb_path.is_file():
+            try:
+                tb_text = tb_path.read_text(encoding="utf-8", errors="replace")
+                tb_available = True
+            except OSError:
+                tb_text = ""
+        else:
+            tb_text = ""
+        if tb_available:
+            tb_excerpt = _bounded_authoritative_excerpt(
+                tb_text,
+                keywords=keywords,
+                max_chars=6000,
+            )
+            tb_context = {
+                "available": tb_available,
+                "path": str(tb_path),
+                **tb_excerpt,
+            }
+        else:
+            tb_context = {
+                "available": False,
+                "path": str(tb_path),
+                "content": "",
+                "truncated": False,
+                "selection": "unavailable",
+            }
+        return {"spec": spec_context, "testbench": tb_context}
+
     def _forbidden_edit_reason(self, path: Path) -> str:
         parts = set(path.parts)
         name = path.name
@@ -633,6 +932,8 @@ class RepoReActTools:
         after_metrics: dict[str, Any] | None = None,
     ) -> str:
         status = str(result.get("status") or "")
+        if status in {"syntax_retry_required", "syntax_retry_exhausted"}:
+            return "syntax_failed"
         if status == "pass" or (result.get("is_pass") and int(result.get("mismatch_count") or 0) == 0):
             return "passed"
         if status == "improved":
@@ -862,6 +1163,8 @@ class RepoReActTools:
         for row in self._read_jsonl("patch_journal.jsonl"):
             if self._is_non_repair_rejection(row):
                 continue
+            if str(row.get("effect") or "") == "syntax_failed":
+                continue
             target = row.get("target") if isinstance(row.get("target"), dict) else {}
             if not target and str(row.get("effect")) == "rejected":
                 continue
@@ -889,7 +1192,7 @@ class RepoReActTools:
             if self._is_non_repair_rejection(row):
                 continue
             effect = str(row.get("effect") or "")
-            if effect not in {"regressed", "syntax_failed"}:
+            if effect != "regressed":
                 continue
             delta = self._row_metric_delta(row)
             total = delta.get("total_mismatch") or delta.get("total_samples_mismatch")
@@ -901,8 +1204,6 @@ class RepoReActTools:
                     f"replace_block of {block_id} regressed mismatch {total}; "
                     "do not repeat this block-level edit without new evidence and a preservation plan."
                 )
-            elif effect == "syntax_failed":
-                text = f"Syntax-failed direction at step {row.get('step')}: {summary}"
             else:
                 text = f"Regressed direction at step {row.get('step')} changed {row.get('changed_signals') or []}: {summary}"
             if text not in seen:
@@ -1068,6 +1369,18 @@ class RepoReActTools:
             "high_coupling_blocks": self._high_coupling_blocks(limit=8),
             "known_planning_corrections": self.load_known_corrections(),
             "action_calls": int(self.state.action_calls),
+            "patch_attempts": int(self.state.patch_attempt_id),
+            "pending_syntax_candidates": [
+                {
+                    "candidate_id": candidate_id,
+                    "action_type": candidate.get("action_type"),
+                    "target_signature": candidate.get("target_signature"),
+                    "retries_used": int(candidate.get("retries_used") or 0),
+                    "last_syntax_errors": candidate.get("last_syntax_errors") or [],
+                }
+                for candidate_id, candidate in self.state.syntax_candidates.items()
+                if candidate.get("status") == "pending"
+            ],
             "max_steps": int(self.state.input.max_steps),
         }
 
@@ -1419,6 +1732,466 @@ class RepoReActTools:
             "truncated": len(matches) >= max(1, int(max_results)),
         }
 
+    def _planning_output_root(self) -> Path | None:
+        inp = self.state.input
+        candidates: list[Path] = []
+        if inp.output_root is not None:
+            candidates.append(inp.output_root)
+        for key in ("module_skeletons", "module_plans", "spec_blocks", "repo_skeleton"):
+            raw = inp.stage_artifacts.get(key)
+            resolved = self._resolve_read_path(raw) if raw else None
+            if resolved is not None and resolved.is_file():
+                candidates.append(resolved.parent)
+        for candidate in candidates:
+            resolved = candidate.resolve()
+            if resolved.is_dir() and any(self._is_under(resolved, root) for root in self._allowed_read_roots()):
+                return resolved
+        return None
+
+    @staticmethod
+    def _read_json_file(path: Path) -> dict[str, Any] | None:
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            return None
+        return value if isinstance(value, dict) else None
+
+    def _load_sidecar_module_semantics(self, module_name: str, sections: set[str]) -> dict[str, Any]:
+        root = self._planning_output_root()
+        result: dict[str, Any] = {
+            "module": {"name": module_name},
+            "specs": [],
+            "skeleton_artifact": None,
+            "plan_artifact": None,
+            "code_interface": [],
+            "artifact_paths": {},
+        }
+        if root is None:
+            return result
+
+        paths = {
+            "spec": root / "module_spec_context_json" / f"{module_name}.json",
+            "skeleton": root / "module_skeleton_json" / f"{module_name}.json",
+            "plan": root / "module_plan_json" / f"{module_name}.json",
+        }
+        if "spec" in sections:
+            artifact = self._read_json_file(paths["spec"])
+            if artifact is not None:
+                result["artifact_paths"]["spec"] = str(paths["spec"])
+                result["specs"] = [
+                    {
+                        "fragment": {
+                            **block,
+                            "text_preview": _clip(str(block.get("text") or ""), max_chars=500),
+                        },
+                        "relation": {
+                            "local_ref": str(block.get("block_id") or ""),
+                            "artifact_path": str(paths["spec"]),
+                        },
+                    }
+                    for block in artifact.get("blocks") or []
+                    if isinstance(block, dict)
+                ]
+        if "skeleton" in sections:
+            result["skeleton_artifact"] = self._read_json_file(paths["skeleton"])
+            if result["skeleton_artifact"] is not None:
+                result["artifact_paths"]["skeleton"] = str(paths["skeleton"])
+        if "plan" in sections:
+            result["plan_artifact"] = self._read_json_file(paths["plan"])
+            if result["plan_artifact"] is not None:
+                result["artifact_paths"]["plan"] = str(paths["plan"])
+
+        repo_skeleton = self._read_json_file(root / STAGE_ARTIFACTS["repo_skeleton"])
+        if repo_skeleton is not None:
+            for module in repo_skeleton.get("modules") or []:
+                if isinstance(module, dict) and str(module.get("module") or module.get("name") or "") == module_name:
+                    result["module"] = {**module, "name": module_name}
+                    break
+        return result
+
+    @staticmethod
+    def _semantic_item_matches(item: Any, terms: list[str]) -> bool:
+        if not terms:
+            return True
+        haystack = json.dumps(item, ensure_ascii=False, default=str).lower()
+        return any(
+            re.search(rf"(?<![a-z0-9_$]){re.escape(term)}(?![a-z0-9_$])", haystack)
+            for term in terms
+        )
+
+    def _module_neighbors(self, module_name: str, module: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
+        warnings: list[str] = []
+        kg = self.state.kg_service
+        if kg is not None and getattr(kg, "is_enabled", lambda: False)():
+            try:
+                result = kg.query(
+                    kg_templates.GET_MODULE_NEIGHBORS,
+                    {"module_name": module_name},
+                    limit=100,
+                )
+                rows = [
+                    {
+                        "relation": str(row.get("relation") or ""),
+                        "module": str(row.get("related_module") or ""),
+                        "instance_name": str(row.get("instance_name") or ""),
+                        "instance_path": str(row.get("instance_path") or ""),
+                        "semantics_included": False,
+                    }
+                    for row in result.get("rows") or []
+                    if row.get("related_module")
+                ]
+                if rows:
+                    return rows, warnings
+            except Exception as exc:  # noqa: BLE001
+                warnings.append(f"KG neighbor lookup failed: {type(exc).__name__}: {exc}")
+
+        rows = []
+        for relation, key, fallback_key in (
+            ("parent", "planned_parents", "parents"),
+            ("child", "planned_children", "children"),
+        ):
+            for related in module.get(key) or module.get(fallback_key) or []:
+                rows.append(
+                    {
+                        "relation": relation,
+                        "module": str(related),
+                        "instance_name": "",
+                        "instance_path": "",
+                        "semantics_included": False,
+                        "source": "planned_hierarchy",
+                    }
+                )
+        return rows, warnings
+
+    def read_module_semantics(
+        self,
+        module_name: str,
+        sections: list[str] | None = None,
+        focus_signals: list[str] | None = None,
+        focus_blocks: list[str] | None = None,
+        max_chars: int = 12000,
+    ) -> dict[str, Any]:
+        requested = {str(item).strip().lower() for item in (sections or ["spec", "skeleton", "plan"])}
+        invalid = sorted(requested - {"spec", "skeleton", "plan"})
+        if invalid:
+            return {"status": "error", "error": f"Unsupported sections: {invalid}"}
+        if not module_name.strip():
+            return {"status": "error", "error": "module_name is required"}
+
+        warnings: list[str] = []
+        source = "planning_kg"
+        context: dict[str, Any] | None = None
+        kg = self.state.kg_service
+        output_root = self._planning_output_root()
+        if kg is not None and getattr(kg, "is_enabled", lambda: False)():
+            try:
+                context = PlanningContextRetriever(kg, output_root, self.state.logger).get_module_context(
+                    module_name,
+                    require_spec="spec" in requested,
+                    require_skeleton="skeleton" in requested,
+                    require_plan="plan" in requested,
+                    include_code_interface=True,
+                )
+            except Exception as exc:  # noqa: BLE001
+                warnings.append(f"Planning KG context unavailable or stale: {type(exc).__name__}: {exc}")
+        else:
+            warnings.append("Planning KG is disabled or unavailable.")
+        if context is None:
+            source = "sidecar_fallback"
+            context = self._load_sidecar_module_semantics(module_name, requested)
+
+        module = dict(context.get("module") or {"name": module_name})
+        specs = list(context.get("specs") or []) if "spec" in requested else []
+        skeleton_metadata = context.get("skeleton") if isinstance(context.get("skeleton"), dict) else {}
+        plan_metadata = context.get("plan") if isinstance(context.get("plan"), dict) else {}
+        skeleton = context.get("skeleton_artifact") or skeleton_metadata or {}
+        plan = context.get("plan_artifact") or plan_metadata or {}
+        skeleton = skeleton if isinstance(skeleton, dict) and "skeleton" in requested else {}
+        plan = plan if isinstance(plan, dict) and "plan" in requested else {}
+
+        focus_signal_terms = [_signal_leaf(item).lower() for item in (focus_signals or []) if str(item).strip()]
+        focus_block_terms = [str(item).strip().lower() for item in (focus_blocks or []) if str(item).strip()]
+        terms = list(dict.fromkeys([*focus_signal_terms, *focus_block_terms]))
+        focused = bool(terms)
+
+        selected_specs = [item for item in specs if self._semantic_item_matches(item, terms)]
+        if focused and specs and not selected_specs:
+            selected_specs = specs[:4]
+            warnings.append("No exact focus match in SpecFragments; returning a compact module-level fallback.")
+        selected_specs = selected_specs[:12]
+        spec_refs = {
+            str((item.get("relation") or {}).get("local_ref") or (item.get("fragment") or {}).get("block_id") or "")
+            for item in selected_specs
+            if isinstance(item, dict)
+        }
+
+        all_blocks = [item for item in skeleton.get("structural_blocks") or [] if isinstance(item, dict)]
+        selected_blocks = [item for item in all_blocks if self._semantic_item_matches(item, terms)]
+        if focused and all_blocks and not selected_blocks:
+            selected_blocks = all_blocks[:6]
+            warnings.append("No exact focus match in Skeleton blocks; returning a compact structural fallback.")
+        selected_blocks = [
+            {
+                **item,
+                "planning_block_id": item.get("planning_block_id")
+                or item.get("block_id")
+                or item.get("block_label"),
+            }
+            for item in selected_blocks[:16]
+        ]
+        selected_block_ids = {
+            str(
+                item.get("planning_block_id")
+                or item.get("block_id")
+                or item.get("block_label")
+                or ""
+            ).lower()
+            for item in selected_blocks
+        }
+
+        all_subtasks = [item for item in plan.get("subtasks") or [] if isinstance(item, dict)]
+        selected_subtasks = []
+        for item in all_subtasks:
+            refs = {str(ref) for ref in item.get("spec_refs") or []}
+            target = str(item.get("target") or item.get("id") or "").lower()
+            if (
+                not focused
+                or self._semantic_item_matches(item, terms)
+                or bool(refs & spec_refs)
+                or any(block_id and block_id in target for block_id in selected_block_ids)
+            ):
+                selected_subtasks.append(item)
+        if focused and all_subtasks and not selected_subtasks:
+            selected_subtasks = all_subtasks[:6]
+            warnings.append("No exact focus match in ModulePlan subtasks; returning a compact plan fallback.")
+        selected_subtasks = selected_subtasks[:16]
+
+        editable_rtl_blocks: list[dict[str, Any]] = []
+        block_alignment: list[dict[str, Any]] = []
+        rtl_path, _rtl_metadata, rtl_warnings = self._resolve_module_rtl_path(module_name)
+        warnings.extend(rtl_warnings)
+        if rtl_path is not None:
+            try:
+                rtl_text = rtl_path.read_text(encoding="utf-8", errors="replace")
+                module_text, line_offset = self._extract_module_source(rtl_text, module_name)
+                parsed_blocks = parse_rtl_blocks(module_text)
+                if line_offset:
+                    parsed_blocks = [
+                        replace(
+                            block,
+                            start_line=block.start_line + line_offset,
+                            end_line=block.end_line + line_offset,
+                        )
+                        for block in parsed_blocks
+                    ]
+                focus_signal_set = set(focus_signal_terms)
+                focus_rtl_id_set = {
+                    term
+                    for term in focus_block_terms
+                    if any(str(block.id).lower() == term for block in parsed_blocks)
+                }
+
+                def rtl_relevance(block: Any) -> tuple[int, int, str]:
+                    symbols = {
+                        str(item).lower()
+                        for item in (*block.writes, *block.reads)
+                    }
+                    return (
+                        1 if str(block.id).lower() in focus_rtl_id_set else 0,
+                        len(symbols & focus_signal_set),
+                        str(block.id),
+                    )
+
+                ranked_blocks = sorted(
+                    parsed_blocks,
+                    key=lambda block: (
+                        -rtl_relevance(block)[0],
+                        -rtl_relevance(block)[1],
+                        rtl_relevance(block)[2],
+                    ),
+                )
+                if focused:
+                    relevant_blocks = [
+                        block
+                        for block in ranked_blocks
+                        if str(block.id).lower() in focus_rtl_id_set
+                        or bool(
+                            {
+                                str(item).lower()
+                                for item in (*block.writes, *block.reads)
+                            }
+                            & focus_signal_set
+                        )
+                    ]
+                else:
+                    relevant_blocks = ranked_blocks
+                editable_rtl_blocks = [
+                    self._rtl_block_payload(module_name, rtl_path, block)
+                    for block in relevant_blocks[:16]
+                ]
+
+                for planning_block in selected_blocks:
+                    planning_block_id = str(
+                        planning_block.get("planning_block_id") or ""
+                    )
+                    planning_text = json.dumps(
+                        planning_block,
+                        ensure_ascii=False,
+                        default=str,
+                    ).lower()
+                    aligned: list[dict[str, Any]] = []
+                    basis: list[str] = []
+                    for rtl_block in editable_rtl_blocks:
+                        symbols = [
+                            str(item)
+                            for item in [
+                                *(rtl_block.get("writes") or []),
+                                *(rtl_block.get("reads") or []),
+                            ]
+                            if str(item)
+                        ]
+                        overlap = sorted(
+                            {
+                                symbol
+                                for symbol in symbols
+                                if re.search(
+                                    rf"\b{re.escape(symbol.lower())}\b",
+                                    planning_text,
+                                )
+                            }
+                        )
+                        focus_overlap = sorted(
+                            set(symbol.lower() for symbol in symbols)
+                            & focus_signal_set
+                        )
+                        if overlap or (
+                            focus_overlap
+                            and self._semantic_item_matches(
+                                planning_block,
+                                list(focus_signal_set),
+                            )
+                        ):
+                            aligned.append(rtl_block)
+                            basis.extend(
+                                f"shared signal: {signal}"
+                                for signal in (overlap or focus_overlap)
+                            )
+                    if aligned:
+                        block_alignment.append(
+                            {
+                                "planning_block_id": planning_block_id,
+                                "rtl_block_ids": [
+                                    item["rtl_block_id"] for item in aligned
+                                ],
+                                "rtl_block_refs": [
+                                    item["rtl_block_ref"] for item in aligned
+                                ],
+                                "basis": list(dict.fromkeys(basis))[:8],
+                                "confidence": 0.85 if basis else 0.6,
+                                "authoritative_for_editing": False,
+                            }
+                        )
+            except OSError as exc:
+                warnings.append(
+                    f"RTL block identity projection failed: {type(exc).__name__}: {exc}"
+                )
+
+        per_text_budget = max(500, min(4000, max(1, int(max_chars)) // 5))
+        spec_fragments = []
+        for item in selected_specs:
+            fragment = dict(item.get("fragment") or {})
+            relation = dict(item.get("relation") or {})
+            spec_fragments.append(
+                {
+                    "block_id": relation.get("local_ref") or fragment.get("block_id"),
+                    "text": _clip(fragment.get("text") or fragment.get("text_preview") or "", max_chars=per_text_budget),
+                    "source_file": fragment.get("source_file"),
+                    "source_chunk_ids": fragment.get("source_chunk_ids") or [],
+                    "confidence": fragment.get("confidence"),
+                    "content_hash": fragment.get("content_hash"),
+                    "input_fingerprint": relation.get("input_fingerprint"),
+                }
+            )
+        list_budget = max(500, max(1, int(max_chars)) // 5)
+        spec_fragments, specs_budget_truncated = _budget_json_items(spec_fragments, max_chars=list_budget)
+        skeleton_blocks, skeleton_budget_truncated = _budget_json_items(selected_blocks, max_chars=list_budget)
+        plan_subtasks, plan_budget_truncated = _budget_json_items(selected_subtasks, max_chars=list_budget)
+        semantic_invariants_items, invariants_budget_truncated = _budget_json_items(
+            [
+                {
+                    "planning_note": skeleton.get("planning_note"),
+                    "module_behavior": skeleton.get("module_behavior") or {},
+                    "block_behavior_overlays": skeleton.get("block_behavior_overlays") or [],
+                    "plan_timing_obligations": plan.get("timing_obligations") or [],
+                }
+            ],
+            max_chars=list_budget,
+        )
+        semantic_invariants = semantic_invariants_items[0] if semantic_invariants_items else {}
+
+        neighbors, neighbor_warnings = self._module_neighbors(module_name, module)
+        warnings.extend(neighbor_warnings)
+        provenance = {
+            "source": source,
+            "output_root": str(output_root) if output_root else "",
+            "artifact_paths": context.get("artifact_paths") or {
+                "spec": [str((item.get("relation") or {}).get("artifact_path") or "") for item in selected_specs],
+                "skeleton": skeleton.get("artifact_path"),
+                "plan": plan.get("artifact_path"),
+            },
+            "fingerprints": {
+                "stage2": module.get("stage2_fingerprint"),
+                "skeleton_input": skeleton_metadata.get("input_fingerprint") or skeleton.get("input_fingerprint"),
+                "skeleton_content": skeleton_metadata.get("content_hash") or skeleton.get("content_hash"),
+                "plan_input": plan_metadata.get("input_fingerprint") or plan.get("input_fingerprint"),
+                "plan_skeleton_content": (
+                    plan_metadata.get("skeleton_content_hash") or plan.get("skeleton_content_hash")
+                ),
+            },
+        }
+        payload = {
+            "status": "ok",
+            "source": source,
+            "module": module,
+            "spec_fragments": spec_fragments,
+            "skeleton_blocks": skeleton_blocks,
+            "plan_subtasks": plan_subtasks,
+            "interface": context.get("code_interface") or [],
+            "semantic_invariants": semantic_invariants,
+            "editable_rtl_blocks": editable_rtl_blocks,
+            "block_alignment": block_alignment,
+            "neighbors": neighbors,
+            "provenance": provenance,
+            "focus_applied": {
+                "signals": list(focus_signals or []),
+                "rtl_block_ids": [
+                    item["rtl_block_id"]
+                    for item in editable_rtl_blocks
+                    if str(item["rtl_block_id"]).lower()
+                    in set(focus_block_terms)
+                ],
+                "planning_block_ids": [
+                    item.get("planning_block_id")
+                    for item in skeleton_blocks
+                    if item.get("planning_block_id")
+                ],
+            },
+            "warnings": warnings,
+            "truncated": (
+                len(specs) > len(selected_specs)
+                or len(all_blocks) > len(selected_blocks)
+                or len(all_subtasks) > len(selected_subtasks)
+                or specs_budget_truncated
+                or skeleton_budget_truncated
+                or plan_budget_truncated
+                or invariants_budget_truncated
+            ),
+        }
+        self.state.observed_tb_or_spec_or_kg = True
+        self.state.observed_spec_or_stage = True
+        self.state.observed_stage_artifact = True
+        return payload
+
     def _load_vcd(self) -> Any:
         if VCDVCD is None:
             return None
@@ -1501,6 +2274,623 @@ class RepoReActTools:
             max_rows=max_rows,
         )
 
+    def _resolve_module_rtl_path(self, module_name: str) -> tuple[Path | None, dict[str, Any], list[str]]:
+        warnings: list[str] = []
+        kg_metadata: dict[str, Any] = {}
+        kg = self.state.kg_service
+        if kg is not None and getattr(kg, "is_enabled", lambda: False)():
+            try:
+                result = kg.query(
+                    kg_templates.GET_MODULE_SOURCE,
+                    {"module_name": module_name},
+                    limit=5,
+                )
+                rows = list(result.get("rows") or [])
+                if rows:
+                    kg_metadata = dict(rows[0])
+            except Exception as exc:  # noqa: BLE001
+                warnings.append(f"KG module source lookup failed: {type(exc).__name__}: {exc}")
+
+        inp = self.state.input
+        candidates: list[Path] = []
+        if module_name in {inp.module_name, inp.top_module}:
+            candidates.extend([inp.rtl_path, inp.merged_file])
+        for raw in (kg_metadata.get("actual_path"), kg_metadata.get("path")):
+            if raw:
+                if inp.rtl_root is not None:
+                    candidates.append(inp.rtl_root / Path(str(raw)).name)
+                resolved = self._resolve_read_path(str(raw))
+                if resolved is not None:
+                    candidates.append(resolved)
+
+        checked: set[Path] = set()
+        module_re = re.compile(rf"\bmodule\s+(?:automatic\s+)?{re.escape(module_name)}\b")
+        for candidate in candidates:
+            resolved = candidate.resolve()
+            if resolved in checked or not resolved.is_file():
+                continue
+            checked.add(resolved)
+            try:
+                if module_re.search(resolved.read_text(encoding="utf-8", errors="replace")):
+                    return resolved, kg_metadata, warnings
+            except OSError:
+                continue
+
+        roots = [item for item in (inp.rtl_root, inp.rtl_path.parent) if item is not None and item.exists()]
+        for root in roots:
+            for candidate in sorted(
+                path for path in root.rglob("*") if path.is_file() and path.suffix.lower() in {".v", ".sv"}
+            ):
+                resolved = candidate.resolve()
+                if resolved in checked:
+                    continue
+                checked.add(resolved)
+                try:
+                    if module_re.search(resolved.read_text(encoding="utf-8", errors="replace")):
+                        return resolved, kg_metadata, warnings
+                except OSError:
+                    continue
+        warnings.append(f"RTL source for module `{module_name}` was not found.")
+        return None, kg_metadata, warnings
+
+    @staticmethod
+    def _extract_module_source(rtl_text: str, module_name: str) -> tuple[str, int]:
+        start_match = re.search(
+            rf"\bmodule\s+(?:automatic\s+)?{re.escape(module_name)}\b",
+            rtl_text,
+        )
+        if start_match is None:
+            return rtl_text, 0
+        end_match = re.search(r"\bendmodule\b", rtl_text[start_match.end() :])
+        if end_match is None:
+            return rtl_text, 0
+        start = start_match.start()
+        end = start_match.end() + end_match.end()
+        line_offset = rtl_text[:start].count("\n")
+        return rtl_text[start:end], line_offset
+
+    @staticmethod
+    def _rtl_block_payload(module_name: str, rtl_path: Path, block: Any) -> dict[str, Any]:
+        rtl_block_id = str(block.id)
+        return {
+            "module_name": module_name,
+            "rtl_block_id": rtl_block_id,
+            "rtl_block_ref": f"{module_name}:{rtl_block_id}",
+            "path": str(rtl_path),
+            "kind": str(block.kind),
+            "clocking": str(block.clocking),
+            "start_line": int(block.start_line),
+            "end_line": int(block.end_line),
+            "writes": list(block.writes),
+            "reads": list(block.reads),
+            "source_hash": hashlib.sha256(str(block.code).encode("utf-8")).hexdigest(),
+        }
+
+    @staticmethod
+    def _frontier_recommended_call(
+        item: dict[str, Any],
+        *,
+        trace_time: int | None,
+    ) -> dict[str, Any]:
+        args: dict[str, Any] = {
+            "module_name": str(item.get("module") or ""),
+            "signal_name": str(item.get("signal") or ""),
+        }
+        if trace_time is not None:
+            args["time"] = int(trace_time)
+        return {
+            "tool": "trace_signal_cause",
+            "args": args,
+            "candidate_id": item.get("candidate_id"),
+            "reason": item.get("reason") or "Continue one-hop causal tracing.",
+        }
+
+    @staticmethod
+    def _select_frontier_candidates(
+        candidates: list[dict[str, Any]],
+        *,
+        limit: int = 12,
+    ) -> tuple[list[dict[str, Any]], bool]:
+        """Select a stable frontier while reserving room for RHS and boundaries."""
+        limit = max(1, int(limit))
+        deduped: dict[tuple[str, str, str], dict[str, Any]] = {}
+        for item in candidates:
+            key = (
+                str(item.get("module") or ""),
+                str(item.get("signal") or ""),
+                str(item.get("relation") or ""),
+            )
+            existing = deduped.get(key)
+            if existing is None or int(item.get("priority") or 0) > int(existing.get("priority") or 0):
+                deduped[key] = dict(item)
+        ordered = sorted(
+            deduped.values(),
+            key=lambda item: (
+                -int(item.get("priority") or 0),
+                str(item.get("module") or ""),
+                str(item.get("signal") or ""),
+                str(item.get("relation") or ""),
+            ),
+        )
+
+        selected: list[dict[str, Any]] = []
+        selected_keys: set[tuple[str, str, str]] = set()
+
+        def add(items: list[dict[str, Any]], quota: int) -> None:
+            for item in items:
+                if quota <= 0 or len(selected) >= limit:
+                    break
+                key = (
+                    str(item.get("module") or ""),
+                    str(item.get("signal") or ""),
+                    str(item.get("relation") or ""),
+                )
+                if key in selected_keys:
+                    continue
+                selected_keys.add(key)
+                selected.append(item)
+                quota -= 1
+
+        add([item for item in ordered if item.get("boundary")], 2)
+        add([item for item in ordered if item.get("relation") == "local_rhs"], 4)
+        add(ordered, limit)
+        selected.sort(
+            key=lambda item: (
+                -int(item.get("priority") or 0),
+                str(item.get("module") or ""),
+                str(item.get("signal") or ""),
+            )
+        )
+        selected = selected[:limit]
+        for index, item in enumerate(selected, start=1):
+            item["candidate_id"] = f"F{index}"
+        return selected, len(ordered) > len(selected)
+
+    def _trace_time_and_expected(
+        self,
+        signal_name: str,
+        time: int | None,
+        expected_value: str | None,
+    ) -> tuple[int | None, str | None]:
+        div = self.state.last_divergence_summary or {}
+        first = div.get("first_divergence") if isinstance(div.get("first_divergence"), dict) else {}
+        if time is None:
+            candidate = first.get("time") if isinstance(first, dict) else None
+            candidate = candidate if candidate is not None else div.get("time")
+            candidate = candidate if candidate is not None else self.state.last_sim.first_fail_time
+            candidate = candidate if candidate is not None else _extract_first_fail_time(self.state.input.sim_failed_log)
+            time = int(candidate) if candidate is not None else None
+        if expected_value is None and isinstance(first, dict):
+            first_signal = _signal_leaf(str(first.get("signal") or ""))
+            if not first_signal or first_signal == _signal_leaf(signal_name):
+                expected_value = first.get("ref") or first.get("expected")
+        return time, str(expected_value) if expected_value is not None else None
+
+    def _signal_boundary_mappings(
+        self,
+        module_name: str,
+        signals: list[str],
+    ) -> tuple[list[dict[str, Any]], list[str]]:
+        kg = self.state.kg_service
+        if kg is None or not getattr(kg, "is_enabled", lambda: False)():
+            return [], ["KG unavailable; Instance/Port boundary mapping was skipped."]
+        try:
+            result = kg.query(
+                kg_templates.GET_SIGNAL_BOUNDARY_MAPPINGS,
+                {"module_name": module_name},
+                limit=500,
+            )
+        except Exception as exc:  # noqa: BLE001
+            return [], [f"KG boundary mapping failed: {type(exc).__name__}: {exc}"]
+
+        wanted = {_signal_leaf(item) for item in signals if str(item).strip()}
+        mappings: list[dict[str, Any]] = []
+        seen: set[tuple[str, ...]] = set()
+        for row in result.get("rows") or []:
+            direction = str(row.get("mapping_direction") or "")
+            child_port = _signal_leaf(str(row.get("child_port") or ""))
+            target_name = _signal_leaf(str(row.get("target_name") or ""))
+            expression = str(
+                row.get("connection_expression")
+                or (row.get("connection") or {}).get("x")
+                or target_name
+            )
+            matched_signal = ""
+            if direction == "parent_to_child":
+                for signal in wanted:
+                    if target_name == signal or _expression_mentions_signal(expression, signal):
+                        matched_signal = signal
+                        break
+            elif direction == "child_to_parent" and child_port in wanted:
+                matched_signal = child_port
+            if not matched_signal:
+                continue
+
+            attrs = _json_attrs(row.get("child_port_attrs"))
+            item = {
+                "matched_signal": matched_signal,
+                "mapping_direction": direction,
+                "parent_module": str(row.get("parent_module") or ""),
+                "parent_actual_signal": target_name or _simple_connection_signal(expression),
+                "connection_expression": expression,
+                "connection_target_kind": str(row.get("target_kind") or ""),
+                "instance_name": str(row.get("instance_name") or ""),
+                "instance_path": str(row.get("instance_path") or ""),
+                "child_module": str(row.get("child_module") or ""),
+                "child_port": child_port,
+                "child_port_path": str(row.get("child_port_path") or ""),
+                "direction": str(attrs.get("dir") or attrs.get("direction") or ""),
+                "width": str(attrs.get("width_expr") or attrs.get("width") or ""),
+                "connection": dict(row.get("connection") or {}),
+            }
+            key = tuple(
+                str(item.get(name) or "")
+                for name in (
+                    "mapping_direction",
+                    "parent_module",
+                    "instance_name",
+                    "child_module",
+                    "child_port",
+                    "connection_expression",
+                    "matched_signal",
+                )
+            )
+            if key not in seen:
+                seen.add(key)
+                mappings.append(item)
+        return mappings, []
+
+    def trace_signal_cause(
+        self,
+        module_name: str,
+        signal_name: str,
+        time: int | None = None,
+        expected_value: str | None = None,
+        max_candidates: int = 5,
+    ) -> dict[str, Any]:
+        if not module_name.strip() or not signal_name.strip():
+            return {"status": "error", "error": "module_name and signal_name are required"}
+        max_candidates = max(1, min(int(max_candidates), 20))
+        leaf = _signal_leaf(signal_name)
+        trace_time, expected = self._trace_time_and_expected(signal_name, time, expected_value)
+        rtl_path, module_metadata, warnings = self._resolve_module_rtl_path(module_name)
+        if rtl_path is None:
+            return {
+                "status": "error",
+                "module": module_name,
+                "signal": leaf,
+                "error": f"RTL source for module `{module_name}` was not found",
+                "warnings": warnings,
+            }
+
+        rtl_text = rtl_path.read_text(encoding="utf-8", errors="replace")
+        module_text, line_offset = self._extract_module_source(rtl_text, module_name)
+        blocks = parse_rtl_blocks(module_text)
+        if line_offset:
+            blocks = [
+                replace(block, start_line=block.start_line + line_offset, end_line=block.end_line + line_offset)
+                for block in blocks
+            ]
+        assignments = parse_rtl_assignments(module_text, blocks)
+        direct_drivers = [item for item in assignments if _signal_leaf(item.lhs) == leaf]
+
+        vcd = self._load_vcd()
+        resolved_paths: dict[str, str] = {}
+        sample_cache: dict[str, str | None] = {}
+        vcd_ctx = self._vcd_context(vcd) if vcd is not None else {"dut": None, "ref": None}
+
+        def sample_signal(*, leaf: str, t: int, prefer_dut: bool = True) -> str | None:
+            del prefer_dut
+            cache_key = f"{leaf}@{t}"
+            if cache_key in sample_cache:
+                return sample_cache[cache_key]
+            if vcd is None:
+                sample_cache[cache_key] = None
+                return None
+            alias = f"dut.{leaf}" if vcd_ctx.get("dut") else leaf
+            resolved = resolve_vcd_signal(
+                vcd,
+                alias,
+                dut_instance=vcd_ctx.get("dut"),
+                ref_instance=vcd_ctx.get("ref"),
+            )
+            if resolved.get("status") != "ok":
+                sample_cache[cache_key] = None
+                return None
+            full_path = str(resolved["full_path"])
+            resolved_paths[leaf] = full_path
+            tv = _vcd_time_values(vcd, full_path)
+            value = _vcd_value_at(tv, t, inclusive=True) if tv is not None else None
+            sample_cache[cache_key] = value
+            return value
+
+        actual = sample_signal(leaf=leaf, t=trace_time, prefer_dut=True) if trace_time is not None else None
+        driver_candidates: list[dict[str, Any]] = []
+        for assignment in direct_drivers[:max_candidates]:
+            step = build_assignment_trace_step(
+                signal=leaf,
+                expected=expected,
+                actual=actual,
+                fail_time=trace_time or 0,
+                assignment=assignment,
+                sample_signal=sample_signal,
+            )
+            if vcd is None or trace_time is None:
+                if step["classification"] != "constant_assignment":
+                    step["classification"] = "static_dependency"
+                    step["reason"] = "Static one-hop dependency found; waveform evidence is unavailable."
+            if assignment.clocking in {"seq", "latch"} or assignment.kind == "nonblocking":
+                step["needs_edge_probe"] = True
+                step["sampling_note"] = (
+                    "Same-time values do not prove a sequential transfer; inspect the relevant clock edge if needed."
+                )
+            driver_candidates.append(step)
+
+        kg_drivers: list[dict[str, Any]] = []
+        kg = self.state.kg_service
+        if kg is not None and getattr(kg, "is_enabled", lambda: False)():
+            try:
+                result = kg.query(
+                    kg_templates.GET_SIGNAL_DEBUG_CONTEXT,
+                    {"module_name": module_name, "signal_name": leaf},
+                    limit=100,
+                )
+                for row in result.get("rows") or []:
+                    kg_drivers.extend(item for item in row.get("drivers") or [] if isinstance(item, dict))
+            except Exception as exc:  # noqa: BLE001
+                warnings.append(f"KG driver enrichment failed: {type(exc).__name__}: {exc}")
+        for candidate in driver_candidates:
+            assignment = candidate.get("assignment") or {}
+            start_line = int(assignment.get("start_line") or 0)
+            candidate["kg_drivers"] = [
+                item
+                for item in kg_drivers
+                if not item.get("sl")
+                or int(item.get("sl") or 0) <= start_line <= int(item.get("el") or item.get("sl") or 0)
+            ] or kg_drivers[:5]
+
+        frontier_candidates_all: list[dict[str, Any]] = []
+        for candidate in driver_candidates:
+            assignment = candidate.get("assignment") or {}
+            classification = str(candidate.get("classification") or "")
+            assignment_id = str(candidate.get("assignment_id") or assignment.get("id") or "")
+            if classification == "condition_blocks_update":
+                condition_priority = 110
+                rhs_priority = 80
+            elif classification in {
+                "lhs_matches_rhs_continue_upstream",
+                "missing_vcd_signal",
+                "static_dependency",
+                "source_matches_expected_mux_wrong",
+                "rhs_matches_expected_lhs_stale",
+            }:
+                condition_priority = 50
+                rhs_priority = 100
+            else:
+                condition_priority = 60
+                rhs_priority = 80
+            for condition, value in (candidate.get("condition_values") or {}).items():
+                frontier_candidates_all.append(
+                    {
+                        "module": module_name,
+                        "signal": condition,
+                        "value": value,
+                        "relation": "local_condition",
+                        "source_assignment_id": assignment_id,
+                        "source_driver_classification": classification,
+                        "priority": condition_priority,
+                        "traceable": True,
+                        "boundary": False,
+                        "reason": (
+                            "Condition participates in selecting or enabling the direct assignment"
+                            + (
+                                " and appears to block this branch."
+                                if classification == "condition_blocks_update"
+                                else "."
+                            )
+                        ),
+                    }
+                )
+            for rhs, value in (candidate.get("rhs_observed_values") or {}).items():
+                frontier_candidates_all.append(
+                    {
+                        "module": module_name,
+                        "signal": rhs,
+                        "value": value,
+                        "relation": "local_rhs",
+                        "source_assignment_id": assignment_id,
+                        "source_driver_classification": classification,
+                        "priority": rhs_priority,
+                        "traceable": True,
+                        "boundary": False,
+                        "reason": candidate.get("reason"),
+                    }
+                )
+
+        boundary_signals = [leaf, *[item["signal"] for item in frontier_candidates_all]]
+        boundary_mappings, boundary_warnings = self._signal_boundary_mappings(module_name, boundary_signals)
+        warnings.extend(boundary_warnings)
+        context_candidates: list[dict[str, Any]] = []
+        for mapping in boundary_mappings:
+            port_direction = mapping.get("direction")
+            direction = mapping.get("mapping_direction")
+            if direction == "parent_to_child" and port_direction in {"output", "inout"}:
+                frontier = {
+                    "module": mapping.get("child_module"),
+                    "signal": mapping.get("child_port"),
+                    "relation": "child_output_boundary",
+                    "source_assignment_id": next(
+                        (
+                            item.get("source_assignment_id")
+                            for item in frontier_candidates_all
+                            if item.get("signal") == mapping.get("matched_signal")
+                        ),
+                        None,
+                    ),
+                    "source_driver_classification": "instance_output_boundary",
+                    "priority": 130,
+                    "traceable": True,
+                    "boundary": True,
+                    "reason": (
+                        f"{mapping.get('matched_signal')} is driven through instance "
+                        f"{mapping.get('instance_name')}.{mapping.get('child_port')}."
+                    ),
+                }
+            elif direction == "child_to_parent" and port_direction in {"input", "inout"}:
+                parent_signal = _simple_connection_signal(str(mapping.get("connection_expression") or ""))
+                if not parent_signal:
+                    continue
+                frontier = {
+                    "module": mapping.get("parent_module"),
+                    "signal": parent_signal,
+                    "relation": "parent_input_boundary",
+                    "source_assignment_id": None,
+                    "source_driver_classification": "instance_input_boundary",
+                    "priority": 130,
+                    "traceable": True,
+                    "boundary": True,
+                    "reason": (
+                        f"Child input {mapping.get('child_port')} is connected from "
+                        f"{mapping.get('parent_module')}.{mapping.get('connection_expression')}."
+                    ),
+                }
+            else:
+                continue
+            frontier_candidates_all.append(frontier)
+            context_candidates.append(
+                {
+                    "module": frontier["module"],
+                    "relation": frontier["relation"],
+                    "reason": frontier["reason"],
+                    "semantics_included": False,
+                }
+            )
+
+        deduped_frontier, frontier_truncated = self._select_frontier_candidates(
+            frontier_candidates_all,
+            limit=12,
+        )
+        for item in deduped_frontier:
+            item["recommended_call"] = self._frontier_recommended_call(
+                item,
+                trace_time=trace_time,
+            )
+
+        if not direct_drivers:
+            stop_reason = "no_assignment_driver"
+        elif len(direct_drivers) > max_candidates:
+            stop_reason = "candidate_limit_reached"
+        else:
+            stop_reason = "one_hop_complete"
+        status = "ok" if vcd is not None and trace_time is not None else "static_only"
+        self.state.observed_rtl = True
+        self.state.observed_trace_or_sim = self.state.observed_trace_or_sim or vcd is not None
+        self.state.observed_tb_or_spec_or_kg = self.state.observed_tb_or_spec_or_kg or bool(kg_drivers or boundary_mappings)
+        driver_block_ids = list(
+            dict.fromkeys(
+                str(candidate.get("driver_block_id") or "")
+                for candidate in driver_candidates
+                if candidate.get("driver_block_id")
+            )
+        )
+        block_by_id = {block.id: block for block in blocks}
+        editable_rtl_blocks = [
+            self._rtl_block_payload(module_name, rtl_path, block_by_id[block_id])
+            for block_id in driver_block_ids
+            if block_id in block_by_id
+        ]
+        focus_context = {
+            "signals": [leaf],
+            "rtl_block_ids": driver_block_ids,
+            "rtl_block_refs": [
+                str(item["rtl_block_ref"]) for item in editable_rtl_blocks
+            ],
+        }
+        recommended_next_calls: list[dict[str, Any]] = []
+        recommended_next_call: dict[str, Any] | None = None
+        traceable_frontier = [
+            item for item in deduped_frontier if item.get("traceable") and item.get("recommended_call")
+        ]
+        if traceable_frontier:
+            recommended_next_call = dict(traceable_frontier[0]["recommended_call"])
+            recommended_next_calls.append(recommended_next_call)
+        if driver_candidates:
+            focused_blocks = [
+                block_by_id[block_id]
+                for block_id in driver_block_ids
+                if block_id in block_by_id
+            ]
+            recommended_next_calls.append(
+                {
+                    "tool": "read_context",
+                    "args": {
+                        "kind": "lines",
+                        "path": str(rtl_path),
+                        "start": (
+                            min(block.start_line for block in focused_blocks)
+                            if focused_blocks
+                            else min(
+                                int((candidate.get("assignment") or {}).get("start_line") or 1)
+                                for candidate in driver_candidates
+                            )
+                        ),
+                        "end": (
+                            max(block.end_line for block in focused_blocks)
+                            if focused_blocks
+                            else max(
+                                int((candidate.get("assignment") or {}).get("end_line") or 1)
+                                for candidate in driver_candidates
+                            )
+                        ),
+                    },
+                }
+            )
+        recommended_next_calls.append(
+            {
+                "tool": "read_module_semantics",
+                "args": {
+                    "module_name": module_name,
+                    "sections": ["spec", "skeleton", "plan"],
+                    "focus_signals": [leaf],
+                    "focus_blocks": driver_block_ids,
+                },
+            }
+        )
+        payload = {
+            "status": status,
+            "module": module_name,
+            "signal": leaf,
+            "resolved_vcd_path": resolved_paths.get(leaf),
+            "time": trace_time,
+            "observed_value": actual,
+            "expected_value": expected,
+            "rtl_path": str(rtl_path),
+            "driver_candidates": driver_candidates,
+            "next_frontier": deduped_frontier,
+            "frontier_candidates": deduped_frontier,
+            "frontier_truncated": frontier_truncated,
+            "boundary_mappings": boundary_mappings,
+            "context_escalation_candidates": context_candidates,
+            "editable_rtl_blocks": editable_rtl_blocks,
+            "focus_context": focus_context,
+            "recommended_next_call": recommended_next_call,
+            "recommended_next_calls": recommended_next_calls,
+            "stop_reason": stop_reason,
+            "warnings": warnings,
+            "provenance": {
+                "module_uid": module_metadata.get("module_uid"),
+                "module_start_line": module_metadata.get("module_start_line"),
+                "module_end_line": module_metadata.get("module_end_line"),
+                "kg_driver_count": len(kg_drivers),
+                "assignment_count": len(direct_drivers),
+                "vcd_available": vcd is not None,
+                "one_hop_only": True,
+            },
+        }
+        self.state.last_signal_trace = payload
+        self.state.last_signal_trace_action_calls = int(self.state.action_calls)
+        return payload
+
     def query_rtl_kg(
         self,
         query_type: Literal[
@@ -1549,6 +2939,8 @@ class RepoReActTools:
             rtl_path=self.state.input.rtl_path,
             sim_log_json=sim_output,
             output_dir=self.state.input.debug_workdir,
+            planner_module_name=self.state.input.module_name,
+            runtime_top_module=self.state.input.top_module or self.state.input.module_name,
             kg_service=self.state.kg_service,
             kg_hop_depth=self.state.input.kg_hop_depth,
         )
@@ -1568,6 +2960,8 @@ class RepoReActTools:
                 rtl_path=self.state.input.rtl_path,
                 sim_log_json=sim_output,
                 output_dir=self.state.input.debug_workdir,
+                planner_module_name=self.state.input.module_name,
+                runtime_top_module=self.state.input.top_module or self.state.input.module_name,
                 kg_service=self.state.kg_service,
                 kg_hop_depth=self.state.input.kg_hop_depth,
             )
@@ -1587,6 +2981,11 @@ class RepoReActTools:
         return {
             "trace_report_path": str(self.state.input.debug_workdir / "trace_report.json"),
             "fail_time": report.get("fail_time"),
+            "planner_module_name": report.get("planner_module_name") or self.state.input.module_name,
+            "runtime_top_module": report.get("runtime_top_module") or self.state.input.top_module or self.state.input.module_name,
+            "dut_instance": report.get("dut_instance"),
+            "runtime_rtl_path": report.get("runtime_rtl_path") or str(self.state.input.rtl_path),
+            "sampling_event": report.get("sampling_event"),
             "total_mismatches": report.get("total_mismatches"),
             "first_failure": report.get("first_failure"),
             "root_failure": report.get("root_failure"),
@@ -1676,10 +3075,34 @@ class RepoReActTools:
                 "trace_summary": trace_summary,
             }
         if mode == "first_divergence":
+            if (
+                signals is None
+                and time_window is None
+                and self.state.last_signal_trace
+                and int(self.state.last_signal_trace_action_calls) == int(self.state.action_calls)
+            ):
+                divergence = self.state.last_divergence_summary or {}
+                first = (
+                    divergence.get("first_divergence")
+                    if isinstance(divergence.get("first_divergence"), dict)
+                    else {}
+                )
+                return {
+                    "status": "ok",
+                    "mode": mode,
+                    "cached": True,
+                    "first_divergence": {
+                        "status": divergence.get("status") or "ok",
+                        "sampling_event": divergence.get("sampling_event"),
+                        "first_divergence": first,
+                        "trace_report_path": str(self.state.input.debug_workdir / "trace_report.json"),
+                    },
+                }
             sim_output = self.state.last_sim_output or self.state.input.sim_failed_log
             result = build_first_divergence_report(
                 rtl_path=self.state.input.rtl_path,
                 output_dir=self.state.input.debug_workdir,
+                runtime_top_module=self.state.input.top_module or self.state.input.module_name,
                 sim_log_json=sim_output,
                 signals=signals,
                 time_window=tuple(time_window) if time_window is not None else None,
@@ -1709,18 +3132,22 @@ class RepoReActTools:
         expected_effect: str,
         protected_invariants_checked: list[str] | None = None,
         preserve_plan: str | None = None,
+        syntax_retry_of: str | None = None,
         verify: bool = True,
         rollback_on_fail: bool = True,
         action_type: str = "apply_patch",
         block_id: str | None = None,
     ) -> dict[str, Any]:
         def reject(message: str) -> dict[str, Any]:
-            step = int(self.state.action_calls) + 1
+            step = int(self.state.patch_attempt_id) + 1
             result = {"status": "rejected", "reason": message, "is_action_executed": False}
             entry = {
                 "step": step,
+                "patch_attempt_id": None,
+                "action_step": None,
                 "action_type": action_type,
                 "block_id": block_id,
+                "candidate_id": syntax_retry_of,
                 "target": {},
                 "patch_count": 0,
                 "patch_summary": message,
@@ -1805,8 +3232,6 @@ class RepoReActTools:
                 block_id=block_id,
             )
 
-        self.state.action_calls += 1
-        step = self.state.action_calls
         before_sim = self.state.last_sim
         before_sim_output = self.state.last_sim_output
         before_summary = {
@@ -1847,13 +3272,82 @@ class RepoReActTools:
         if block_id:
             target["block_id"] = block_id
 
+        patch_diff: list[dict[str, Any]] = []
+        rtl_surrounding_context: list[dict[str, Any]] = []
+        for idx, (patch, edit_path) in enumerate(parsed_items):
+            old_text = old_text_by_patch[idx]
+            new_text = patch.new_text.rstrip("\n")
+            new_line_count = len(new_text.splitlines())
+            patch_diff.append(
+                {
+                    "path": str(edit_path),
+                    "original_start_line": int(patch.start_line),
+                    "original_end_line": int(patch.end_line),
+                    "candidate_start_line": int(patch.start_line),
+                    "candidate_end_line": int(patch.start_line) + new_line_count - 1,
+                    "old_text": old_text,
+                    "new_text": new_text,
+                    "unified_diff": _complete_patch_diff(edit_path, patch, old_text),
+                }
+            )
+            rtl_surrounding_context.append(
+                _patch_surrounding_context(
+                    edit_path,
+                    patch,
+                    lines_by_path[edit_path],
+                    context_lines=20,
+                )
+            )
+
+        target_signature = {
+            "action_type": action_type,
+            "block_id": block_id,
+            "files": sorted(
+                (
+                    str(item["path"]),
+                    int(item["start_line"]),
+                    int(item["end_line"]),
+                )
+                for item in file_targets
+            ),
+        }
+        syntax_candidate: dict[str, Any] | None = None
+        retry_ordinal = 0
+        if syntax_retry_of:
+            syntax_candidate = self.state.syntax_candidates.get(str(syntax_retry_of))
+            if syntax_candidate is None:
+                return reject(f"Unknown syntax retry candidate: {syntax_retry_of}.")
+            if syntax_candidate.get("status") != "pending":
+                return reject(
+                    f"Syntax retry candidate {syntax_retry_of} is not pending "
+                    f"(status={syntax_candidate.get('status')})."
+                )
+            if syntax_candidate.get("target_signature") != target_signature:
+                return reject(
+                    f"Syntax retry candidate {syntax_retry_of} must keep the same action type and target ranges."
+                )
+            retries_used = int(syntax_candidate.get("retries_used") or 0)
+            if retries_used >= 2:
+                syntax_candidate["status"] = "exhausted"
+                return reject(f"Syntax retry candidate {syntax_retry_of} exhausted its two retries.")
+            retry_ordinal = retries_used + 1
+
         needs_preserve, relevant_invariants = self._patch_requires_preserve_plan(
             action_type=action_type,
             changed_signals=changed_signals,
             block_id=block_id,
         )
 
-        before_snapshot = self.state.journal.snapshot_files(step=step, label="before", files=edited_paths)
+        self.state.patch_attempt_id += 1
+        patch_attempt_id = int(self.state.patch_attempt_id)
+        candidate_id = str(syntax_retry_of or f"syntax_candidate_{patch_attempt_id:04d}")
+        action_step: int | None = None
+
+        before_snapshot = self.state.journal.snapshot_files(
+            step=patch_attempt_id,
+            label="before",
+            files=edited_paths,
+        )
         for path in edited_paths:
             lines = list(lines_by_path[path])
             for _idx, patch in sorted(grouped[path], key=lambda item: item[1].start_line, reverse=True):
@@ -1861,7 +3355,11 @@ class RepoReActTools:
                 lines[patch.start_line - 1 : patch.end_line] = replacement
             original = before_text_by_path[path]
             path.write_text("\n".join(lines) + ("\n" if original.endswith("\n") else ""), encoding="utf-8")
-        after_snapshot = self.state.journal.snapshot_files(step=step, label="after", files=edited_paths)
+        after_snapshot = self.state.journal.snapshot_files(
+            step=patch_attempt_id,
+            label="after",
+            files=edited_paths,
+        )
 
         def restore_edited_files() -> None:
             for path, text in before_text_by_path.items():
@@ -1870,6 +3368,12 @@ class RepoReActTools:
         result: dict[str, Any] = {
             "status": "pending",
             "is_action_executed": True,
+            "committed": False,
+            "candidate_id": candidate_id,
+            "patch_attempt_id": patch_attempt_id,
+            "action_step": None,
+            "syntax_retries_used": retry_ordinal,
+            "syntax_retries_remaining": max(0, 2 - retry_ordinal),
             "reason": reason,
             "expected_effect": expected_effect,
             "warnings": warnings,
@@ -1885,9 +3389,12 @@ class RepoReActTools:
                 after_metrics=after_metrics_holder.get("metrics", {}),
             )
             entry = {
-                "step": step,
+                "step": action_step if action_step is not None else patch_attempt_id,
+                "patch_attempt_id": patch_attempt_id,
+                "action_step": action_step,
                 "action_type": action_type,
                 "block_id": block_id,
+                "candidate_id": candidate_id,
                 "target": target,
                 "patch_count": len(parsed),
                 "patch_summary": patch_summary,
@@ -1919,7 +3426,19 @@ class RepoReActTools:
             }
             self._record_patch_entry(entry)
 
+        def commit_functional_action() -> None:
+            nonlocal action_step
+            self.state.action_calls += 1
+            action_step = int(self.state.action_calls)
+            result["action_step"] = action_step
+            result["committed"] = True
+            if syntax_candidate is not None:
+                syntax_candidate["status"] = "resolved"
+                syntax_candidate["retries_used"] = retry_ordinal
+                syntax_candidate["resolved_attempt_id"] = patch_attempt_id
+
         if not verify:
+            commit_functional_action()
             result["status"] = "kept_unverified"
             persist_patch_result(result)
             return result
@@ -1931,12 +3450,40 @@ class RepoReActTools:
         result["lint_pass"] = bool(lint_ok)
         result["lint_output_excerpt"] = _summarize_command_json(lint_output, max_chars=5000)
         if not lint_ok:
-            if rollback_on_fail:
-                restore_edited_files()
-            result["status"] = "rollback"
+            restore_edited_files()
+            syntax_errors = _extract_syntax_errors(lint_output)
+            if syntax_candidate is None:
+                syntax_candidate = {
+                    "candidate_id": candidate_id,
+                    "status": "pending",
+                    "action_type": action_type,
+                    "block_id": block_id,
+                    "target_signature": target_signature,
+                    "retries_used": 0,
+                    "initial_attempt_id": patch_attempt_id,
+                }
+                self.state.syntax_candidates[candidate_id] = syntax_candidate
+            else:
+                syntax_candidate["retries_used"] = retry_ordinal
+            syntax_candidate["last_attempt_id"] = patch_attempt_id
+            syntax_candidate["last_syntax_errors"] = syntax_errors
+            syntax_candidate["last_lint_output_excerpt"] = result["lint_output_excerpt"]
+            retries_used = int(syntax_candidate.get("retries_used") or 0)
+            retries_remaining = max(0, 2 - retries_used)
+            if retries_remaining == 0:
+                syntax_candidate["status"] = "exhausted"
+                result["status"] = "syntax_retry_exhausted"
+            else:
+                result["status"] = "syntax_retry_required"
+            result["is_action_executed"] = False
+            result["syntax_errors"] = syntax_errors
+            result["syntax_retries_used"] = retries_used
+            result["syntax_retries_remaining"] = retries_remaining
             result["rollback_reason"] = "lint_failed"
             persist_patch_result(result)
             return result
+
+        commit_functional_action()
 
         if self.state.input.repair_mode == "syntax":
             result["status"] = "pass"
@@ -1996,6 +3543,44 @@ class RepoReActTools:
 
         def judge_rollback_candidate(candidate_reason: str, candidate_mixed_acceptance: dict[str, Any] | None) -> str:
             result["script_rollback_recommendation"] = candidate_reason
+            evidence_keywords = list(changed_signals)
+            evidence_keywords.extend(
+                str(signal)
+                for metrics in (before_metrics, after_metrics_holder.get("metrics", {}))
+                for signal in ((metrics.get("per_signal") or {}).keys())
+            )
+            for trace in (
+                self.state.last_trace_summary,
+                self.state.last_divergence_summary,
+                after_trace_payload.get("trace_summary"),
+                after_trace_payload.get("divergence_summary"),
+            ):
+                if not isinstance(trace, dict):
+                    continue
+                for key in ("signal", "root_signal", "output"):
+                    if trace.get(key):
+                        evidence_keywords.append(str(trace[key]))
+                for section_name in ("first_failure", "root_failure", "edge_active_failure", "first_divergence"):
+                    section = trace.get(section_name)
+                    if isinstance(section, dict):
+                        for key in ("signal", "root_signal", "output"):
+                            if section.get(key):
+                                evidence_keywords.append(str(section[key]))
+            evidence_keywords.extend(
+                [
+                    self.state.input.module_name,
+                    self.state.input.top_module,
+                    "posedge",
+                    "negedge",
+                    "sampling",
+                    "mismatch",
+                    "assert",
+                    "done",
+                    "reset",
+                    "rst",
+                    "clk",
+                ]
+            )
             acceptance_payload = {
                 "module": self.state.input.module_name,
                 "action_type": action_type,
@@ -2005,6 +3590,10 @@ class RepoReActTools:
                 "reason": reason,
                 "expected_effect": expected_effect,
                 "patch_summary": patch_summary,
+                "patch_diff": patch_diff,
+                "rtl_surrounding_context": rtl_surrounding_context,
+                "authoritative_context": self._authoritative_context_for_acceptance(evidence_keywords),
+                "recent_repair_ledger": self._repair_ledger(limit=5),
                 "script_rollback_recommendation": candidate_reason,
                 "before": before_summary,
                 "after": {
@@ -2105,17 +3694,120 @@ class RepoReActTools:
         persist_patch_result(result)
         return result
 
+    def _planning_block_ids(self, module_name: str) -> tuple[set[str], dict[str, dict[str, Any]]]:
+        context = self._load_sidecar_module_semantics(module_name, {"skeleton"})
+        skeleton = context.get("skeleton_artifact")
+        if not isinstance(skeleton, dict):
+            return set(), {}
+        by_id: dict[str, dict[str, Any]] = {}
+        for item in skeleton.get("structural_blocks") or []:
+            if not isinstance(item, dict):
+                continue
+            planning_block_id = str(
+                item.get("planning_block_id")
+                or item.get("block_id")
+                or item.get("block_label")
+                or ""
+            )
+            if planning_block_id:
+                by_id[planning_block_id] = item
+        return set(by_id), by_id
+
+    def _rank_editable_block_candidates(
+        self,
+        *,
+        module_name: str,
+        rtl_path: Path,
+        blocks: list[Any],
+        planning_block: dict[str, Any] | None = None,
+        limit: int = 8,
+    ) -> list[dict[str, Any]]:
+        last_trace = self.state.last_signal_trace or {}
+        recent_ids: list[str] = []
+        focus_signals: set[str] = set()
+        if str(last_trace.get("module") or "") == module_name:
+            recent_ids = [
+                str(item.get("rtl_block_id") or "")
+                for item in last_trace.get("editable_rtl_blocks") or []
+                if isinstance(item, dict) and item.get("rtl_block_id")
+            ]
+            focus = (
+                last_trace.get("focus_context")
+                if isinstance(last_trace.get("focus_context"), dict)
+                else {}
+            )
+            focus_signals = {
+                _signal_leaf(str(item)).lower()
+                for item in focus.get("signals") or []
+                if str(item)
+            }
+
+        planning_text = (
+            json.dumps(planning_block, ensure_ascii=False, default=str).lower()
+            if isinstance(planning_block, dict)
+            else ""
+        )
+
+        def score(block: Any) -> tuple[int, int, int, str]:
+            symbols = {
+                str(item).lower()
+                for item in (*block.writes, *block.reads)
+            }
+            planning_overlap = sum(
+                1
+                for signal in symbols
+                if planning_text
+                and re.search(
+                    rf"\b{re.escape(signal)}\b",
+                    planning_text,
+                )
+            )
+            return (
+                1 if str(block.id) in recent_ids else 0,
+                planning_overlap,
+                len(symbols & focus_signals),
+                str(block.id),
+            )
+
+        ranked = sorted(
+            blocks,
+            key=lambda block: (
+                -score(block)[0],
+                -score(block)[1],
+                -score(block)[2],
+                score(block)[3],
+            ),
+        )
+        return [
+            self._rtl_block_payload(module_name, rtl_path, block)
+            for block in ranked[: max(1, int(limit))]
+        ]
+
     def replace_block(
         self,
-        block_id: str,
+        block_id: str | None,
         new_code: str,
         reason: str,
         expected_effect: str,
         protected_invariants_checked: list[str] | None = None,
         preserve_plan: str | None = None,
+        syntax_retry_of: str | None = None,
         verify: bool = True,
         rollback_on_fail: bool = True,
+        module_name: str | None = None,
+        rtl_block_id: str | None = None,
     ) -> dict[str, Any]:
+        if block_id and rtl_block_id and str(block_id) != str(rtl_block_id):
+            return {
+                "status": "conflicting_block_ids",
+                "is_action_executed": False,
+                "block_id": str(block_id),
+                "rtl_block_id": str(rtl_block_id),
+                "message": "block_id and rtl_block_id must identify the same RTL parser block.",
+            }
+        selected_rtl_block_id = str(rtl_block_id or block_id or "")
+        target_module = str(module_name or self.state.input.module_name)
+        legacy_call = module_name is None or rtl_block_id is None
         max_actions = max(1, int(self.state.input.max_steps or 1))
         if int(self.state.action_calls) >= max_actions:
             return self._record_rejected_action(
@@ -2123,15 +3815,15 @@ class RepoReActTools:
                 step=int(self.state.action_calls) + 1,
                 reason=f"Repair action budget exhausted: max_steps={max_actions}.",
                 hypothesis=reason,
-                block_id=block_id,
+                block_id=selected_rtl_block_id,
             )
-        if not block_id or not isinstance(block_id, str):
+        if not selected_rtl_block_id:
             return self._record_rejected_action(
                 action_type="replace_block",
                 step=int(self.state.action_calls) + 1,
-                reason="replace_block requires a non-empty block_id.",
+                reason="replace_block requires a non-empty rtl_block_id.",
                 hypothesis=reason,
-                block_id=block_id,
+                block_id=selected_rtl_block_id,
             )
         if not str(new_code).strip():
             return self._record_rejected_action(
@@ -2139,10 +3831,25 @@ class RepoReActTools:
                 step=int(self.state.action_calls) + 1,
                 reason="replace_block requires non-empty new_code.",
                 hypothesis=reason,
-                block_id=block_id,
+                block_id=selected_rtl_block_id,
             )
 
-        rtl_path = self.state.input.rtl_path
+        rtl_path, _module_metadata, path_warnings = self._resolve_module_rtl_path(
+            target_module
+        )
+        if rtl_path is None:
+            result = self._record_rejected_action(
+                action_type="replace_block",
+                step=int(self.state.action_calls) + 1,
+                reason=f"RTL source for module {target_module!r} was not found.",
+                hypothesis=reason,
+                block_id=selected_rtl_block_id,
+            )
+            result["module_name"] = target_module
+            result["rtl_block_id"] = selected_rtl_block_id
+            result["rtl_block_ref"] = f"{target_module}:{selected_rtl_block_id}"
+            result["warnings"] = path_warnings
+            return result
         try:
             rtl_text = rtl_path.read_text(encoding="utf-8")
         except OSError as exc:
@@ -2151,26 +3858,74 @@ class RepoReActTools:
                 step=int(self.state.action_calls) + 1,
                 reason=f"Could not read RTL for block replacement: {exc}",
                 hypothesis=reason,
-                block_id=block_id,
+                block_id=selected_rtl_block_id,
             )
 
-        blocks = parse_rtl_blocks(rtl_text)
-        block = next((b for b in blocks if b.id == block_id), None)
+        module_text, line_offset = self._extract_module_source(rtl_text, target_module)
+        blocks = parse_rtl_blocks(module_text)
+        if line_offset:
+            blocks = [
+                replace(
+                    item,
+                    start_line=item.start_line + line_offset,
+                    end_line=item.end_line + line_offset,
+                )
+                for item in blocks
+            ]
+        block = next(
+            (item for item in blocks if item.id == selected_rtl_block_id),
+            None,
+        )
         if block is None:
-            return self._record_rejected_action(
+            planning_ids, planning_by_id = self._planning_block_ids(target_module)
+            detected_namespace = (
+                "planning_block_id"
+                if selected_rtl_block_id in planning_ids
+                else "unknown_rtl_block_id"
+            )
+            valid_blocks = self._rank_editable_block_candidates(
+                module_name=target_module,
+                rtl_path=rtl_path,
+                blocks=blocks,
+                planning_block=planning_by_id.get(selected_rtl_block_id),
+                limit=8,
+            )
+            result = self._record_rejected_action(
                 action_type="replace_block",
                 step=int(self.state.action_calls) + 1,
-                reason=f"Block id {block_id!r} was not found in current debug RTL.",
+                reason=(
+                    f"{selected_rtl_block_id!r} is a planning block id and cannot be edited directly."
+                    if detected_namespace == "planning_block_id"
+                    else f"RTL block id {selected_rtl_block_id!r} was not found in module {target_module!r}."
+                ),
                 hypothesis=reason,
-                block_id=block_id,
+                block_id=selected_rtl_block_id,
             )
+            result.update(
+                {
+                    "status": "invalid_rtl_block_id",
+                    "module_name": target_module,
+                    "provided": selected_rtl_block_id,
+                    "rtl_block_id": selected_rtl_block_id,
+                    "rtl_block_ref": f"{target_module}:{selected_rtl_block_id}",
+                    "detected_namespace": detected_namespace,
+                    "message": (
+                        f"{selected_rtl_block_id} is a ModuleSkeleton planning block and cannot be edited directly."
+                        if detected_namespace == "planning_block_id"
+                        else "Use one of the current RTL parser block ids returned in valid_editable_blocks."
+                    ),
+                    "valid_editable_blocks": valid_blocks,
+                    "warnings": path_warnings,
+                }
+            )
+            return result
         if block.kind not in {"always", "assign"}:
             return self._record_rejected_action(
                 action_type="replace_block",
                 step=int(self.state.action_calls) + 1,
-                reason=f"Block id {block_id!r} has unsupported kind {block.kind!r}.",
+                reason=f"RTL block id {selected_rtl_block_id!r} has unsupported kind {block.kind!r}.",
                 hypothesis=reason,
-                block_id=block_id,
+                block_id=selected_rtl_block_id,
             )
 
         patch = {
@@ -2179,17 +3934,34 @@ class RepoReActTools:
             "end_line": int(block.end_line),
             "new_text": str(new_code).rstrip("\n"),
         }
-        return self.apply_patch(
+        result = self.apply_patch(
             patches=[patch],
             reason=reason,
             expected_effect=expected_effect,
             protected_invariants_checked=protected_invariants_checked,
             preserve_plan=preserve_plan,
+            syntax_retry_of=syntax_retry_of,
             verify=verify,
             rollback_on_fail=rollback_on_fail,
             action_type="replace_block",
-            block_id=block_id,
+            block_id=selected_rtl_block_id,
         )
+        result = dict(result)
+        result["module_name"] = target_module
+        result["rtl_block_id"] = selected_rtl_block_id
+        result["rtl_block_ref"] = f"{target_module}:{selected_rtl_block_id}"
+        result["warnings"] = [
+            *(result.get("warnings") or []),
+            *path_warnings,
+            *(
+                [
+                    "Deprecated replace_block compatibility path used; pass module_name and rtl_block_id."
+                ]
+                if legacy_call
+                else []
+            ),
+        ]
+        return result
 
     def record_correction(
         self,
@@ -2278,14 +4050,28 @@ class RepoReActTools:
             "current_rtl_hash": self._current_rtl_hash(),
             "latest_trace_summary": self.state.last_trace_summary,
             "last_divergence_summary": self.state.last_divergence_summary,
+            "last_signal_trace": self.state.last_signal_trace,
+            "pending_post_patch_trace": self.state.pending_post_patch_trace,
             "recent_repair_journal": self._recent_repair_entries_slim(limit=3),
             "recent_edited_ranges": self._recent_edited_ranges(limit=5),
             "recent_replaced_blocks": self._recent_replaced_blocks(limit=5),
-            "failed_directions": self._directions_by_effect({"rejected", "syntax_failed", "regressed"}, limit=5),
+            "failed_directions": self._directions_by_effect({"rejected", "regressed"}, limit=5),
             "promising_directions": self._directions_by_effect({"passed", "improved"}, limit=5),
             "known_planning_corrections": self.load_known_corrections(),
             "last_sim": self.state.last_sim.model_dump(),
             "action_calls": int(self.state.action_calls),
+            "patch_attempts": int(self.state.patch_attempt_id),
+            "pending_syntax_candidates": [
+                {
+                    "candidate_id": candidate_id,
+                    "action_type": candidate.get("action_type"),
+                    "target_signature": candidate.get("target_signature"),
+                    "retries_used": int(candidate.get("retries_used") or 0),
+                    "last_syntax_errors": candidate.get("last_syntax_errors") or [],
+                }
+                for candidate_id, candidate in self.state.syntax_candidates.items()
+                if candidate.get("status") == "pending"
+            ],
             "max_steps": int(self.state.input.max_steps),
             "observed_context": {
                 "rtl": bool(self.state.observed_rtl),
@@ -2348,5 +4134,5 @@ class RepoReActTools:
         if kind == "next_target":
             return {"status": "ok", "kind": kind, "next_local_target": brief.get("next_local_target")}
         if kind == "failed_directions":
-            return {"status": "ok", "kind": kind, "directions": self._directions_by_effect({"rejected", "syntax_failed", "regressed"}, limit=limit)}
+            return {"status": "ok", "kind": kind, "directions": self._directions_by_effect({"rejected", "regressed"}, limit=limit)}
         return {"status": "ok", "kind": kind, "directions": self._directions_by_effect({"passed", "improved"}, limit=limit)}

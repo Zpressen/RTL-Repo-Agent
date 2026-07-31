@@ -1,8 +1,11 @@
 from . import (
     stage1_ingest_extract,
+    stage1_temporal_extract,
     stage2_repo_skeleton,
+    stage2_temporal_contract,
     stage3_module_synthesis,
     stage3_module_skeleton,
+    stage3_timing_binding,
     stage4_checklist_eval,
     stage4_module_plan,
     stage4_pairwise_tiebreak,
@@ -13,9 +16,12 @@ from . import (
 
 __all__ = [
     "stage1_ingest_extract",
+    "stage1_temporal_extract",
     "stage2_repo_skeleton",
+    "stage2_temporal_contract",
     "stage3_module_synthesis",
     "stage3_module_skeleton",
+    "stage3_timing_binding",
     "stage4_checklist_eval",
     "stage4_module_plan",
     "stage4_pairwise_tiebreak",

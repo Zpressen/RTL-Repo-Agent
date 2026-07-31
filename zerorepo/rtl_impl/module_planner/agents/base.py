@@ -29,6 +29,10 @@ def model_dump(instance: BaseModel) -> Dict[str, Any]:
         return instance.dict()
 
 
+class StageGenerationError(ValueError):
+    """A recoverable LLM invocation, parse, or quality failure for one planning stage."""
+
+
 class BaseStageAgent:
     stage_name: str = ""
     output_model: Type[BaseModel]
@@ -155,7 +159,18 @@ class BaseStageAgent:
                 len(retry_prompt),
                 len(images or []),
             )
-            raw = self.llm_client.complete_with_memory(memory=memory, images=images or None)
+            try:
+                raw = self.llm_client.complete_with_memory(memory=memory, images=images or None)
+            except Exception as exc:
+                parse_errors.append(f"LLM invocation failed: {exc}")
+                self.logger.warning(
+                    "[%s] LLM invocation failed on parse attempt %d/%d: %s",
+                    self.stage_name,
+                    parse_attempt,
+                    parse_attempt_limit,
+                    exc,
+                )
+                continue
             if parse_attempt == 1:
                 self._log_llm_raw_output(raw, attempt_label="initial")
             else:
@@ -175,7 +190,7 @@ class BaseStageAgent:
                 )
 
         if artifact is None:
-            raise ValueError(
+            raise StageGenerationError(
                 f"{self.stage_name} output failed parse after {parse_attempt_limit} attempts: {parse_errors[-1]}"
             )
 
@@ -210,7 +225,18 @@ class BaseStageAgent:
                 len(retry_prompt),
                 len(images or []),
             )
-            raw = self.llm_client.complete_with_memory(memory=memory, images=images or None)
+            try:
+                raw = self.llm_client.complete_with_memory(memory=memory, images=images or None)
+            except Exception as exc:
+                current_errors = [f"LLM invocation failed during quality retry: {exc}"]
+                self.logger.warning(
+                    "[%s] LLM invocation failed on quality attempt %d/%d: %s",
+                    self.stage_name,
+                    quality_attempt,
+                    quality_attempt_limit,
+                    exc,
+                )
+                continue
             self._log_llm_raw_output(raw, attempt_label=f"retry_after_quality_failure_{quality_attempt - 1}")
             memory.add_message(AssistantMessage(content=raw if isinstance(raw, str) else self.to_pretty_json(raw)))
             try:
@@ -244,8 +270,10 @@ class BaseStageAgent:
             )
             return best_artifact
 
-        raise ValueError(
-            f"{self.stage_name} output failed quality checks after {quality_attempt_limit} attempts: {best_quality_errors}"
+        raise StageGenerationError(
+            f"{self.stage_name} output failed quality checks after {quality_attempt_limit} attempts; "
+            f"last_candidate_errors={current_errors}; best_candidate_errors={best_quality_errors}; "
+            "selected_candidate_reason=fewest_quality_errors"
         )
 
     def _create_stage_memory(self) -> Memory:

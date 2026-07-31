@@ -1,0 +1,37 @@
+{
+  "schema_version": "module_timing_bindings_v1",
+  "task_id": "aes_inv_cipher_system_hard",
+  "input_fingerprint": "9c5082e589874e99756fff478230e5880e373a2b92b5f5ca0507f8b2c1222946",
+  "module_order": [
+    "aes_sbox",
+    "aes_inv_sbox",
+    "aes_key_expand",
+    "aes_inv_cipher_top"
+  ],
+  "status": "planned",
+  "completed_modules": [
+    "aes_sbox",
+    "aes_inv_sbox",
+    "aes_key_expand",
+    "aes_inv_cipher_top"
+  ],
+  "resume_cursor": 4,
+  "module_binding_files": [
+    {
+      "module": "aes_sbox",
+      "binding_file": "module_timing_binding_json/aes_sbox.json"
+    },
+    {
+      "module": "aes_inv_sbox",
+      "binding_file": "module_timing_binding_json/aes_inv_sbox.json"
+    },
+    {
+      "module": "aes_key_expand",
+      "binding_file": "module_timing_binding_json/aes_key_expand.json"
+    },
+    {
+      "module": "aes_inv_cipher_top",
+      "binding_file": "module_timing_binding_json/aes_inv_cipher_top.json"
+    }
+  ]
+}

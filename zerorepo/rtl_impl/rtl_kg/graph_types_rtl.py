@@ -708,6 +708,14 @@ def make_uid(*parts: str) -> str:
     return ":".join(parts)
 
 
+def canonical_module_uid(repo_uid: str, module_name: str) -> str:
+    """Return the one path-independent identity used by planning and RTL graphs."""
+    normalized_name = str(module_name).strip()
+    if not normalized_name:
+        raise ValueError("module_name must not be empty")
+    return make_uid(repo_uid, "module", normalized_name)
+
+
 def make_eid(*parts: str) -> str:
     """Join eid parts with ':' (caller ensures parts are normalized)."""
     return ":".join(parts)

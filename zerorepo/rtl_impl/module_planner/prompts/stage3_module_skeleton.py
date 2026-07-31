@@ -177,6 +177,7 @@ def build_prompt(
     module_spec_markdown: str,
     module_contract_json: str,
     repo_module_json: str,
+    architecture_timing_json: str = "",
     stage_context: str = "",
 ) -> str:
     return f"""
@@ -221,6 +222,8 @@ Planning rules:
    - final output/done block
 7. The names do not need to be fixed, but the structure should reflect that intent when justified by the spec.
 8. Treat this output as a planning artifact for later code generation. Avoid any detail that looks like directly reusable RTL code.
+9. Use the architecture timing contract to keep registered updates, combinational paths, and transfer boundaries in compatible blocks.
+10. Do not copy timing tables or physical signal bindings into this Markdown document.
 
 Internal self-check before finalizing:
 
@@ -242,6 +245,9 @@ Current module extracted facts:
 
 Current module repo skeleton slice:
 {repo_module_json}
+
+Current module architecture timing slice:
+{architecture_timing_json or "None"}
 
 Additional stage context:
 {stage_context or "None"}

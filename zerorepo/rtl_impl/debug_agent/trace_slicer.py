@@ -119,6 +119,10 @@ def _strip_comments_keep_lines(text: str) -> str:
 _ATTR_PREFIX = r"(?:\(\*.*?\*\)\s*)*"
 _ALWAYS_RE = re.compile(rf"^\s*{_ATTR_PREFIX}(always_ff|always_comb|always_latch|always)\b")
 _ASSIGN_RE = re.compile(rf"^\s*{_ATTR_PREFIX}assign\b")
+_BASED_LITERAL_RE = re.compile(
+    r"(?<![A-Za-z0-9_$])(?:[0-9][0-9_]*\s*)?'[sS]?[bBoOdDhH][0-9a-fA-F_xXzZ?]+"
+)
+_UNBASED_LITERAL_RE = re.compile(r"(?<![A-Za-z0-9_$])'[01xXzZ](?![A-Za-z0-9_$])")
 
 
 @dataclass(frozen=True)
@@ -145,6 +149,7 @@ class RtlAssignment:
     start_line: int
     end_line: int
     code_snippet: str
+    rhs_expression: str
     condition_exprs: tuple[str, ...] = ()
 
 
@@ -153,7 +158,9 @@ def _count_word(line: str, word: str) -> int:
 
 
 def _extract_idents(text: str) -> Set[str]:
-    idents = set(re.findall(r"\b[a-zA-Z_][a-zA-Z0-9_]*\b", text))
+    without_literals = _BASED_LITERAL_RE.sub(" ", text)
+    without_literals = _UNBASED_LITERAL_RE.sub(" ", without_literals)
+    idents = set(re.findall(r"\b[a-zA-Z_][a-zA-Z0-9_]*\b", without_literals))
     return {x for x in idents if x not in _KEYWORDS}
 
 
@@ -167,7 +174,7 @@ def _extract_writes(code: str) -> Set[str]:
     return writes
 
 
-def _extract_assignments_from_block(block: RtlBlock) -> list[RtlAssignment]:
+def _extract_assignments_from_block_heuristic(block: RtlBlock) -> list[RtlAssignment]:
     clean = _strip_comments_keep_lines(block.code)
     raw_lines = block.code.splitlines()
     clean_lines = clean.splitlines()
@@ -238,6 +245,7 @@ def _extract_assignments_from_block(block: RtlBlock) -> list[RtlAssignment]:
                     start_line=block.start_line + idx,
                     end_line=block.start_line + idx,
                     code_snippet=raw_line.strip(),
+                    rhs_expression=rhs.strip(),
                     condition_exprs=tuple(expr for expr in active_if_exprs if expr),
                 )
             )
@@ -259,6 +267,128 @@ def _extract_assignments_from_block(block: RtlBlock) -> list[RtlAssignment]:
             depth = 0
 
     return assignments
+
+
+def _node_contains(ancestor: object, descendant: object) -> bool:
+    return (
+        int(getattr(ancestor, "start_byte")) <= int(getattr(descendant, "start_byte"))
+        and int(getattr(descendant, "end_byte")) <= int(getattr(ancestor, "end_byte"))
+    )
+
+
+def _negated_condition(expression: str) -> str:
+    expression = expression.strip()
+    if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_$]*", expression):
+        return f"!{expression}"
+    return f"!({expression})"
+
+
+def _assignment_condition_path(node: object, source: bytes) -> tuple[str, ...]:
+    """Return the effective outer-to-inner if/case path for an assignment."""
+    conditions: list[str] = []
+    current = getattr(node, "parent", None)
+    while current is not None:
+        node_type = str(getattr(current, "type", ""))
+        named_children = list(getattr(current, "named_children", []) or [])
+        if node_type == "conditional_statement" and len(named_children) >= 2:
+            predicate = _node_text(source, named_children[0]).strip()
+            then_branch = named_children[1]
+            in_then = _node_contains(then_branch, node)
+            conditions.append(predicate if in_then else _negated_condition(predicate))
+        elif node_type == "case_statement":
+            selector = next(
+                (
+                    _node_text(source, child).strip()
+                    for child in named_children
+                    if str(getattr(child, "type", "")) == "case_expression"
+                ),
+                "",
+            )
+            if selector:
+                conditions.append(selector)
+        current = getattr(current, "parent", None)
+    conditions.reverse()
+    return tuple(dict.fromkeys(item for item in conditions if item))
+
+
+def _extract_assignments_from_block_treesitter(block: RtlBlock) -> list[RtlAssignment]:
+    """Extract complete procedural/continuous assignments using tree-sitter."""
+    wrapper_prefix = "module __zerorepo_trace;\n"
+    source_text = f"{wrapper_prefix}{block.code}\nendmodule\n"
+    source = source_text.encode("utf-8")
+    tree = _get_ts_parser().parse(source)
+    assignments: list[RtlAssignment] = []
+    assignment_types = {
+        "nonblocking_assignment": "nonblocking",
+        "blocking_assignment": "blocking",
+        "net_assignment": "continuous",
+    }
+    seq = 0
+    for node in _iter_descendants(tree.root_node):
+        node_type = str(getattr(node, "type", ""))
+        kind = assignment_types.get(node_type)
+        if kind is None:
+            continue
+        named_children = list(getattr(node, "named_children", []) or [])
+        if len(named_children) < 2:
+            continue
+        lhs_text = _node_text(source, named_children[0]).strip()
+        lhs_match = re.search(r"\b([A-Za-z_][A-Za-z0-9_$]*)\b", lhs_text)
+        if lhs_match is None:
+            continue
+        lhs = lhs_match.group(1)
+        rhs = _node_text(source, named_children[-1]).strip()
+        rhs_for_idents = _strip_comments_keep_lines(rhs)
+        condition_exprs = _assignment_condition_path(node, source)
+        condition_signals: Set[str] = set()
+        for expression in condition_exprs:
+            condition_signals |= _extract_idents(expression)
+        condition_signals = {
+            signal for signal in condition_signals if not signal.isupper()
+        }
+
+        start_row = int(getattr(getattr(node, "start_point"), "row")) - 1
+        end_row = int(getattr(getattr(node, "end_point"), "row")) - 1
+        start_line = block.start_line + max(0, start_row)
+        end_line = block.start_line + max(0, end_row)
+        seq += 1
+        assignments.append(
+            RtlAssignment(
+                id=f"{block.id}.S{seq}",
+                block_id=block.id,
+                lhs=lhs,
+                rhs_signals=tuple(sorted(_extract_idents(rhs_for_idents) - {lhs})),
+                condition_signals=tuple(sorted(condition_signals - {lhs})),
+                kind=kind,  # type: ignore[arg-type]
+                clocking=block.clocking,
+                start_line=start_line,
+                end_line=end_line,
+                code_snippet=_node_text(source, node).strip(),
+                rhs_expression=rhs,
+                condition_exprs=condition_exprs,
+            )
+        )
+    assignments.sort(key=lambda item: (item.start_line, item.end_line, item.id))
+    return [
+        RtlAssignment(
+            **{
+                **item.__dict__,
+                "id": f"{block.id}.S{index}",
+            }
+        )
+        for index, item in enumerate(assignments, start=1)
+    ]
+
+
+def _extract_assignments_from_block(block: RtlBlock) -> list[RtlAssignment]:
+    if Parser is not None and Language is not None and _ts_verilog is not None:
+        try:
+            assignments = _extract_assignments_from_block_treesitter(block)
+            if assignments:
+                return assignments
+        except Exception:  # noqa: BLE001
+            pass
+    return _extract_assignments_from_block_heuristic(block)
 
 
 def parse_rtl_assignments(rtl_text: str, blocks: Iterable[RtlBlock] | None = None) -> list[RtlAssignment]:

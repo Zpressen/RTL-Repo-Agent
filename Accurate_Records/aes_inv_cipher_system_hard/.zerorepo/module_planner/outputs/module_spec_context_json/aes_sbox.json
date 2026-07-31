@@ -1,0 +1,57 @@
+{
+  "schema_version": "module_spec_context_retrieval_v1",
+  "module": "aes_sbox",
+  "blocks": [
+    {
+      "block_id": "S001",
+      "text": "**1. Introduction**\n\nThe forward S-box is a crucial function in the AES encryption algorithm,\nperforming non-linear byte substitution operations. This section describes\nits design principles and implementation requirements without assigning the\nfunction to a specific RTL design unit.",
+      "source_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher_top_hard/aes_inv_cipher_system_hard.md",
+      "source_chunk_ids": [
+        "C028"
+      ],
+      "relevance_reason": [
+        "Direct introduction to the forward S-box functional requirements section, which this module implements."
+      ],
+      "confidence": "high"
+    },
+    {
+      "block_id": "S002",
+      "text": "**2.1 Basic Principle**\n\nThe S-box transformation is completed in two steps:\n\n1.  Computing the multiplicative inverse in Galois Field GF($2^{8}$)\n\n2.  Applying an affine transformation\n\nApart from the mathematical calculations, we can look up in the forward\nS-box table in actual realization.\n\nIn this design, a lookup table stores all the S-box output\nvalues for their corresponding inputs.",
+      "source_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher_top_hard/aes_inv_cipher_system_hard.md",
+      "source_chunk_ids": [
+        "C030"
+      ],
+      "relevance_reason": [
+        "Specifies the lookup table implementation (256x8) and core principle of the forward S-box, directly defining the expected behavior of this module."
+      ],
+      "confidence": "high"
+    },
+    {
+      "block_id": "S003",
+      "text": "**4. Constraints**\n\n1.  Timing Constraints:\n\n-   Combinational logic implementation, no clock required.\n\n-   Output updates immediately after input changes.\n\n2.  Resource Constraints:\n\n-   ROM implementation: requires 256×8 bits storage.\n\n-   Implementation method can be selected based on target device\n    characteristics (ROM/LUT).\n\n3.  Usage Guidelines:\n\n-   Pure combinational logic; consider setup and hold times.\n\n-   Pipeline registers can be added around this combinational path if needed.",
+      "source_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher_top_hard/aes_inv_cipher_system_hard.md",
+      "source_chunk_ids": [
+        "C035"
+      ],
+      "relevance_reason": [
+        "States combinational, clock-free nature, storage size (256×8), and usage constraints, all directly applicable to the aes_sbox module."
+      ],
+      "confidence": "high"
+    },
+    {
+      "block_id": "S004",
+      "text": "**2.2 Mathematical Derivation**\n\n**The key expansion process involves the following operations:**\n\n1.  Word Rotation (RotWord)\n\n-   Performs a cyclic left shift on input word\n\n-   \\[a0,a1,a2,a3\\] → \\[a1,a2,a3,a0\\]\n\n2.  S-box Substitution (SubWord)\n\n-   Applies S-box transformation to each byte\n\n-   Uses the same S-box as encryption process\n\n3.  Round Constant XOR (Rcon)\n\n-   XOR operation with round constant\n\n-   Different constant value for each round\n\n4.  Key Expansion Algorithm\n\n-   W\\[i\\] = W\\[i-4\\]⊕T(W\\[i-1\\]), when i mod 4 = 0\n\n-   W\\[i\\] = W\\[i-4\\]⊕W\\[i-1\\], otherwise where T(W) =\n    SubWord(RotWord(W))⊕Rcon",
+      "source_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher_top_hard/aes_inv_cipher_system_hard.md",
+      "source_chunk_ids": [
+        "C020"
+      ],
+      "relevance_reason": [
+        "Parent key expansion context: SubWord applies the S-box per byte, confirming that the forward S-box module must be a byte-level lookup (8‑bit input/output) for use in key expansion."
+      ],
+      "confidence": "high"
+    }
+  ],
+  "open_issues": [],
+  "fallback_used": false,
+  "fallback_reason": ""
+}

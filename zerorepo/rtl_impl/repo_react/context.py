@@ -39,16 +39,15 @@ Your process:
 Available tools:
 - read_context(kind="lines", path, start, end) — read specific RTL line ranges
 - read_context(kind="file", path) — read a whole file (use sparingly)
-- read_context(kind="spec"|"testbench"|"trace_report"|"repair_journal"|"stage_artifact") — read artifacts
+- read_context(kind="testbench"|"trace_report"|"repair_journal"|"stage_artifact") — read artifacts
 - search_context(pattern, scope) — regex search in rtl/tb/spec/all
 - probe_vcd(signals, time_range, mode="changes") — sample VCD waveform values
 - list_vcd_signals(pattern) — discover available VCD signal names
-- read_spec(module_name) — read the original design specification
-- retrieve_spec_block(module_name, query) — find spec blocks by keyword or block_id
+- trace_signal_cause(module_name, signal_name, time) — one-hop RTL/VCD/KG cause trace with Instance/Port boundaries
+- read_module_semantics(module_name, focus_signals, focus_blocks) — Module-centred semantics with separate planning_block_id and rtl_block_id namespaces
 - query_rtl_kg(query_type, module_name, signal_name) — query the RTL knowledge graph.
-  Valid query_type values: module_interface, module_instances, instance_connections, signal_drivers.
+  Valid query_type values: module_interface, module_instances, instance_connections.
 - run_check(mode="first_divergence") — get the first DUT/ref divergence report
-- read_memory(kind="brief") — read the current session's repair memory summary
 - read_long_term_memory(path) — read selected RTL long-term memory markdown
 
 Rules:
@@ -112,13 +111,12 @@ class DebugContextRouter:
         "read_context",
         "search_context",
         "query_rtl_kg",
-        "read_spec",
-        "retrieve_spec_block",
+        "read_module_semantics",
+        "trace_signal_cause",
         "read_long_term_memory",
         "list_vcd_signals",
         "probe_vcd",
         "run_check",
-        "read_memory",
     }
 
     def __init__(
@@ -140,7 +138,7 @@ class DebugContextRouter:
             except ValueError:
                 pass
         elif tools.state.input.repair_scope == "repo" and tools.state.input.repair_mode == "functional":
-            max_tool_calls = max(int(max_tool_calls), 16)
+            max_tool_calls = max(int(max_tool_calls), 8)
         self.max_tool_calls = max(1, int(max_tool_calls))
         self._tool_calls = 0
         self._evidence_counter = 0
@@ -302,18 +300,19 @@ class DebugContextRouter:
             except Exception:
                 pass
 
-        # 4. missing_evidence mentions "spec" → retrieve matching spec blocks
+        # 4. missing_evidence mentions "spec" → read Module-centred semantics
         if request.missing_evidence and any(
             "spec" in m.lower() for m in request.missing_evidence
         ):
             try:
                 query = timing.signal if timing.signal else ""
-                result = self.tools.retrieve_spec_block(
+                result = self.tools.read_module_semantics(
                     module_name=self.state.input.module_name,
-                    query=query,
-                    max_results=3,
+                    sections=["spec"],
+                    focus_signals=[query] if query else [],
+                    max_chars=6000,
                 )
-                matches = result.get("matches") if isinstance(result, dict) else []
+                matches = result.get("spec_fragments") if isinstance(result, dict) else []
                 for m in (matches or [])[:2]:
                     if not isinstance(m, dict):
                         continue
@@ -439,9 +438,7 @@ class DebugContextRouter:
         evidence: list[str] = []
         missing: list[str] = []
         signal_path: list[dict[str, Any]] = []
-        recommended = [
-            {"tool": "query_rtl_kg", "args": {"query_type": "module_instances", "module_name": top_name}},
-        ]
+        recommended: list[dict[str, Any]] = []
 
         kg_modules: list[str] = []
         kg_status = ""
@@ -456,11 +453,22 @@ class DebugContextRouter:
         if timing.signal:
             recommended.append(
                 {
-                    "tool": "query_rtl_kg",
+                    "tool": "trace_signal_cause",
                     "args": {
-                        "query_type": "signal_drivers",
                         "module_name": top_name,
                         "signal_name": timing.signal,
+                        "time": timing.time,
+                        "expected_value": timing.ref or None,
+                    },
+                }
+            )
+            recommended.append(
+                {
+                    "tool": "read_module_semantics",
+                    "args": {
+                        "module_name": top_name,
+                        "focus_signals": [timing.signal],
+                        "focus_blocks": [timing.block_id] if timing.block_id else [],
                     },
                 }
             )
@@ -775,14 +783,18 @@ class DebugContextRouter:
             if sub_files:
                 missing_evidence.append(
                     f"Repo scope: {len(sub_files)} sub-module files exist under {inp.rtl_root}. "
-                    "Use query_rtl_kg(module_instances) to trace the hierarchy, then read sub-module RTL "
-                    "before concluding the root cause is only in the top module."
+                    "Use trace_signal_cause to expose Instance/Port boundaries, then trace and read semantics "
+                    "only for sub-modules that enter the suspect path."
                 )
         next_edit_candidates = []
         if timing.block_id:
             next_edit_candidates.append(
                 {
                     "block_id": timing.block_id,
+                    "rtl_block_id": timing.block_id,
+                    "rtl_block_ref": (
+                        f"{self.state.input.module_name}:{timing.block_id}"
+                    ),
                     "line_range": timing.line_range,
                     "signals": [timing.signal] if timing.signal else [],
                     "file": str(self.state.input.rtl_path),
@@ -1206,15 +1218,15 @@ class DebugContextRouter:
             f"Focus signals: {request.focus_signals or 'investigate the first-divergence signal'}\n"
             f"Focus blocks: {request.focus_blocks or 'investigate the primary suspect block'}\n"
             f"Missing evidence: {request.missing_evidence or 'general investigation'}\n\n"
-            "CRITICAL: The value backtrace only traces within the top module. Do NOT assume sub-modules are correct.\n"
+            "Signal cause tracing is deliberately one module and one hop at a time. Do NOT assume sub-modules are correct.\n"
             "Tool results include visible_payload with clipped RTL/spec/KG/VCD content; use that content as evidence.\n"
             "If run_check(mode=\"first_divergence\") reports missing_vcd, stop calling list_vcd_signals/probe_vcd and continue with static RTL/KG/spec triage.\n"
             f"Valid stage_artifact artifact_name values: {stage_artifact_help_text()}. Do not pass module names as artifact names.\n"
-            "When a top-level output diverges, trace its RHS signals through sub-module instances:\n"
-            "  1. query_rtl_kg(\"module_instances\", ...) to find child instances\n"
-            "  2. query_rtl_kg(\"instance_connections\", ...) to see how child outputs connect\n"
-            "  3. read_context(kind=\"file\", path=\"<child_module>\") to verify child RTL logic\n"
-            "  4. retrieve_spec_block on the child module to cross-check correctness\n\n"
+            "When an output diverges, prefer this evidence flow:\n"
+            "  1. trace_signal_cause(module_name, signal_name, time) for its direct driver and boundary candidates\n"
+            "  2. if a boundary candidate is causal, trace the mapped parent/child module signal in a new call\n"
+            "  3. read_module_semantics only for a module that entered the suspect path\n"
+            "  4. use low-level KG, VCD, source, or legacy spec tools only when the consolidated result is insufficient\n\n"
             "Call the most relevant readonly tools to gather evidence, then return exactly this JSON shape:\n"
             "{\n"
             "  \"system_triage\": {\n"
@@ -1249,7 +1261,6 @@ class DebugContextRouter:
                             "repo_tree",
                             "file",
                             "lines",
-                            "spec",
                             "testbench",
                             "stage_artifact",
                             "trace_report",
@@ -1280,33 +1291,8 @@ class DebugContextRouter:
                 ["pattern"],
             ),
         )
-        toolkit.register_tool_function(
-            self.read_memory,
-            json_schema=_tool_schema("read_memory", "Read repair memory. Read-only.", {"kind": {"type": "string"}, "limit": {"type": "integer"}}, []),
-        )
-        toolkit.register_tool_function(
-            self.read_spec,
-            json_schema=_tool_schema(
-                "read_spec",
-                "Read original spec or module spec excerpt. Read-only.",
-                {"module_name": {"type": ["string", "null"]}, "path": {"type": ["string", "null"]}, "max_chars": {"type": "integer"}},
-                [],
-            ),
-        )
-        toolkit.register_tool_function(
-            self.retrieve_spec_block,
-            json_schema=_tool_schema(
-                "retrieve_spec_block",
-                "Retrieve spec blocks by module/query/id. Read-only.",
-                {
-                    "module_name": {"type": "string"},
-                    "query": {"type": ["string", "null"]},
-                    "block_id": {"type": ["string", "null"]},
-                    "max_results": {"type": "integer"},
-                },
-                ["module_name"],
-            ),
-        )
+        # Legacy memory/spec readers remain callable internally for compatibility,
+        # but are not part of the Router LLM tool surface.
         toolkit.register_tool_function(
             self.read_long_term_memory,
             json_schema=_tool_schema(
@@ -1328,7 +1314,6 @@ class DebugContextRouter:
                             "module_interface",
                             "module_instances",
                             "instance_connections",
-                            "signal_drivers",
                         ],
                     },
                     "module_name": {"type": "string"},
@@ -1336,6 +1321,49 @@ class DebugContextRouter:
                     "instance_name": {"type": ["string", "null"]},
                 },
                 ["query_type", "module_name"],
+            ),
+        )
+        toolkit.register_tool_function(
+            self.read_module_semantics,
+            json_schema=_tool_schema(
+                "read_module_semantics",
+                "Read consolidated Module-centred Spec/Skeleton/Plan semantics. Read-only.",
+                {
+                    "module_name": {"type": "string"},
+                    "sections": {
+                        "type": ["array", "null"],
+                        "items": {"type": "string", "enum": ["spec", "skeleton", "plan"]},
+                    },
+                    "focus_signals": {"type": ["array", "null"], "items": {"type": "string"}},
+                    "focus_blocks": {
+                        "type": ["array", "null"],
+                        "items": {"type": "string"},
+                        "description": (
+                            "Optional filter terms. Skeleton results use planning_block_id; "
+                            "editable RTL results use rtl_block_id."
+                        ),
+                    },
+                    "max_chars": {"type": "integer"},
+                },
+                ["module_name"],
+            ),
+        )
+        toolkit.register_tool_function(
+            self.trace_signal_cause,
+            json_schema=_tool_schema(
+                "trace_signal_cause",
+                (
+                    "Trace one module-local signal hop with RTL, VCD, KG drivers, and Instance/Port boundaries. "
+                    "Use recommended_next_call for the preferred exact next one-hop trace. Read-only."
+                ),
+                {
+                    "module_name": {"type": "string"},
+                    "signal_name": {"type": "string"},
+                    "time": {"type": ["integer", "null"]},
+                    "expected_value": {"type": ["string", "null"]},
+                    "max_candidates": {"type": "integer"},
+                },
+                ["module_name", "signal_name"],
             ),
         )
         toolkit.register_tool_function(
@@ -1379,8 +1407,9 @@ class DebugContextRouter:
         )
 
     def _readonly_tool_response(self, name: str, payload: dict[str, Any]) -> ToolResponse:
-        self._tool_calls += 1
-        if self._tool_calls > self.max_tool_calls:
+        status = str(payload.get("status", "ok") or "ok")
+        counts_for_budget = status in {"ok", "static_only", "stable_values_match_but_tb_edge_mismatch", "no_divergence"}
+        if counts_for_budget and self._tool_calls >= self.max_tool_calls:
             payload = {
                 "status": "router_readonly_budget_exhausted",
                 "tool_name": name,
@@ -1388,6 +1417,9 @@ class DebugContextRouter:
                 "tool_budget_limit": self.max_tool_calls,
                 "evidence_index_path": str(self.state.journal.root / "evidence" / "evidence_index.jsonl"),
             }
+            counts_for_budget = False
+        if counts_for_budget:
+            self._tool_calls += 1
         if name == "run_check":
             first = payload.get("first_divergence") if isinstance(payload.get("first_divergence"), dict) else payload
             if isinstance(first, dict) and first.get("status") == "missing_vcd":
@@ -1428,6 +1460,49 @@ class DebugContextRouter:
             content = payload.get("content")
             if isinstance(content, str):
                 visible["content"] = _clip(content, max_chars=max_chars)
+        elif name == "read_module_semantics":
+            for key in (
+                "module",
+                "spec_fragments",
+                "skeleton_blocks",
+                "plan_subtasks",
+                "interface",
+                "semantic_invariants",
+                "editable_rtl_blocks",
+                "block_alignment",
+                "neighbors",
+                "provenance",
+                "focus_applied",
+                "warnings",
+                "truncated",
+            ):
+                if key in payload and payload.get(key) not in (None, "", [], {}):
+                    visible[key] = self._clip_json(payload.get(key), max_chars=max_chars)
+        elif name == "trace_signal_cause":
+            for key in (
+                "module",
+                "signal",
+                "resolved_vcd_path",
+                "time",
+                "observed_value",
+                "expected_value",
+                "rtl_path",
+                "driver_candidates",
+                "next_frontier",
+                "frontier_candidates",
+                "frontier_truncated",
+                "boundary_mappings",
+                "context_escalation_candidates",
+                "editable_rtl_blocks",
+                "focus_context",
+                "recommended_next_call",
+                "recommended_next_calls",
+                "stop_reason",
+                "warnings",
+                "provenance",
+            ):
+                if key in payload and payload.get(key) not in (None, "", [], {}):
+                    visible[key] = self._clip_json(payload.get(key), max_chars=max_chars)
         elif name == "retrieve_spec_block":
             matches = payload.get("matches")
             if isinstance(matches, list):
@@ -1483,9 +1558,9 @@ class DebugContextRouter:
             return clipped
 
     def _kind_for_tool(self, name: str, payload: dict[str, Any]) -> str:
-        if name in {"read_spec", "retrieve_spec_block"}:
+        if name in {"read_spec", "retrieve_spec_block", "read_module_semantics"}:
             return "spec"
-        if name in {"list_vcd_signals", "probe_vcd", "run_check"}:
+        if name in {"list_vcd_signals", "probe_vcd", "run_check", "trace_signal_cause"}:
             return "trace"
         if name == "read_memory":
             return "memory"
@@ -1539,6 +1614,40 @@ class DebugContextRouter:
         result = self.tools.query_rtl_kg(query_type, module_name, signal_name, instance_name)  # type: ignore[arg-type]
         return self._readonly_tool_response("query_rtl_kg", result)
 
+    def read_module_semantics(
+        self,
+        module_name: str,
+        sections: list[str] | None = None,
+        focus_signals: list[str] | None = None,
+        focus_blocks: list[str] | None = None,
+        max_chars: int = 12000,
+    ) -> ToolResponse:
+        result = self.tools.read_module_semantics(
+            module_name,
+            sections,
+            focus_signals,
+            focus_blocks,
+            max_chars,
+        )
+        return self._readonly_tool_response("read_module_semantics", result)
+
+    def trace_signal_cause(
+        self,
+        module_name: str,
+        signal_name: str,
+        time: int | None = None,
+        expected_value: str | None = None,
+        max_candidates: int = 5,
+    ) -> ToolResponse:
+        result = self.tools.trace_signal_cause(
+            module_name,
+            signal_name,
+            time,
+            expected_value,
+            max_candidates,
+        )
+        return self._readonly_tool_response("trace_signal_cause", result)
+
     def list_vcd_signals(self, pattern: str = "", scope: str = "", limit: int = 100) -> ToolResponse:
         if self._vcd_unavailable:
             return self._readonly_tool_response(
@@ -1546,7 +1655,7 @@ class DebugContextRouter:
                 {
                     "status": "skipped_missing_vcd",
                     "error": "VCD was already reported missing; switch to static RTL/KG/spec triage.",
-                    "suggested_tools": ["read_context", "query_rtl_kg", "retrieve_spec_block", "run_check"],
+                    "suggested_tools": ["trace_signal_cause", "read_module_semantics", "read_context", "query_rtl_kg", "run_check"],
                 },
             )
         result = self.tools.list_vcd_signals(pattern, scope, limit)
@@ -1571,7 +1680,7 @@ class DebugContextRouter:
                     "time_range": time_range,
                     "mode": mode,
                     "error": "VCD was already reported missing; inspect generated RTL, KG hierarchy, spec blocks, and simulator output instead.",
-                    "suggested_tools": ["read_context", "query_rtl_kg", "retrieve_spec_block", "run_check"],
+                    "suggested_tools": ["trace_signal_cause", "read_module_semantics", "read_context", "query_rtl_kg", "run_check"],
                 },
             )
         result = self.tools.probe_vcd(signals, time, time_range, edge, mode, max_rows)

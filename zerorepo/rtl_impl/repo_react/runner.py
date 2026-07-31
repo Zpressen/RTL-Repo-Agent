@@ -11,16 +11,26 @@ from agentscope.memory import InMemoryMemory
 from agentscope.message import Msg
 from agentscope.tool import ToolResponse, Toolkit
 
-from zerorepo.rtl_impl.debug_agent.agents import SafeReActAgent, clear_memory_safely
+from zerorepo.rtl_impl.debug_agent.agents import (
+    SafeReActAgent,
+    clear_memory_safely,
+    clear_memory_safely_async,
+)
 from zerorepo.rtl_impl.debug_agent.config import OpenAIConfig
 from zerorepo.rtl_impl.debug_agent.model import make_formatter, make_openai_model
 from zerorepo.rtl_impl.debug_agent.sim_reviewer import SimReviewer
 from zerorepo.rtl_impl.debug_agent.trace_report import build_trace_report
 
-from .compact import build_llm_compact_memory
+from .compact import build_deterministic_compact_memory, build_llm_compact_memory
 from .context import DebugContextRouter
 from .journal import RepoReActJournal
-from .prompt import SYSTEM_PROMPT, build_compact_prompt, build_continue_prompt, build_initial_prompt
+from .prompt import (
+    SYSTEM_PROMPT,
+    build_compact_prompt,
+    build_continue_prompt,
+    build_initial_prompt,
+    build_tool_call_recovery_prompt,
+)
 from .schemas import DebugContextGoal, Diagnosis, RepoReActInput, RepoReActResult, SimSnapshot
 from .tools import RepoReActToolState, RepoReActTools, _extract_first_fail_time, _summarize_command_json
 from .tools import stage_artifact_help_text
@@ -87,15 +97,15 @@ class RepoReActRunner:
         "read_context",
         "search_context",
         "query_rtl_kg",
-        "read_spec",
-        "retrieve_spec_block",
+        "read_module_semantics",
+        "trace_signal_cause",
         "read_long_term_memory",
         "list_vcd_signals",
         "probe_vcd",
         "run_check",
-        "route_debug_context",
     }
     ACTION_TOOLS = {"apply_patch", "replace_block", "record_correction"}
+    READ_BUDGET_RESET_TOOLS = {"apply_patch", "replace_block"}
     ROUTER_FIRST_TOOLS: set[str] = set()
 
     def __init__(
@@ -125,8 +135,13 @@ class RepoReActRunner:
         self._route_calls_since_action = 0
         self._route_allowed_reads: list[dict[str, Any]] = []
         self._route_read_count = 0
+        self._required_initial_trace_call: dict[str, Any] = {}
+        self._initial_trace_completed = False
+        self._initial_dut_instance = ""
         self._light_consolidations_since_checkpoint = 0
         self._checkpoint_count = 0
+        self._pending_tool_call_recovery: dict[str, Any] = {}
+        self._tool_call_recovery_signatures: set[str] = set()
         self._readonly_budget_from_env = "ZEROREPO_REACT_READONLY_BUDGET" in os.environ
         self._max_readonly_calls_since_action = int(os.environ.get("ZEROREPO_REACT_READONLY_BUDGET", "16"))
         self._router_first_enabled = os.environ.get("ZEROREPO_REACT_ROUTER_FIRST", "0").lower() not in {"0", "false", "no"}
@@ -136,7 +151,7 @@ class RepoReActRunner:
             self.read_context,
             json_schema=_tool_schema(
                 "read_context",
-                "Read repository tree, files, line ranges, specs, testbench, stage artifacts, trace reports, or journals. Use route_debug_context first in a new observation cycle unless you need one exact cited artifact.",
+                "Read repository trees, files, line ranges, testbenches, stage artifacts, trace reports, or journals.",
                 {
                     "kind": {
                         "type": "string",
@@ -144,7 +159,6 @@ class RepoReActRunner:
                             "repo_tree",
                             "file",
                             "lines",
-                            "spec",
                             "testbench",
                             "stage_artifact",
                             "trace_report",
@@ -171,7 +185,7 @@ class RepoReActRunner:
             self.search_context,
             json_schema=_tool_schema(
                 "search_context",
-                "Search RTL, testbench, spec, or all context with a regex pattern. Use route_debug_context first in a new observation cycle.",
+                "Search RTL, testbench, spec, or all context with a regex pattern.",
                 {
                     "pattern": {"type": "string"},
                     "scope": {"type": "string", "enum": ["rtl", "tb", "spec", "all"]},
@@ -187,7 +201,7 @@ class RepoReActRunner:
             self.query_rtl_kg,
             json_schema=_tool_schema(
                 "query_rtl_kg",
-                "Run a fixed-template RTL KG query for interface, instances, connections, or signal drivers.",
+                "Run a fixed-template structural RTL KG query for interfaces, instances, or connections.",
                 {
                     "query_type": {
                         "type": "string",
@@ -195,7 +209,6 @@ class RepoReActRunner:
                             "module_interface",
                             "module_instances",
                             "instance_connections",
-                            "signal_drivers",
                         ],
                     },
                     "module_name": {"type": "string"},
@@ -207,34 +220,54 @@ class RepoReActRunner:
             ),
         )
         toolkit.register_tool_function(
-            self.read_spec,
+            self.read_module_semantics,
             json_schema=_tool_schema(
-                "read_spec",
-                "Read the original spec document or current module spec excerpt.",
-                {
-                    "module_name": {"type": ["string", "null"]},
-                    "path": {"type": ["string", "null"]},
-                    "max_chars": {"type": "integer"},
-                    **READONLY_TRACE_INTENT_FIELDS,
-                },
-                [],
-            ),
-        )
-        toolkit.register_tool_function(
-            self.retrieve_spec_block,
-            json_schema=_tool_schema(
-                "retrieve_spec_block",
-                "Retrieve relevant module spec blocks from spec_blocks.json by block id or query.",
+                "read_module_semantics",
+                "Read a Module-centred Spec/Skeleton/Plan view. Prefer this over separate planning-artifact reads; related module semantics are never loaded automatically.",
                 {
                     "module_name": {"type": "string"},
-                    "query": {"type": ["string", "null"]},
-                    "block_id": {"type": ["string", "null"]},
-                    "max_results": {"type": "integer"},
+                    "sections": {
+                        "type": ["array", "null"],
+                        "items": {"type": "string", "enum": ["spec", "skeleton", "plan"]},
+                    },
+                    "focus_signals": {"type": ["array", "null"], "items": {"type": "string"}},
+                    "focus_blocks": {
+                        "type": ["array", "null"],
+                        "items": {"type": "string"},
+                        "description": (
+                            "Optional filter terms. Returned Skeleton ids are planning_block_id; "
+                            "editable parser ids are rtl_block_id and the namespaces are never interchangeable."
+                        ),
+                    },
+                    "max_chars": {"type": "integer"},
                     **READONLY_TRACE_INTENT_FIELDS,
                 },
                 ["module_name"],
             ),
         )
+        toolkit.register_tool_function(
+            self.trace_signal_cause,
+            json_schema=_tool_schema(
+                "trace_signal_cause",
+                (
+                    "Trace one signal through direct drivers in one module, sample its VCD evidence, "
+                    "and expose Instance/Port boundary candidates without recursive traversal. "
+                    "When a frontier is traceable, recommended_next_call is the preferred exact next one-hop trace."
+                ),
+                {
+                    "module_name": {"type": "string"},
+                    "signal_name": {"type": "string"},
+                    "time": {"type": ["integer", "null"]},
+                    "expected_value": {"type": ["string", "null"]},
+                    "max_candidates": {"type": "integer"},
+                    **READONLY_TRACE_INTENT_FIELDS,
+                },
+                ["module_name", "signal_name"],
+            ),
+        )
+        # Legacy read_spec/retrieve_spec_block implementations remain available
+        # internally, but are intentionally not exposed to the LLM. Module-centred
+        # planning semantics must flow through read_module_semantics.
         toolkit.register_tool_function(
             self.read_long_term_memory,
             json_schema=_tool_schema(
@@ -252,7 +285,7 @@ class RepoReActRunner:
             self.list_vcd_signals,
             json_schema=_tool_schema(
                 "list_vcd_signals",
-                "List VCD signal names matching an optional pattern and scope. Use route_debug_context first in a new observation cycle.",
+                "List VCD signal names matching an optional pattern and scope.",
                 {
                     "pattern": {"type": "string"},
                     "scope": {"type": "string"},
@@ -266,7 +299,7 @@ class RepoReActRunner:
             self.probe_vcd,
             json_schema=_tool_schema(
                 "probe_vcd",
-                "Sample VCD signals at a time or over a time window with optional edge filtering. Use route_debug_context first in a new observation cycle.",
+                "Sample VCD signals at a time or over a time window with optional edge filtering.",
                 {
                     "signals": {"type": "array", "items": {"type": "string"}},
                     "time": {"type": ["integer", "null"]},
@@ -324,38 +357,15 @@ class RepoReActRunner:
         #         [],
         #     ),
         # )
-        toolkit.register_tool_function(
-            self.route_debug_context,
-            json_schema=_tool_schema(
-                "route_debug_context",
-                "Ask the read-only DebugContextRouter subagent for a short context pack with evidence citations.",
-                {
-                    "goal": {
-                        "type": "string",
-                        "enum": [
-                            "initial_triage",
-                            "before_patch",
-                            "after_patch",
-                            "compact_resume",
-                            "specific_question",
-                        ],
-                    },
-                    "focus_signals": {"type": ["array", "null"], "items": {"type": "string"}},
-                    "focus_blocks": {"type": ["array", "null"], "items": {"type": "string"}},
-                    "missing_evidence": {"type": ["array", "null"], "items": {"type": "string"}},
-                    "max_items": {"type": "integer"},
-                    **READONLY_TRACE_INTENT_FIELDS,
-                },
-                ["goal"],
-            ),
-        )
+        # DebugContextRouter remains an internal context service; exposing it as a
+        # meta-tool would duplicate the direct read/debug tools above.
         toolkit.register_tool_function(
             self.apply_patch,
             json_schema={
                 "type": "function",
                 "function": {
                     "name": "apply_patch",
-                    "description": "Apply one coherent RTL line-range patch whose scope matches the evidence and diagnosis, then lint/sim/trace verify and rollback on regression.",
+                    "description": "Apply one coherent RTL line-range patch whose scope matches the evidence and plausible causal patch rationale, then lint/sim/trace verify and rollback on regression.",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -377,6 +387,10 @@ class RepoReActRunner:
                             "expected_effect": {"type": "string"},
                             "protected_invariants_checked": {"type": ["array", "null"], "items": {"type": "string"}},
                             "preserve_plan": {"type": ["string", "null"]},
+                            "syntax_retry_of": {
+                                "type": ["string", "null"],
+                                "description": "Candidate id returned by a prior syntax_retry_required result.",
+                            },
                             "verify": {"type": "boolean"},
                             "rollback_on_fail": {"type": "boolean"},
                         },
@@ -391,20 +405,42 @@ class RepoReActRunner:
                 "type": "function",
                 "function": {
                     "name": "replace_block",
-                    "description": "Replace one complete parsed always/assign block when that is the natural repair scope from the evidence and diagnosis, then lint/sim/trace verify and rollback on regression.",
+                    "description": (
+                        "Replace one complete RTL parser always/assign block in the specified module. "
+                        "Use only module_name and rtl_block_id returned by "
+                        "trace_signal_cause.editable_rtl_blocks or "
+                        "read_module_semantics.editable_rtl_blocks. Never pass a B1/B2/B5 planning_block_id."
+                    ),
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "block_id": {"type": "string"},
+                            "module_name": {
+                                "type": "string",
+                                "description": "Logical module containing the current RTL parser block.",
+                            },
+                            "rtl_block_id": {
+                                "type": "string",
+                                "description": "Current RTL parser id such as A2, A3, or C101; never a planning block id.",
+                            },
                             "new_code": {"type": "string"},
                             "reason": {"type": "string"},
                             "expected_effect": {"type": "string"},
                             "protected_invariants_checked": {"type": ["array", "null"], "items": {"type": "string"}},
                             "preserve_plan": {"type": ["string", "null"]},
+                            "syntax_retry_of": {
+                                "type": ["string", "null"],
+                                "description": "Candidate id returned by a prior syntax_retry_required result.",
+                            },
                             "verify": {"type": "boolean"},
                             "rollback_on_fail": {"type": "boolean"},
                         },
-                        "required": ["block_id", "new_code", "reason", "expected_effect"],
+                        "required": [
+                            "module_name",
+                            "rtl_block_id",
+                            "new_code",
+                            "reason",
+                            "expected_effect",
+                        ],
                     },
                 },
             },
@@ -461,12 +497,17 @@ class RepoReActRunner:
         self._route_calls_since_action = 0
         self._route_allowed_reads = []
         self._route_read_count = 0
+        self._required_initial_trace_call = {}
+        self._initial_trace_completed = False
+        self._initial_dut_instance = ""
         self._light_consolidations_since_checkpoint = 0
         self._checkpoint_count = 0
+        self._pending_tool_call_recovery = {}
+        self._tool_call_recovery_signatures = set()
 
     def _configure_scope_defaults(self, inp: RepoReActInput) -> None:
         if inp.repair_scope == "repo" and not self._readonly_budget_from_env:
-            self._max_readonly_calls_since_action = max(self._max_readonly_calls_since_action, 32)
+            self._max_readonly_calls_since_action = max(self._max_readonly_calls_since_action, 16)
 
     def _clip_trace_value(self, value: Any, max_chars: int = 900) -> Any:
         if isinstance(value, str):
@@ -481,12 +522,96 @@ class RepoReActRunner:
             }
         return value
 
+    @staticmethod
+    def _detect_textual_tool_call(text: str) -> dict[str, str] | None:
+        """Recognize DSML/XML pseudo-calls without parsing or executing arguments."""
+        if not text:
+            return None
+        marker = re.search(
+            r"(?is)(?:<\s*(?:tool_call|invoke|function_call)\b|"
+            r"DSML.{0,32}?(?:tool[_\s-]*calls?|function[_\s-]*calls?|invoke)|"
+            r"<\|(?:tool_call|function_call)\|>)",
+            text,
+        )
+        if marker is None:
+            return None
+        tail = text[max(0, marker.start() - 80) : marker.start() + 800]
+        name_match = re.search(
+            r"""(?is)(?:name\s*=\s*["']|["']name["']\s*:\s*["']|"""
+            r"""(?:tool|function)\s*[:=]\s*["']?)([A-Za-z_][A-Za-z0-9_]*)""",
+            tail,
+        )
+        if name_match is None:
+            known = re.search(r"\b(apply_patch|replace_block|trace_signal_cause|read_module_semantics)\b", tail)
+            tool_name = known.group(1) if known else ""
+        else:
+            tool_name = name_match.group(1)
+        normalized = re.sub(r"\s+", " ", tail).strip()[:500]
+        return {
+            "tool_name": tool_name,
+            "signature": f"{tool_name}:{normalized}",
+            "excerpt": tail[:800],
+        }
+
+    def _record_unexecuted_tool_call(self, text: str) -> None:
+        detected = self._detect_textual_tool_call(text)
+        if detected is None or self._state is None:
+            return
+        signature = detected["signature"]
+        retry_eligible = signature not in self._tool_call_recovery_signatures
+        self._state.journal.append_jsonl(
+            "react_trace.jsonl",
+            {
+                "role": "system",
+                "event": "unexecuted_tool_call",
+                "tool_name": detected["tool_name"],
+                "retry_eligible": retry_eligible,
+                "content_excerpt": detected["excerpt"],
+                "action_calls": int(self._state.action_calls),
+            },
+        )
+        self._state.journal.append_jsonl(
+            "decision_trace.jsonl",
+            {
+                "schema": "repo_react_decision_trace.v1",
+                "step": int(self._state.action_calls),
+                "action_calls": int(self._state.action_calls),
+                "patch_attempts": int(self._state.patch_attempt_id),
+                "tool_name": detected["tool_name"] or "unknown_textual_tool_call",
+                "tool_kind": "unexecuted_tool_call",
+                "observation_summary": {
+                    "status": "unexecuted_tool_call",
+                    "message": "Assistant emitted textual tool markup; no tool was executed.",
+                },
+                "effect": "not_executed",
+                "evidence_refs": [{"kind": "journal", "path": "react_trace.jsonl"}],
+            },
+        )
+        if retry_eligible:
+            self._tool_call_recovery_signatures.add(signature)
+            self._pending_tool_call_recovery = detected
+
     def _tool_kind(self, name: str) -> str:
         if name in self.ACTION_TOOLS:
             return "action"
         if name == "route_debug_context":
             return "route"
         return "read"
+
+    def _counts_as_successful_tool_call(self, name: str, payload: dict[str, Any]) -> bool:
+        status = str(payload.get("status", "ok") or "ok")
+        if name in self.ACTION_TOOLS:
+            if payload.get("is_action_executed") is False:
+                return False
+            return status not in {
+                "error",
+                "rejected",
+                "observation_budget_exhausted",
+                "router_first_required",
+                "route_read_restricted",
+                "post_patch_trace_required",
+            }
+        return status in {"ok", "static_only", "stable_values_match_but_tb_edge_mismatch", "no_divergence"}
 
     def _trace_intent(self, purpose: str = "", question: str = "", expected_evidence: str = "") -> dict[str, str]:
         return {
@@ -562,6 +687,7 @@ class RepoReActRunner:
             "schema": "repo_react_decision_trace.v1",
             "step": int(self._state.action_calls),
             "action_calls": int(self._state.action_calls),
+            "patch_attempts": int(self._state.patch_attempt_id),
             "tool_name": name,
             "tool_kind": self._tool_kind(name),
             "intent": intent,
@@ -583,16 +709,17 @@ class RepoReActRunner:
         text = json.dumps(payload, indent=2, ensure_ascii=False)
         self._tool_result_chars_since_compact += len(text)
         self._tool_result_chars_since_light += len(text)
-        if name in self.ACTION_TOOLS:
+        counts_for_budget = self._counts_as_successful_tool_call(name, payload)
+        if name in self.READ_BUDGET_RESET_TOOLS and counts_for_budget:
             self._readonly_calls_since_action = 0
             self._route_calls_since_action = 0
             self._route_allowed_reads = []
             self._route_read_count = 0
-        elif name == "route_debug_context":
+        elif name == "route_debug_context" and counts_for_budget:
             self._route_calls_since_action += 1
             self._readonly_calls_since_action += 1
             self._readonly_calls_since_light += 1
-        elif name in self.READONLY_TOOLS:
+        elif name in self.READONLY_TOOLS and counts_for_budget:
             self._readonly_calls_since_action += 1
             self._readonly_calls_since_light += 1
         return ToolResponse(content=[{"type": "text", "text": text}])
@@ -615,10 +742,11 @@ class RepoReActRunner:
             "tool_name": tool_name,
             "readonly_calls_since_action": self._readonly_calls_since_action,
             "max_readonly_calls_since_action": self._max_readonly_calls_since_action,
-            "required_next_action": ["apply_patch", "replace_block", "record_correction", "generate_response"],
+            "required_next_action": ["apply_patch", "replace_block"],
             "message": (
-                "Observation budget exhausted. Stop reading more context unless you first take a write action "
-                "or finish with generate_response. Use the memory summary and evidence already gathered."
+                "Observation budget exhausted. Stop reading more context unless you first take a verified RTL edit "
+                "with apply_patch/replace_block. record_correction and generate_response do not reset the observation "
+                "budget; generate_response should only be used to stop."
             ),
         }
         if self._tools is not None:
@@ -632,6 +760,136 @@ class RepoReActRunner:
     def _router_first_required_response(self, tool_name: str) -> ToolResponse | None:
         del tool_name
         return None
+
+    def _initial_trace_gate_response(self, tool_name: str) -> ToolResponse | None:
+        required = getattr(self, "_required_initial_trace_call", {})
+        if (
+            not isinstance(required, dict)
+            or not required
+            or bool(getattr(self, "_initial_trace_completed", False))
+            or tool_name not in {"read_context", "probe_vcd"}
+        ):
+            return None
+        payload = {
+            "status": "initial_trace_required",
+            "tool_name": tool_name,
+            "required_next_tool": "trace_signal_cause",
+            "arguments": required,
+            "message": (
+                "Complete the recommended one-hop trace_signal_cause call for the initial first-divergence "
+                "signal before using read_context or probe_vcd. These detailed reads are unlocked after a "
+                "successful matching trace."
+            ),
+        }
+        return self._tool_response(tool_name, payload)
+
+    def _matches_required_initial_trace(self, args: dict[str, Any]) -> bool:
+        required = getattr(self, "_required_initial_trace_call", {})
+        if not isinstance(required, dict) or not required:
+            return False
+        for key in ("module_name", "signal_name", "time", "expected_value"):
+            expected = required.get(key)
+            actual = args.get(key)
+            if key == "time":
+                try:
+                    if int(actual) != int(expected):
+                        return False
+                except (TypeError, ValueError):
+                    return False
+            elif str(actual) != str(expected):
+                return False
+        return True
+
+    def _post_patch_trace_required_response(self, tool_name: str) -> ToolResponse | None:
+        if self._state is None or self._state.input.repair_mode != "functional":
+            return None
+        required = self._state.pending_post_patch_trace
+        if not required:
+            return None
+        return self._tool_response(
+            tool_name,
+            {
+                "status": "post_patch_trace_required",
+                "tool_name": tool_name,
+                "required_next_tool": "trace_signal_cause",
+                "arguments": required,
+                "message": (
+                    "The previous functional patch was neutral. Re-run the matching one-hop signal trace "
+                    "on the committed baseline before making another RTL modification."
+                ),
+            },
+        )
+
+    def _current_root_trace_requirement(self) -> dict[str, Any]:
+        if self._state is None:
+            return {}
+        divergence = self._state.last_divergence_summary or {}
+        first = divergence.get("first_divergence") if isinstance(divergence.get("first_divergence"), dict) else {}
+        if isinstance(first.get("first_divergence"), dict):
+            first = first["first_divergence"]
+        signal = first.get("signal")
+        time = first.get("time")
+        expected = first.get("ref") if first.get("ref") is not None else first.get("expected")
+        module_name = (
+            (self._state.last_trace_summary or {}).get("runtime_top_module")
+            or (self._state.last_signal_trace or {}).get("module")
+            or self._state.input.top_module
+            or self._state.input.module_name
+        )
+        if signal not in (None, "") and time is not None:
+            return {
+                "module_name": str(module_name),
+                "signal_name": str(signal),
+                "time": int(time),
+                "expected_value": None if expected is None else str(expected),
+            }
+        last_signal = self._state.last_signal_trace or {}
+        if last_signal.get("signal") and last_signal.get("time") is not None:
+            return {
+                "module_name": str(last_signal.get("module") or module_name),
+                "signal_name": str(last_signal["signal"]),
+                "time": int(last_signal["time"]),
+                "expected_value": (
+                    None
+                    if last_signal.get("expected_value") is None
+                    else str(last_signal.get("expected_value"))
+                ),
+            }
+        return {}
+
+    def _attach_post_patch_trace_requirement(self, result: dict[str, Any]) -> dict[str, Any]:
+        if (
+            self._state is None
+            or self._state.input.repair_mode != "functional"
+            or str(result.get("status") or "") != "neutral"
+            or result.get("committed") is False
+        ):
+            return result
+        required = self._current_root_trace_requirement()
+        if not required:
+            return result
+        self._state.pending_post_patch_trace = required
+        result = dict(result)
+        result["required_next_tool"] = "trace_signal_cause"
+        result["arguments"] = required
+        return result
+
+    def _matches_pending_post_patch_trace(self, args: dict[str, Any]) -> bool:
+        if self._state is None or not self._state.pending_post_patch_trace:
+            return False
+        required = self._state.pending_post_patch_trace
+        for key in ("module_name", "signal_name", "time", "expected_value"):
+            expected = required.get(key)
+            actual = args.get(key)
+            if key == "time":
+                try:
+                    if int(actual) != int(expected):
+                        return False
+                except (TypeError, ValueError):
+                    return False
+            elif str(actual) != str(expected):
+                return False
+        return True
 
     def _compact_route_debug_context_result(self, pack: dict[str, Any]) -> dict[str, Any]:
         """Return only the conclusion and minimal evidence index for the main agent.
@@ -741,8 +999,16 @@ class RepoReActRunner:
             "next_local_target": snapshot.get("next_local_target") or {},
             "high_coupling_blocks": snapshot.get("high_coupling_blocks") or [],
             "action_calls": snapshot.get("action_calls"),
+            "patch_attempts": snapshot.get("patch_attempts"),
+            "pending_syntax_candidates": snapshot.get("pending_syntax_candidates") or [],
             "max_steps": snapshot.get("max_steps"),
         }
+
+    @staticmethod
+    def _resolve_max_agent_turns(inp: RepoReActInput, max_steps: int) -> int:
+        if inp.max_agent_turns is not None:
+            return max(1, int(inp.max_agent_turns))
+        return max(1, int(max_steps) * 3)
 
     def _has_real_divergence_for_checkpoint(self) -> bool:
         if self._state is None:
@@ -812,9 +1078,9 @@ class RepoReActRunner:
             )
         return self._latest_context_pack or {}
 
-    async def _compact_agent_memory(self, mode: Literal["checkpoint", "deep"] = "checkpoint") -> None:
+    async def _compact_agent_memory(self, mode: Literal["checkpoint", "deep"] = "checkpoint") -> bool:
         if self._tools is None or self._state is None:
-            return
+            return False
         context_pack = self._latest_context_pack or {}
         snapshot = self._tools.persist_memory_snapshot()
         llm_compact = await build_llm_compact_memory(
@@ -825,10 +1091,17 @@ class RepoReActRunner:
             context_pack=context_pack,
             logger=self.logger,
         )
-        if llm_compact:
-            self._state.journal.write_json("repo_react_llm_compact.json", llm_compact)
+        if not llm_compact:
+            llm_compact = build_deterministic_compact_memory(
+                journal_root=self._state.journal.root,
+                mode=mode,
+                memory_snapshot=snapshot,
+                context_pack=context_pack,
+            )
+        self._state.journal.write_json("repo_react_llm_compact.json", llm_compact)
+        self._state.journal.write_json("repo_react_recovery_memory.json", llm_compact)
         prompt = build_compact_prompt(context_pack, mode=mode, llm_compact_memory=llm_compact)
-        clear_memory_safely(self._agent)
+        await clear_memory_safely_async(self._agent)
         self._last_compacted_action_calls = int(self._state.action_calls)
         self._last_checkpoint_action_calls = int(self._state.action_calls)
         self._tool_result_chars_since_compact = 0
@@ -842,7 +1115,15 @@ class RepoReActRunner:
             "react_trace.jsonl",
             {"role": "user", "content": prompt, "compact": mode},
         )
-        await self._agent(Msg("user", prompt, role="user"))
+        msg = await self._agent(Msg("user", prompt, role="user"))
+        text = msg.get_text_content() or ""
+        if text:
+            self._state.journal.append_jsonl(
+                "react_trace.jsonl",
+                {"role": "assistant", "content": text, "compact": mode},
+            )
+            self._record_unexecuted_tool_call(text)
+        return True
 
     def _route_context_pack(
         self,
@@ -895,6 +1176,9 @@ class RepoReActRunner:
         blocked = self._readonly_budget_exceeded_response("read_context")
         if blocked is not None:
             return blocked
+        initial_trace_required = self._initial_trace_gate_response("read_context")
+        if initial_trace_required is not None:
+            return initial_trace_required
         router_required = self._router_first_required_response("read_context")
         if router_required is not None:
             return router_required
@@ -1007,6 +1291,171 @@ class RepoReActRunner:
             trace_meta={
                 "intent": self._trace_intent(purpose, question, expected_evidence),
                 "args": {"query_type": query_type, "module_name": module_name, "signal_name": signal_name, "instance_name": instance_name},
+            },
+        )
+
+    async def read_module_semantics(
+        self,
+        module_name: str,
+        sections: list[str] | None = None,
+        focus_signals: list[str] | None = None,
+        focus_blocks: list[str] | None = None,
+        max_chars: int = 12000,
+        purpose: str = "",
+        question: str = "",
+        expected_evidence: str = "",
+    ) -> ToolResponse:
+        """Read the current Module-centred planning semantics."""
+        blocked = self._readonly_budget_exceeded_response("read_module_semantics")
+        if blocked is not None:
+            return blocked
+        router_required = self._router_first_required_response("read_module_semantics")
+        if router_required is not None:
+            return router_required
+        last_trace = self._state.last_signal_trace if self._state is not None else {}
+        trace_focus = last_trace.get("focus_context") if isinstance(last_trace.get("focus_context"), dict) else {}
+        same_module = str(last_trace.get("module") or "") == str(module_name)
+        focus_sources: dict[str, str] = {}
+        if focus_signals is None and same_module:
+            focus_signals = list(trace_focus.get("signals") or [])
+            if focus_signals:
+                focus_sources["signals"] = "last_signal_trace"
+        elif focus_signals is not None:
+            focus_sources["signals"] = "explicit"
+        if focus_blocks is None and same_module:
+            focus_blocks = list(
+                trace_focus.get("rtl_block_ids")
+                or trace_focus.get("rtl_blocks")
+                or []
+            )
+            if focus_blocks:
+                focus_sources["block_terms"] = "last_signal_trace"
+        elif focus_blocks is not None:
+            focus_sources["block_terms"] = "explicit"
+        args = {
+            "module_name": module_name,
+            "sections": sections,
+            "focus_signals": focus_signals,
+            "focus_blocks": focus_blocks,
+        }
+        route_restricted = self._route_read_restricted_response("read_module_semantics", args)
+        if route_restricted is not None:
+            return route_restricted
+        result = await asyncio.to_thread(
+            self._require_tools().read_module_semantics,
+            module_name,
+            sections,
+            focus_signals,
+            focus_blocks,
+            max_chars,
+        )
+        result = dict(result)
+        core_focus = (
+            result.get("focus_applied")
+            if isinstance(result.get("focus_applied"), dict)
+            else {}
+        )
+        rtl_block_ids = list(core_focus.get("rtl_block_ids") or [])
+        planning_block_ids = list(core_focus.get("planning_block_ids") or [])
+        block_source = focus_sources.pop("block_terms", None)
+        if block_source and rtl_block_ids:
+            focus_sources["rtl_block_ids"] = block_source
+        if block_source and planning_block_ids:
+            focus_sources["planning_block_ids"] = block_source
+        result["focus_applied"] = {
+            "signals": list(focus_signals or []),
+            "rtl_block_ids": rtl_block_ids,
+            "planning_block_ids": planning_block_ids,
+            "sources": focus_sources,
+        }
+        self._record_route_read_if_recommended("read_module_semantics", args)
+        return self._tool_response(
+            "read_module_semantics",
+            result,
+            trace_meta={
+                "intent": self._trace_intent(purpose, question, expected_evidence),
+                "args": args,
+            },
+        )
+
+    async def trace_signal_cause(
+        self,
+        module_name: str,
+        signal_name: str,
+        time: int | None = None,
+        expected_value: str | None = None,
+        max_candidates: int = 5,
+        purpose: str = "",
+        question: str = "",
+        expected_evidence: str = "",
+    ) -> ToolResponse:
+        """Trace one module-local signal cause and its Instance/Port boundaries."""
+        blocked = self._readonly_budget_exceeded_response("trace_signal_cause")
+        if blocked is not None:
+            return blocked
+        router_required = self._router_first_required_response("trace_signal_cause")
+        if router_required is not None:
+            return router_required
+        args = {
+            "module_name": module_name,
+            "signal_name": signal_name,
+            "time": time,
+            "expected_value": expected_value,
+            "max_candidates": max_candidates,
+        }
+        route_restricted = self._route_read_restricted_response("trace_signal_cause", args)
+        if route_restricted is not None:
+            return route_restricted
+        result = await asyncio.to_thread(
+            self._require_tools().trace_signal_cause,
+            module_name,
+            signal_name,
+            time,
+            expected_value,
+            max_candidates,
+        )
+        matched_initial_trace = self._matches_required_initial_trace(args)
+        matched_post_patch_trace = self._matches_pending_post_patch_trace(args)
+        if matched_initial_trace and str(result.get("status") or "") in {"ok", "static_only"}:
+            self._initial_trace_completed = True
+            result = dict(result)
+            result["initial_trace_gate"] = {
+                "status": "completed",
+                "unlocked_tools": ["read_context", "probe_vcd"],
+            }
+        elif getattr(self, "_required_initial_trace_call", {}) and not getattr(self, "_initial_trace_completed", False):
+            result = dict(result)
+            result["initial_trace_gate"] = {
+                "status": "pending",
+                "required_next_tool": "trace_signal_cause",
+                "arguments": self._required_initial_trace_call,
+                "message": "This trace did not match and successfully complete the initial required trace.",
+            }
+        if matched_post_patch_trace and str(result.get("status") or "") in {"ok", "static_only"}:
+            if self._state is not None:
+                self._state.pending_post_patch_trace = {}
+            result = dict(result)
+            result["post_patch_trace_gate"] = {
+                "status": "completed",
+                "unlocked_tools": ["apply_patch", "replace_block"],
+            }
+        elif (
+            self._state is not None
+            and self._state.pending_post_patch_trace
+        ):
+            result = dict(result)
+            result["post_patch_trace_gate"] = {
+                "status": "pending",
+                "required_next_tool": "trace_signal_cause",
+                "arguments": self._state.pending_post_patch_trace,
+            }
+        self._record_route_read_if_recommended("trace_signal_cause", args)
+        return self._tool_response(
+            "trace_signal_cause",
+            result,
+            trace_meta={
+                "intent": self._trace_intent(purpose, question, expected_evidence),
+                "args": args,
             },
         )
 
@@ -1158,6 +1607,9 @@ class RepoReActRunner:
         blocked = self._readonly_budget_exceeded_response("probe_vcd")
         if blocked is not None:
             return blocked
+        initial_trace_required = self._initial_trace_gate_response("probe_vcd")
+        if initial_trace_required is not None:
+            return initial_trace_required
         router_required = self._router_first_required_response("probe_vcd")
         if router_required is not None:
             return router_required
@@ -1296,10 +1748,14 @@ class RepoReActRunner:
         expected_effect: str,
         protected_invariants_checked: list[str] | None = None,
         preserve_plan: str | None = None,
+        syntax_retry_of: str | None = None,
         verify: bool = True,
         rollback_on_fail: bool = True,
     ) -> ToolResponse:
         """Apply a controlled RTL patch with automatic lint/sim/trace verification and rollback."""
+        post_patch_trace_required = self._post_patch_trace_required_response("apply_patch")
+        if post_patch_trace_required is not None:
+            return post_patch_trace_required
         router_required = self._router_first_required_response("apply_patch")
         if router_required is not None:
             return router_required
@@ -1310,9 +1766,11 @@ class RepoReActRunner:
             expected_effect,
             protected_invariants_checked,
             preserve_plan,
+            syntax_retry_of,
             verify,
             rollback_on_fail,
         )
+        result = self._attach_post_patch_trace_requirement(dict(result))
         return self._tool_response(
             "apply_patch",
             result,
@@ -1324,6 +1782,7 @@ class RepoReActRunner:
                         for patch in patches
                         if isinstance(patch, dict)
                     ],
+                    "syntax_retry_of": syntax_retry_of,
                     "verify": verify,
                     "rollback_on_fail": rollback_on_fail,
                 },
@@ -1332,36 +1791,52 @@ class RepoReActRunner:
 
     async def replace_block(
         self,
-        block_id: str,
+        module_name: str,
+        rtl_block_id: str,
         new_code: str,
         reason: str,
         expected_effect: str,
         protected_invariants_checked: list[str] | None = None,
         preserve_plan: str | None = None,
+        syntax_retry_of: str | None = None,
         verify: bool = True,
         rollback_on_fail: bool = True,
     ) -> ToolResponse:
         """Replace one complete RTL block with automatic verification and rollback."""
+        post_patch_trace_required = self._post_patch_trace_required_response("replace_block")
+        if post_patch_trace_required is not None:
+            return post_patch_trace_required
         router_required = self._router_first_required_response("replace_block")
         if router_required is not None:
             return router_required
         result = await asyncio.to_thread(
             self._require_tools().replace_block,
-            block_id,
+            rtl_block_id,
             new_code,
             reason,
             expected_effect,
             protected_invariants_checked,
             preserve_plan,
+            syntax_retry_of,
             verify,
             rollback_on_fail,
+            module_name,
+            rtl_block_id,
         )
+        result = self._attach_post_patch_trace_requirement(dict(result))
         return self._tool_response(
             "replace_block",
             result,
             trace_meta={
                 "intent": {"reason": reason, "expected_effect": expected_effect},
-                "args": {"block_id": block_id, "verify": verify, "rollback_on_fail": rollback_on_fail},
+                "args": {
+                    "module_name": module_name,
+                    "rtl_block_id": rtl_block_id,
+                    "rtl_block_ref": f"{module_name}:{rtl_block_id}",
+                    "syntax_retry_of": syntax_retry_of,
+                    "verify": verify,
+                    "rollback_on_fail": rollback_on_fail,
+                },
             },
         )
 
@@ -1409,6 +1884,8 @@ class RepoReActRunner:
                 rtl_path=inp.rtl_path,
                 sim_log_json=inp.sim_failed_log,
                 output_dir=inp.debug_workdir,
+                planner_module_name=inp.module_name,
+                runtime_top_module=inp.top_module or inp.module_name,
                 kg_service=self.kg_service,
                 kg_hop_depth=inp.kg_hop_depth,
             )
@@ -1418,39 +1895,46 @@ class RepoReActRunner:
             )
         except Exception as exc:  # noqa: BLE001
             report = {"trace_error": f"{type(exc).__name__}: {exc}"}
-        chains = ((report.get("value_backtrace") or {}).get("chains") or [])[:3] if isinstance(report, dict) else []
+        report = report if isinstance(report, dict) else {}
+        self._initial_dut_instance = str(report.get("dut_instance") or "")
+        divergence_report = report.get("first_divergence")
+        divergence_report = divergence_report if isinstance(divergence_report, dict) else {}
+        first = (
+            divergence_report.get("first_divergence")
+            if divergence_report.get("status") in {"ok", "stable_values_match_but_tb_edge_mismatch"}
+            else None
+        )
+        first = first if isinstance(first, dict) else {}
+        root_module = str(report.get("runtime_top_module") or inp.top_module or inp.module_name)
+        root_signal = first.get("signal")
+        divergence_time = first.get("time")
+        expected_value = first.get("ref")
+        actual_value = first.get("dut")
+        sampling_event = divergence_report.get("sampling_event") or report.get("sampling_event")
+
+        arguments: dict[str, Any] = {}
+        required_next_tool: str | None = None
+        if root_signal not in (None, "") and divergence_time is not None:
+            required_next_tool = "trace_signal_cause"
+            arguments = {
+                "module_name": root_module,
+                "signal_name": str(root_signal),
+                "time": int(divergence_time),
+                "expected_value": None if expected_value is None else str(expected_value),
+            }
+
+        # The full trace remains available in trace_report.json. The initial
+        # prompt intentionally receives only the first-divergence seed so that
+        # trace_signal_cause owns driver, waveform, and one-hop localization.
         return {
-            "fail_time": report.get("fail_time") if isinstance(report, dict) else None,
-            "total_mismatches": report.get("total_mismatches") if isinstance(report, dict) else None,
-            "first_failure": report.get("first_failure") if isinstance(report, dict) else None,
-            "root_failure": report.get("root_failure") if isinstance(report, dict) else None,
-            "first_divergence": report.get("first_divergence") if isinstance(report, dict) else None,
-            "required_next_tool": report.get("required_next_tool") if isinstance(report, dict) else None,
-            "ignored_tb_metrics": report.get("ignored_tb_metrics") if isinstance(report, dict) else None,
-            "raw_fail_outputs": report.get("raw_fail_outputs") if isinstance(report, dict) else None,
-            "top_diagnosis": (report.get("diagnostic_narrative") or [None])[0] if isinstance(report, dict) else None,
-            "suspect_blocks": (report.get("suspect_blocks") or [])[:8] if isinstance(report, dict) else [],
-            "value_backtrace_summary": [
-                {
-                    "sig": chain.get("sig"),
-                    "expected": chain.get("expected"),
-                    "actual": chain.get("actual"),
-                    "steps": [
-                        {
-                            "signal": step.get("signal"),
-                            "driver_block_id": step.get("driver_block_id"),
-                            "classification": step.get("classification"),
-                            "reason": step.get("reason"),
-                        }
-                        for step in (chain.get("chain") or [])[:4]
-                        if isinstance(step, dict)
-                    ],
-                }
-                for chain in chains
-                if isinstance(chain, dict)
-            ],
-            "vcd_available": report.get("vcd_available") if isinstance(report, dict) else None,
-            "trace_error": report.get("trace_error") if isinstance(report, dict) else None,
+            "root_module": root_module,
+            "root_signal": root_signal,
+            "first_divergence_time": divergence_time,
+            "expected_value": expected_value,
+            "actual_value": actual_value,
+            "sampling_event": sampling_event,
+            "required_next_tool": required_next_tool,
+            "arguments": arguments,
         }
 
     async def chat(self, inp: RepoReActInput) -> RepoReActResult:
@@ -1478,13 +1962,31 @@ class RepoReActRunner:
         self._tools = RepoReActTools(state)
         self._context_router = DebugContextRouter(cfg=self.cfg, tools=self._tools, logger=self.logger)
         max_steps = max(1, int(inp.max_steps or self.max_steps))
+        max_agent_turns = self._resolve_max_agent_turns(inp, max_steps)
+        agent_turns = 0
         initial_trace = self._build_initial_trace(inp)
         state.last_trace_summary = initial_trace
-        initial_divergence = initial_trace.get("first_divergence")
-        if isinstance(initial_divergence, dict):
-            state.last_divergence_summary = initial_divergence
-            if initial_divergence.get("status") in {"ok", "stable_values_match_but_tb_edge_mismatch"} and initial_divergence.get("first_divergence"):
-                state.observed_real_divergence = True
+        required_initial_trace = (
+            initial_trace.get("arguments")
+            if initial_trace.get("required_next_tool") == "trace_signal_cause"
+            else {}
+        )
+        self._required_initial_trace_call = (
+            dict(required_initial_trace) if isinstance(required_initial_trace, dict) else {}
+        )
+        self._initial_trace_completed = not bool(self._required_initial_trace_call)
+        if self._required_initial_trace_call:
+            state.last_divergence_summary = {
+                "status": "ok",
+                "sampling_event": initial_trace.get("sampling_event"),
+                "first_divergence": {
+                    "signal": initial_trace.get("root_signal"),
+                    "time": initial_trace.get("first_divergence_time"),
+                    "ref": initial_trace.get("expected_value"),
+                    "dut": initial_trace.get("actual_value"),
+                },
+            }
+            state.observed_real_divergence = True
         corrections = self._tools.load_known_corrections()
         memory_snapshot = self._tools.persist_memory_snapshot()
         memory_brief = self._memory_summary(memory_snapshot)
@@ -1492,6 +1994,8 @@ class RepoReActRunner:
         self._latest_context_pack = context_pack
         first_prompt = build_initial_prompt(
             module_name=inp.module_name,
+            runtime_top_module=inp.top_module or inp.module_name,
+            dut_instance=str(getattr(self, "_initial_dut_instance", "") or ""),
             repair_mode=inp.repair_mode,
             rtl_path=str(inp.rtl_path),
             merged_file=str(inp.merged_file),
@@ -1510,6 +2014,7 @@ class RepoReActRunner:
         journal.append_jsonl("react_trace.jsonl", {"role": "user", "content": first_prompt})
 
         try:
+            agent_turns += 1
             msg = await self._agent(Msg("user", first_prompt, role="user"))
             text = msg.get_text_content() or ""
             diag = _extract_diagnosis(text)
@@ -1517,33 +2022,52 @@ class RepoReActRunner:
                 "react_trace.jsonl",
                 {"role": "assistant", "content": text, "diagnosis": diag.model_dump() if diag else None},
             )
-            for step in range(1, max_steps + 1):
+            self._record_unexecuted_tool_call(text)
+            while agent_turns < max_agent_turns:
                 if state.last_sim.is_pass and state.last_sim.mismatch_count == 0:
                     break
                 if int(state.action_calls) >= max_steps:
                     break
-                compact_decision = self._compact_decision()
-                if compact_decision == "light":
-                    context_pack = await self._light_consolidate_context()
-                elif compact_decision in {"checkpoint", "deep"}:
-                    await self._compact_agent_memory(mode=compact_decision)
-                    if state.last_sim.is_pass and state.last_sim.mismatch_count == 0:
-                        break
-                    if int(state.action_calls) >= max_steps:
-                        break
-                    context_pack = self._latest_context_pack
-                else:
+                recovery = self._pending_tool_call_recovery
+                if recovery:
+                    self._pending_tool_call_recovery = {}
                     context_pack = {}
-                snapshot = await asyncio.to_thread(self._tools.persist_memory_snapshot)
-                if not context_pack:
-                    context_pack = self._latest_context_pack or {}
-                prompt = build_continue_prompt(
-                    memory_summary=self._memory_summary(snapshot),
-                    readonly_calls_since_action=self._readonly_calls_since_action,
-                    max_readonly_calls=self._max_readonly_calls_since_action,
-                    context_pack=context_pack,
-                )
-                journal.append_jsonl("react_trace.jsonl", {"role": "user", "content": prompt, "step": step})
+                    prompt = build_tool_call_recovery_prompt(recovery.get("tool_name"))
+                else:
+                    compact_decision = self._compact_decision()
+                    if compact_decision == "light":
+                        context_pack = await self._light_consolidate_context()
+                    elif compact_decision in {"checkpoint", "deep"}:
+                        compact_agent_turn = await self._compact_agent_memory(mode=compact_decision)
+                        if compact_agent_turn:
+                            agent_turns += 1
+                        if state.last_sim.is_pass and state.last_sim.mismatch_count == 0:
+                            break
+                        if int(state.action_calls) >= max_steps:
+                            break
+                        if agent_turns >= max_agent_turns:
+                            break
+                        context_pack = self._latest_context_pack
+                    else:
+                        context_pack = {}
+                    recovery = self._pending_tool_call_recovery
+                    if recovery:
+                        self._pending_tool_call_recovery = {}
+                        context_pack = {}
+                        prompt = build_tool_call_recovery_prompt(recovery.get("tool_name"))
+                    else:
+                        snapshot = await asyncio.to_thread(self._tools.persist_memory_snapshot)
+                        if not context_pack:
+                            context_pack = self._latest_context_pack or {}
+                        prompt = build_continue_prompt(
+                            memory_summary=self._memory_summary(snapshot),
+                            readonly_calls_since_action=self._readonly_calls_since_action,
+                            max_readonly_calls=self._max_readonly_calls_since_action,
+                            context_pack=context_pack,
+                        )
+                next_turn = agent_turns + 1
+                journal.append_jsonl("react_trace.jsonl", {"role": "user", "content": prompt, "step": next_turn})
+                agent_turns += 1
                 msg = await self._agent(Msg("user", prompt, role="user"))
                 text = msg.get_text_content() or ""
                 diag = _extract_diagnosis(text)
@@ -1552,10 +2076,11 @@ class RepoReActRunner:
                     {
                         "role": "assistant",
                         "content": text,
-                        "step": step,
+                        "step": agent_turns,
                         "diagnosis": diag.model_dump() if diag else None,
                     },
                 )
+                self._record_unexecuted_tool_call(text)
                 if state.last_sim.is_pass and state.last_sim.mismatch_count == 0:
                     break
                 if int(state.action_calls) >= max_steps:
@@ -1565,18 +2090,29 @@ class RepoReActRunner:
             if self._tools is not None:
                 await asyncio.to_thread(self._tools.persist_memory_snapshot)
             status = "pass" if state.last_sim.is_pass and state.last_sim.mismatch_count == 0 else "max_steps_exceeded"
-            reason = "" if status == "pass" else (
-                f"RepoReActRunner ended without passing module simulation; "
-                f"repair action budget exhausted ({state.action_calls}/{max_steps})."
-                if int(state.action_calls) >= max_steps
-                else "RepoReActRunner ended without passing module simulation."
-            )
+            if status == "pass":
+                reason = ""
+            elif int(state.action_calls) >= max_steps:
+                reason = (
+                    "RepoReActRunner ended without passing module simulation; "
+                    f"repair action budget exhausted ({state.action_calls}/{max_steps})."
+                )
+            elif agent_turns >= max_agent_turns:
+                reason = (
+                    "RepoReActRunner ended without passing module simulation; "
+                    f"agent turn budget exhausted ({agent_turns}/{max_agent_turns}) with "
+                    f"{state.action_calls}/{max_steps} functional actions used."
+                )
+            else:
+                reason = "RepoReActRunner ended without passing module simulation."
             return RepoReActResult(
                 status=status,
                 is_pass=status == "pass",
                 rtl_code=rtl_code,
-                steps=max_steps,
+                steps=agent_turns,
+                agent_turns=agent_turns,
                 action_calls=state.action_calls,
+                patch_attempts=state.patch_attempt_id,
                 mismatch_count=int(state.last_sim.mismatch_count),
                 trace_report_path=str(inp.debug_workdir / "trace_report.json"),
                 sim_output_path=state.last_sim.sim_output_path,
@@ -1593,8 +2129,10 @@ class RepoReActRunner:
                 status="error",
                 is_pass=False,
                 rtl_code=rtl_code,
-                steps=0,
+                steps=agent_turns,
+                agent_turns=agent_turns,
                 action_calls=state.action_calls,
+                patch_attempts=state.patch_attempt_id,
                 mismatch_count=int(state.last_sim.mismatch_count),
                 trace_report_path=str(inp.debug_workdir / "trace_report.json"),
                 sim_output_path=state.last_sim.sim_output_path,
@@ -1602,4 +2140,4 @@ class RepoReActRunner:
                 reason=f"{type(exc).__name__}: {exc}",
             )
         finally:
-            clear_memory_safely(self._agent)
+            await clear_memory_safely_async(self._agent)

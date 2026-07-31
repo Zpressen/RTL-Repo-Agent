@@ -1,0 +1,125 @@
+{
+  "schema_version": "stage3_skeleton_docs_v1",
+  "task_id": "aes_inv_cipher_system_hard",
+  "input_fingerprint": "083d9237e89d82c5d177cdf7458aa21267989d96a6a307872639f5d0369812df",
+  "source_schema_versions": {
+    "modules": "module_contracts_v1",
+    "repo_skeleton": "repo_skeleton_v1"
+  },
+  "stage3_status": "module_skeletons_planned",
+  "top_module": "aes_inv_cipher_top",
+  "module_order": [
+    "aes_sbox",
+    "aes_inv_sbox",
+    "aes_key_expand",
+    "aes_inv_cipher_top"
+  ],
+  "completed_modules": [
+    "aes_sbox",
+    "aes_inv_sbox",
+    "aes_key_expand",
+    "aes_inv_cipher_top"
+  ],
+  "resume_cursor": 4,
+  "global_summary": [
+    "AES-128 decryption system with top-level control, separate key expansion, and combinational S-box helpers",
+    "primary clock: clk, reset: rst, active-high synchronous reset, posedge",
+    "aes_inv_cipher_top, aes_key_expand, aes_sbox, and aes_inv_sbox share the same positive-edge clock domain (clk)",
+    "aes_key_expand provides round keys to aes_inv_cipher_top during the key expansion phase",
+    "aes_sbox supplies byte substitution for aes_key_expand's SubWord step",
+    "State matrix is 4x4 bytes in column-major order",
+    "Round keys are stored in reverse order (rk10 down to rk0)",
+    "Forward and inverse S-boxes are 256x8 lookup tables",
+    "aes_inv_cipher_top integrates aes_key_expand and aes_inv_sbox",
+    "Round keys are buffered in the top module; key expansion supplies keys during KeyExpansion phase",
+    "InvShiftRows, InvMixColumns, AddRoundKey remain inside aes_inv_cipher_top as internal logic",
+    "generation order: aes_sbox, aes_inv_sbox, aes_key_expand, aes_inv_cipher_top"
+  ],
+  "module_records": [
+    {
+      "module": "aes_sbox",
+      "doc_file": "module_skeleton_docs/aes_sbox.md",
+      "export_file": "module_skeleton_json/aes_sbox.json",
+      "spec_context_file": "module_spec_context_json/aes_sbox.json",
+      "export_schema_version": "module_skeleton_export_v1",
+      "source_refs": {
+        "module_contract_ref": "module_contracts_v1::aes_sbox",
+        "repo_skeleton_ref": "repo_skeleton_v1::aes_sbox",
+        "module_spec_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher_top_hard/aes_inv_cipher_system_hard.md"
+      },
+      "planning_note": "Pure combinational forward S‑box; no clock, no state, no children.",
+      "block_ids": [
+        "B1",
+        "B2"
+      ]
+    },
+    {
+      "module": "aes_inv_sbox",
+      "doc_file": "module_skeleton_docs/aes_inv_sbox.md",
+      "export_file": "module_skeleton_json/aes_inv_sbox.json",
+      "spec_context_file": "module_spec_context_json/aes_inv_sbox.json",
+      "export_schema_version": "module_skeleton_export_v1",
+      "source_refs": {
+        "module_contract_ref": "module_contracts_v1::aes_inv_sbox",
+        "repo_skeleton_ref": "repo_skeleton_v1::aes_inv_sbox",
+        "module_spec_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher_top_hard/aes_inv_cipher_system_hard.md"
+      },
+      "planning_note": "Pure combinational leaf module implementing the AES inverse S-box via a 256x8 lookup table. No clock, reset, or persistent state.",
+      "block_ids": [
+        "B1",
+        "B2"
+      ]
+    },
+    {
+      "module": "aes_key_expand",
+      "doc_file": "module_skeleton_docs/aes_key_expand.md",
+      "export_file": "module_skeleton_json/aes_key_expand.json",
+      "spec_context_file": "module_spec_context_json/aes_key_expand.json",
+      "export_schema_version": "module_skeleton_export_v1",
+      "source_refs": {
+        "module_contract_ref": "module_contracts_v1::aes_key_expand",
+        "repo_skeleton_ref": "repo_skeleton_v1::aes_key_expand",
+        "module_spec_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher_top_hard/aes_inv_cipher_system_hard.md"
+      },
+      "planning_note": "Module generates outer‑round keys sequentially using a 4‑word working register and an internal round counter (rcnt), instantiaties aes_sbox for SubWord, and exports each completed 128‑bit round key on a registered output.",
+      "block_ids": [
+        "B1",
+        "B2",
+        "B3",
+        "B4",
+        "B5"
+      ]
+    },
+    {
+      "module": "aes_inv_cipher_top",
+      "doc_file": "module_skeleton_docs/aes_inv_cipher_top.md",
+      "export_file": "module_skeleton_json/aes_inv_cipher_top.json",
+      "spec_context_file": "module_spec_context_json/aes_inv_cipher_top.json",
+      "export_schema_version": "module_skeleton_export_v1",
+      "source_refs": {
+        "module_contract_ref": "module_contracts_v1::aes_inv_cipher_top",
+        "repo_skeleton_ref": "repo_skeleton_v1::aes_inv_cipher_top",
+        "module_spec_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher_top_hard/aes_inv_cipher_system_hard.md"
+      },
+      "planning_note": "The module integrates key expansion and inverse S‑box instances, owns the state matrix, round‑key buffer, round counter, and control FSM. All inverse cipher transformations (InvShiftRows, InvSubBytes via child instance, AddRoundKey, InvMixColumns) except SubBytes substitution are performed internally.",
+      "block_ids": [
+        "B1",
+        "B2",
+        "B3",
+        "B4",
+        "B5"
+      ]
+    }
+  ],
+  "open_issues": [
+    "Decryption latency ambiguity",
+    "InvMixColumns separation",
+    "Key expansion interface contract"
+  ],
+  "quality_report": {
+    "hard_fail_count": 0,
+    "soft_warning_count": 0,
+    "warnings": [],
+    "auto_fixes": []
+  }
+}

@@ -10,8 +10,12 @@ import zerorepo.rtl_impl.debug_agent.trace_report as trace_report_module
 from zerorepo.rtl_impl.debug_agent.bash_tools import CommandResult
 from zerorepo.rtl_impl.debug_agent.debug_runner import ModuleDebugResult, ModuleDebugRunner, RtlDebugConfig
 from zerorepo.rtl_impl.debug_agent.kg_debug_reads import DebugReadsMaterializer, kg_dynamic_slice
-from zerorepo.rtl_impl.debug_agent.trace_report import build_first_divergence_report, build_trace_report
-from zerorepo.rtl_impl.debug_agent.trace_slicer import parse_rtl_blocks
+from zerorepo.rtl_impl.debug_agent.trace_report import (
+    build_first_divergence_report,
+    build_trace_report,
+    build_value_backtrace,
+)
+from zerorepo.rtl_impl.debug_agent.trace_slicer import parse_rtl_assignments, parse_rtl_blocks
 from zerorepo.rtl_impl.kg_agent.module_result_writer import ModuleResultWriter
 
 
@@ -195,6 +199,34 @@ endmodule
     assert report["suspect_blocks"][0]["id"] == suspect_blocks[0].id
 
 
+def test_trace_report_uses_planner_identity_for_kg_and_runtime_identity_for_rtl(tmp_path: Path) -> None:
+    rtl = """module runtime_top(input a, output y);
+  assign y = a;
+endmodule
+"""
+    rtl_path = tmp_path / "runtime_top.sv"
+    rtl_path.write_text(rtl, encoding="utf-8")
+    blocks = parse_rtl_blocks(rtl)
+    kg = _FakeKgService(repo_path=tmp_path, blocks=blocks)
+    sim_log = CommandResult(
+        stdout="Hint: Output 'y' has 1 mismatches. First mismatch occurred at time 10.\n",
+        stderr="",
+    ).model_dump_json()
+
+    report, _ = build_trace_report(
+        rtl_path=rtl_path,
+        sim_log_json=sim_log,
+        output_dir=tmp_path,
+        planner_module_name="planner_top",
+        runtime_top_module="runtime_top",
+        kg_service=kg,
+    )
+
+    assert report["planner_module_name"] == "planner_top"
+    assert report["runtime_top_module"] == "runtime_top"
+    assert any("planner_top" in (params.get("modules") or []) for _query, params in kg.queries)
+
+
 class _FakeSignal:
     def __init__(self, tv: list[tuple[int, str]]) -> None:
         self.tv = tv
@@ -289,6 +321,18 @@ class _EdgeActiveDivergenceVcd:
         }
 
 
+class _AuthoritativeSamplingVcd:
+    def __init__(self, _path: str, store_tvs: bool = True) -> None:
+        del store_tvs
+        self._signals = {
+            "tb.clk": _FakeSignal(
+                [(0, "0"), (5, "1"), (10, "0"), (15, "1"), (20, "0"), (25, "1")]
+            ),
+            "tb.settings_ref": _FakeSignal([(0, "00"), (6, "01"), (16, "00"), (25, "01")]),
+            "tb.settings_dut": _FakeSignal([(0, "00"), (5, "01"), (15, "00"), (25, "01")]),
+        }
+
+
 def test_first_divergence_reports_real_dut_ref_output(tmp_path: Path, monkeypatch: Any) -> None:
     rtl = """module m(clk, settings);
   input clk;
@@ -300,7 +344,11 @@ endmodule
     rtl_path = tmp_path / "rtl.sv"
     rtl_path.write_text(rtl, encoding="utf-8")
     (tmp_path / "contract.json").write_text(json.dumps({"module_name": "m", "clocking": {"clock": {"name": "clk"}}}) + "\n", encoding="utf-8")
-    (tmp_path / "tb.sv").write_text("module tb; m top_module1(); ref_m good1(); endmodule\n", encoding="utf-8")
+    (tmp_path / "tb.sv").write_text(
+        "module tb; m top_module1(); ref_m good1(); "
+        "always @(posedge clk) begin if (!tb_match) errors = errors + 1; end endmodule\n",
+        encoding="utf-8",
+    )
     (tmp_path / "wave.vcd").write_text("$date\n$date\n", encoding="utf-8")
     monkeypatch.setattr(trace_report_module, "VCDVCD", _FirstDivergenceVcd)
 
@@ -323,7 +371,11 @@ endmodule
     rtl_path = tmp_path / "rtl.sv"
     rtl_path.write_text(rtl, encoding="utf-8")
     (tmp_path / "contract.json").write_text(json.dumps({"module_name": "m", "clocking": {"clock": {"name": "clk"}}}) + "\n", encoding="utf-8")
-    (tmp_path / "tb.sv").write_text("module tb; m top_module1(); ref_m good1(); endmodule\n", encoding="utf-8")
+    (tmp_path / "tb.sv").write_text(
+        "module tb; m top_module1(); ref_m good1(); "
+        "always @(posedge clk) begin if (!tb_match) errors = errors + 1; end endmodule\n",
+        encoding="utf-8",
+    )
     (tmp_path / "wave.vcd").write_text("$date\n$date\n", encoding="utf-8")
     sim_log = CommandResult(
         cmd=["sim"],
@@ -345,6 +397,214 @@ endmodule
     assert result["first_divergence"]["driver_assignment_kind"] == "nonblocking"
     assert result["first_divergence"]["dut"] == "00"
     assert result["first_divergence"]["ref"] == "01"
+
+
+def test_first_divergence_uses_authoritative_tb_sample_and_keeps_early_transient_secondary(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    rtl = """module runtime_top(clk, settings);
+  input clk;
+  output [1:0] settings;
+  reg [1:0] settings;
+  always @(posedge clk) settings <= 2'b01;
+endmodule
+"""
+    rtl_path = tmp_path / "runtime_top.v"
+    rtl_path.write_text(rtl, encoding="utf-8")
+    (tmp_path / "contract.json").write_text(
+        json.dumps({"module_name": "planner_top", "clocking": {"clock": {"name": "clk"}}}) + "\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "tb.sv").write_text(
+        """module tb;
+  runtime_top top_module1();
+  ref_m good1();
+  always @(posedge clk) begin
+    if (!tb_match) errors = errors + 1;
+  end
+endmodule
+""",
+        encoding="utf-8",
+    )
+    (tmp_path / "wave.vcd").write_text("$date\n$date\n", encoding="utf-8")
+    sim_log = CommandResult(
+        cmd=["sim"],
+        returncode=1,
+        stdout=(
+            "Hint: Output 'errors_settings' has 3 mismatches. First mismatch occurred at time 5.\n"
+            "Hint: Output 'settings' has 1 mismatches. First mismatch occurred at time 25.\n"
+        ),
+        stderr="",
+    ).model_dump_json()
+    monkeypatch.setattr(trace_report_module, "VCDVCD", _AuthoritativeSamplingVcd)
+
+    result = build_first_divergence_report(
+        rtl_path=rtl_path,
+        output_dir=tmp_path,
+        sim_log_json=sim_log,
+        runtime_top_module="runtime_top",
+    )
+
+    assert result["status"] == "ok"
+    assert result["runtime_top_module"] == "runtime_top"
+    assert result["dut_instance"] == "top_module1"
+    assert result["authoritative_fail_time"] == 25
+    assert result["ignored_tb_metrics"][0]["sig"] == "errors_settings"
+    assert result["sampling_event"] == {"edge": "posedge", "clock": "clk", "source": "tb_checker"}
+    assert result["first_divergence"]["time"] == 25
+    assert result["first_divergence"]["sampling_mode"] == "edge_active"
+    assert result["pre_sample_transients"][0]["time"] == 5
+    assert result["pre_sample_transients"][0]["classification"] == "pre_sample_transient"
+
+    report, _ = build_trace_report(
+        rtl_path=rtl_path,
+        sim_log_json=sim_log,
+        output_dir=tmp_path,
+        planner_module_name="planner_top",
+        runtime_top_module="runtime_top",
+    )
+    assert report["fail_time"] == 25
+    assert report["first_failure"]["time"] == 25
+    assert report["root_failure"]["time"] == 25
+    assert report["value_backtrace"]["sampling_mode"] == "edge_active"
+    assert report["value_backtrace"]["chains"][0]["expected"] == "01"
+    assert report["value_backtrace"]["chains"][0]["actual"] == "00"
+
+
+def test_first_divergence_reports_unresolved_when_log_time_does_not_align_to_tb_sample(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    rtl_path = tmp_path / "runtime_top.v"
+    rtl_path.write_text(
+        "module runtime_top(input clk, output reg [1:0] settings);\n"
+        "always @(posedge clk) settings <= 2'b01;\nendmodule\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "tb.sv").write_text(
+        "module tb; runtime_top top_module1(); ref_m good1(); "
+        "always @(posedge clk) begin if (!tb_match) errors = errors + 1; end endmodule\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "wave.vcd").write_text("$date\n$date\n", encoding="utf-8")
+    sim_log = CommandResult(
+        stdout="Hint: Output 'settings' has 1 mismatches. First mismatch occurred at time 20.\n",
+        stderr="",
+    ).model_dump_json()
+    monkeypatch.setattr(trace_report_module, "VCDVCD", _AuthoritativeSamplingVcd)
+
+    result = build_first_divergence_report(
+        rtl_path=rtl_path,
+        output_dir=tmp_path,
+        sim_log_json=sim_log,
+        runtime_top_module="runtime_top",
+    )
+
+    assert result["status"] == "sampling_alignment_unresolved"
+    assert result["authoritative_fail_time"] == 20
+    assert result["edge_active_candidate"]["time"] == 25
+
+    report, _ = build_trace_report(
+        rtl_path=rtl_path,
+        sim_log_json=sim_log,
+        output_dir=tmp_path,
+        planner_module_name="planner_top",
+        runtime_top_module="runtime_top",
+    )
+    assert report["fail_time"] == 20
+    assert report["root_failure"] is None
+    assert report["first_failure"] is None
+    assert report["value_backtrace"]["fallback_reason"] == "sampling_alignment_unresolved"
+
+
+def test_verilog_constants_are_not_extracted_as_vcd_signals() -> None:
+    rtl = """module m(input clk, input [2:0] state, input [7:0] a, output reg [127:0] q);
+  always @(posedge clk) begin
+    if (state == 3'd0)
+      q <= 128'h0000_0000_0000_0000_0000_0000_0000_0000;
+    else
+      q <= a ^ 8'hff;
+  end
+  always @(posedge clk) begin
+    flag <= '0;
+    nibble <= 4'sb10xz;
+    mask <= 'hff;
+  end
+endmodule
+"""
+
+    assignments = parse_rtl_assignments(rtl)
+    q_assignments = [item for item in assignments if item.lhs == "q"]
+    constant_q = next(item for item in q_assignments if item.rhs_expression.startswith("128'h"))
+    mixed_q = next(item for item in q_assignments if "a ^" in item.rhs_expression)
+
+    assert constant_q.rhs_signals == ()
+    assert constant_q.condition_signals == ("state",)
+    assert mixed_q.rhs_signals == ("a",)
+    assert next(item for item in assignments if item.lhs == "flag").rhs_signals == ()
+    assert next(item for item in assignments if item.lhs == "nibble").rhs_signals == ()
+    assert next(item for item in assignments if item.lhs == "mask").rhs_signals == ()
+    assert not any(
+        signal.startswith(("h", "b", "d"))
+        for assignment in assignments
+        for signal in (*assignment.rhs_signals, *assignment.condition_signals)
+    )
+
+
+def test_multiline_assignment_preserves_all_if_else_branches_and_conditions() -> None:
+    rtl = """module top(
+  input clk, input rst, input [1:0] fsm_state,
+  input [7:0] state_a, state_b, output logic [15:0] text_out
+);
+  always @(posedge clk) begin
+    if (rst) begin
+      text_out <= '0;
+    end else if (fsm_state == 2'd3) begin
+      text_out <= {
+        state_a,
+        state_b
+      };
+    end else begin
+      text_out <= text_out;
+    end
+  end
+endmodule
+"""
+
+    assignments = [item for item in parse_rtl_assignments(rtl) if item.lhs == "text_out"]
+
+    assert len(assignments) == 3
+    reset, done, fallback = assignments
+    assert reset.condition_exprs == ("rst",)
+    assert done.condition_exprs == ("!rst", "fsm_state == 2'd3")
+    assert fallback.condition_exprs == ("!rst", "!(fsm_state == 2'd3)")
+    assert done.rhs_signals == ("state_a", "state_b")
+    assert done.end_line > done.start_line
+    assert "state_a,\n" in done.code_snippet
+
+
+def test_value_backtrace_classifies_pure_constant_assignment_without_vcd_lookup() -> None:
+    rtl = "module m(output q); assign q = 8'h00; endmodule\n"
+    assignments = parse_rtl_assignments(rtl)
+    sampled: list[str] = []
+
+    def sample_signal(*, leaf: str, t: int, prefer_dut: bool) -> str | None:
+        del t, prefer_dut
+        sampled.append(leaf)
+        return None
+
+    result = build_value_backtrace(
+        fail_outputs=[{"sig": "q", "expected": "1", "actual": "0"}],
+        fail_time=25,
+        assignments=assignments,
+        sample_signal=sample_signal,
+    )
+
+    step = result["chains"][0]["chain"][0]
+    assert step["classification"] == "constant_assignment"
+    assert step["rhs_observed_values"] == {}
+    assert sampled == []
 
 
 def test_debug_reads_materializer_reports_missing_module_node(tmp_path: Path) -> None:

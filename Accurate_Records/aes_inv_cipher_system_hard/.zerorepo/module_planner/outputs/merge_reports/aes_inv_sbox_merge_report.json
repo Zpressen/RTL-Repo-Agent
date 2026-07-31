@@ -1,0 +1,38 @@
+{
+  "schema_version": "stage6_semantic_merge_report_v2",
+  "module": "aes_inv_sbox",
+  "required_includes": [],
+  "signal_ownership": {
+    "byte_out": {
+      "drivers": [
+        "C1"
+      ],
+      "owner_block": "C1"
+    }
+  },
+  "always_block_responsibility": [
+    {
+      "id": "C1",
+      "kind": "assign",
+      "start_line": 25,
+      "end_line": 25,
+      "writes": [
+        "byte_out"
+      ],
+      "uses_nonblocking": false,
+      "uses_blocking": true
+    }
+  ],
+  "static_check_summary": {
+    "status": "pass",
+    "errors": [],
+    "warnings": []
+  },
+  "lint_summary": {
+    "status": "ok",
+    "is_pass": true,
+    "output_excerpt": "{\n    \"stdout\": \"- V e r i l a t i o n   R e p o r t: Verilator 5.044 2026-01-01 rev conda-forge build 0\\n- Verilator: Built from 0.054 MB sources in 3 modules, into 0.010 MB in 3 C++ files needing 0.000 MB\\n- Verilator: Walltime 0.007 s (elab=0.001, cvt=0.002, bld=0.000); cpu 0.006 s on 1 threads; alloced 21.965 MB\\n\",\n    \"stderr\": \"%Warning-DECLFILENAME: /home/mokita/RPG-ZeroRepo/rtl_outputs/aes_inv_cipher_system_hard/.zerorepo/workspace/merge_drafts/aes_inv_sbox_draft.v:1:8: Filename 'aes_inv_sbox_draft' does not match MODULE name: 'aes_inv_sbox'\\n    1 | module aes_inv_sbox (\\n      |        ^~~~~~~~~~~~\\n                       ... For warning description see https://verilator.org/warn/DECLFILENAME?v=5.044\\n                       ... Use \\\"/* verilator lint_off DECLFILENAME */\\\" and lint_on around source to disable this message.\\n%Warning-DECLFILENAME: /home/mokita/RPG-ZeroRepo/rtl_outputs/aes_inv_cipher_system_hard/.zerorepo/workspace/merge_drafts/aes_sbox_draft.v:1:8: Filename 'aes_sbox_draft' does not match MODULE name: 'aes_sbox'\\n    1 | module aes_sbox (\\n      |        ^~~~~~~~\\n\"\n}"
+  },
+  "draft_committed": true,
+  "total_action_calls": 1
+}

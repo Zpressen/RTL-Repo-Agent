@@ -99,12 +99,56 @@ def _slim_context_pack(pack: dict[str, Any], *, mode: CompactMode) -> dict[str, 
     }
 
 
+def _slim_signal_trace(trace: dict[str, Any]) -> dict[str, Any]:
+    candidates = trace.get("driver_candidates") if isinstance(trace.get("driver_candidates"), list) else []
+    return {
+        "status": trace.get("status"),
+        "module": trace.get("module"),
+        "signal": trace.get("signal"),
+        "time": trace.get("time"),
+        "observed_value": trace.get("observed_value"),
+        "expected_value": trace.get("expected_value"),
+        "focus_context": trace.get("focus_context") or {},
+        "editable_rtl_blocks": (trace.get("editable_rtl_blocks") or [])[:8],
+        "driver_candidates": [
+            {
+                "driver_block_id": item.get("driver_block_id"),
+                "classification": item.get("classification"),
+                "reason": _clip(item.get("reason") or "", 500),
+                "assignment": {
+                    key: (item.get("assignment") or {}).get(key)
+                    for key in (
+                        "id",
+                        "block_id",
+                        "lhs",
+                        "rhs_signals",
+                        "condition_signals",
+                        "condition_expressions",
+                        "start_line",
+                        "end_line",
+                    )
+                },
+            }
+            for item in candidates[:8]
+            if isinstance(item, dict)
+        ],
+        "next_frontier": (trace.get("next_frontier") or [])[:12],
+        "boundary_mappings": (trace.get("boundary_mappings") or [])[:6],
+        "recommended_next_calls": (trace.get("recommended_next_calls") or [])[:4],
+        "recommended_next_call": trace.get("recommended_next_call") or {},
+        "frontier_truncated": bool(trace.get("frontier_truncated")),
+        "stop_reason": trace.get("stop_reason"),
+    }
+
+
 def _slim_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
     return {
         "module": snapshot.get("module"),
         "current_rtl_hash": snapshot.get("current_rtl_hash"),
         "last_sim": snapshot.get("last_sim"),
         "action_calls": snapshot.get("action_calls"),
+        "patch_attempts": snapshot.get("patch_attempts"),
+        "pending_syntax_candidates": snapshot.get("pending_syntax_candidates") or [],
         "max_steps": snapshot.get("max_steps"),
         "latest_trace_summary": {
             "fail_time": (snapshot.get("latest_trace_summary") or {}).get("fail_time"),
@@ -113,11 +157,100 @@ def _slim_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
             "suspect_blocks": (snapshot.get("latest_trace_summary") or {}).get("suspect_blocks"),
         },
         "last_divergence_summary": snapshot.get("last_divergence_summary") or {},
+        "last_signal_trace": _slim_signal_trace(snapshot.get("last_signal_trace") or {}),
+        "pending_post_patch_trace": snapshot.get("pending_post_patch_trace") or {},
         "repair_ledger": snapshot.get("repair_ledger") or [],
         "protected_invariants": snapshot.get("protected_invariants") or [],
         "unsafe_directions": snapshot.get("unsafe_directions") or [],
         "next_local_target": snapshot.get("next_local_target") or {},
     }
+
+
+def build_deterministic_compact_memory(
+    *,
+    journal_root: str | Path,
+    mode: CompactMode,
+    memory_snapshot: dict[str, Any],
+    context_pack: dict[str, Any],
+) -> dict[str, Any]:
+    """Build a non-empty recovery snapshot without relying on an LLM."""
+    root = Path(journal_root)
+    snapshot = _slim_snapshot(memory_snapshot)
+    pack = _slim_context_pack(context_pack or {}, mode=mode)
+    decisions = _read_jsonl_tail(root / "decision_trace.jsonl", 8)
+    patches = _read_jsonl_tail(root / "patch_journal.jsonl", 5)
+    pending = snapshot.get("pending_post_patch_trace") or {}
+    last_trace = snapshot.get("last_signal_trace") or {}
+
+    reasoning_trace = [
+        {
+            "tool": row.get("tool_name"),
+            "observation": row.get("observation_summary") or {},
+            "effect": row.get("effect"),
+        }
+        for row in decisions[-6:]
+    ]
+    patch_lessons = [
+        {
+            "action": row.get("action_type"),
+            "target": row.get("target") or {},
+            "reason": _clip(row.get("reason") or row.get("patch_summary") or "", 600),
+            "effect": row.get("effect") or row.get("status"),
+        }
+        for row in patches[-4:]
+    ]
+    if pending:
+        next_action = {
+            "recommendation": "trace_signal_cause",
+            "arguments": pending,
+            "why": "The latest committed functional patch was neutral; a matching one-hop retrace is required.",
+        }
+    else:
+        triage = pack.get("system_triage") or {}
+        recommended = triage.get("recommended_tool_calls") or []
+        next_action = {
+            "recommendation": recommended[0] if recommended else "continue_local_causal_debug",
+            "arguments": {},
+            "why": (
+                (pack.get("task_frame") or {}).get("next_action_hint")
+                or "Continue from the latest persisted trace, simulation, and patch evidence."
+            ),
+        }
+
+    last_patch = patches[-1] if patches else {}
+    compact = {
+        "schema": "repo_react_llm_compact.v1",
+        "current_state": {
+            "module": snapshot.get("module"),
+            "current_rtl_hash": snapshot.get("current_rtl_hash"),
+            "last_sim": snapshot.get("last_sim") or {},
+            "first_divergence": snapshot.get("last_divergence_summary") or {},
+            "last_signal_trace": last_trace,
+            "pending_post_patch_trace": pending,
+            "action_calls": snapshot.get("action_calls"),
+            "patch_attempts": snapshot.get("patch_attempts"),
+            "repair_ledger": snapshot.get("repair_ledger") or [],
+            "protected_invariants": snapshot.get("protected_invariants") or [],
+        },
+        "reasoning_trace": reasoning_trace,
+        "hypotheses": (pack.get("active_working_set") or {}).get("active_hypotheses") or [],
+        "patch_lessons": patch_lessons,
+        "open_questions": (
+            [{"question": "Re-evaluate the root signal on the committed neutral baseline.", "required_call": pending}]
+            if pending
+            else (pack.get("active_working_set") or {}).get("missing_evidence") or []
+        ),
+        "next_action": next_action,
+        "do_not_repeat": snapshot.get("unsafe_directions") or [],
+        "metadata": {
+            "mode": mode,
+            "source": "deterministic_fallback",
+            "last_patch_effect": last_patch.get("effect") or last_patch.get("status"),
+            "source_decision_trace_count": len(decisions),
+            "source_patch_journal_count": len(patches),
+        },
+    }
+    return compact
 
 
 def _compact_prompt(payload: dict[str, Any]) -> str:

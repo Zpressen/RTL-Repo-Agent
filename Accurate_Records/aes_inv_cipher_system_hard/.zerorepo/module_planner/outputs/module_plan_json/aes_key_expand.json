@@ -1,0 +1,81 @@
+{
+  "schema_version": "module_plan_v1",
+  "module": "aes_key_expand",
+  "subtasks": [
+    {
+      "id": "B1_decl_state_and_regs",
+      "target": "<block: decl_state_and_regs>",
+      "description": "Declare sequential state: 4-bit round counter rcnt (0–9) and four 32-bit registers w0, w1, w2, w3 holding the current round key words.",
+      "spec_refs": [
+        "S005",
+        "S008"
+      ],
+      "constraints": [
+        "Use scalar 32-bit registers w0, w1, w2, w3; do not use an unpacked array."
+      ],
+      "timing_obligation_ids": [],
+      "logical_value_tags": []
+    },
+    {
+      "id": "B2_inst_sbox",
+      "target": "<block: inst_sbox>",
+      "description": "Instantiate a single aes_sbox module for combinational byte substitution used in SubWord. Connect byte input and output with appropriate signals.",
+      "spec_refs": [
+        "S009",
+        "S010"
+      ],
+      "constraints": [
+        "Purely combinational instantiation; no sequential logic."
+      ],
+      "timing_obligation_ids": [],
+      "logical_value_tags": []
+    },
+    {
+      "id": "B3_comb_round_const_gen",
+      "target": "<block: comb_round_const_gen>",
+      "description": "Derive an 8-bit round constant (Rcon) combinationally from rcnt, using a lookup table or shift-based method. Only the highest byte is valid; lower bytes are zero.",
+      "spec_refs": [
+        "S006"
+      ],
+      "constraints": [
+        "Output must be combinational and respond immediately to rcnt changes."
+      ],
+      "timing_obligation_ids": [],
+      "logical_value_tags": []
+    },
+    {
+      "id": "B4_comb_key_expand_next",
+      "target": "<block: comb_key_expand_next>",
+      "description": "Implement pure combinational key expansion datapath: rotate w3, feed byte to sbox, XOR SubWord result with Rcon, then XOR chain with current words w0..w3 to produce next_w0, next_w1, next_w2, next_w3.",
+      "spec_refs": [
+        "S004",
+        "S005"
+      ],
+      "constraints": [
+        "Do not store intermediate values; all computations feed-forward.",
+        "If using a single sbox instance, multiplex the appropriate rotated w3 byte into it.",
+        "Use separate scalar wires for next_w0, next_w1, next_w2, next_w3."
+      ],
+      "timing_obligation_ids": [],
+      "logical_value_tags": []
+    },
+    {
+      "id": "B5_seq_update",
+      "target": "<block: seq_update>",
+      "description": "Sequential always block: on posedge clk with synchronous reset, if kld load initial_key into w0..w3 and clear rcnt; else if expansion active, load next_w0..next_w3 into w0..w3, increment rcnt, and assign round_key <= {w0,w1,w2,w3}.",
+      "spec_refs": [
+        "S005",
+        "S008"
+      ],
+      "constraints": [
+        "round_key must be registered; do not drive combinationally.",
+        "Use scalar signal assignments for w0..w3 and next_w0..next_w3."
+      ],
+      "timing_obligation_ids": [
+        "OBL_KEYEXPAND_LOAD",
+        "OBL_KEYEXPAND_EXPANSION"
+      ],
+      "logical_value_tags": []
+    }
+  ]
+}

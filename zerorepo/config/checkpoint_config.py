@@ -45,6 +45,7 @@ class CheckpointFiles:
     # RTL knowledge graph files
     rtl_kg_state: str = "rtl_kg_state.json"
     rtl_kg_manifest: str = "rtl_kg_manifest.json"
+    rtl_kg_planning_projection: str = "planning_kg_projection.json"
     
     
     def to_dict(self) -> Dict[str, str]:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Literal, Optional
 
 from zerorepo.rtl_impl.debug_agent.adapters import (
     build_debug_contract_json,
@@ -20,18 +20,21 @@ from zerorepo.rtl_impl.debug_agent.system_debug_runner import (
     SystemDebugRunner,
     system_debug_result_to_dict,
 )
-from zerorepo.rtl_impl.kg_agent import ModuleResultWriter
+from zerorepo.rtl_impl.kg_agent import ModuleResultWriter, PlanningContextRetriever, PlanningGraphWriter
 
 from .agents import (
     Stage1Agent,
+    Stage1TemporalAgent,
     Stage2Agent,
+    Stage2TemporalContractAgent,
     Stage3Agent,
+    Stage3TimingBindingAgent,
     Stage4ModulePlanAgent,
     Stage4SpecBlocksAgent,
     Stage5Agent,
     Stage6MergeAgent,
 )
-from .agents.base import model_dump, validate_model
+from .agents.base import StageGenerationError, model_dump, validate_model
 from .interfaces import (
     NullPlanningArtifactSink,
     NullPlanningContextProvider,
@@ -43,20 +46,27 @@ from .module_organizer import (
     build_stage2_planning_input_from_task,
 )
 from .schemas import (
+    ArchitectureTimingContractArtifact,
+    GlobalTemporalFactsArtifact,
     ModuleCodegenRecord,
     ModuleMergeRecord,
     ModuleOrganizationArtifact,
     ModulePlanArtifact,
+    ModuleSkeletonExport,
+    ModuleTimingBindingArtifact,
+    ModuleTimingBindingRecord,
     PlannerTaskInput,
     Stage1ContractsArtifact,
     Stage2RepoSkeletonArtifact,
     Stage3ModuleSkeletonArtifact,
+    Stage3TimingBindingsArtifact,
     Stage4ModulePlansArtifact,
     Stage4SpecBlocksArtifact,
     Stage5CodegenArtifact,
     Stage6MergeArtifact,
+    TimingBindingCheckArtifact,
 )
-from .utils import PlannerLLMClient, get_planner_logger
+from .utils import PlannerLLMClient, canonical_fingerprint, check_temporal_bindings, get_planner_logger
 from .utils import resolve_module_spec_text
 
 
@@ -94,10 +104,16 @@ class PlannerRunner:
     MODULE_PLANS_FILENAME = "module_plans.json"
     STAGE5_CODEGEN_FILENAME = "stage5_codegen.json"
     STAGE6_MERGE_FILENAME = "stage6_merge.json"
+    GLOBAL_TEMPORAL_FACTS_FILENAME = "global_temporal_facts.json"
+    ARCHITECTURE_TIMING_CONTRACT_FILENAME = "architecture_timing_contract.json"
+    MODULE_TIMING_BINDINGS_FILENAME = "module_timing_bindings.json"
+    TIMING_BINDING_CHECK_FILENAME = "timing_binding_check.json"
+    TIMING_BINDING_CHECK_RULESET_VERSION = "stage3_5_refinement_v2"
     MODULE_SKELETON_DOCS_DIRNAME = "module_skeleton_docs"
     MODULE_SKELETON_JSON_DIRNAME = "module_skeleton_json"
     MODULE_PLAN_JSON_DIRNAME = "module_plan_json"
     BLOCK_SPEC_RETRIEVAL_JSON_DIRNAME = "block_spec_retrieval_json"
+    MODULE_TIMING_BINDING_JSON_DIRNAME = "module_timing_binding_json"
 
     def __init__(
         self,
@@ -110,6 +126,8 @@ class PlannerRunner:
         debug_config: Optional[RtlDebugConfig] = None,
         kg_service: Optional[Any] = None,
         checkpoint_dir: Optional[str | Path] = None,
+        temporal_planning_enabled: bool = True,
+        temporal_failure_policy: Literal["strict", "degrade"] = "degrade",
     ):
         self.output_root = Path(output_root)
         self.logger = logger or get_planner_logger("rtl_module_planner.runner")
@@ -118,14 +136,38 @@ class PlannerRunner:
         self.llm_client = PlannerLLMClient(llm_config=llm_config, backend=llm_backend)
         self.kg_service = kg_service
         self.checkpoint_dir = Path(checkpoint_dir) if checkpoint_dir is not None else self._default_checkpoint_dir()
+        self.planning_graph_writer = (
+            PlanningGraphWriter(self.kg_service, self.output_root, self.logger)
+            if self.kg_service is not None and self.kg_service.is_enabled()
+            else None
+        )
+        self.planning_context_retriever = (
+            PlanningContextRetriever(self.kg_service, self.output_root, self.logger)
+            if self.planning_graph_writer is not None
+            else None
+        )
+        self.temporal_planning_enabled = bool(temporal_planning_enabled)
+        if temporal_failure_policy not in {"strict", "degrade"}:
+            raise ValueError("temporal_failure_policy must be `strict` or `degrade`")
+        self.temporal_failure_policy = temporal_failure_policy
         self.stage1 = Stage1Agent(self.llm_client, self.context_provider, self.artifact_sink, self.logger)
+        self.stage1_temporal = Stage1TemporalAgent(
+            self.llm_client, self.context_provider, self.artifact_sink, self.logger
+        )
         self.stage2 = Stage2Agent(self.llm_client, self.context_provider, self.artifact_sink, self.logger)
+        self.stage2_temporal = Stage2TemporalContractAgent(
+            self.llm_client, self.context_provider, self.artifact_sink, self.logger
+        )
         self.stage3 = Stage3Agent(
             self.llm_client,
             self.context_provider,
             self.artifact_sink,
             self.logger,
             output_root=self.output_root,
+            planning_context_retriever=self.planning_context_retriever,
+        )
+        self.stage3_timing = Stage3TimingBindingAgent(
+            self.llm_client, self.context_provider, self.artifact_sink, self.logger
         )
         self.stage4_spec_blocks = Stage4SpecBlocksAgent(
             self.llm_client,
@@ -140,6 +182,7 @@ class PlannerRunner:
             self.artifact_sink,
             self.logger,
             output_root=self.output_root,
+            planning_context_retriever=self.planning_context_retriever,
         )
         self.stage5 = Stage5Agent(
             self.llm_client,
@@ -147,6 +190,7 @@ class PlannerRunner:
             self.artifact_sink,
             self.logger,
             output_root=self.output_root,
+            planning_context_retriever=self.planning_context_retriever,
         )
         self.stage6 = Stage6MergeAgent(
             self.llm_client,
@@ -155,6 +199,7 @@ class PlannerRunner:
             self.logger,
             output_root=self.output_root,
             kg_service=self.kg_service,
+            planning_context_retriever=self.planning_context_retriever,
         )
         if debug_config is None:
             debug_config = RtlDebugConfig.from_env()
@@ -199,7 +244,7 @@ class PlannerRunner:
         task_input: PlannerTaskInput | Dict[str, Any],
         resume: bool = False,
         end_stage: str = "stage1",
-    ) -> Stage1ContractsArtifact | Stage2RepoSkeletonArtifact | Stage3ModuleSkeletonArtifact | Stage4ModulePlansArtifact | Stage5CodegenArtifact | Stage6MergeArtifact:
+    ) -> GlobalTemporalFactsArtifact | Stage1ContractsArtifact | Stage2RepoSkeletonArtifact | Stage3ModuleSkeletonArtifact | Stage4ModulePlansArtifact | Stage5CodegenArtifact | Stage6MergeArtifact:
         if end_stage not in {"stage1", "stage2", "stage3", "stage4", "stage5", "stage6"}:
             raise NotImplementedError("module_planner currently supports end_stage in {'stage1', 'stage2', 'stage3', 'stage4', 'stage5', 'stage6'} only.")
 
@@ -207,30 +252,68 @@ class PlannerRunner:
         artifacts: Dict[str, Any] = {}
         stage2_input = build_stage2_planning_input_from_task(task_input=task)
 
-        if end_stage == "stage1":
+        temporal_facts = None
+        architecture_timing = None
+        timing_bindings = None
+        timing_check = None
+
+        if self.temporal_planning_enabled:
+            temporal_input_fingerprint = canonical_fingerprint(
+                {
+                    "task_id": task.task_id,
+                    "source_specs": model_dump(stage2_input).get("source_specs", []),
+                }
+            )
+            temporal_facts = (
+                self._read_temporal_facts_if_valid(temporal_input_fingerprint)
+                if resume
+                else None
+            )
+            if temporal_facts is None:
+                try:
+                    temporal_facts = self.stage1_temporal.run(
+                        task,
+                        {"stage2_input": stage2_input},
+                    )
+                except StageGenerationError as exc:
+                    if self.temporal_failure_policy == "strict":
+                        raise
+                    temporal_facts = self._build_degraded_temporal_facts(task, exc)
+                temporal_facts.input_fingerprint = temporal_input_fingerprint
+                self._write_temporal_facts_payload(model_dump(temporal_facts))
+            stage2_input.temporal_facts = temporal_facts
+            existing_contracts = self._read_contracts_if_valid() if resume else None
+            if existing_contracts is None or existing_contracts.task_id != task.task_id:
+                self._build_minimal_stage1_artifact(task, stage2_input)
+            if end_stage == "stage1":
+                return temporal_facts
+        elif end_stage == "stage1":
             return self._build_minimal_stage1_artifact(task, stage2_input)
 
+        stage2_input_fingerprint = canonical_fingerprint(stage2_input)
         if resume:
-            existing_repo_skeleton = self._read_repo_skeleton_if_valid()
+            existing_repo_skeleton = self._read_repo_skeleton_if_valid(
+                stage2_input_fingerprint if self.temporal_planning_enabled else None
+            )
             if existing_repo_skeleton is not None:
                 self.logger.info(
                     "[rtl_module_planner] Resume reused stage2 repo skeleton artifact from %s",
                     self._repo_skeleton_path(),
                 )
-                if end_stage == "stage2":
-                    return existing_repo_skeleton
                 repo_skeleton = existing_repo_skeleton
             else:
                 repo_skeleton = self.stage2.run(
                     task,
                     {"stage2_input": stage2_input},
                 )
+                repo_skeleton.input_fingerprint = stage2_input_fingerprint
                 self._write_repo_skeleton_payload(model_dump(repo_skeleton))
         else:
             repo_skeleton = self.stage2.run(
                 task,
                 {"stage2_input": stage2_input},
             )
+            repo_skeleton.input_fingerprint = stage2_input_fingerprint
             self._write_repo_skeleton_payload(model_dump(repo_skeleton))
 
         modules_artifact = build_module_organized_artifact_from_repo_skeleton_only(
@@ -238,14 +321,71 @@ class PlannerRunner:
             repo_skeleton=repo_skeleton,
         )
         self._write_modules_payload(model_dump(modules_artifact))
+        if self.planning_graph_writer is not None:
+            self.planning_graph_writer.upsert_module_anchors(task, repo_skeleton)
+
+        if self.temporal_planning_enabled:
+            architecture_input_fingerprint = canonical_fingerprint(
+                {
+                    "temporal_facts": temporal_facts,
+                    "repo_skeleton": repo_skeleton,
+                }
+            )
+            architecture_timing = (
+                self._read_architecture_timing_if_valid(
+                    task,
+                    temporal_facts,
+                    repo_skeleton,
+                    architecture_input_fingerprint,
+                )
+                if resume
+                else None
+            )
+            if architecture_timing is None:
+                if temporal_facts.planning_status == "degraded":
+                    upstream_reasons = "; ".join(temporal_facts.degradation_reasons) or "unknown reason"
+                    architecture_timing = self._build_degraded_architecture_timing(
+                        task,
+                        repo_skeleton,
+                        "Stage1 temporal facts are degraded; skipped architecture timing LLM. "
+                        f"Upstream reason: {upstream_reasons}",
+                    )
+                else:
+                    try:
+                        architecture_timing = self.stage2_temporal.run(
+                            task,
+                            {
+                                "temporal_facts": temporal_facts,
+                                "stage2": repo_skeleton,
+                            },
+                        )
+                    except StageGenerationError as exc:
+                        if self.temporal_failure_policy == "strict":
+                            raise
+                        architecture_timing = self._build_degraded_architecture_timing(
+                            task,
+                            repo_skeleton,
+                            f"Stage2.5 architecture timing failed: {exc}",
+                        )
+                architecture_timing.input_fingerprint = architecture_input_fingerprint
+                self._write_architecture_timing_payload(model_dump(architecture_timing))
 
         if end_stage == "stage2":
             return repo_skeleton
 
         module_skeletons = None
+        stage3_input_fingerprint = canonical_fingerprint(
+            {
+                "modules": modules_artifact,
+                "repo_skeleton": repo_skeleton,
+                "architecture_timing": architecture_timing,
+            }
+        )
 
         if resume:
-            existing_stage3 = self._read_module_skeletons_if_valid()
+            existing_stage3 = self._read_module_skeletons_if_valid(
+                stage3_input_fingerprint if self.temporal_planning_enabled else None
+            )
             if existing_stage3 is not None:
                 if existing_stage3.stage3_status == "module_skeletons_planned":
                     self.logger.info(
@@ -268,18 +408,61 @@ class PlannerRunner:
                     "stage2_input": stage2_input,
                     "modules": modules_artifact,
                     "stage2": repo_skeleton,
+                    "architecture_timing": architecture_timing,
+                    "stage3_input_fingerprint": stage3_input_fingerprint,
                     **({"stage3": artifacts["stage3"]} if "stage3" in artifacts else {}),
                 },
                 persist_callback=self._write_stage3_outputs,
+                spec_context_persist_callback=self._write_stage3_spec_context,
+            )
+            module_skeletons.input_fingerprint = stage3_input_fingerprint
+            self._write_module_skeletons_payload(model_dump(module_skeletons))
+        if self.planning_graph_writer is not None:
+            self.planning_graph_writer.ensure_projection(
+                task,
+                repo_skeleton,
+                module_skeletons=module_skeletons,
+            )
+
+        if self.temporal_planning_enabled:
+            if self.planning_context_retriever is not None:
+                for module_name in module_skeletons.module_order:
+                    try:
+                        self.planning_context_retriever.get_module_context(
+                            module_name,
+                            require_skeleton=True,
+                            expected_fingerprints={"skeleton": stage3_input_fingerprint},
+                        )
+                    except Exception as exc:
+                        if str(getattr(self.kg_service, "mode", "required")) == "required":
+                            raise
+                        self.logger.warning(
+                            "[rtl_module_planner] Stage3.5 planning KG skeleton check "
+                            "fell back to sidecar for %s: %s",
+                            module_name,
+                            exc,
+                        )
+            timing_bindings, timing_check = self._run_temporal_binding_stages(
+                task=task,
+                temporal_facts=temporal_facts,
+                repo_skeleton=repo_skeleton,
+                architecture_timing=architecture_timing,
+                module_skeletons=module_skeletons,
+                resume=resume,
             )
         if end_stage == "stage3":
             return module_skeletons
+        self._report_timing_check(timing_check)
 
         spec_stage_inputs = {
             "stage2_input": stage2_input,
             "modules": modules_artifact,
             "stage2": repo_skeleton,
             "stage3": module_skeletons,
+            "temporal_facts": temporal_facts,
+            "architecture_timing": architecture_timing,
+            "timing_bindings": timing_bindings,
+            "timing_check": timing_check,
         }
         if resume:
             existing_spec_blocks = self._read_spec_blocks_if_valid(task, spec_stage_inputs)
@@ -301,9 +484,19 @@ class PlannerRunner:
             "stage2": repo_skeleton,
             "stage3": module_skeletons,
             "spec_blocks": spec_blocks,
+            "temporal_facts": temporal_facts,
+            "architecture_timing": architecture_timing,
+            "timing_bindings": timing_bindings,
+            "timing_check": timing_check,
         }
+        stage4_input_fingerprint = canonical_fingerprint(module_plan_stage_inputs)
+        module_plan_stage_inputs["stage4_input_fingerprint"] = stage4_input_fingerprint
         if resume:
-            existing_module_plans = self._read_module_plans_if_valid(task, module_plan_stage_inputs)
+            existing_module_plans = self._read_module_plans_if_valid(
+                task,
+                module_plan_stage_inputs,
+                stage4_input_fingerprint if self.temporal_planning_enabled else None,
+            )
             if existing_module_plans is not None and existing_module_plans.stage4_status == "module_plans_planned":
                 self.logger.info(
                     "[rtl_module_planner] Resume reused stage4 module plans artifact from %s",
@@ -329,6 +522,13 @@ class PlannerRunner:
                 module_plan_stage_inputs,
                 persist_callback=self._write_stage4_module_plan_outputs,
             )
+        if self.planning_graph_writer is not None:
+            self.planning_graph_writer.ensure_projection(
+                task,
+                repo_skeleton,
+                module_skeletons=module_skeletons,
+                module_plans=module_plans,
+            )
         if end_stage == "stage4":
             return module_plans
 
@@ -338,8 +538,30 @@ class PlannerRunner:
             "stage3": module_skeletons,
             "stage4": module_plans,
             "spec_blocks": spec_blocks,
+            "temporal_facts": temporal_facts,
+            "architecture_timing": architecture_timing,
+            "timing_bindings": timing_bindings,
+            "timing_check": timing_check,
         }
+        codegen_stage_inputs["stage5_input_fingerprint"] = canonical_fingerprint(
+            {
+                "stage4": module_plans,
+                "timing_bindings": timing_bindings,
+            }
+        )
         if end_stage == "stage5":
+            if resume:
+                existing_stage5 = self._read_stage5_codegen_if_valid(
+                    task,
+                    codegen_stage_inputs,
+                    codegen_stage_inputs["stage5_input_fingerprint"],
+                )
+                if existing_stage5 is not None:
+                    self.logger.info(
+                        "[rtl_module_planner] Resume reused stage5 codegen artifact from %s",
+                        self._stage5_codegen_path(),
+                    )
+                    return existing_stage5
             return self.stage5.run_incremental(
                 task,
                 codegen_stage_inputs,
@@ -347,6 +569,17 @@ class PlannerRunner:
             )
 
         return self._run_stage6_per_module(task, codegen_stage_inputs, spec_blocks)
+
+    def _report_timing_check(
+        self,
+        timing_check: TimingBindingCheckArtifact | None,
+    ) -> None:
+        if timing_check is not None and timing_check.status == "fail":
+            self.logger.warning(
+                "[rtl_module_planner] Stage3.5 temporal binding check reported errors; "
+                "continuing to Stage4 with the diagnostic artifact at %s.",
+                self._timing_binding_check_path(),
+            )
 
     def _build_minimal_stage1_artifact(
         self,
@@ -394,6 +627,307 @@ class PlannerRunner:
         self.logger.info("[rtl_module_planner] Wrote stage1 contracts artifact to %s", path)
         return path
 
+    def _read_temporal_facts_if_valid(self, expected_input_fingerprint: str) -> GlobalTemporalFactsArtifact | None:
+        path = self._temporal_facts_path()
+        if not path.exists():
+            return None
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                artifact = validate_model(GlobalTemporalFactsArtifact, json.load(f))
+            if artifact.input_fingerprint != expected_input_fingerprint:
+                raise ValueError("global temporal facts input fingerprint mismatch")
+            return artifact
+        except Exception as exc:
+            self.logger.warning(
+                "[rtl_module_planner] Resume ignored invalid global temporal facts at %s: %s",
+                path,
+                exc,
+            )
+            return None
+
+    def _build_degraded_temporal_facts(
+        self,
+        task: PlannerTaskInput,
+        exc: Exception,
+    ) -> GlobalTemporalFactsArtifact:
+        reason = f"Stage1 temporal facts failed: {exc}"
+        self.logger.warning(
+            "[rtl_module_planner] %s Continuing with a safe empty temporal artifact.",
+            reason,
+        )
+        return GlobalTemporalFactsArtifact(
+            task_id=task.task_id,
+            planning_status="degraded",
+            degradation_reasons=[reason],
+        )
+
+    def _build_degraded_architecture_timing(
+        self,
+        task: PlannerTaskInput,
+        repo_skeleton: Stage2RepoSkeletonArtifact,
+        reason: str,
+    ) -> ArchitectureTimingContractArtifact:
+        modules = list(repo_skeleton.planning_decisions.generation_order) or [
+            item.module for item in repo_skeleton.modules
+        ]
+        self.logger.warning(
+            "[rtl_module_planner] %s Continuing with a safe empty architecture timing contract.",
+            reason,
+        )
+        return ArchitectureTimingContractArtifact(
+            task_id=task.task_id,
+            planning_status="degraded",
+            degradation_reasons=[reason],
+            module_set=modules,
+            architecture_logical_objects=[],
+            module_assignments=[{"module": module} for module in modules],
+            cross_module_transfers=[],
+            module_obligations=[],
+            assumptions=[
+                "Temporal architecture planning degraded; downstream stages must rely on the source specification."
+            ],
+        )
+
+    def _write_temporal_facts_payload(self, payload: Dict[str, Any]) -> Path:
+        path = self._temporal_facts_path()
+        self._write_json_payload(payload, path)
+        self.logger.info("[rtl_module_planner] Wrote global temporal facts artifact to %s", path)
+        return path
+
+    def _read_architecture_timing_if_valid(
+        self,
+        task: PlannerTaskInput,
+        temporal_facts: GlobalTemporalFactsArtifact,
+        repo_skeleton: Stage2RepoSkeletonArtifact,
+        expected_input_fingerprint: str,
+    ) -> ArchitectureTimingContractArtifact | None:
+        path = self._architecture_timing_path()
+        if not path.exists():
+            return None
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                artifact = validate_model(ArchitectureTimingContractArtifact, json.load(f))
+            if artifact.input_fingerprint != expected_input_fingerprint:
+                raise ValueError("architecture timing input fingerprint mismatch")
+            quality_errors = self.stage2_temporal.validate_quality(
+                artifact,
+                task,
+                {"temporal_facts": temporal_facts, "stage2": repo_skeleton},
+            )
+            if quality_errors:
+                raise ValueError(quality_errors)
+            return artifact
+        except Exception as exc:
+            self.logger.warning(
+                "[rtl_module_planner] Resume ignored invalid architecture timing artifact at %s: %s",
+                path,
+                exc,
+            )
+            return None
+
+    def _write_architecture_timing_payload(self, payload: Dict[str, Any]) -> Path:
+        path = self._architecture_timing_path()
+        self._write_json_payload(payload, path)
+        self.logger.info("[rtl_module_planner] Wrote architecture timing artifact to %s", path)
+        return path
+
+    def _run_temporal_binding_stages(
+        self,
+        *,
+        task: PlannerTaskInput,
+        temporal_facts: GlobalTemporalFactsArtifact,
+        repo_skeleton: Stage2RepoSkeletonArtifact,
+        architecture_timing: ArchitectureTimingContractArtifact,
+        module_skeletons: Stage3ModuleSkeletonArtifact,
+        resume: bool,
+    ) -> tuple[Stage3TimingBindingsArtifact, TimingBindingCheckArtifact]:
+        bindings_input_fingerprint = canonical_fingerprint(
+            {
+                "temporal_facts": temporal_facts,
+                "architecture_timing": architecture_timing,
+                "module_skeletons": module_skeletons,
+            }
+        )
+        manifest = (
+            self._read_timing_bindings_if_valid(bindings_input_fingerprint)
+            if resume
+            else None
+        )
+        records = list(manifest.module_binding_files) if manifest is not None else []
+        completed = {item.module for item in records}
+        record_by_module = {item.module: item for item in module_skeletons.module_records}
+
+        for module_name in module_skeletons.module_order:
+            if module_name in completed:
+                continue
+            skeleton_record = record_by_module[module_name]
+            skeleton_path = self.output_root / skeleton_record.export_file
+            with open(skeleton_path, "r", encoding="utf-8") as f:
+                skeleton_export = validate_model(ModuleSkeletonExport, json.load(f))
+            spec_context: Dict[str, Any] = {}
+            if skeleton_record.spec_context_file:
+                spec_context_path = self.output_root / skeleton_record.spec_context_file
+                if spec_context_path.exists():
+                    with open(spec_context_path, "r", encoding="utf-8") as f:
+                        spec_context = json.load(f)
+            module_input_fingerprint = canonical_fingerprint(
+                {
+                    "module": module_name,
+                    "temporal_facts": temporal_facts,
+                    "architecture_timing": architecture_timing,
+                    "module_skeleton_export": skeleton_export,
+                }
+            )
+            if architecture_timing.planning_status == "degraded":
+                binding = ModuleTimingBindingArtifact(
+                    task_id=task.task_id,
+                    module=module_name,
+                    assumptions=[
+                        "Architecture timing is degraded; no temporal bindings were generated."
+                    ],
+                )
+            else:
+                binding = self.stage3_timing.run(
+                    task,
+                    {
+                        "module_name": module_name,
+                        "temporal_facts": temporal_facts,
+                        "architecture_timing": architecture_timing,
+                        "module_skeleton_export": skeleton_export,
+                        "module_spec_context": spec_context,
+                    },
+                )
+            binding.input_fingerprint = module_input_fingerprint
+            binding_file = self._module_timing_binding_relative_path(module_name)
+            self._write_json_payload(model_dump(binding), self.output_root / binding_file)
+            records.append(ModuleTimingBindingRecord(module=module_name, binding_file=binding_file))
+            incremental = Stage3TimingBindingsArtifact(
+                task_id=task.task_id,
+                input_fingerprint=bindings_input_fingerprint,
+                module_order=list(module_skeletons.module_order),
+                status="in_progress",
+                completed_modules=[item.module for item in records],
+                resume_cursor=len(records),
+                module_binding_files=records,
+            )
+            self._write_timing_bindings_payload(model_dump(incremental))
+
+        manifest = Stage3TimingBindingsArtifact(
+            task_id=task.task_id,
+            input_fingerprint=bindings_input_fingerprint,
+            module_order=list(module_skeletons.module_order),
+            status="planned",
+            completed_modules=[item.module for item in records],
+            resume_cursor=len(records),
+            module_binding_files=records,
+        )
+        self._write_timing_bindings_payload(model_dump(manifest))
+
+        bindings_by_module: Dict[str, ModuleTimingBindingArtifact] = {}
+        skeletons_by_module: Dict[str, ModuleSkeletonExport] = {}
+        for record in manifest.module_binding_files:
+            with open(self.output_root / record.binding_file, "r", encoding="utf-8") as f:
+                bindings_by_module[record.module] = validate_model(
+                    ModuleTimingBindingArtifact,
+                    json.load(f),
+                )
+            skeleton_record = record_by_module[record.module]
+            with open(self.output_root / skeleton_record.export_file, "r", encoding="utf-8") as f:
+                skeletons_by_module[record.module] = validate_model(
+                    ModuleSkeletonExport,
+                    json.load(f),
+                )
+
+        check_input_fingerprint = canonical_fingerprint(
+            {
+                "checker_ruleset": self.TIMING_BINDING_CHECK_RULESET_VERSION,
+                "temporal_facts": temporal_facts,
+                "repo_skeleton": repo_skeleton,
+                "architecture_timing": architecture_timing,
+                "module_skeletons": module_skeletons,
+                "timing_bindings": manifest,
+            }
+        )
+        timing_check = (
+            self._read_timing_check_if_valid(check_input_fingerprint)
+            if resume
+            else None
+        )
+        if timing_check is None:
+            timing_check = check_temporal_bindings(
+                task_id=task.task_id,
+                temporal_facts=temporal_facts,
+                repo_skeleton=repo_skeleton,
+                architecture=architecture_timing,
+                skeletons=skeletons_by_module,
+                bindings=bindings_by_module,
+                input_fingerprint=check_input_fingerprint,
+            )
+            self._write_timing_check_payload(model_dump(timing_check))
+        return manifest, timing_check
+
+    def _read_timing_bindings_if_valid(
+        self,
+        expected_input_fingerprint: str,
+    ) -> Stage3TimingBindingsArtifact | None:
+        path = self._timing_bindings_path()
+        if not path.exists():
+            return None
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                artifact = validate_model(Stage3TimingBindingsArtifact, json.load(f))
+            if artifact.input_fingerprint != expected_input_fingerprint:
+                raise ValueError("module timing bindings input fingerprint mismatch")
+            for record in artifact.module_binding_files:
+                binding_path = self.output_root / record.binding_file
+                if not binding_path.exists():
+                    raise FileNotFoundError(f"missing module timing binding: {binding_path}")
+                with open(binding_path, "r", encoding="utf-8") as f:
+                    binding = validate_model(ModuleTimingBindingArtifact, json.load(f))
+                if binding.task_id != artifact.task_id or binding.module != record.module:
+                    raise ValueError(f"invalid module timing binding identity at {binding_path}")
+            return artifact
+        except Exception as exc:
+            self.logger.warning(
+                "[rtl_module_planner] Resume ignored invalid module timing bindings at %s: %s",
+                path,
+                exc,
+            )
+            return None
+
+    def _write_timing_bindings_payload(self, payload: Dict[str, Any]) -> Path:
+        path = self._timing_bindings_path()
+        self._write_json_payload(payload, path)
+        self.logger.info("[rtl_module_planner] Wrote module timing bindings manifest to %s", path)
+        return path
+
+    def _read_timing_check_if_valid(
+        self,
+        expected_input_fingerprint: str,
+    ) -> TimingBindingCheckArtifact | None:
+        path = self._timing_binding_check_path()
+        if not path.exists():
+            return None
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                artifact = validate_model(TimingBindingCheckArtifact, json.load(f))
+            if artifact.input_fingerprint != expected_input_fingerprint:
+                raise ValueError("timing binding check input fingerprint mismatch")
+            return artifact
+        except Exception as exc:
+            self.logger.warning(
+                "[rtl_module_planner] Resume ignored invalid timing binding check at %s: %s",
+                path,
+                exc,
+            )
+            return None
+
+    def _write_timing_check_payload(self, payload: Dict[str, Any]) -> Path:
+        path = self._timing_binding_check_path()
+        self._write_json_payload(payload, path)
+        self.logger.info("[rtl_module_planner] Wrote timing binding check artifact to %s", path)
+        return path
+
     def _write_modules_payload(self, payload: Dict[str, Any]) -> Path:
         directory = self.output_root
         directory.mkdir(parents=True, exist_ok=True)
@@ -405,14 +939,17 @@ class PlannerRunner:
         self.logger.info("[rtl_module_planner] Wrote module-organized artifact to %s", path)
         return path
 
-    def _read_repo_skeleton_if_valid(self) -> Any | None:
+    def _read_repo_skeleton_if_valid(self, expected_input_fingerprint: str | None = None) -> Any | None:
         path = self._repo_skeleton_path()
         if not path.exists():
             return None
         try:
             with open(path, "r", encoding="utf-8") as f:
                 payload = json.load(f)
-            return validate_model(Stage2RepoSkeletonArtifact, payload)
+            artifact = validate_model(Stage2RepoSkeletonArtifact, payload)
+            if expected_input_fingerprint is not None and artifact.input_fingerprint != expected_input_fingerprint:
+                raise ValueError("repo skeleton input fingerprint mismatch")
+            return artifact
         except Exception as exc:
             self.logger.warning(
                 "[rtl_module_planner] Resume ignored invalid repo skeleton artifact at %s: %s",
@@ -432,14 +969,17 @@ class PlannerRunner:
         self.logger.info("[rtl_module_planner] Wrote repo skeleton artifact to %s", path)
         return path
 
-    def _read_module_skeletons_if_valid(self) -> Any | None:
+    def _read_module_skeletons_if_valid(self, expected_input_fingerprint: str | None = None) -> Any | None:
         path = self._module_skeletons_path()
         if not path.exists():
             return None
         try:
             with open(path, "r", encoding="utf-8") as f:
                 payload = json.load(f)
-            return validate_model(Stage3ModuleSkeletonArtifact, payload)
+            artifact = validate_model(Stage3ModuleSkeletonArtifact, payload)
+            if expected_input_fingerprint is not None and artifact.input_fingerprint != expected_input_fingerprint:
+                raise ValueError("module skeleton input fingerprint mismatch")
+            return artifact
         except Exception as exc:
             self.logger.warning(
                 "[rtl_module_planner] Resume ignored invalid module skeleton artifact at %s: %s",
@@ -468,7 +1008,12 @@ class PlannerRunner:
             )
             return None
 
-    def _read_module_plans_if_valid(self, task: PlannerTaskInput, partial_artifacts: Dict[str, Any]) -> Any | None:
+    def _read_module_plans_if_valid(
+        self,
+        task: PlannerTaskInput,
+        partial_artifacts: Dict[str, Any],
+        expected_input_fingerprint: str | None = None,
+    ) -> Any | None:
         path = self._module_plans_path()
         if not path.exists():
             return None
@@ -476,6 +1021,8 @@ class PlannerRunner:
             with open(path, "r", encoding="utf-8") as f:
                 payload = json.load(f)
             artifact = validate_model(Stage4ModulePlansArtifact, payload)
+            if expected_input_fingerprint is not None and artifact.input_fingerprint != expected_input_fingerprint:
+                raise ValueError("module plans input fingerprint mismatch")
             quality_errors = self.stage4_module_plans.validate_quality(artifact, task, partial_artifacts)
             if quality_errors:
                 raise ValueError(quality_errors)
@@ -541,6 +1088,36 @@ class PlannerRunner:
         self.logger.info("[rtl_module_planner] Wrote stage5 codegen artifact to %s", path)
         return path
 
+    def _read_stage5_codegen_if_valid(
+        self,
+        task: PlannerTaskInput,
+        codegen_stage_inputs: Dict[str, Any],
+        expected_input_fingerprint: str,
+    ) -> Stage5CodegenArtifact | None:
+        path = self._stage5_codegen_path()
+        if not path.exists():
+            return None
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                artifact = validate_model(Stage5CodegenArtifact, json.load(f))
+            if artifact.input_fingerprint != expected_input_fingerprint:
+                raise ValueError("stage5 codegen input fingerprint mismatch")
+            for record in artifact.module_files:
+                reused = self._reuse_stage5_fragment_if_valid(record.module, codegen_stage_inputs)
+                if reused is None:
+                    raise ValueError(f"stage5 fragment for `{record.module}` is not reusable")
+            quality_errors = self.stage5.validate_quality(artifact, task, codegen_stage_inputs)
+            if quality_errors:
+                raise ValueError(quality_errors)
+            return artifact
+        except Exception as exc:
+            self.logger.warning(
+                "[rtl_module_planner] Resume ignored invalid stage5 codegen artifact at %s: %s",
+                path,
+                exc,
+            )
+            return None
+
     def _write_stage6_merge_payload(self, payload: Dict[str, Any]) -> Path:
         directory = self.output_root
         directory.mkdir(parents=True, exist_ok=True)
@@ -558,6 +1135,14 @@ class PlannerRunner:
             self._write_json_payload(payload["plan_payload"], self.output_root / payload["plan_file"])
             if "retrieval_file" in payload and "retrieval_payload" in payload:
                 self._write_json_payload(payload["retrieval_payload"], self.output_root / payload["retrieval_file"])
+            if self.planning_graph_writer is not None:
+                self.planning_graph_writer.upsert_module_plan(
+                    payload.get("task") or {"task_id": payload["manifest"].get("task_id", "")},
+                    module_name,
+                    payload["plan_payload"],
+                    artifact_path=payload["plan_file"],
+                    input_fingerprint=str(payload.get("input_fingerprint") or ""),
+                )
             self.logger.info("[rtl_module_planner] Wrote stage4 module plan sidecar for %s", module_name)
         return self._write_module_plans_payload(payload["manifest"])
 
@@ -576,11 +1161,33 @@ class PlannerRunner:
             self._write_json_payload(payload["export_payload"], self.output_root / export_file)
             if "spec_context_file" in payload and "spec_context_payload" in payload:
                 self._write_json_payload(payload["spec_context_payload"], self.output_root / payload["spec_context_file"])
+            if self.planning_graph_writer is not None:
+                self.planning_graph_writer.upsert_module_skeleton(
+                    payload.get("task") or {"task_id": payload["manifest"].get("task_id", "")},
+                    module_name,
+                    payload["export_payload"],
+                    artifact_path=export_file,
+                    input_fingerprint=str(payload.get("input_fingerprint") or ""),
+                    spec_context_fingerprint=self.planning_graph_writer._module_spec_fingerprint(module_name),
+                )
             self.logger.info(
                 "[rtl_module_planner] Wrote stage3 module doc/json sidecars for %s",
                 module_name,
             )
         return self._write_module_skeletons_payload(payload["manifest"])
+
+    def _write_stage3_spec_context(self, payload: Dict[str, Any]) -> Path:
+        path = self.output_root / payload["spec_context_file"]
+        self._write_json_payload(payload["spec_context_payload"], path)
+        if self.planning_graph_writer is not None:
+            self.planning_graph_writer.upsert_spec_fragments(
+                payload.get("task") or {},
+                str(payload["module"]),
+                payload["spec_context_payload"],
+                artifact_path=str(payload["spec_context_file"]),
+                input_fingerprint=str(payload.get("input_fingerprint") or ""),
+            )
+        return path
 
     def _write_json_payload(self, payload: Dict[str, Any], path: Path) -> Path:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -600,6 +1207,21 @@ class PlannerRunner:
 
     def _contracts_path(self) -> Path:
         return self.output_root / self.CONTRACTS_FILENAME
+
+    def _temporal_facts_path(self) -> Path:
+        return self.output_root / self.GLOBAL_TEMPORAL_FACTS_FILENAME
+
+    def _architecture_timing_path(self) -> Path:
+        return self.output_root / self.ARCHITECTURE_TIMING_CONTRACT_FILENAME
+
+    def _timing_bindings_path(self) -> Path:
+        return self.output_root / self.MODULE_TIMING_BINDINGS_FILENAME
+
+    def _timing_binding_check_path(self) -> Path:
+        return self.output_root / self.TIMING_BINDING_CHECK_FILENAME
+
+    def _module_timing_binding_relative_path(self, module_name: str) -> str:
+        return f"{self.MODULE_TIMING_BINDING_JSON_DIRNAME}/{module_name}.json"
 
     def _modules_path(self) -> Path:
         return self.output_root / self.MODULES_FILENAME
@@ -734,6 +1356,18 @@ class PlannerRunner:
                     module_name, exc,
                 )
             debug_records.append(debug_result)
+            if (
+                self.kg_service is not None
+                and self.kg_service.is_enabled()
+                and debug_result.status in {"pass", "fixed"}
+            ):
+                # Materialize code structure only after the merged module passes
+                # syntax, and before any simulation/system-debug activity.
+                self.kg_service.refresh_repo_files(
+                    changed_paths=[stage6_record.merged_file],
+                    stage="post_stage6_syntax",
+                    filter_to_planned_skeleton=False,
+                )
             self._record_kg_module_result(
                 module_name,
                 stage6_record.merged_file,
@@ -756,6 +1390,7 @@ class PlannerRunner:
 
         stage5_artifact = Stage5CodegenArtifact(
             task_id=task.task_id,
+            input_fingerprint=str(codegen_stage_inputs.get("stage5_input_fingerprint") or ""),
             module_order=list(spec_blocks.module_order),
             module_files=stage5_records,
         )
@@ -767,6 +1402,13 @@ class PlannerRunner:
             )
         self._write_stage5_codegen_payload(model_dump(stage5_artifact))
         self.artifact_sink.record_stage_output(self.stage5.stage_name, stage5_artifact, task)
+
+        self._write_planning_kg_consistency_report(
+            repo_skeleton=codegen_stage_inputs.get("stage2"),
+            stage3=codegen_stage_inputs.get("stage3"),
+            stage6_records=stage6_records,
+            debug_records=debug_records,
+        )
 
         repo_skeleton = codegen_stage_inputs.get("stage2")
         top_module = str(getattr(repo_skeleton, "top_module", "") or "")
@@ -814,6 +1456,150 @@ class PlannerRunner:
         self.artifact_sink.record_stage_output(self.stage6.stage_name, stage6_artifact, task)
         return stage6_artifact
 
+    def _write_planning_kg_consistency_report(
+        self,
+        *,
+        repo_skeleton: Any,
+        stage3: Any,
+        stage6_records: list[Any],
+        debug_records: list[Any],
+    ) -> Path | None:
+        """Emit a read-only Stage6 planning/code comparison before system debug."""
+        if repo_skeleton is None:
+            return None
+        planned = [str(item.module) for item in repo_skeleton.modules]
+        passed = {
+            str(item.module)
+            for item in debug_records
+            if str(getattr(item, "status", "")) in {"pass", "fixed"}
+        }
+        merged = {
+            str(item.module)
+            for item in stage6_records
+            if str(getattr(item, "merged_file", ""))
+        }
+        report: Dict[str, Any] = {
+            "schema_version": "planning_code_consistency_v1",
+            "planned_modules": planned,
+            "materialized_modules": sorted(passed),
+            "missing_actual_modules": sorted(set(planned) - passed),
+            "unexpected_actual_modules": sorted(merged - set(planned)),
+            "planned_child_not_instantiated": [],
+            "interface_width_mismatches": [],
+            "unmaterialized_skeleton_blocks": [],
+            "query_errors": [],
+        }
+        if self.kg_service is not None and self.kg_service.is_enabled():
+            try:
+                hierarchy = self.kg_service.query(
+                    """
+                    MATCH (m:Module {repo_uid: $repo_uid})
+                    OPTIONAL MATCH (m)-[:INSTANTIATES]->(:Instance)-[:OF_MODULE]->(child:Module)
+                    RETURN m.name AS module, collect(DISTINCT child.name) AS children
+                    """,
+                    {"repo_uid": self.kg_service.repo_uid},
+                    limit=max(10, len(planned) * 2),
+                )
+                actual_children = {
+                    str(row.get("module")): {str(item) for item in row.get("children") or [] if item}
+                    for row in hierarchy.get("rows") or []
+                }
+                for module in repo_skeleton.modules:
+                    for child in module.children:
+                        if module.module in passed and child not in actual_children.get(module.module, set()):
+                            report["planned_child_not_instantiated"].append(
+                                {"parent": module.module, "child": child}
+                            )
+            except Exception as exc:
+                report["query_errors"].append(f"hierarchy: {exc}")
+
+            try:
+                blocks = self.kg_service.query(
+                    """
+                    MATCH (m:Module {repo_uid: $repo_uid})
+                    OPTIONAL MATCH (m)-[:HAS|INSTANTIATES]->(b)
+                    WHERE b:AlwaysBlock OR b:Assign OR b:Instance
+                    RETURN m.name AS module, collect(DISTINCT b.kind) AS kinds
+                    """,
+                    {"repo_uid": self.kg_service.repo_uid},
+                    limit=max(10, len(planned) * 2),
+                )
+                actual_kinds = {
+                    str(row.get("module")): {str(item) for item in row.get("kinds") or [] if item}
+                    for row in blocks.get("rows") or []
+                }
+                for record in getattr(stage3, "module_records", []) or []:
+                    export_path = self.output_root / str(record.export_file)
+                    if not export_path.exists() or record.module not in passed:
+                        continue
+                    export = json.loads(export_path.read_text(encoding="utf-8"))
+                    for block in export.get("structural_blocks") or []:
+                        block_kind = str(block.get("block_kind") or "")
+                        kinds = actual_kinds.get(record.module, set())
+                        realized = (
+                            block_kind not in {"inst", "seq", "comb"}
+                            or (block_kind == "inst" and "Instance" in kinds)
+                            or (block_kind == "seq" and "AlwaysBlock" in kinds)
+                            or (block_kind == "comb" and bool(kinds & {"AlwaysBlock", "Assign"}))
+                        )
+                        if not realized:
+                            report["unmaterialized_skeleton_blocks"].append(
+                                {
+                                    "module": record.module,
+                                    "block_id": str(block.get("block_id") or ""),
+                                    "block_kind": block_kind,
+                                }
+                            )
+            except Exception as exc:
+                report["query_errors"].append(f"blocks: {exc}")
+
+            if self.planning_context_retriever is not None:
+                for module_name in sorted(passed):
+                    try:
+                        context = self.planning_context_retriever.get_module_context(
+                            module_name,
+                            require_skeleton=True,
+                            include_code_interface=True,
+                        )
+                        frame = str((context.get("skeleton_artifact") or {}).get("module_frame") or "")
+                        for port in context.get("code_interface") or []:
+                            name = str(port.get("name") or "")
+                            match = re.search(
+                                rf"\b(input|output|inout)\b\s*(?:wire|reg|logic)?\s*"
+                                rf"(?P<width>\[[^\]]+\])?\s*{re.escape(name)}\b",
+                                frame,
+                            )
+                            actual_width = re.sub(r"\s+", "", str(port.get("width") or ""))
+                            planned_width = re.sub(
+                                r"\s+", "", str(match.group("width") if match else "")
+                            )
+                            if match is None or planned_width != actual_width:
+                                report["interface_width_mismatches"].append(
+                                    {
+                                        "module": module_name,
+                                        "port": name,
+                                        "planned_width": planned_width,
+                                        "actual_width": actual_width,
+                                        "reason": "port missing from skeleton frame" if match is None else "width differs",
+                                    }
+                                )
+                    except Exception as exc:
+                        report["query_errors"].append(f"interface/{module_name}: {exc}")
+
+        issue_keys = (
+            "missing_actual_modules",
+            "unexpected_actual_modules",
+            "planned_child_not_instantiated",
+            "interface_width_mismatches",
+            "unmaterialized_skeleton_blocks",
+            "query_errors",
+        )
+        report["status"] = "pass" if not any(report[key] for key in issue_keys) else "warn"
+        path = self.output_root / "planning_code_consistency.json"
+        self._write_json_payload(report, path)
+        self.logger.info("[rtl_module_planner] Wrote planning/code consistency report to %s", path)
+        return path
+
     def _record_kg_module_result(
         self,
         module_name: str,
@@ -829,6 +1615,10 @@ class PlannerRunner:
                 merged_file=merged_file,
                 debug_result=debug_result,
                 stage=stage,
+                refresh_code=(
+                    stage != "post_module_syntax"
+                    or str(getattr(debug_result, "status", "")) in {"pass", "fixed"}
+                ),
             )
             self.logger.info(
                 "[rtl_module_planner] Wrote RTL KG module result for %s at %s: %s passed=%s",
@@ -915,6 +1705,20 @@ class PlannerRunner:
                 missing_markers,
             )
             return None
+
+        if self.temporal_planning_enabled:
+            contracts_path = self.stage5._contracts_file(module_name)
+            if not contracts_path.exists():
+                return None
+            try:
+                with open(contracts_path, "r", encoding="utf-8") as f:
+                    contracts_payload = json.load(f)
+                if contracts_payload.get("input_fingerprint") != str(
+                    codegen_stage_inputs.get("stage5_input_fingerprint") or ""
+                ):
+                    return None
+            except Exception:
+                return None
 
         return ModuleCodegenRecord(
             module=module_name,

@@ -32,6 +32,8 @@ Use this schema:
       "target": "<exact skeleton block placeholder>",
       "description": "<one or two sentences describing what code should be generated for this block>",
       "spec_refs": ["Sxxx", "Syyy"],
+      "timing_obligation_ids": ["OBL_xxx"],
+      "logical_value_tags": ["RK3"],
       "constraints": [
         "<optional essential constraint>",
         "<optional essential constraint>"
@@ -43,10 +45,11 @@ Use this schema:
 Rules:
 1. Create exactly one subtask for each skeleton block.
 2. Keep each description short and implementation-oriented.
-3. Copy spec_refs exactly from REQUIRED_SUBTASKS. Do not add, remove, reorder, or reinterpret them.
+3. Copy spec_refs, timing_obligation_ids, and logical_value_tags exactly from REQUIRED_SUBTASKS.
+   Do not add, remove, reorder, or reinterpret them.
 4. Do not invent extra blocks.
 5. Do not list read/write objects.
-6. Do not output timing tables, signal tables, verification plans, or local checks.
+6. Do not output timing tables, signal tables, verification plans, or local checks. Timing details are referenced by ID.
 7. Constraints should be short and only include non-negotiable requirements.
 8. If a block has no special constraint, use an empty list.
 9. The plan should be easy for a code generation agent to consume block by block.
@@ -67,15 +70,17 @@ def build_prompt(
     module_skeleton: str,
     module_spec_blocks: str,
     required_subtasks: str,
+    planning_kg_context: str = "",
     stage_context: str = "",
 ) -> str:
     return f"""
 {SCHEMA_AND_RULES}
 
 Mandatory target rules:
-1. Use the following REQUIRED_SUBTASKS list as the source of truth for every `id`, `target`, and `spec_refs`.
-2. Copy each `id`, `target`, and `spec_refs` value exactly as written in REQUIRED_SUBTASKS.
-3. Do not infer `target` or `spec_refs` from other inputs.
+1. Use REQUIRED_SUBTASKS as the source of truth for every `id`, `target`, `spec_refs`,
+   `timing_obligation_ids`, and `logical_value_tags`.
+2. Copy those values exactly as written in REQUIRED_SUBTASKS.
+3. Do not infer target, spec refs, obligations, or logical tags from other inputs.
 4. Do not add Markdown, comments, slashes, or code prefixes to `target`.
 5. A target like `<block: B1_decl_core_objects>` must stay exactly `<block: B1_decl_core_objects>`.
 6. A target like `<block: decl_core_objects>` must stay exactly `<block: decl_core_objects>`.
@@ -93,6 +98,9 @@ Input:
 
 [MODULE_SPEC_BLOCKS]
 {module_spec_blocks}
+
+[PLANNING_KG_CONTEXT]
+{planning_kg_context or "None"}
 
 [STAGE_CONTEXT]
 {stage_context}

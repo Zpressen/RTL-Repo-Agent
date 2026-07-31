@@ -1,0 +1,129 @@
+{
+  "schema_version": "module_spec_context_retrieval_v1",
+  "module": "aes_inv_sbox",
+  "blocks": [
+    {
+      "block_id": "S001",
+      "text": "**4.2 Mathematical Principle**\n\n1\\. State Matrix Structure and Data Mapping:\n\n-   State matrix arrangement:\n\n> $$\\begin{matrix}\n> sa00 & sa01 & sa02 & sa03 \\\\\n> sa10 & sa11 & sa12 & sa13 \\\\\n> sa20 & sa21 & sa22 & sa23 \\\\\n> sa30 & sa31 & sa32 & sa33\n> \\end{matrix}$$\n\n-   Input data mapping (128-bit in column-major order):\n\n    -   Start from text_in\\[127:120\\], map to the state matrix from top\n        to bottom, left to right.\n\n2\\. Inverse Round Transformations\n\na\\) **InvShiftRows**: Cyclic right shift\n\nRow 0: \\[a b c d\\] → \\[a b c d\\] // No shift\n\nRow 1: \\[a b c d\\] → \\[d a b c\\] // Right shift by 1 byte\n\nRow 2: \\[a b c d\\] → \\[c d a b\\] // Right shift by 2 bytes\n\nRow 3: \\[a b c d\\] → \\[b c d a\\] // Right shift by 3 bytes\n\nb\\) **InvSubBytes**: - Nonlinear transformation using the inverse\nS-box - 16 bytes processed in parallel - Involves multiplicative inverse\noperations in GF($2^{8}$)\n\nc\\) **InvMixColumns**:\n\nMatrix representation:\n\n$$\\begin{bmatrix}\n0E & 0B & 0D & 09 \\\\\n09 & 0E & 0B & 0D \\\\\n0D & 09 & 0E & 0B \\\\\n0B & 0D & 09 & 0E\n\\end{bmatrix} \\times \\begin{bmatrix}\ns0 \\\\\ns1 \\\\\ns2 \\\\\ns3\n\\end{bmatrix} = \\begin{bmatrix}\nout0 \\\\\nout1 \\\\\nout2 \\\\\nout3\n\\end{bmatrix}$$\n\nMultiplication coefficients:\n\n\\- 0E: 14\n\n\\- 0B: 11\n\n\\- 0D: 13\n\n\\- 09: 9\n\nAll operations are performed in the GF($2^{8}$) domain, using\npre-computed polynomial multiplications.\n\nd\\) **AddRoundKey**:\n\n\\- Byte-wise XOR with the round key\n\n\\- Round keys are applied in reverse order\n\n\\- Each byte is XOR\\'ed with the corresponding round key byte",
+      "source_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher_top_hard/aes_inv_cipher_system_hard.md",
+      "source_chunk_ids": [
+        "C007"
+      ],
+      "relevance_reason": [
+        "Describes the role of inverse S-box within the InvSubBytes transformation, stating it processes 16 bytes in parallel using multiplicative inverse in GF(2^8)."
+      ],
+      "confidence": "high"
+    },
+    {
+      "block_id": "S002",
+      "text": "**7. Constraints**\n\n> 1\\. Timing Constraints:\n\n-   Key schedule must be loaded before data processing\n\n-   Register updates on clock rising edge\n\n-   Critical path includes inverse S-box and inverse column mixing\n\n> 2\\. Resource Constraints:\n\n\n-   11 x 128-bit key buffer registers\n\n-   4×4 state matrix register array\n\n-   Complex multiplication functions in GF(2⁸)\n\n> 3\\. Control Constraints:\n\n-   Proper key schedule loading sequence\n\n-   Accurate round counting\n\n-   Correct transformation ordering\n\n---\n\n**AES-128 Key Expansion Functional Requirements**",
+      "source_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher_top_hard/aes_inv_cipher_system_hard.md",
+      "source_chunk_ids": [
+        "C016"
+      ],
+      "relevance_reason": [
+        "Timing constraint notes that critical path includes inverse S-box, affecting implementation timing."
+      ],
+      "confidence": "high"
+    },
+    {
+      "block_id": "S003",
+      "text": "**6. Constraints**\n\n1.  Counter Size:\n\n-   rcnt is 4 bits wide\n\n-   Valid RCON values for rcnt range 0-9\n\n2.  Output Format:\n\n-   Only MSB changes\n\n-   Lower 24 bits must always be 0x000000\n\n-   Output is registered, changes on clock edge\n\n---\n\n**Inverse S-box Functional Requirements**",
+      "source_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher_top_hard/aes_inv_cipher_system_hard.md",
+      "source_chunk_ids": [
+        "C050"
+      ],
+      "relevance_reason": [
+        "Marks the beginning of the Inverse S-box Functional Requirements section, providing context for subsequent chunks."
+      ],
+      "confidence": "medium"
+    },
+    {
+      "block_id": "S004",
+      "text": "**1. Introduction**\n\nThe inverse S-box is a key function in the AES decryption algorithm,\nperforming the inverse non-linear byte substitution operation. This section\ndescribes its design principles and implementation requirements without\nassigning the function to a specific RTL design unit.",
+      "source_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher_top_hard/aes_inv_cipher_system_hard.md",
+      "source_chunk_ids": [
+        "C051"
+      ],
+      "relevance_reason": [
+        "Direct introduction to inverse S-box, describing it as key function for decryption byte substitution, without assigning to specific RTL unit."
+      ],
+      "confidence": "high"
+    },
+    {
+      "block_id": "S005",
+      "text": "**2.1 Basic Principle**\n\nThe Inverse S-box transformation implements the inverse operation of the\nS-box transformation in AES encryption. According to AES algorithm\ntheory, the inverse S-box values can be obtained through two\nmathematical methods:\n\n1.  Through mathematical calculations in GF($2^{8}$) field, including\n    multiplicative inverse and inverse affine transformation.\n\n2.  Directly through the Inverse S-box table.\n\nThis design uses a lookup table approach to directly implement the\ninverse S-box functionality, where the table stores the inverse S-box\noutput values for all possible inputs.",
+      "source_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher_top_hard/aes_inv_cipher_system_hard.md",
+      "source_chunk_ids": [
+        "C053"
+      ],
+      "relevance_reason": [
+        "States that inverse S-box can be implemented via lookup table, which is the chosen method."
+      ],
+      "confidence": "high"
+    },
+    {
+      "block_id": "S006",
+      "text": "**2.2 Mathematical Derivation**\n\nThe Inverse S-box transformation process is the reverse order of the\noriginal S-box transformation steps:\n\n2.2.1 Inverse Affine Transformation\n\n-   Input byte b undergoes a linear transformation using an inverse\n    matrix\n\n-   The transformation includes two parts:\n\n\n\n-   8x8 binary matrix multiplication (matrix is inverse of original\n    S-box affine transformation matrix)\n\n-   XOR with constant vector 0x05 (inverse of original S-box constant\n    0x63)\n\n> $\\begin{bmatrix}\n> b'0 \\\\\n> b'1 \\\\\n> b'2 \\\\\n> b'3 \\\\\n> b'4 \\\\\n> b'5 \\\\\n> b'6 \\\\\n> b'7\n> \\end{bmatrix}$ =$\\ \\left\\lbrack \\begin{matrix}\n> 0 \\\\\n> 0 \\\\\n> 1 \\\\\n> 0 \\\\\n> 0 \\\\\n> 1 \\\\\n> 0 \\\\\n> 1\n> \\end{matrix}\\ \\begin{matrix}\n> 1 \\\\\n> 0 \\\\\n> 0 \\\\\n> 1 \\\\\n> 0 \\\\\n> 0 \\\\\n> 1 \\\\\n> 0\n> \\end{matrix}\\ \\begin{matrix}\n> 0 \\\\\n> 1 \\\\\n> 0 \\\\\n> 0 \\\\\n> 1 \\\\\n> 0 \\\\\n> 0 \\\\\n> 1\n> \\end{matrix}\\ \\begin{matrix}\n> 1 \\\\\n> 0 \\\\\n> 1 \\\\\n> 0 \\\\\n> 0 \\\\\n> 1 \\\\\n> 0 \\\\\n> 0\n> \\end{matrix}\\ \\begin{matrix}\n> 0 \\\\\n> 1 \\\\\n> 0 \\\\\n> 1 \\\\\n> 0 \\\\\n> 0 \\\\\n> 1 \\\\\n> 0\n> \\end{matrix}\\ \\begin{matrix}\n> 0 \\\\\n> 0 \\\\\n> 1 \\\\\n> 0 \\\\\n> 1 \\\\\n> 0 \\\\\n> 0 \\\\\n> 1\n> \\end{matrix}\\ \\begin{matrix}\n> 1 \\\\\n> 0 \\\\\n> 0 \\\\\n> 1 \\\\\n> 0 \\\\\n> 1 \\\\\n> 0 \\\\\n> 0\n> \\end{matrix}\\ \\begin{matrix}\n> 0 \\\\\n> 1 \\\\\n> 0 \\\\\n> 0 \\\\\n> 1 \\\\\n> 0 \\\\\n> 1 \\\\\n> 0\n> \\end{matrix} \\right\\rbrack\\ \\begin{bmatrix}\n> b0 \\\\\n> b1 \\\\\n> b2 \\\\\n> b3 \\\\\n> b4 \\\\\n> b5 \\\\\n> b6 \\\\\n> b7\n> \\end{bmatrix} + \\begin{bmatrix}\n> 1 \\\\\n> 1 \\\\\n> 0 \\\\\n> 0 \\\\\n> 0 \\\\\n> 1 \\\\\n> 1 \\\\\n> 0\n> \\end{bmatrix}$\n\n2.2.2 Multiplicative Inverse in GF($2^{8}$)\n\n-   Calculate multiplicative inverse in Galois Field GF($2^{8}$)\n\n-   Based on irreducible polynomial: p(x)\n    =$x^{8} + x^{4} + x^{3} + x + 1$\n\n-   For any non-zero element a, its inverse $a^{- 1}$ satisfies: a ×\n    $a^{- 1}$ ≡ 1 (mod p(x))\n\n-   Special case: inverse of 0x00 is defined as 0x00",
+      "source_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher_top_hard/aes_inv_cipher_system_hard.md",
+      "source_chunk_ids": [
+        "C054"
+      ],
+      "relevance_reason": [
+        "Provides mathematical derivation: inverse affine transformation and multiplicative inverse in GF(2^8), underpinning the table values."
+      ],
+      "confidence": "high"
+    },
+    {
+      "block_id": "S007",
+      "text": "**2.3 Implementation Method**\n\nDue to the complexity of mathematical operations, actual implementation\nuses a ROM lookup table:\n\n1.  ROM structure uses 256 x 8-bit mapping table\n\n2.  Input byte directly serves as ROM address\n\n3.  ROM output corresponds to pre-calculated inverse transformation\n    results\n\n4.  All 256 possible input values have unique output mappings",
+      "source_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher_top_hard/aes_inv_cipher_system_hard.md",
+      "source_chunk_ids": [
+        "C055"
+      ],
+      "relevance_reason": [
+        "Specifies implementation method as ROM lookup table, 256x8 mapping, input as address, purely combinational."
+      ],
+      "confidence": "high"
+    },
+    {
+      "block_id": "S008",
+      "text": "**2.4 Transformation Example**\n\nTaking input 0x63 as an example:\n\n1.  Input 0x63\n\n2.  Lookup table returns 0x00\n\n3.  This result corresponds to S-box mapping 0x00 to 0x63, verifying the\n    inverse relationship",
+      "source_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher_top_hard/aes_inv_cipher_system_hard.md",
+      "source_chunk_ids": [
+        "C056"
+      ],
+      "relevance_reason": [
+        "Example with 0x63 mapping to 0x00, verifying inverse S-box behavior."
+      ],
+      "confidence": "high"
+    },
+    {
+      "block_id": "S009",
+      "text": "**3.2 Key Verification Points**\n\n1.  Ensure the inverse relationship with the forward S-box function\n\n2.  For any input x, must satisfy:\n\n-   S-box(Inv_S-box(x)) = x\n\n-   Inv_S-box(S-box(x)) = x",
+      "source_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher_top_hard/aes_inv_cipher_system_hard.md",
+      "source_chunk_ids": [
+        "C059"
+      ],
+      "relevance_reason": [
+        "Verification requirements: inverse relationship with forward S-box, ensuring correctness."
+      ],
+      "confidence": "high"
+    },
+    {
+      "block_id": "S010",
+      "text": "**4. Constraints**\n\n1.  Implementation Constraints:\n\n-   Pure combinational logic implementation, no clock or reset required\n\n-   Output responds immediately to input changes\n\n-   Input must remain stable until output is sampled\n\n2.  Resource Constraints:\n\n-   ROM implementation requires 256×8-bit storage\n\n-   Implementation method can be chosen based on target device (ROM/LUT)\n\n-   Lookup table method uses more resources than computational\n    implementation\n\n---\n\n**Architecture Inference Requirement**\n\nThe sections above are functional views of one AES-128 decryption system, not a prescribed list of RTL modules. The implementation shall determine its own design-unit boundaries and responsibility allocation from the required clocking behavior, persistent state, data dependencies, repeated byte and column operations, reuse opportunities, and timing constraints. Only the top-level `aes_inv_cipher_top` interface is fixed.",
+      "source_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher_top_hard/aes_inv_cipher_system_hard.md",
+      "source_chunk_ids": [
+        "C060"
+      ],
+      "relevance_reason": [
+        "Direct constraints for inverse S-box implementation: combinational, no clock, 256x8 ROM, resource trade-offs."
+      ],
+      "confidence": "high"
+    }
+  ],
+  "open_issues": [],
+  "fallback_used": false,
+  "fallback_reason": ""
+}

@@ -1,0 +1,153 @@
+{
+  "schema_version": "module_spec_context_retrieval_v1",
+  "module": "aes_key_expand",
+  "blocks": [
+    {
+      "block_id": "S001",
+      "text": "**5.5 Key Expansion Buffer**\n\n1.  Buffer Control Logic:\n\n-   Uses the kcnt (4-bit counter) to track the storage progress\n\n-   Initial value is set to 10, reaches 0 when the storage is complete\n\n-   The kb_ld signal controls the storage process\n\n2.  Key Storage Process:\n\n-   kb\\[10\\] stores the initial round key\n\n-   kb\\[9\\] to kb\\[1\\] store the intermediate round keys\n\n-   kb\\[0\\] stores the last round key\n\n\n3.  Key Retrieval Mechanism:\n\n-   Selects the current round key based on the dcnt (round counter)\n\n-   Makes the selected 128-bit round key available as four 32-bit words for the round transformations\n\n-   Updated every clock cycle",
+      "source_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher_top_hard/aes_inv_cipher_system_hard.md",
+      "source_chunk_ids": [
+        "C013"
+      ],
+      "relevance_reason": [
+        "Defines the key buffer structure in the parent module that key_expand must fill; constrains round key ordering (kb[10] to kb[0]) and output interface."
+      ],
+      "confidence": "high"
+    },
+    {
+      "block_id": "S002",
+      "text": "**1. Introduction**\n\nAES-128 key expansion is a crucial function in the AES encryption\nalgorithm, expanding a 128-bit initial key into round keys for multiple\nencryption rounds. This section describes its design principles and\nimplementation requirements without assigning the function to a specific\nRTL design unit.",
+      "source_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher_top_hard/aes_inv_cipher_system_hard.md",
+      "source_chunk_ids": [
+        "C017"
+      ],
+      "relevance_reason": [
+        "Section introduction that describes the key expansion function this module implements."
+      ],
+      "confidence": "high"
+    },
+    {
+      "block_id": "S003",
+      "text": "**2.1 Basic Principle**\n\nAES-128 key expansion transforms a 128-bit initial key into 11 sets of\n128-bit round keys (including the initial round key). Each round key\nconsists of four 32-bit words. The expansion process is iterative,\ngenerating one new round key at a time.",
+      "source_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher_top_hard/aes_inv_cipher_system_hard.md",
+      "source_chunk_ids": [
+        "C019"
+      ],
+      "relevance_reason": [
+        "Basic principle of key expansion: number of round keys, iterative generation, and word sizes."
+      ],
+      "confidence": "high"
+    },
+    {
+      "block_id": "S004",
+      "text": "**2.2 Mathematical Derivation**\n\n**The key expansion process involves the following operations:**\n\n1.  Word Rotation (RotWord)\n\n-   Performs a cyclic left shift on input word\n\n-   \\[a0,a1,a2,a3\\] → \\[a1,a2,a3,a0\\]\n\n2.  S-box Substitution (SubWord)\n\n-   Applies S-box transformation to each byte\n\n-   Uses the same S-box as encryption process\n\n3.  Round Constant XOR (Rcon)\n\n-   XOR operation with round constant\n\n-   Different constant value for each round\n\n4.  Key Expansion Algorithm\n\n-   W\\[i\\] = W\\[i-4\\]⊕T(W\\[i-1\\]), when i mod 4 = 0\n\n-   W\\[i\\] = W\\[i-4\\]⊕W\\[i-1\\], otherwise where T(W) =\n    SubWord(RotWord(W))⊕Rcon",
+      "source_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher_top_hard/aes_inv_cipher_system_hard.md",
+      "source_chunk_ids": [
+        "C020"
+      ],
+      "relevance_reason": [
+        "Core key expansion algorithm: RotWord, SubWord, Rcon, and iterative word generation formulas."
+      ],
+      "confidence": "high"
+    },
+    {
+      "block_id": "S005",
+      "text": "**3.2 Key Expansion Operation**\n\n1.  When kld signal is inactive, perform expansion:\n\n-   Take the last word (fourth register value)\n\n-   Perform byte reordering and S-box transformation\n\n-   XOR with current round constant\n\n2.  New round key generation sequence:\n\n-   First word: XOR with previous round word and transformation result\n\n-   Second word: XOR with previous round word, current round first word,\n    and transformation result\n\n-   Third word: XOR with previous round word, current round first two\n    words, and transformation result\n\n-   Fourth word: XOR with previous round word, current round first three\n    words, and transformation result",
+      "source_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher_top_hard/aes_inv_cipher_system_hard.md",
+      "source_chunk_ids": [
+        "C023"
+      ],
+      "relevance_reason": [
+        "Detailed step-by-step operation of key expansion when kld is inactive, including word generation logic and the use of transformation result."
+      ],
+      "confidence": "high"
+    },
+    {
+      "block_id": "S006",
+      "text": "**3.4 Round Constant Operation**\n\n1.  Round constant generation:\n\n-   Starts from initial value, updates automatically each round\n\n-   Only highest byte is valid, other bytes are 0\n\n-   XORs with transformation result during each key expansion\n\n2.  Round constant update:\n\n-   Reset during initial key loading\n\n-   Left shift each round, XOR with specific polynomial on overflow",
+      "source_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher_top_hard/aes_inv_cipher_system_hard.md",
+      "source_chunk_ids": [
+        "C025"
+      ],
+      "relevance_reason": [
+        "Describes round constant generation behavior, reset condition, and update rule, which are integrated within the key expansion module."
+      ],
+      "confidence": "high"
+    },
+    {
+      "block_id": "S007",
+      "text": "**1. Introduction**\n\nRound constant generation provides the constant values used in the AES key\nexpansion process. For each round of key expansion, a different constant\nvalue is needed. The values may be generated through a counter-based lookup\nmechanism.",
+      "source_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher_top_hard/aes_inv_cipher_system_hard.md",
+      "source_chunk_ids": [
+        "C036"
+      ],
+      "relevance_reason": [
+        "Introduction to round constant generation, which is part of the key expansion sub-block."
+      ],
+      "confidence": "high"
+    },
+    {
+      "block_id": "S008",
+      "text": "**2. Required Sequential State**\n\nrcnt: Round counter for key expansion process. Counts from 0 to 9,\nincrements each clock cycle when kld is deasserted, resets to 0 when kld\nis asserted. Controls round constant generation sequence.",
+      "source_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher_top_hard/aes_inv_cipher_system_hard.md",
+      "source_chunk_ids": [
+        "C037"
+      ],
+      "relevance_reason": [
+        "Defines the required state register rcnt for round constant generation, its range, and control by kld."
+      ],
+      "confidence": "high"
+    },
+    {
+      "block_id": "S009",
+      "text": "**2.1 Basic Principle**\n\nThe S-box transformation is completed in two steps:\n\n1.  Computing the multiplicative inverse in Galois Field GF($2^{8}$)\n\n2.  Applying an affine transformation\n\nApart from the mathematical calculations, we can look up in the forward\nS-box table in actual realization.\n\nIn this design, a lookup table stores all the S-box output\nvalues for their corresponding inputs.",
+      "source_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher_top_hard/aes_inv_cipher_system_hard.md",
+      "source_chunk_ids": [
+        "C030"
+      ],
+      "relevance_reason": [
+        "Describes the forward S-box used in SubWord step of key expansion; constrains the child aes_sbox instantiation."
+      ],
+      "confidence": "high"
+    },
+    {
+      "block_id": "S010",
+      "text": "**4. Constraints**\n\n1.  Implementation Constraints:\n\n-   Pure combinational logic implementation, no clock or reset required\n\n-   Output responds immediately to input changes\n\n-   Input must remain stable until output is sampled\n\n2.  Resource Constraints:\n\n-   ROM implementation requires 256×8-bit storage\n\n-   Implementation method can be chosen based on target device (ROM/LUT)\n\n-   Lookup table method uses more resources than computational\n    implementation",
+      "source_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher_top_hard/aes_inv_cipher_system_hard.md",
+      "source_chunk_ids": [
+        "C060"
+      ],
+      "relevance_reason": [
+        "Implementation constraints for the S-box submodule, which is instantiated by key_expand; affects its interface and timing."
+      ],
+      "confidence": "high"
+    },
+    {
+      "block_id": "S011",
+      "text": "**5.1 Operational Phases**\n\na)  IDLE: This is the initial reset state, waiting for the key load\n    signal (kld) or data load signal (ld) to start the decryption\n    process.\n\nb)  KeyLoad State: Enters the key loading state, preparing to execute\n    the key expansion operation.\n\nc)  KeyExpansion State: Enters the key expansion state, executing the\n    expansion algorithm to generate the required round keys.When the key\n    expansion is complete (kcnt==0), it transitions to the KeyStored\n    state.\n\nd)  KeyStored State: The key expansion is complete, and the round keys\n    are ready.Upon receiving the data load signal (ld), it transitions\n    to the InitialRound state to start the decryption.\n\ne)  InitialRound State: Performs the initial round\\'s inverse round key\n    addition operation. The round counter (dcnt) is incremented, and it\n    transitions to the StandardRound state.\n\nf)  StandardRound State: Executes the standard round\\'s inverse\n    transformations, including InvShiftRows, InvSubBytes, AddRoundKey,\n    and InvMixColumns. The round counter continues to increment.\n\ng)  FinalRound State: Performs the final round\\'s inverse operation,\n    excluding the InvMixColumns transformation.When the round counter\n    reaches 11, it transitions to the Done state.\n\nh)  Done State: The decryption operation is complete, and the final\n    plaintext result is output.\n\nIt transitions back to the Idle state, waiting for the next decryption\noperation.",
+      "source_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher_top_hard/aes_inv_cipher_system_hard.md",
+      "source_chunk_ids": [
+        "C009"
+      ],
+      "relevance_reason": [
+        "Defines the parent FSM phases including KeyExpansion state and the completion condition (kcnt==0) that signals key_expand to finish."
+      ],
+      "confidence": "high"
+    },
+    {
+      "block_id": "S012",
+      "text": "**7. Constraints**\n\n> 1\\. Timing Constraints:\n\n-   Key schedule must be loaded before data processing\n\n-   Register updates on clock rising edge\n\n-   Critical path includes inverse S-box and inverse column mixing\n\n> 2\\. Resource Constraints:\n\n\n-   11 x 128-bit key buffer registers\n\n-   4×4 state matrix register array\n\n-   Complex multiplication functions in GF(2⁸)\n\n> 3\\. Control Constraints:\n\n-   Proper key schedule loading sequence\n\n-   Accurate round counting\n\n-   Correct transformation ordering\n\n---",
+      "source_file": "/home/mokita/RPG-ZeroRepo/rtl_dataset/aes_inv_cipher_top_hard/aes_inv_cipher_system_hard.md",
+      "source_chunk_ids": [
+        "C016"
+      ],
+      "relevance_reason": [
+        "System-level constraints on key schedule loading sequence, accurate round counting, and timing, which bound the key_expand module behavior."
+      ],
+      "confidence": "high"
+    }
+  ],
+  "open_issues": [],
+  "fallback_used": false,
+  "fallback_reason": ""
+}

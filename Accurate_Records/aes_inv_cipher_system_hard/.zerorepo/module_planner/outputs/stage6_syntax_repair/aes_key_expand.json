@@ -1,0 +1,9 @@
+{
+  "schema_version": "stage6_syntax_diagnostic_v1",
+  "module": "aes_key_expand",
+  "status": "pass",
+  "syntax_passed": true,
+  "delegated_to": "ModuleDebugRunner.repo_react_syntax",
+  "merged_file": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_inv_cipher_system_hard/.zerorepo/workspace/merged/aes_key_expand.v",
+  "syntax_summary": "- V e r i l a t i o n   R e p o r t: Verilator 5.044 2026-01-01 rev conda-forge build 0\n- Verilator: Built from 0.079 MB sources in 4 modules, into 0.124 MB in 3 C++ files needing 0.000 MB\n- Verilator: Walltime 0.043 s (elab=0.006, cvt=0.022, bld=0.000); cpu 0.023 s on 1 threads; alloced 22.770 MB"
+}

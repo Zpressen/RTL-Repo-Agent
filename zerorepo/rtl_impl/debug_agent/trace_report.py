@@ -259,6 +259,28 @@ def _extract_dut_instance_name(tb_text: str, *, module_name: str) -> str | None:
     return None
 
 
+def _extract_tb_sampling_event(tb_text: str) -> dict[str, str] | None:
+    """Find the clock edge used by the testbench mismatch counter."""
+    clocked_always = re.compile(
+        r"\balways\s*@\(\s*(?P<edge>posedge|negedge)\s+"
+        r"(?P<clock>[A-Za-z_][A-Za-z0-9_]*)\s*\)\s*begin(?P<body>.*?)\bend\b",
+        re.DOTALL,
+    )
+    for match in clocked_always.finditer(tb_text):
+        event = {
+            "edge": match.group("edge"),
+            "clock": match.group("clock"),
+            "source": "tb_checker",
+        }
+        if re.search(
+            r"\b(?:tb_match\w*|mismatch\w*|errors?\w*|fail\w*)\b",
+            match.group("body"),
+            re.IGNORECASE,
+        ):
+            return event
+    return None
+
+
 def _vcd_signal_names(vcd: Any) -> list[str]:
     signals: list[str] = []
     seen: set[str] = set()
@@ -412,6 +434,9 @@ def _condition_blocks_update(exprs: Iterable[str], values: dict[str, str | None]
 
 
 def _assignment_to_report(assignment: RtlAssignment) -> dict[str, Any]:
+    snippet = assignment.code_snippet
+    if len(snippet) > 1200:
+        snippet = snippet[:1200] + "\n...<snip>..."
     return {
         "id": assignment.id,
         "block_id": assignment.block_id,
@@ -422,7 +447,76 @@ def _assignment_to_report(assignment: RtlAssignment) -> dict[str, Any]:
         "clocking": assignment.clocking,
         "start_line": assignment.start_line,
         "end_line": assignment.end_line,
-        "code_snippet": assignment.code_snippet,
+        "code_snippet": snippet,
+        "rhs_expression": assignment.rhs_expression,
+        "condition_expressions": list(assignment.condition_exprs),
+    }
+
+
+def build_assignment_trace_step(
+    *,
+    signal: str,
+    expected: str | None,
+    actual: str | None,
+    fail_time: int,
+    assignment: RtlAssignment,
+    sample_signal: Any,
+) -> dict[str, Any]:
+    """Classify one assignment-level cause without recursively following it."""
+    lhs_value = actual if actual is not None else sample_signal(leaf=signal, t=fail_time, prefer_dut=True)
+    rhs_values = {
+        rhs: sample_signal(leaf=rhs, t=fail_time, prefer_dut=True)
+        for rhs in assignment.rhs_signals
+    }
+    condition_values = {
+        cond: sample_signal(leaf=cond, t=fail_time, prefer_dut=True)
+        for cond in assignment.condition_signals
+    }
+
+    rhs_present = bool(rhs_values)
+    missing_rhs = rhs_present and any(value is None for value in rhs_values.values())
+    rhs_matches_expected = expected is not None and any(
+        _wildcard_match(expected, value) for value in rhs_values.values() if value is not None
+    )
+    rhs_matches_actual = lhs_value is not None and any(
+        _wildcard_match(lhs_value, value) for value in rhs_values.values() if value is not None
+    )
+    lhs_matches_expected = expected is not None and lhs_value is not None and _wildcard_match(expected, lhs_value)
+    condition_blocks = _condition_blocks_update(assignment.condition_exprs, condition_values)
+
+    classification = "missing_vcd_signal" if missing_rhs else "lhs_matches_rhs_continue_upstream"
+    reason = "Assignment reflects an observed RHS value; continue upstream."
+    if condition_blocks:
+        classification = "condition_blocks_update"
+        reason = "Observed condition values appear to block this assignment update."
+    elif not rhs_present:
+        classification = "constant_assignment"
+        reason = "The selected assignment is driven only by a Verilog constant expression."
+    elif missing_rhs:
+        reason = "At least one RHS signal was not present in the VCD."
+    elif rhs_matches_expected and not lhs_matches_expected:
+        if assignment.clocking == "comb" or assignment.kind == "continuous":
+            classification = "source_matches_expected_mux_wrong"
+            reason = "A source value matches expected, but the combinational/continuous output does not."
+        else:
+            classification = "rhs_matches_expected_lhs_stale"
+            reason = "RHS already matches expected, but LHS/output still has the failing value."
+    elif rhs_matches_actual and not lhs_matches_expected:
+        classification = "lhs_matches_rhs_continue_upstream"
+        reason = "LHS matches the current RHS value, so the error likely originates upstream."
+
+    return {
+        "signal": signal,
+        "driver_block_id": assignment.block_id,
+        "assignment_id": assignment.id,
+        "assignment": _assignment_to_report(assignment),
+        "lhs_value": lhs_value,
+        "expected": expected,
+        "actual": actual,
+        "rhs_observed_values": rhs_values,
+        "condition_values": condition_values,
+        "classification": classification,
+        "reason": reason,
     }
 
 
@@ -493,58 +587,17 @@ def build_value_backtrace(
                 ]
 
         assignment = drivers[0]
-        lhs_value = actual if actual is not None else sample_signal(leaf=signal, t=fail_time, prefer_dut=True)
-        rhs_values = {
-            rhs: sample_signal(leaf=rhs, t=fail_time, prefer_dut=True)
-            for rhs in assignment.rhs_signals
-        }
-        condition_values = {
-            cond: sample_signal(leaf=cond, t=fail_time, prefer_dut=True)
-            for cond in assignment.condition_signals
-        }
-
-        rhs_present = bool(rhs_values)
-        missing_rhs = rhs_present and any(value is None for value in rhs_values.values())
-        rhs_matches_expected = expected is not None and any(
-            _wildcard_match(expected, value) for value in rhs_values.values() if value is not None
+        step = build_assignment_trace_step(
+            signal=signal,
+            expected=expected,
+            actual=actual,
+            fail_time=fail_time,
+            assignment=assignment,
+            sample_signal=sample_signal,
         )
-        rhs_matches_actual = lhs_value is not None and any(
-            _wildcard_match(lhs_value, value) for value in rhs_values.values() if value is not None
-        )
-        lhs_matches_expected = expected is not None and lhs_value is not None and _wildcard_match(expected, lhs_value)
-        condition_blocks = _condition_blocks_update(assignment.condition_exprs, condition_values)
-
-        classification = "missing_vcd_signal" if missing_rhs else "lhs_matches_rhs_continue_upstream"
-        reason = "Assignment reflects an observed RHS value; continue upstream."
-        if condition_blocks:
-            classification = "condition_blocks_update"
-            reason = "Observed condition values appear to block this assignment update."
-        elif missing_rhs:
-            reason = "At least one RHS signal was not present in the VCD."
-        elif rhs_matches_expected and not lhs_matches_expected:
-            if assignment.clocking == "comb" or assignment.kind == "continuous":
-                classification = "source_matches_expected_mux_wrong"
-                reason = "A source value matches expected, but the combinational/continuous output does not."
-            else:
-                classification = "rhs_matches_expected_lhs_stale"
-                reason = "RHS already matches expected, but LHS/output still has the failing value."
-        elif rhs_matches_actual and not lhs_matches_expected:
-            classification = "lhs_matches_rhs_continue_upstream"
-            reason = "LHS matches the current RHS value, so the error likely originates upstream."
-
-        step = {
-            "signal": signal,
-            "driver_block_id": assignment.block_id,
-            "assignment_id": assignment.id,
-            "assignment": _assignment_to_report(assignment),
-            "lhs_value": lhs_value,
-            "expected": expected,
-            "actual": actual,
-            "rhs_observed_values": rhs_values,
-            "condition_values": condition_values,
-            "classification": classification,
-            "reason": reason,
-        }
+        lhs_value = step["lhs_value"]
+        rhs_values = step["rhs_observed_values"]
+        classification = step["classification"]
         steps = [step]
 
         if (
@@ -1123,15 +1176,21 @@ def _build_edge_active_time_points(
     *,
     output_dir: Path,
     time_window: tuple[int, int] | None,
+    sampling_event: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     if time_window is None:
         time_window = _vcd_time_range(vcd)
     if time_window is None:
         return []
-    clock_name = _find_clock_signal(vcd, preferred_name=_find_clock_from_contract(output_dir))
+    preferred_clock = (sampling_event or {}).get("clock") or _find_clock_from_contract(output_dir)
+    clock_name = _find_clock_signal(vcd, preferred_name=preferred_clock)
     if not clock_name:
         return []
-    return _find_clock_edges(vcd, clock_name, time_window)
+    edges = _find_clock_edges(vcd, clock_name, time_window)
+    required_edge = (sampling_event or {}).get("edge")
+    if required_edge:
+        edges = [item for item in edges if item.get("edge") == required_edge]
+    return edges
 
 
 def _sample_named_signal(
@@ -1161,6 +1220,7 @@ def build_first_divergence_report(
     sampling_mode: str = "auto",
     context_cycles: int = 3,
     max_signals: int = 24,
+    runtime_top_module: str | None = None,
 ) -> dict[str, Any]:
     """Find the first real DUT/ref output divergence in the current VCD.
 
@@ -1174,24 +1234,37 @@ def build_first_divergence_report(
 
     rtl_text = rtl_path.read_text(encoding="utf-8")
     ports = _extract_topmodule_ports(rtl_text)
-    module_name = _extract_module_name_from_contract(output_dir) or _extract_module_name_from_rtl(rtl_text) or "TopModule"
+    module_name = (
+        str(runtime_top_module or "").strip()
+        or _extract_module_name_from_contract(output_dir)
+        or _extract_module_name_from_rtl(rtl_text)
+        or "TopModule"
+    )
     tb_path = output_dir / "tb.sv"
     dut_instance = None
+    sampling_event: dict[str, str] | None = None
     if tb_path.exists():
         try:
-            dut_instance = _extract_dut_instance_name(tb_path.read_text(encoding="utf-8"), module_name=module_name)
+            tb_text = tb_path.read_text(encoding="utf-8")
+            dut_instance = _extract_dut_instance_name(tb_text, module_name=module_name)
+            sampling_event = _extract_tb_sampling_event(tb_text)
         except Exception:  # noqa: BLE001
             dut_instance = None
 
     ignored_tb_metrics: list[dict[str, Any]] = []
     raw_fail_outputs: list[dict[str, Any]] = []
+    real_fail_outputs: list[dict[str, Any]] = []
     if sim_log_json:
         try:
             sim = CommandResult.model_validate_json(sim_log_json)
             _fail_time, raw_fail_outputs = _extract_fail_signals_and_time(sim.stdout or "")
-            _real, ignored_tb_metrics = _filter_root_fail_outputs(raw_fail_outputs, module_outputs=ports["outputs"])
+            real_fail_outputs, ignored_tb_metrics = _filter_root_fail_outputs(
+                raw_fail_outputs,
+                module_outputs=ports["outputs"],
+            )
         except Exception:  # noqa: BLE001
             raw_fail_outputs = []
+            real_fail_outputs = []
 
     vcd = VCDVCD(str(vcd_path), store_tvs=True)  # type: ignore[operator]
     ref_instance = _resolve_ref_instance(vcd)
@@ -1214,6 +1287,7 @@ def build_first_divergence_report(
     if not pairs:
         return {
             "status": "no_pair_found",
+            "runtime_top_module": module_name,
             "candidate_signals": candidate_signals,
             "dut_instance": dut_instance,
             "ref_instance": ref_instance,
@@ -1224,9 +1298,19 @@ def build_first_divergence_report(
     blocks = parse_rtl_blocks(rtl_text)
     assignments = parse_rtl_assignments(rtl_text, blocks)
 
-    def scan(mode: str) -> dict[str, Any]:
+    authoritative_fail_time = min(
+        (int(item["time"]) for item in real_fail_outputs if isinstance(item.get("time"), int)),
+        default=None,
+    )
+
+    def scan(mode: str, *, not_before: int | None = None) -> dict[str, Any]:
         if mode == "edge_active":
-            edge_points = _build_edge_active_time_points(vcd, output_dir=output_dir, time_window=time_window)
+            edge_points = _build_edge_active_time_points(
+                vcd,
+                output_dir=output_dir,
+                time_window=time_window,
+                sampling_event=sampling_event,
+            )
             time_points = [int(edge["t"]) for edge in edge_points if isinstance(edge.get("t"), int)]
             edge_by_time = {int(edge["t"]): edge.get("edge") for edge in edge_points if isinstance(edge.get("t"), int)}
             active_region_model = (
@@ -1244,6 +1328,8 @@ def build_first_divergence_report(
         first_idx = -1
         first_pair: dict[str, Any] | None = None
         for idx, t in enumerate(time_points):
+            if not_before is not None and t < not_before:
+                continue
             for pair in pairs:
                 driver_kind = _driver_assignment_kind(str(pair["signal"]), assignments)
                 ref_value, dut_value = _sample_pair_with_mode(
@@ -1304,6 +1390,39 @@ def build_first_divergence_report(
     selected = stable_scan
     if requested_mode == "edge_active":
         selected = scan("edge_active")
+    elif requested_mode == "auto" and authoritative_fail_time is not None:
+        stable_authoritative = scan("stable", not_before=authoritative_fail_time)
+        edge_authoritative = scan("edge_active", not_before=authoritative_fail_time)
+        edge_first = edge_authoritative.get("first") if isinstance(edge_authoritative.get("first"), dict) else {}
+        stable_first = stable_authoritative.get("first") if isinstance(stable_authoritative.get("first"), dict) else {}
+        if (
+            sampling_event is not None
+            and edge_authoritative.get("status") == "ok"
+            and edge_first.get("time") == authoritative_fail_time
+        ):
+            selected = edge_authoritative
+            if stable_scan.get("status") == "no_divergence":
+                selected = dict(selected)
+                selected["status"] = "stable_values_match_but_tb_edge_mismatch"
+                selected["stable_result"] = {
+                    "status": stable_scan.get("status"),
+                    "sampling_mode": stable_scan.get("sampling_mode"),
+                    "candidate_signals": stable_scan.get("candidate_signals"),
+                }
+        elif stable_authoritative.get("status") == "ok" and stable_first.get("time") == authoritative_fail_time:
+            selected = stable_authoritative
+        else:
+            selected = {
+                "status": "sampling_alignment_unresolved",
+                "sampling_mode": "auto",
+                "authoritative_fail_time": authoritative_fail_time,
+                "sampling_event": sampling_event,
+                "stable_candidate": stable_authoritative.get("first"),
+                "edge_active_candidate": edge_authoritative.get("first"),
+                "candidate_signals": [p["signal"] for p in pairs],
+                "ignored_tb_metrics": ignored_tb_metrics,
+                "raw_fail_outputs": raw_fail_outputs,
+            }
     elif requested_mode == "auto" and stable_scan.get("status") == "no_divergence":
         total_mismatches = None
         if sim_log_json:
@@ -1323,7 +1442,36 @@ def build_first_divergence_report(
                 }
                 selected = edge_scan
 
-    if selected.get("status") in {"missing_time_range", "no_divergence"}:
+    if requested_mode == "auto" and authoritative_fail_time is not None:
+        selected.setdefault("authoritative_fail_time", authoritative_fail_time)
+        selected.setdefault("sampling_event", sampling_event)
+        stable_first = stable_scan.get("first") if isinstance(stable_scan.get("first"), dict) else None
+        stable_pair = stable_scan.get("first_pair") if isinstance(stable_scan.get("first_pair"), dict) else None
+        stable_times = stable_scan.get("time_points") if isinstance(stable_scan.get("time_points"), list) else []
+        recovered_before_sample = False
+        if stable_first and stable_pair and isinstance(stable_first.get("time"), int):
+            for t in stable_times:
+                if not isinstance(t, int) or not (stable_first["time"] < t < authoritative_fail_time):
+                    continue
+                ref_value, dut_value = _sample_pair_with_mode(
+                    stable_pair,
+                    t,
+                    sampling_mode="stable",
+                    driver_assignment_kind=_driver_assignment_kind(str(stable_pair["signal"]), assignments),
+                )
+                if ref_value is not None and dut_value is not None and _wildcard_match(ref_value, dut_value):
+                    recovered_before_sample = True
+                    break
+        if stable_first and recovered_before_sample:
+            selected.setdefault(
+                "pre_sample_transients",
+                [{**stable_first, "classification": "pre_sample_transient"}],
+            )
+
+    if selected.get("status") in {"missing_time_range", "no_divergence", "sampling_alignment_unresolved"}:
+        selected.setdefault("runtime_top_module", module_name)
+        selected.setdefault("dut_instance", dut_instance)
+        selected.setdefault("ref_instance", ref_instance)
         selected.setdefault("candidate_signals", [p["signal"] for p in pairs])
         selected.setdefault("ignored_tb_metrics", ignored_tb_metrics)
         selected.setdefault("raw_fail_outputs", raw_fail_outputs)
@@ -1392,6 +1540,10 @@ def build_first_divergence_report(
 
     return {
         "status": selected.get("status", "ok"),
+        "authoritative_fail_time": authoritative_fail_time,
+        "sampling_event": sampling_event,
+        "pre_sample_transients": selected.get("pre_sample_transients") or [],
+        "runtime_top_module": module_name,
         "sampling_mode": first.get("sampling_mode"),
         "edge": first.get("edge"),
         "driver_assignment_kind": first.get("driver_assignment_kind"),
@@ -1404,7 +1556,7 @@ def build_first_divergence_report(
         "suspect": {
             "driver_blocks": suspect_blocks,
             "signals": sorted({str(first["signal"]), *related_outputs}),
-            "hint": "First real DUT/ref output divergence; use this instead of testbench metric counters.",
+            "hint": "First DUT/ref divergence aligned to the authoritative testbench sampling event.",
         },
         "candidate_signals": [p["signal"] for p in pairs],
         "ignored_tb_metrics": ignored_tb_metrics,
@@ -1425,6 +1577,8 @@ def build_trace_report(
     kg_hop_depth: int = 2,
     window_cycles: int = 10,
     diag_edges: int = 200,
+    planner_module_name: str = "",
+    runtime_top_module: str | None = None,
 ) -> tuple[dict[str, Any], list[RtlBlock]]:
     """Build a structured bug report (waveform + coarse RTL slice)."""
     sim = CommandResult.model_validate_json(sim_log_json)
@@ -1432,7 +1586,13 @@ def build_trace_report(
 
     rtl_text = rtl_path.read_text(encoding="utf-8")
     ports = _extract_topmodule_ports(rtl_text)
-    module_name = _extract_module_name_from_contract(output_dir) or _extract_module_name_from_rtl(rtl_text) or "TopModule"
+    module_name = (
+        str(runtime_top_module or "").strip()
+        or _extract_module_name_from_contract(output_dir)
+        or _extract_module_name_from_rtl(rtl_text)
+        or "TopModule"
+    )
+    logical_module_name = str(planner_module_name or "").strip() or module_name
 
     fail_time, raw_fail_outputs = _extract_fail_signals_and_time(stdout)
     total_mismatches = _extract_total_mismatches(stdout)
@@ -1477,11 +1637,11 @@ def build_trace_report(
     suspect_blocks = local_suspect_blocks
 
     if kg_service is not None:
-        session_id = kg_session_id or kg_debug_session_id(module_name)
+        session_id = kg_session_id or kg_debug_session_id(logical_module_name)
         try:
             materializer = DebugReadsMaterializer(kg_service)
             materialized = materializer.materialize(
-                module_name=module_name,
+                module_name=logical_module_name,
                 session_id=session_id,
                 hop_depth=kg_hop_depth,
                 current_rtl_path=rtl_path,
@@ -1489,7 +1649,7 @@ def build_trace_report(
             )
             kg_slice = kg_dynamic_slice(
                 kg_service=kg_service,
-                module_name=module_name,
+                module_name=logical_module_name,
                 fail_signals=fail_signal_names,
                 session_id=session_id,
                 max_depth=max_depth,
@@ -1528,7 +1688,39 @@ def build_trace_report(
         except Exception:  # noqa: BLE001
             dut_instance = None
 
+    first_divergence_report: dict[str, Any] | None = None
+    if vcd_available:
+        try:
+            first_divergence_report = build_first_divergence_report(
+                rtl_path=rtl_path,
+                output_dir=output_dir,
+                sim_log_json=sim_log_json,
+                signals=ports["outputs"],
+                context_cycles=3,
+                runtime_top_module=module_name,
+            )
+        except Exception as exc:  # noqa: BLE001
+            first_divergence_report = {"status": "error", "error": f"{type(exc).__name__}: {exc}"}
+
     fail_time_star = fail_time
+    aligned_divergence = (
+        first_divergence_report.get("first_divergence")
+        if isinstance(first_divergence_report, dict)
+        and first_divergence_report.get("status") in {"ok", "stable_values_match_but_tb_edge_mismatch"}
+        and isinstance(first_divergence_report.get("first_divergence"), dict)
+        else None
+    )
+    if isinstance(aligned_divergence, dict) and isinstance(aligned_divergence.get("time"), int):
+        fail_time_star = int(aligned_divergence["time"])
+    selected_sampling_mode = (
+        str(aligned_divergence.get("sampling_mode"))
+        if isinstance(aligned_divergence, dict) and aligned_divergence.get("sampling_mode") in {"stable", "edge_active"}
+        else ""
+    )
+    sampling_alignment_unresolved = (
+        isinstance(first_divergence_report, dict)
+        and first_divergence_report.get("status") == "sampling_alignment_unresolved"
+    )
     fail_details: list[dict[str, Any]] = []
     active_failures: list[dict[str, Any]] = []
     ordered_fail_outputs: list[dict[str, Any]] = []
@@ -1600,6 +1792,14 @@ def build_trace_report(
             if not full:
                 return None
             inclusive = (clk_leaf is not None and leaf == clk_leaf) or (t == 0)
+            if selected_sampling_mode == "stable" and t == fail_time_star:
+                inclusive = True
+            elif selected_sampling_mode == "edge_active" and t == fail_time_star:
+                if leaf.endswith("_ref"):
+                    inclusive = True
+                elif leaf.endswith("_dut"):
+                    output_name = leaf[:-4]
+                    inclusive = _driver_assignment_kind(output_name, assignments) != "nonblocking"
             tv = _vcd_time_values(vcd, full)
             if tv is None:
                 return None
@@ -1720,14 +1920,18 @@ def build_trace_report(
                     "match_rate_dut_lag1": lag_rate,
                 }
 
-        value_backtrace = build_value_backtrace(
-            fail_outputs=ordered_fail_outputs or fail_outputs,
-            fail_time=fail_time_star,
-            assignments=assignments,
-            sample_signal=sample_signal,
-            max_depth=max_depth,
-        )
-        diagnostic_narrative = _build_diagnostic_narrative(value_backtrace)
+        if sampling_alignment_unresolved:
+            value_backtrace = {"chains": [], "fallback_reason": "sampling_alignment_unresolved"}
+        else:
+            value_backtrace = build_value_backtrace(
+                fail_outputs=ordered_fail_outputs or fail_outputs,
+                fail_time=fail_time_star,
+                assignments=assignments,
+                sample_signal=sample_signal,
+                max_depth=max_depth,
+            )
+            value_backtrace["sampling_mode"] = selected_sampling_mode or "stable"
+            diagnostic_narrative = _build_diagnostic_narrative(value_backtrace)
 
     elif fail_time_star is None:
         value_backtrace = {"chains": [], "fallback_reason": "missing_fail_time"}
@@ -1756,19 +1960,6 @@ def build_trace_report(
             key=lambda b: (b.start_line, b.id),
         )
 
-    first_divergence_report: dict[str, Any] | None = None
-    if vcd_available:
-        try:
-            first_divergence_report = build_first_divergence_report(
-                rtl_path=rtl_path,
-                output_dir=output_dir,
-                sim_log_json=sim_log_json,
-                signals=ports["outputs"],
-                context_cycles=3,
-            )
-        except Exception as exc:  # noqa: BLE001
-            first_divergence_report = {"status": "error", "error": f"{type(exc).__name__}: {exc}"}
-
     root_failure = None
     has_real_divergence = (
         isinstance(first_divergence_report, dict)
@@ -1776,7 +1967,7 @@ def build_trace_report(
     )
     if has_real_divergence:
         root_failure = first_divergence_report.get("first_divergence")
-    elif active_failures:
+    elif not sampling_alignment_unresolved and active_failures:
         root_failure = active_failures[0]
 
     visible_fail_outputs = active_failures
@@ -1785,6 +1976,9 @@ def build_trace_report(
 
     report: dict[str, Any] = {
         "fail_time": fail_time_star,
+        "planner_module_name": logical_module_name,
+        "runtime_top_module": module_name,
+        "runtime_rtl_path": str(rtl_path),
         "total_mismatches": total_mismatches,
         "raw_fail_outputs": raw_fail_outputs,
         "ignored_tb_metrics": ignored_tb_metrics,
@@ -1795,7 +1989,7 @@ def build_trace_report(
         "edge_active_failure": (
             first_divergence_report.get("first_divergence")
             if isinstance(first_divergence_report, dict)
-            and first_divergence_report.get("status") == "stable_values_match_but_tb_edge_mismatch"
+            and first_divergence_report.get("sampling_mode") == "edge_active"
             else None
         ),
         "required_next_tool": (
@@ -1819,6 +2013,11 @@ def build_trace_report(
         ],
         "vcd_available": bool(vcd_available),
         "dut_instance": dut_instance,
+        "sampling_event": (
+            first_divergence_report.get("sampling_event")
+            if isinstance(first_divergence_report, dict)
+            else None
+        ),
         "timing_hints": timing_hints,
     }
 

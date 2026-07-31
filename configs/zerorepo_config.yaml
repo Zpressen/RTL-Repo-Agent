@@ -5,7 +5,7 @@
 # LLM Configuration
 # ============================================================================
 llm:
-  model: "gpt-5.6-sol"
+  model: "gpt-5.5"
   max_tokens: 65536
   temperature: 0.6
   reasoning_effort: "high"
@@ -67,6 +67,14 @@ rtl_kg:
     uri: "bolt://localhost:7687"
     user: "neo4j"
     password: "neo4j123456"
+
+# ============================================================================
+# RTL Module Planner Configuration
+# ============================================================================
+rtl_module_planner:
+  temporal_planning:
+    # Enabled by default in code; set false only for baseline/ablation runs.
+    enabled: true
 
 # ============================================================================
 # Code Generation Configuration (IterativeCodeGenerator)

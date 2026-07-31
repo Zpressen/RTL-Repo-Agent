@@ -37,6 +37,7 @@ class ModuleResultWriter:
         merged_file: str | Path,
         debug_result: Any,
         stage: str = "post_module_debug",
+        refresh_code: bool = True,
     ) -> ModuleSimulationStatus:
         status = self._build_status(module_name=module_name, debug_result=debug_result, stage=stage)
         payload = self._load_status_payload()
@@ -47,12 +48,13 @@ class ModuleResultWriter:
         records.setdefault(module_name, {})[stage] = status_payload
         self._write_status_payload(payload)
 
-        changed_path = self._relative_changed_path(Path(merged_file))
-        self.kg_service.refresh_repo_files(
-            changed_paths=[changed_path],
-            stage=stage,
-            filter_to_planned_skeleton=False,
-        )
+        if refresh_code:
+            changed_path = self._relative_changed_path(Path(merged_file))
+            self.kg_service.refresh_repo_files(
+                changed_paths=[changed_path],
+                stage=stage,
+                filter_to_planned_skeleton=False,
+            )
         self._ingest_simulation_statuses(records)
         return status
 

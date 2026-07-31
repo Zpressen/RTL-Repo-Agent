@@ -24,7 +24,7 @@ DebugStatus = Literal["disabled", "skipped", "pass", "fixed", "fail", "error"]
 class RtlDebugConfig:
     enabled: bool = True
     oracle_root: str = "/home/mokita/RealBench"
-    max_trials: int = 15
+    max_trials: int = 30
     allow_failure: bool = False
     toolchain_bin: str = ""
     openai_config: OpenAIConfig | None = None

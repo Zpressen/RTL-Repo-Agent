@@ -116,6 +116,7 @@ class ModuleRecord(BaseModel):
 class Stage3ModuleSkeletonArtifact(BaseModel):
     schema_version: str = Field(default="stage3_skeleton_docs_v1")
     task_id: str = Field(..., min_length=1)
+    input_fingerprint: str = Field(default="")
     source_schema_versions: dict[str, str] = Field(default_factory=dict)
     stage3_status: Stage3Status = Field(default="module_skeletons_in_progress")
     top_module: str = Field(..., min_length=1)

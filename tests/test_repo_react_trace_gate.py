@@ -1,15 +1,28 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 from pathlib import Path
 from types import SimpleNamespace
 from zerorepo.rtl_impl.debug_agent.bash_tools import CommandResult
+from zerorepo.rtl_impl.debug_agent.debug_runner import RtlDebugConfig
 
 from zerorepo.rtl_impl.repo_react.journal import RepoReActJournal
-from zerorepo.rtl_impl.repo_react.compact import build_llm_compact_memory, parse_llm_compact_json
+from zerorepo.rtl_impl.repo_react.compact import (
+    build_deterministic_compact_memory,
+    build_llm_compact_memory,
+    parse_llm_compact_json,
+)
 from zerorepo.rtl_impl.repo_react.context import DebugContextRouter
-from zerorepo.rtl_impl.repo_react.prompt import _compact_long_term_memories, build_compact_prompt, build_continue_prompt, build_initial_prompt
+from zerorepo.rtl_impl.repo_react.prompt import (
+    SYSTEM_PROMPT,
+    _compact_long_term_memories,
+    build_compact_prompt,
+    build_continue_prompt,
+    build_initial_prompt,
+    build_tool_call_recovery_prompt,
+)
 from zerorepo.rtl_impl.repo_react.runner import RepoReActRunner
 import zerorepo.rtl_impl.repo_react.runner as runner_module
 from zerorepo.rtl_impl.repo_react.schemas import DebugContextPack, RepoReActInput, SimSnapshot, SystemTriage
@@ -133,9 +146,27 @@ def _make_runner(tmp_path: Path, *, repair_mode: str = "functional") -> tuple[Re
     runner._route_calls_since_action = 0
     runner._light_consolidations_since_checkpoint = 0
     runner._checkpoint_count = 0
+    runner._pending_tool_call_recovery = {}
+    runner._tool_call_recovery_signatures = set()
     runner._max_readonly_calls_since_action = 16
     runner._router_first_enabled = True
+    runner._route_allowed_reads = []
+    runner._route_read_count = 0
+    runner._required_initial_trace_call = {}
+    runner._initial_trace_completed = True
     return runner, tools
+
+
+def test_debug_action_budget_defaults_to_thirty(tmp_path: Path) -> None:
+    tools = _make_tools(tmp_path)
+
+    assert RtlDebugConfig(openai_config=None).max_trials == 30
+    assert tools.state.input.max_steps == 30
+    assert inspect.signature(RepoReActRunner).parameters["max_steps"].default == 30
+    assert RepoReActRunner._resolve_max_agent_turns(
+        tools.state.input,
+        tools.state.input.max_steps,
+    ) == 90
 
 
 def test_functional_apply_patch_requires_real_divergence(tmp_path: Path) -> None:
@@ -283,11 +314,16 @@ def test_multi_file_lint_fail_rolls_back_all_files(tmp_path: Path, monkeypatch: 
         expected_effect="lint catches syntax",
     )
 
-    assert result["status"] == "rollback"
+    assert result["status"] == "syntax_retry_required"
     assert result["rollback_reason"] == "lint_failed"
+    assert result["candidate_id"] == "syntax_candidate_0001"
+    assert result["patch_attempt_id"] == 1
+    assert result["syntax_retries_used"] == 0
+    assert result["syntax_retries_remaining"] == 2
     assert top_path.read_text(encoding="utf-8") == before_top
     assert child_path.read_text(encoding="utf-8") == before_child
-    assert tools.state.action_calls == 1
+    assert tools.state.action_calls == 0
+    assert tools.state.patch_attempt_id == 1
 
 
 def test_multi_file_sim_regression_rolls_back_all_files(tmp_path: Path, monkeypatch: object) -> None:
@@ -307,8 +343,14 @@ def test_multi_file_sim_regression_rolls_back_all_files(tmp_path: Path, monkeypa
         del top_module
         return True, CommandResult(stdout="", stderr="").model_dump_json()
 
+    captured: dict[str, object] = {}
+
+    def fake_judge(payload: dict[str, object]) -> dict[str, object]:
+        captured.update(payload)
+        return {"decision": "rollback"}
+
     monkeypatch.setattr(tools_module, "check_syntax", fake_check_syntax)
-    monkeypatch.setattr(tools, "_llm_patch_acceptance_decision", lambda _payload: {"decision": "rollback"})
+    monkeypatch.setattr(tools, "_llm_patch_acceptance_decision", fake_judge)
 
     result = tools.apply_patch(
         patches=[
@@ -321,11 +363,15 @@ def test_multi_file_sim_regression_rolls_back_all_files(tmp_path: Path, monkeypa
 
     assert result["status"] == "rollback"
     assert result["rollback_reason"] == "mismatch_count_regressed"
+    assert len(captured["patch_diff"]) == 2  # type: ignore[arg-type]
+    assert {item["path"] for item in captured["patch_diff"]} == {str(top_path), str(child_path)}  # type: ignore[union-attr]
+    assert all("assign y = 1'b1;" in item["new_text"] for item in captured["patch_diff"])  # type: ignore[union-attr]
+    assert len(captured["rtl_surrounding_context"]) == 2  # type: ignore[arg-type]
     assert top_path.read_text(encoding="utf-8") == before_top
     assert child_path.read_text(encoding="utf-8") == before_child
 
 
-def test_repo_scope_defaults_to_larger_readonly_budget(tmp_path: Path) -> None:
+def test_repo_scope_defaults_to_light_readonly_budget(tmp_path: Path) -> None:
     tools = _make_repo_tools(tmp_path)
     runner = RepoReActRunner.__new__(RepoReActRunner)
     runner._readonly_budget_from_env = False
@@ -333,7 +379,7 @@ def test_repo_scope_defaults_to_larger_readonly_budget(tmp_path: Path) -> None:
 
     runner._configure_scope_defaults(tools.state.input)
 
-    assert runner._max_readonly_calls_since_action == 32
+    assert runner._max_readonly_calls_since_action == 16
 
 
 def test_env_readonly_budget_is_respected_for_repo_scope(tmp_path: Path) -> None:
@@ -427,6 +473,335 @@ def test_apply_patch_enforces_action_budget(tmp_path: Path) -> None:
 
     assert result["status"] == "rejected"
     assert "max_steps=1" in result["reason"]
+
+
+def test_apply_patch_syntax_retries_share_one_functional_action(tmp_path: Path, monkeypatch: object) -> None:
+    tools = _make_tools(tmp_path, repair_mode="syntax")
+    rtl_path = tools.state.input.rtl_path
+    before = rtl_path.read_text(encoding="utf-8")
+    lint_results = iter(
+        [
+            (False, CommandResult(stdout="", stderr=f"%Error: {rtl_path}:2:12: unexpected ';'").model_dump_json()),
+            (False, CommandResult(stdout="", stderr=f"%Error: {rtl_path}:2:12: unexpected ';'").model_dump_json()),
+            (True, CommandResult(stdout="lint ok", stderr="").model_dump_json()),
+        ]
+    )
+    monkeypatch.setattr(tools_module, "check_syntax", lambda *_args, **_kwargs: next(lint_results))
+
+    first = tools.apply_patch(
+        patches=[{"path": "rtl.sv", "start_line": 2, "end_line": 2, "new_text": "assign y = ;"}],
+        reason="repair assignment",
+        expected_effect="lint passes",
+    )
+    assert first["status"] == "syntax_retry_required"
+    assert first["syntax_errors"] == [
+        {"path": str(rtl_path), "line": 2, "column": 12, "message": "unexpected ';'"}
+    ]
+    assert rtl_path.read_text(encoding="utf-8") == before
+    assert tools.state.action_calls == 0
+
+    second = tools.apply_patch(
+        patches=[{"path": "rtl.sv", "start_line": 2, "end_line": 2, "new_text": "assign y = ;"}],
+        reason="repair assignment syntax",
+        expected_effect="lint passes",
+        syntax_retry_of=first["candidate_id"],
+    )
+    assert second["status"] == "syntax_retry_required"
+    assert second["candidate_id"] == first["candidate_id"]
+    assert second["syntax_retries_used"] == 1
+    assert second["syntax_retries_remaining"] == 1
+    assert rtl_path.read_text(encoding="utf-8") == before
+    assert tools.state.action_calls == 0
+
+    third = tools.apply_patch(
+        patches=[{"path": "rtl.sv", "start_line": 2, "end_line": 2, "new_text": "assign y = ~clk;"}],
+        reason="finish assignment syntax repair",
+        expected_effect="lint passes",
+        syntax_retry_of=first["candidate_id"],
+    )
+    assert third["status"] == "pass"
+    assert third["candidate_id"] == first["candidate_id"]
+    assert third["patch_attempt_id"] == 3
+    assert third["action_step"] == 1
+    assert third["committed"] is True
+    assert tools.state.patch_attempt_id == 3
+    assert tools.state.action_calls == 1
+    assert tools.state.syntax_candidates[first["candidate_id"]]["status"] == "resolved"
+
+
+def test_apply_patch_syntax_retry_exhaustion_does_not_consume_budget(tmp_path: Path, monkeypatch: object) -> None:
+    tools = _make_tools(tmp_path, repair_mode="syntax")
+    before = tools.state.input.rtl_path.read_text(encoding="utf-8")
+    monkeypatch.setattr(tools_module, "check_syntax", lambda *_args, **_kwargs: (False, "lint failed"))
+    patch = [{"path": "rtl.sv", "start_line": 2, "end_line": 2, "new_text": "assign y = ;"}]
+
+    first = tools.apply_patch(patches=patch, reason="try", expected_effect="lint")
+    second = tools.apply_patch(
+        patches=patch,
+        reason="retry one",
+        expected_effect="lint",
+        syntax_retry_of=first["candidate_id"],
+    )
+    third = tools.apply_patch(
+        patches=patch,
+        reason="retry two",
+        expected_effect="lint",
+        syntax_retry_of=first["candidate_id"],
+    )
+
+    assert first["status"] == "syntax_retry_required"
+    assert second["status"] == "syntax_retry_required"
+    assert third["status"] == "syntax_retry_exhausted"
+    assert third["syntax_retries_used"] == 2
+    assert third["syntax_retries_remaining"] == 0
+    assert tools.state.patch_attempt_id == 3
+    assert tools.state.action_calls == 0
+    assert tools.state.input.rtl_path.read_text(encoding="utf-8") == before
+
+    rejected = tools.apply_patch(
+        patches=patch,
+        reason="retry too late",
+        expected_effect="lint",
+        syntax_retry_of=first["candidate_id"],
+    )
+    assert rejected["status"] == "rejected"
+    assert tools.state.patch_attempt_id == 3
+    assert tools.state.action_calls == 0
+
+
+def test_syntax_retry_rejects_unknown_or_changed_target_without_counting(tmp_path: Path, monkeypatch: object) -> None:
+    tools = _make_tools(tmp_path, repair_mode="syntax")
+    monkeypatch.setattr(tools_module, "check_syntax", lambda *_args, **_kwargs: (False, "lint failed"))
+    first = tools.apply_patch(
+        patches=[{"path": "rtl.sv", "start_line": 2, "end_line": 2, "new_text": "assign y = ;"}],
+        reason="try",
+        expected_effect="lint",
+    )
+
+    unknown = tools.apply_patch(
+        patches=[{"path": "rtl.sv", "start_line": 2, "end_line": 2, "new_text": "assign y = clk;"}],
+        reason="unknown",
+        expected_effect="lint",
+        syntax_retry_of="syntax_candidate_9999",
+    )
+    changed_target = tools.apply_patch(
+        patches=[{"path": "rtl.sv", "start_line": 1, "end_line": 1, "new_text": "module m(input clk, output y);"}],
+        reason="changed target",
+        expected_effect="lint",
+        syntax_retry_of=first["candidate_id"],
+    )
+    changed_action = tools.replace_block(
+        block_id="C1",
+        new_code="assign y = clk;",
+        reason="changed action",
+        expected_effect="lint",
+        syntax_retry_of=first["candidate_id"],
+    )
+
+    assert unknown["status"] == "rejected"
+    assert changed_target["status"] == "rejected"
+    assert changed_action["status"] == "rejected"
+    assert tools.state.patch_attempt_id == 1
+    assert tools.state.action_calls == 0
+
+
+def test_syntax_failure_is_journaled_but_not_an_unsafe_direction(tmp_path: Path, monkeypatch: object) -> None:
+    tools = _make_tools(tmp_path, repair_mode="syntax")
+    monkeypatch.setattr(tools_module, "check_syntax", lambda *_args, **_kwargs: (False, "lint failed"))
+
+    result = tools.apply_patch(
+        patches=[{"path": "rtl.sv", "start_line": 2, "end_line": 2, "new_text": "assign y = ;"}],
+        reason="syntax typo",
+        expected_effect="lint",
+    )
+    snapshot = tools.memory_snapshot()
+
+    assert result["status"] == "syntax_retry_required"
+    assert tools._read_jsonl("patch_journal.jsonl")[-1]["effect"] == "syntax_failed"
+    assert snapshot["unsafe_directions"] == []
+    assert snapshot["failed_directions"] == []
+    assert snapshot["repair_ledger"] == []
+    assert snapshot["pending_syntax_candidates"][0]["candidate_id"] == result["candidate_id"]
+
+
+def test_runner_agent_turn_budget_defaults_to_three_times_functional_budget(tmp_path: Path) -> None:
+    tools = _make_tools(tmp_path, repair_mode="functional")
+    inp = tools.state.input
+    inp.max_steps = 15
+    assert RepoReActRunner._resolve_max_agent_turns(inp, inp.max_steps) == 45
+    inp.max_agent_turns = 7
+    assert RepoReActRunner._resolve_max_agent_turns(inp, inp.max_steps) == 7
+
+
+def test_initial_trace_is_minimal_seed_with_required_one_hop_call(
+    tmp_path: Path,
+    monkeypatch: object,
+) -> None:
+    runner, tools = _make_runner(tmp_path, repair_mode="functional")
+    report = {
+        "runtime_top_module": "m",
+        "dut_instance": "dut0",
+        "first_failure": {"signal": "legacy_signal"},
+        "suspect_blocks": [{"id": "A1", "start_line": 2, "end_line": 2}],
+        "value_backtrace": {
+            "chains": [
+                {
+                    "sig": "y",
+                    "chain": [{"driver_block_id": "A1", "classification": "constant_assignment"}],
+                }
+            ]
+        },
+        "first_divergence": {
+            "status": "ok",
+            "sampling_event": {"edge": "posedge", "clock": "clk", "source": "tb_checker"},
+            "nearby": {"rows": [{"t": 9, "y_dut": "0", "y_ref": "1"}]},
+            "suspect": {"driver_blocks": [{"id": "A1"}]},
+            "first_divergence": {
+                "signal": "y",
+                "time": 9,
+                "ref": "1",
+                "dut": "0",
+                "classification": "wrong_value",
+            },
+        },
+    }
+    monkeypatch.setattr(runner_module, "build_trace_report", lambda **_kwargs: (report, []))
+
+    seed = runner._build_initial_trace(tools.state.input)
+
+    assert seed == {
+        "root_module": "m",
+        "root_signal": "y",
+        "first_divergence_time": 9,
+        "expected_value": "1",
+        "actual_value": "0",
+        "sampling_event": {"edge": "posedge", "clock": "clk", "source": "tb_checker"},
+        "required_next_tool": "trace_signal_cause",
+        "arguments": {
+            "module_name": "m",
+            "signal_name": "y",
+            "time": 9,
+            "expected_value": "1",
+        },
+    }
+    assert runner._initial_dut_instance == "dut0"
+    assert "nearby" not in seed
+    assert "suspect_blocks" not in seed
+    assert "value_backtrace_summary" not in seed
+    persisted = json.loads((tools.state.input.debug_workdir / "trace_report.json").read_text(encoding="utf-8"))
+    assert persisted["suspect_blocks"][0]["id"] == "A1"
+
+
+def test_initial_trace_gate_unlocks_context_and_vcd_only_after_matching_successful_trace(
+    tmp_path: Path,
+    monkeypatch: object,
+) -> None:
+    runner, tools = _make_runner(tmp_path, repair_mode="functional")
+    async def inline_to_thread(func: object, *args: object, **kwargs: object) -> object:
+        return func(*args, **kwargs)  # type: ignore[operator]
+
+    monkeypatch.setattr(runner_module.asyncio, "to_thread", inline_to_thread)
+    required = {
+        "module_name": "m",
+        "signal_name": "y",
+        "time": 9,
+        "expected_value": "1",
+    }
+    runner._required_initial_trace_call = required
+    runner._initial_trace_completed = False
+
+    blocked_read = json.loads(
+        asyncio.run(
+            runner.read_context(
+                kind="lines",
+                path=str(tools.state.input.rtl_path),
+                start=1,
+                end=2,
+            )
+        ).content[0]["text"]
+    )
+    blocked_probe = json.loads(
+        asyncio.run(runner.probe_vcd(signals=["y"], time=9)).content[0]["text"]
+    )
+    assert blocked_read["status"] == "initial_trace_required"
+    assert blocked_probe["status"] == "initial_trace_required"
+    assert blocked_read["arguments"] == required
+
+    wrong = json.loads(
+        asyncio.run(
+            runner.trace_signal_cause(
+                module_name="m",
+                signal_name="y",
+                time=10,
+                expected_value="1",
+            )
+        ).content[0]["text"]
+    )
+    assert wrong["initial_trace_gate"]["status"] == "pending"
+    assert runner._initial_trace_completed is False
+
+    completed = json.loads(
+        asyncio.run(
+            runner.trace_signal_cause(
+                module_name="m",
+                signal_name="y",
+                time=9,
+                expected_value="1",
+            )
+        ).content[0]["text"]
+    )
+    assert completed["status"] == "static_only"
+    assert completed["initial_trace_gate"] == {
+        "status": "completed",
+        "unlocked_tools": ["read_context", "probe_vcd"],
+    }
+    assert runner._initial_trace_completed is True
+
+    unblocked_read = json.loads(
+        asyncio.run(
+            runner.read_context(
+                kind="lines",
+                path=str(tools.state.input.rtl_path),
+                start=1,
+                end=2,
+            )
+        ).content[0]["text"]
+    )
+    assert unblocked_read["status"] == "ok"
+
+
+def test_runner_reports_independent_turn_action_and_patch_counts(tmp_path: Path, monkeypatch: object) -> None:
+    runner, tools = _make_runner(tmp_path, repair_mode="functional")
+    async def inline_to_thread(func: object, *args: object, **kwargs: object) -> object:
+        return func(*args, **kwargs)  # type: ignore[operator]
+
+    monkeypatch.setattr(runner_module.asyncio, "to_thread", inline_to_thread)
+    runner._readonly_budget_from_env = False
+    runner._route_allowed_reads = []
+    runner._route_read_count = 0
+    runner._build_initial_trace = lambda _inp: {}  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        RepoReActTools,
+        "persist_memory_snapshot",
+        lambda self: {
+            "module": self.state.input.module_name,
+            "last_sim": self.state.last_sim.model_dump(),
+            "action_calls": self.state.action_calls,
+            "patch_attempts": self.state.patch_attempt_id,
+            "max_steps": self.state.input.max_steps,
+            "causal_memory_brief": {},
+        },
+    )
+    inp = tools.state.input.model_copy(update={"max_steps": 15, "max_agent_turns": 3})
+
+    result = asyncio.run(runner.chat(inp))
+
+    assert result.status == "max_steps_exceeded"
+    assert result.agent_turns == 3
+    assert result.steps == 3
+    assert result.action_calls == 0
+    assert result.patch_attempts == 0
+    assert "agent turn budget exhausted (3/3)" in result.reason
 
 
 def test_parse_sim_metrics_extracts_total_and_per_signal() -> None:
@@ -618,6 +993,170 @@ def test_llm_acceptance_can_keep_functional_regression(tmp_path: Path, monkeypat
     assert result["acceptance_decision"]["decision"] == "keep"
     assert "assign y = ~clk;" in tools.state.input.rtl_path.read_text(encoding="utf-8")
     assert tools.state.last_sim.mismatch_count == 42360
+
+
+def test_acceptance_payload_includes_full_diff_context_authority_and_ledger(tmp_path: Path, monkeypatch: object) -> None:
+    tools = _make_tools(tmp_path, repair_mode="functional")
+    rtl_path = tools.state.input.rtl_path
+    baseline_lines = ["module m(input clk, output y);"] + [f"// line {idx}" for idx in range(2, 65)] + ["endmodule"]
+    rtl_path.write_text("\n".join(baseline_lines) + "\n", encoding="utf-8")
+    tools.state.input.spec_text = "target_signal must change only at the sampled posedge."
+    tb_text = "module tb;\nalways @(posedge clk) if (target_signal !== expected) errors = errors + 1;\nendmodule\n"
+    (tools.state.input.debug_workdir / "tb.sv").write_text(tb_text, encoding="utf-8")
+
+    for step in range(1, 8):
+        tools.state.journal.append_jsonl(
+            "patch_journal.jsonl",
+            {
+                "step": step,
+                "effect": "neutral",
+                "action_type": "apply_patch",
+                "target": {"path": str(rtl_path), "start_line": step, "end_line": step},
+                "changed_signals": [f"old_signal_{step}"],
+                "hypothesis": f"prior repair {step}",
+                "patch_summary": f"prior patch {step}",
+                "result": {"status": "neutral"},
+            },
+        )
+    tools.state.journal.append_jsonl(
+        "patch_journal.jsonl",
+        {"step": 8, "effect": "syntax_failed", "target": {"path": str(rtl_path)}, "result": {}},
+    )
+
+    before_log = CommandResult(
+        stdout="Hint: Output 'target_signal' has 1 mismatches. First mismatch occurred at time 10.\nMismatches: 1 in 20 samples\n",
+        stderr="",
+    ).model_dump_json()
+    after_log = CommandResult(
+        stdout="Hint: Output 'target_signal' has 2 mismatches. First mismatch occurred at time 10.\nMismatches: 2 in 20 samples\n",
+        stderr="",
+    ).model_dump_json()
+    tools.state.last_sim = SimSnapshot(is_pass=False, mismatch_count=1, first_fail_time=10, sim_output_path="")
+    tools.state.last_sim_output = before_log
+    tools.state.sim_reviewer = SimpleNamespace(review=lambda: (False, 2, after_log))
+    tools._trace_payload_for_sim = lambda _sim_output: {  # type: ignore[method-assign]
+        "trace_summary": None,
+        "divergence_summary": None,
+        "error": None,
+    }
+    captured: dict[str, object] = {}
+
+    def fake_judge(payload: dict[str, object]) -> dict[str, object]:
+        captured.update(payload)
+        return {"decision": "rollback", "confidence": 0.9, "reason": "regressed"}
+
+    monkeypatch.setattr(
+        tools_module,
+        "check_syntax",
+        lambda *_args, **_kwargs: (True, CommandResult(stdout="", stderr="").model_dump_json()),
+    )
+    monkeypatch.setattr(tools, "_llm_patch_acceptance_decision", fake_judge)
+    long_new_text = "wire target_signal;\n" + "// complete diff marker " + ("X" * 600)
+
+    result = tools.apply_patch(
+        patches=[{"path": "rtl.sv", "start_line": 31, "end_line": 31, "new_text": long_new_text}],
+        reason="candidate hypothesis",
+        expected_effect="change target signal",
+    )
+
+    assert result["status"] == "rollback"
+    diff = captured["patch_diff"][0]  # type: ignore[index]
+    assert diff["old_text"] == "// line 31"
+    assert diff["new_text"] == long_new_text
+    assert "X" * 600 in diff["unified_diff"]
+    surrounding = captured["rtl_surrounding_context"][0]  # type: ignore[index]
+    assert surrounding["above"].splitlines()[0] == "11: // line 11"
+    assert surrounding["above"].splitlines()[-1] == "30: // line 30"
+    assert surrounding["below"].splitlines()[0] == "32: // line 32"
+    assert surrounding["below"].splitlines()[-1] == "51: // line 51"
+    authority = captured["authoritative_context"]  # type: ignore[assignment]
+    assert authority["spec"]["available"] is True  # type: ignore[index]
+    assert authority["spec"]["content"] == tools.state.input.spec_text  # type: ignore[index]
+    assert authority["testbench"]["content"] == tb_text  # type: ignore[index]
+    assert [row["step"] for row in captured["recent_repair_ledger"]] == [3, 4, 5, 6, 7]  # type: ignore[union-attr]
+
+
+def test_authoritative_context_uses_bounded_keyword_windows_and_reports_unavailable(tmp_path: Path) -> None:
+    long_text = "\n".join(
+        "magic_signal is sampled here" if idx == 500 else f"unrelated specification line {idx}"
+        for idx in range(1, 1000)
+    )
+    excerpt = tools_module._bounded_authoritative_excerpt(
+        long_text,
+        keywords=["magic_signal"],
+        max_chars=6000,
+    )
+
+    assert excerpt["truncated"] is True
+    assert excerpt["selection"] == "keyword_windows"
+    assert "magic_signal is sampled here" in excerpt["content"]
+    assert len(excerpt["content"]) <= 6000
+
+    tools = _make_tools(tmp_path / "missing", repair_mode="functional")
+    context = tools._authoritative_context_for_acceptance(["y"])
+    assert context["spec"]["available"] is False
+    assert context["spec"]["source"] == "unavailable"
+    assert context["testbench"]["available"] is False
+    assert context["testbench"]["selection"] == "unavailable"
+
+    spec_path = tools.state.input.workspace_root / "authoritative_spec.md"
+    spec_path.write_text(long_text, encoding="utf-8")
+    tools.state.input.spec_source_path = str(spec_path)
+    tools.state.input.spec_text = "fallback text must not win"
+    tb_path = tools.state.input.debug_workdir / "tb.sv"
+    tb_path.write_text(long_text, encoding="utf-8")
+    sourced = tools._authoritative_context_for_acceptance(["magic_signal"])
+
+    assert sourced["spec"]["source"] == [str(spec_path)]
+    assert "magic_signal is sampled here" in sourced["spec"]["content"]
+    assert "fallback text must not win" not in sourced["spec"]["content"]
+    assert sourced["spec"]["truncated"] is True
+    assert sourced["testbench"]["available"] is True
+    assert sourced["testbench"]["truncated"] is True
+    assert "magic_signal is sampled here" in sourced["testbench"]["content"]
+    assert len(sourced["spec"]["content"]) <= 6000
+    assert len(sourced["testbench"]["content"]) <= 6000
+
+
+def test_patch_surrounding_context_handles_file_boundaries() -> None:
+    lines = [f"line {idx}" for idx in range(1, 31)]
+    first = tools_module._patch_surrounding_context(
+        Path("first.v"),
+        tools_module.Patch(path="first.v", start_line=1, end_line=1, new_text="changed"),
+        lines,
+        context_lines=20,
+    )
+    last = tools_module._patch_surrounding_context(
+        Path("last.v"),
+        tools_module.Patch(path="last.v", start_line=30, end_line=30, new_text="changed"),
+        lines,
+        context_lines=20,
+    )
+
+    assert first["above"] == ""
+    assert first["below"].splitlines()[0] == "2: line 2"
+    assert first["below"].splitlines()[-1] == "21: line 21"
+    assert last["above"].splitlines()[0] == "10: line 10"
+    assert last["above"].splitlines()[-1] == "29: line 29"
+    assert last["below"] == ""
+
+
+def test_acceptance_decision_evidence_refs_are_optional_and_preserved(tmp_path: Path) -> None:
+    tools = _make_tools(tmp_path, repair_mode="functional")
+
+    legacy = tools._parse_acceptance_decision('{"decision":"keep","confidence":0.7,"reason":"ok"}')
+    enriched = tools._parse_acceptance_decision(
+        '{"decision":"rollback","confidence":0.9,"reason":"bad",'
+        '"evidence_refs":["patch_diff[0]","metric_delta.target_signal",3]}'
+    )
+
+    assert legacy is not None and "evidence_refs" not in legacy
+    assert enriched is not None
+    assert enriched["evidence_refs"] == ["patch_diff[0]", "metric_delta.target_signal", "3"]
+    prompt = tools_module._build_patch_acceptance_prompt({"patch_diff": [], "authoritative_context": {}})
+    assert "authoritative spec and testbench context outrank" in prompt
+    assert "reason, expected_effect, and preserve_plan are hypotheses" in prompt
+    assert '"evidence_refs"' in prompt
 
 
 def test_llm_acceptance_can_confirm_functional_rollback(tmp_path: Path, monkeypatch: object) -> None:
@@ -881,7 +1420,7 @@ def test_compact_prompt_can_include_llm_compact_memory() -> None:
 
     prompt = build_compact_prompt(context_pack, mode="checkpoint", llm_compact_memory=llm_memory)
 
-    assert "<llm_compact_memory_json>" in prompt
+    assert "<recovery_memory_json>" in prompt
     assert "repo_react_llm_compact.v1" in prompt
     assert "debug_context_pack_summary_json" in prompt
 
@@ -912,6 +1451,38 @@ def test_readonly_tool_writes_clipped_decision_trace(tmp_path: Path) -> None:
     assert long_text not in json.dumps(row, ensure_ascii=False)
 
 
+def test_failed_readonly_tool_does_not_consume_read_budget(tmp_path: Path) -> None:
+    runner, _tools = _make_runner(tmp_path)
+    runner._readonly_calls_since_action = 3
+    runner._readonly_calls_since_light = 2
+
+    runner._tool_response("read_context", {"status": "error", "error": "bad path"})
+
+    assert runner._readonly_calls_since_action == 3
+    assert runner._readonly_calls_since_light == 2
+
+    runner._tool_response("read_context", {"status": "ok", "kind": "file", "content": "module m; endmodule"})
+
+    assert runner._readonly_calls_since_action == 4
+    assert runner._readonly_calls_since_light == 3
+
+
+def test_failed_route_debug_context_does_not_consume_read_budget(tmp_path: Path) -> None:
+    runner, _tools = _make_runner(tmp_path)
+
+    runner._tool_response("route_debug_context", {"status": "error", "error": "router failed"})
+
+    assert runner._route_calls_since_action == 0
+    assert runner._readonly_calls_since_action == 0
+    assert runner._readonly_calls_since_light == 0
+
+    runner._tool_response("route_debug_context", {"status": "ok", "pack_path": "pack.json"})
+
+    assert runner._route_calls_since_action == 1
+    assert runner._readonly_calls_since_action == 1
+    assert runner._readonly_calls_since_light == 1
+
+
 def test_action_tool_decision_trace_records_reason_and_effect(tmp_path: Path) -> None:
     runner, tools = _make_runner(tmp_path, repair_mode="syntax")
 
@@ -928,6 +1499,57 @@ def test_action_tool_decision_trace_records_reason_and_effect(tmp_path: Path) ->
     assert row["tool_kind"] == "action"
     assert row["intent"]["reason"] == "try simple assignment"
     assert row["effect"] == "neutral"
+
+
+def test_rejected_action_tool_does_not_reset_read_budget(tmp_path: Path) -> None:
+    runner, _tools = _make_runner(tmp_path, repair_mode="syntax")
+    runner._readonly_calls_since_action = 5
+    runner._route_calls_since_action = 2
+    runner._route_allowed_reads = [{"tool": "read_context", "args": {"kind": "lines"}}]
+    runner._route_read_count = 1
+
+    runner._tool_response("apply_patch", {"status": "rejected", "is_action_executed": False, "reason": "bad patch"})
+
+    assert runner._readonly_calls_since_action == 5
+    assert runner._route_calls_since_action == 2
+    assert runner._route_allowed_reads
+    assert runner._route_read_count == 1
+
+    runner._tool_response("apply_patch", {"status": "rollback", "is_action_executed": True, "rollback_reason": "lint_failed"})
+
+    assert runner._readonly_calls_since_action == 0
+    assert runner._route_calls_since_action == 0
+    assert runner._route_allowed_reads == []
+    assert runner._route_read_count == 0
+
+
+def test_record_correction_does_not_reset_read_budget(tmp_path: Path) -> None:
+    runner, _tools = _make_runner(tmp_path, repair_mode="syntax")
+    runner._readonly_calls_since_action = 16
+    runner._route_calls_since_action = 2
+    runner._route_allowed_reads = [{"tool": "read_context", "args": {"kind": "stage_artifact"}}]
+    runner._route_read_count = 1
+
+    runner._tool_response("record_correction", {"status": "ok", "path": "planning_corrections/plan_overrides.json"})
+
+    assert runner._readonly_calls_since_action == 16
+    assert runner._route_calls_since_action == 2
+    assert runner._route_allowed_reads
+    assert runner._route_read_count == 1
+
+
+def test_observation_budget_exhausted_only_allows_rtl_edit_to_reset(tmp_path: Path) -> None:
+    runner, _tools = _make_runner(tmp_path, repair_mode="syntax")
+    runner._readonly_calls_since_action = 16
+    runner._max_readonly_calls_since_action = 16
+
+    response = runner._readonly_budget_exceeded_response("list_vcd_signals")
+    assert response is not None
+    payload = json.loads(response.content[0]["text"])
+
+    assert payload["status"] == "observation_budget_exhausted"
+    assert payload["required_next_action"] == ["apply_patch", "replace_block"]
+    assert "record_correction and generate_response do not reset" in payload["message"]
 
 
 def test_llm_compact_builder_accepts_mock_json(tmp_path: Path) -> None:
@@ -1024,10 +1646,240 @@ def test_compact_agent_memory_writes_llm_compact_and_prompt(tmp_path: Path, monk
     asyncio.run(runner._compact_agent_memory(mode="checkpoint"))
 
     prompt = runner._agent.prompts[-1]
-    assert "<llm_compact_memory_json>" in prompt
+    assert "<recovery_memory_json>" in prompt
     assert "repo_react_llm_compact.v1" in prompt
     written = json.loads((tools.state.journal.root / "repo_react_llm_compact.json").read_text(encoding="utf-8"))
     assert written["current_state"]["failure"] == "y mismatch"
+
+
+def test_deterministic_compact_keeps_pending_neutral_retrace_without_context_pack(
+    tmp_path: Path,
+) -> None:
+    journal = RepoReActJournal(tmp_path / "journal")
+    journal.append_jsonl(
+        "patch_journal.jsonl",
+        {
+            "action_type": "replace_block",
+            "reason": "remove reset overwrite",
+            "effect": "neutral",
+            "target": {"block_id": "A2"},
+        },
+    )
+    required = {
+        "module_name": "m",
+        "signal_name": "text_out",
+        "time": 15,
+        "expected_value": "aa",
+    }
+
+    compact = build_deterministic_compact_memory(
+        journal_root=journal.root,
+        mode="checkpoint",
+        memory_snapshot={
+            "module": "m",
+            "current_rtl_hash": "rtl-hash",
+            "last_sim": {"is_pass": False, "mismatch_count": 1},
+            "last_divergence_summary": {
+                "first_divergence": {
+                    "signal": "text_out",
+                    "time": 15,
+                    "ref": "aa",
+                    "dut": "00",
+                }
+            },
+            "last_signal_trace": {"module": "m", "signal": "text_out", "time": 15},
+            "pending_post_patch_trace": required,
+            "repair_ledger": [{"effect": "neutral", "reason": "remove reset overwrite"}],
+            "protected_invariants": ["keep output ordering"],
+            "unsafe_directions": ["do not invert output bytes"],
+        },
+        context_pack={},
+    )
+    prompt = build_compact_prompt({}, llm_compact_memory=compact)
+
+    assert compact["metadata"]["source"] == "deterministic_fallback"
+    assert compact["next_action"]["recommendation"] == "trace_signal_cause"
+    assert compact["next_action"]["arguments"] == required
+    assert compact["patch_lessons"][0]["effect"] == "neutral"
+    assert "<recovery_memory_json>" in prompt
+    assert "text_out" in prompt
+
+
+def test_compact_agent_memory_uses_deterministic_recovery_when_llm_compact_fails(
+    tmp_path: Path,
+    monkeypatch: object,
+) -> None:
+    runner, tools = _make_runner(tmp_path)
+    required = {
+        "module_name": "m",
+        "signal_name": "y",
+        "time": 9,
+        "expected_value": "1",
+    }
+    tools.state.last_divergence_summary = {
+        "first_divergence": {"signal": "y", "time": 9, "ref": "1", "dut": "0"}
+    }
+    tools.state.last_signal_trace = {
+        "module": "m",
+        "signal": "y",
+        "time": 9,
+        "focus_context": {"signals": ["y"], "rtl_blocks": ["A1"]},
+    }
+    tools.state.pending_post_patch_trace = required
+    runner._latest_context_pack = {}
+
+    async def failed_compact(**_kwargs: object) -> None:
+        return None
+
+    monkeypatch.setattr(runner_module, "build_llm_compact_memory", failed_compact)
+    asyncio.run(runner._compact_agent_memory(mode="checkpoint"))
+
+    prompt = runner._agent.prompts[-1]
+    written = json.loads(
+        (tools.state.journal.root / "repo_react_recovery_memory.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert "<recovery_memory_json>" in prompt
+    assert written["metadata"]["source"] == "deterministic_fallback"
+    assert written["next_action"]["recommendation"] == "trace_signal_cause"
+    assert written["next_action"]["arguments"] == required
+
+
+def test_textual_dsml_tool_call_is_recorded_and_retried_once(tmp_path: Path) -> None:
+    runner, tools = _make_runner(tmp_path)
+    text = (
+        '<｜｜DSML｜｜tool_calls>\n'
+        '<｜｜DSML｜｜invoke name="replace_block">\n'
+        '<｜｜DSML｜｜parameter name="path">rtl.sv</｜｜DSML｜｜parameter>\n'
+        "</｜｜DSML｜｜invoke>\n"
+        "</｜｜DSML｜｜tool_calls>"
+    )
+
+    runner._record_unexecuted_tool_call(text)
+
+    assert tools.state.action_calls == 0
+    assert runner._pending_tool_call_recovery["tool_name"] == "replace_block"
+    recovery = build_tool_call_recovery_prompt("replace_block")
+    assert "native function call" in recovery
+    assert "does not accept `path`" in recovery
+    rows = tools._read_jsonl("react_trace.jsonl")
+    assert rows[-1]["event"] == "unexecuted_tool_call"
+    assert rows[-1]["retry_eligible"] is True
+
+    runner._pending_tool_call_recovery = {}
+    runner._record_unexecuted_tool_call(text)
+    assert runner._pending_tool_call_recovery == {}
+    assert tools._read_jsonl("react_trace.jsonl")[-1]["retry_eligible"] is False
+
+
+def test_neutral_patch_requires_matching_trace_before_next_rtl_action(
+    tmp_path: Path,
+    monkeypatch: object,
+) -> None:
+    runner, tools = _make_runner(tmp_path)
+
+    async def inline_to_thread(func: object, *args: object, **kwargs: object) -> object:
+        return func(*args, **kwargs)  # type: ignore[operator]
+
+    monkeypatch.setattr(runner_module.asyncio, "to_thread", inline_to_thread)
+    tools.state.last_divergence_summary = {
+        "first_divergence": {"signal": "y", "time": 9, "ref": "1", "dut": "0"}
+    }
+    tools.state.last_trace_summary = {"runtime_top_module": "m"}
+    neutral = runner._attach_post_patch_trace_requirement(
+        {"status": "neutral", "committed": True, "effect": "neutral"}
+    )
+    required = neutral["arguments"]
+    assert neutral["required_next_tool"] == "trace_signal_cause"
+
+    blocked = json.loads(
+        asyncio.run(
+            runner.apply_patch(
+                patches=[
+                    {
+                        "path": str(tools.state.input.rtl_path),
+                        "start_line": 2,
+                        "end_line": 2,
+                        "new_text": "assign y = ~clk;",
+                    }
+                ],
+                reason="second patch",
+                expected_effect="change output",
+                verify=False,
+            )
+        ).content[0]["text"]
+    )
+    assert blocked["status"] == "post_patch_trace_required"
+    assert blocked["arguments"] == required
+
+    wrong = json.loads(
+        asyncio.run(
+            runner.trace_signal_cause(
+                module_name="m",
+                signal_name="y",
+                time=10,
+                expected_value="1",
+            )
+        ).content[0]["text"]
+    )
+    assert wrong["post_patch_trace_gate"]["status"] == "pending"
+    assert tools.state.pending_post_patch_trace == required
+
+    matched = json.loads(
+        asyncio.run(
+            runner.trace_signal_cause(
+                module_name="m",
+                signal_name="y",
+                time=9,
+                expected_value="1",
+            )
+        ).content[0]["text"]
+    )
+    assert matched["post_patch_trace_gate"]["status"] == "completed"
+    assert tools.state.pending_post_patch_trace == {}
+
+    allowed = json.loads(
+        asyncio.run(
+            runner.apply_patch(
+                patches=[
+                    {
+                        "path": str(tools.state.input.rtl_path),
+                        "start_line": 2,
+                        "end_line": 2,
+                        "new_text": "assign y = ~clk;",
+                    }
+                ],
+                reason="evidence refreshed",
+                expected_effect="change output",
+                verify=False,
+            )
+        ).content[0]["text"]
+    )
+    assert allowed["status"] == "kept_unverified"
+
+
+def test_repeated_first_divergence_after_trace_returns_minimal_cache(tmp_path: Path) -> None:
+    tools = _make_tools(tmp_path)
+    tools.state.last_signal_trace = {
+        "status": "static_only",
+        "module": "m",
+        "signal": "y",
+        "time": 9,
+    }
+    tools.state.last_signal_trace_action_calls = tools.state.action_calls
+    tools.state.last_divergence_summary = {
+        "status": "ok",
+        "sampling_event": {"edge": "posedge", "clock": "clk"},
+        "first_divergence": {"signal": "y", "time": 9, "ref": "1", "dut": "0"},
+    }
+
+    result = tools.run_check("first_divergence")
+
+    assert result["cached"] is True
+    assert result["first_divergence"]["first_divergence"]["signal"] == "y"
+    assert "nearby" not in result["first_divergence"]
+    assert result["first_divergence"]["trace_report_path"].endswith("trace_report.json")
 
 
 def test_debug_context_router_fallback_writes_pack_and_preserves_timing(tmp_path: Path) -> None:
@@ -1105,7 +1957,8 @@ def test_repo_initial_route_builds_system_triage_without_explicit_focus(tmp_path
     assert triage["root_time"] == 16
     assert triage["suspect_files"]
     assert any(Path(path).name == "child.v" for path in triage["suspect_files"])
-    assert triage["recommended_tool_calls"][0]["tool"] == "query_rtl_kg"
+    assert triage["recommended_tool_calls"][0]["tool"] == "trace_signal_cause"
+    assert triage["recommended_tool_calls"][1]["tool"] == "read_module_semantics"
     assert "system_triage" in json.loads(Path(pack["pack_path"]).read_text(encoding="utf-8"))
 
 
@@ -1189,12 +2042,30 @@ def test_debug_investigator_read_spec_exposes_visible_content(tmp_path: Path) ->
     assert "AES spec text should be visible" in payload["visible_payload"]["content"]
 
 
-def test_repo_debug_context_router_uses_larger_default_tool_budget(tmp_path: Path) -> None:
+def test_repo_debug_context_router_uses_light_default_tool_budget(tmp_path: Path) -> None:
     tools = _make_repo_tools(tmp_path)
 
     router = DebugContextRouter(cfg=None, tools=tools)
 
-    assert router.max_tool_calls >= 16
+    assert router.max_tool_calls >= 8
+
+
+def test_debug_context_router_errors_do_not_consume_tool_budget(tmp_path: Path) -> None:
+    tools = _make_repo_tools(tmp_path)
+    router = DebugContextRouter(cfg=None, tools=tools)
+    router.max_tool_calls = 1
+
+    failed = json.loads(router._readonly_tool_response("read_context", {"status": "error", "error": "bad path"}).content[0]["text"])
+
+    assert failed["status"] == "error"
+    assert router._tool_calls == 0
+
+    first_ok = json.loads(router._readonly_tool_response("read_context", {"status": "ok", "content": "module top; endmodule"}).content[0]["text"])
+    second_ok = json.loads(router._readonly_tool_response("read_context", {"status": "ok", "content": "module child; endmodule"}).content[0]["text"])
+
+    assert first_ok["status"] == "ok"
+    assert second_ok["status"] == "router_readonly_budget_exhausted"
+    assert router._tool_calls == 1
 
 
 def test_debug_context_router_tool_budget_env_override(tmp_path: Path, monkeypatch: object) -> None:
@@ -1393,6 +2264,8 @@ def test_debug_context_router_scans_memory_files_without_index_and_injects_excer
     memories = pack["causal_memory"]["selected_long_term_memories"]
     prompt = build_initial_prompt(
         module_name="m",
+        runtime_top_module="runtime_m",
+        dut_instance="top_module1",
         repair_mode="functional",
         rtl_path=str(tools.state.input.rtl_path),
         merged_file=str(tools.state.input.merged_file),
@@ -1474,6 +2347,8 @@ def test_repo_react_prompts_use_context_pack_not_full_static_payload() -> None:
     }
     prompt = build_initial_prompt(
         module_name="m",
+        runtime_top_module="runtime_m",
+        dut_instance="top_module1",
         repair_mode="functional",
         rtl_path="/tmp/rtl.sv",
         merged_file="/tmp/m.v",
@@ -1502,6 +2377,9 @@ def test_repo_react_prompts_use_context_pack_not_full_static_payload() -> None:
     assert "hierarchy_connection" in prompt
     assert "recommended_tool_calls" in prompt
     assert "FIRST ACTION REQUIREMENT" not in prompt
+    assert "<planner_module_name>\nm\n</planner_module_name>" in prompt
+    assert "<runtime_top_module>\nruntime_m\n</runtime_top_module>" in prompt
+    assert "<dut_instance>\ntop_module1\n</dut_instance>" in prompt
     assert "first visible tool call must be route_debug_context" not in prompt
     assert "route_debug_context with focused parameters" not in prompt
     assert "multi-file apply_patch" in prompt
@@ -1524,6 +2402,65 @@ def test_repo_react_prompts_use_context_pack_not_full_static_payload() -> None:
     assert "hierarchy_connection" not in continued
     assert "Keep the debounce threshold change" not in continued
     assert "replace_block of A7 regressed mismatch" not in continued
+
+
+def test_repo_react_prompts_forbid_oracle_literal_hardcoding() -> None:
+    oracle_value = "362f13449254d1bc0ede8c53b043ad5e"
+    context_pack = {
+        "pack_path": "/tmp/debug_context_pack.json",
+        "causal_memory": {
+            "selected_long_term_memories": [
+                {
+                    "path": "cases/debug_aes_improved.md",
+                    "memory_id": "debug_aes_improved",
+                    "type": "repair_outcome",
+                    "stage": "debug",
+                    "module": "aes_inv_cipher_top",
+                    "signals": ["text_out"],
+                    "failure_type": "timing_bug",
+                    "outcome": "improved",
+                    "confidence": 0.72,
+                    "description": "A visible mismatch decreased.",
+                    "patch_pattern": f"text_out <= 128'h{oracle_value};",
+                    "body_excerpt": f"## Patch Summary\ntext_out <= 128'h{oracle_value};",
+                }
+            ]
+        },
+    }
+    initial = build_initial_prompt(
+        module_name="aes_inv_cipher_top",
+        runtime_top_module="aes_inv_cipher_top",
+        dut_instance="top_module1",
+        repair_mode="functional",
+        rtl_path="/tmp/aes_inv_cipher_top.v",
+        merged_file="/tmp/merged_aes_inv_cipher_top.v",
+        spec_text="",
+        contract_json="",
+        sim_failed_excerpt="Hint: Output text_out has 1 mismatch.",
+        trace_summary={"expected_value": oracle_value},
+        corrections=[],
+        memory_snapshot={},
+        context_pack=context_pack,
+    )
+    continued = build_continue_prompt(
+        memory_summary={},
+        readonly_calls_since_action=1,
+        max_readonly_calls=16,
+        context_pack=context_pack,
+    )
+
+    assert '"generalization_check"' in SYSTEM_PROMPT
+    assert '"uses_observed_expected_value": false' in SYSTEM_PROMPT
+    assert "visible testbench is not an exhaustive specification" in SYSTEM_PROMPT
+    assert "Never copy an observed value into RTL" in SYSTEM_PROMPT
+    assert "A lower mismatch count alone does not validate hardcoded" in SYSTEM_PROMPT
+    assert oracle_value in initial
+    assert "must never become a patch RHS" in initial
+    assert "never its concrete data literals" in initial
+    assert "does not prove that a patch generalizes" in initial
+    assert "never copy them into a patch RHS" in continued
+    assert "not concrete data literals" in continued
+    assert "lower mismatch count alone as proof of generalization" in continued
 
 
 def test_stage_artifact_error_returns_valid_names(tmp_path: Path) -> None:
@@ -1941,6 +2878,35 @@ def test_replace_block_lint_fail_rolls_back(tmp_path: Path, monkeypatch: object)
         expected_effect="lint should catch it",
     )
 
-    assert result["status"] == "rollback"
+    assert result["status"] == "syntax_retry_required"
     assert result["rollback_reason"] == "lint_failed"
     assert tools.state.input.rtl_path.read_text(encoding="utf-8") == before
+    assert tools.state.action_calls == 0
+    assert tools.state.patch_attempt_id == 1
+
+
+def test_replace_block_syntax_retry_uses_same_candidate_chain(tmp_path: Path, monkeypatch: object) -> None:
+    tools = _make_tools(tmp_path, repair_mode="syntax")
+    lint_results = iter([(False, "lint failed"), (True, "lint ok")])
+    monkeypatch.setattr(tools_module, "check_syntax", lambda *_args, **_kwargs: next(lint_results))
+
+    first = tools.replace_block(
+        block_id="C1",
+        new_code="assign y = ;",
+        reason="broken replace",
+        expected_effect="lint passes",
+    )
+    retry = tools.replace_block(
+        block_id="C1",
+        new_code="assign y = ~clk;",
+        reason="fix replace syntax",
+        expected_effect="lint passes",
+        syntax_retry_of=first["candidate_id"],
+    )
+
+    assert first["status"] == "syntax_retry_required"
+    assert retry["status"] == "pass"
+    assert retry["candidate_id"] == first["candidate_id"]
+    assert tools.state.patch_attempt_id == 2
+    assert tools.state.action_calls == 1
+    assert "assign y = ~clk;" in tools.state.input.rtl_path.read_text(encoding="utf-8")

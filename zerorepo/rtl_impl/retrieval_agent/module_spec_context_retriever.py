@@ -15,7 +15,7 @@ from .utils import repair_json_payload
 class ModuleSpecContextRetriever:
     """Retrieve source spec passages for a planned module from unified specs."""
 
-    def __init__(self, llm_client: Any, logger: Any | None = None, max_chunks: int = 36):
+    def __init__(self, llm_client: Any, logger: Any | None = None, max_chunks: int = 24):
         self.llm_client = llm_client
         self.logger = logger
         self.max_chunks = max(4, max_chunks)
@@ -32,7 +32,7 @@ class ModuleSpecContextRetriever:
         sources = self._read_sources(spec_md_files)
         chunks = self._build_source_chunks(sources)
         ranked_chunks = self._rank_chunks(module_name, chunks, repo_module=repo_module, fact_ledger=fact_ledger)
-        prompt_chunks = ranked_chunks[: self.max_chunks] or chunks[: self.max_chunks]
+        prompt_chunks = self._sort_chunks_by_source_order(ranked_chunks[: self.max_chunks] or chunks[: self.max_chunks])
         if not prompt_chunks:
             return self._empty_fallback(module_name)
 
@@ -94,7 +94,7 @@ class ModuleSpecContextRetriever:
         ranked_chunks: List[dict[str, str]] | None = None,
         reason: str = "",
     ) -> ModuleSpecContextRetrievalResult:
-        selected = list(ranked_chunks or [])[:6]
+        selected = self._sort_chunks_by_source_order(list(ranked_chunks or [])[:6])
         fallback_reason = f"Module context retrieval failed; using heuristic source chunks. {reason}".strip()
         if not selected and chunks:
             selected = chunks[:1]
@@ -256,6 +256,15 @@ class ModuleSpecContextRetriever:
                 scored.append((score, -index, chunk))
         scored.sort(reverse=True)
         return [chunk for _, _, chunk in scored]
+
+    def _sort_chunks_by_source_order(self, chunks: List[dict[str, str]]) -> List[dict[str, str]]:
+        return sorted(chunks, key=lambda chunk: self._chunk_sort_key(chunk.get("chunk_id", "")))
+
+    def _chunk_sort_key(self, chunk_id: str) -> tuple[int, str]:
+        match = re.search(r"(\d+)$", str(chunk_id))
+        if match:
+            return int(match.group(1)), str(chunk_id)
+        return 10**9, str(chunk_id)
 
     def _retrieval_terms(self, module_name: str, *, repo_module: Any | None, fact_ledger: Any | None) -> List[str]:
         terms: list[str] = []

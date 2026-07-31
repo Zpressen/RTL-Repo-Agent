@@ -1,0 +1,120 @@
+{
+  "schema_version": "rtl_kg_module_statuses_v2",
+  "repo_uid": "merged@1feb89ff7db4",
+  "modules": {
+    "aes_sbox": {
+      "module": "aes_sbox",
+      "status": "pass",
+      "passed": true,
+      "mismatch_count": 0,
+      "debug_trials": 0,
+      "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_inv_cipher_system_hard/.zerorepo/workspace/debug/aes_sbox/rtl.sv",
+      "trace_report_path": "",
+      "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_inv_cipher_system_hard/.zerorepo/workspace/debug/aes_sbox/initial_syntax_output.json",
+      "reason": "",
+      "stage": "post_module_syntax",
+      "timestamp": "2026-07-27T06:36:52.982863+00:00"
+    },
+    "aes_inv_sbox": {
+      "module": "aes_inv_sbox",
+      "status": "pass",
+      "passed": true,
+      "mismatch_count": 0,
+      "debug_trials": 0,
+      "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_inv_cipher_system_hard/.zerorepo/workspace/debug/aes_inv_sbox/rtl.sv",
+      "trace_report_path": "",
+      "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_inv_cipher_system_hard/.zerorepo/workspace/debug/aes_inv_sbox/initial_syntax_output.json",
+      "reason": "",
+      "stage": "post_module_syntax",
+      "timestamp": "2026-07-27T06:36:54.130238+00:00"
+    },
+    "aes_key_expand": {
+      "module": "aes_key_expand",
+      "status": "pass",
+      "passed": true,
+      "mismatch_count": 0,
+      "debug_trials": 0,
+      "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_inv_cipher_system_hard/.zerorepo/workspace/debug/aes_key_expand/rtl.sv",
+      "trace_report_path": "",
+      "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_inv_cipher_system_hard/.zerorepo/workspace/debug/aes_key_expand/initial_syntax_output.json",
+      "reason": "",
+      "stage": "post_module_syntax",
+      "timestamp": "2026-07-27T06:36:55.443538+00:00"
+    },
+    "aes_inv_cipher_top": {
+      "module": "aes_inv_cipher_top",
+      "status": "pass",
+      "passed": true,
+      "mismatch_count": 0,
+      "debug_trials": 0,
+      "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_inv_cipher_system_hard/.zerorepo/workspace/debug/aes_inv_cipher_top/rtl.sv",
+      "trace_report_path": "",
+      "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_inv_cipher_system_hard/.zerorepo/workspace/debug/aes_inv_cipher_top/initial_syntax_output.json",
+      "reason": "",
+      "stage": "post_module_syntax",
+      "timestamp": "2026-07-27T06:36:55.511881+00:00"
+    }
+  },
+  "records": {
+    "aes_sbox": {
+      "post_module_syntax": {
+        "module": "aes_sbox",
+        "status": "pass",
+        "passed": true,
+        "mismatch_count": 0,
+        "debug_trials": 0,
+        "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_inv_cipher_system_hard/.zerorepo/workspace/debug/aes_sbox/rtl.sv",
+        "trace_report_path": "",
+        "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_inv_cipher_system_hard/.zerorepo/workspace/debug/aes_sbox/initial_syntax_output.json",
+        "reason": "",
+        "stage": "post_module_syntax",
+        "timestamp": "2026-07-27T06:36:52.982863+00:00"
+      }
+    },
+    "aes_inv_sbox": {
+      "post_module_syntax": {
+        "module": "aes_inv_sbox",
+        "status": "pass",
+        "passed": true,
+        "mismatch_count": 0,
+        "debug_trials": 0,
+        "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_inv_cipher_system_hard/.zerorepo/workspace/debug/aes_inv_sbox/rtl.sv",
+        "trace_report_path": "",
+        "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_inv_cipher_system_hard/.zerorepo/workspace/debug/aes_inv_sbox/initial_syntax_output.json",
+        "reason": "",
+        "stage": "post_module_syntax",
+        "timestamp": "2026-07-27T06:36:54.130238+00:00"
+      }
+    },
+    "aes_key_expand": {
+      "post_module_syntax": {
+        "module": "aes_key_expand",
+        "status": "pass",
+        "passed": true,
+        "mismatch_count": 0,
+        "debug_trials": 0,
+        "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_inv_cipher_system_hard/.zerorepo/workspace/debug/aes_key_expand/rtl.sv",
+        "trace_report_path": "",
+        "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_inv_cipher_system_hard/.zerorepo/workspace/debug/aes_key_expand/initial_syntax_output.json",
+        "reason": "",
+        "stage": "post_module_syntax",
+        "timestamp": "2026-07-27T06:36:55.443538+00:00"
+      }
+    },
+    "aes_inv_cipher_top": {
+      "post_module_syntax": {
+        "module": "aes_inv_cipher_top",
+        "status": "pass",
+        "passed": true,
+        "mismatch_count": 0,
+        "debug_trials": 0,
+        "final_rtl_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_inv_cipher_system_hard/.zerorepo/workspace/debug/aes_inv_cipher_top/rtl.sv",
+        "trace_report_path": "",
+        "sim_output_path": "/home/mokita/RPG-ZeroRepo/rtl_outputs/aes_inv_cipher_system_hard/.zerorepo/workspace/debug/aes_inv_cipher_top/initial_syntax_output.json",
+        "reason": "",
+        "stage": "post_module_syntax",
+        "timestamp": "2026-07-27T06:36:55.511881+00:00"
+      }
+    }
+  }
+}

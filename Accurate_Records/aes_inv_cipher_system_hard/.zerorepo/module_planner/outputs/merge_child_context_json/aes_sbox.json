@@ -1,0 +1,10 @@
+{
+  "schema_version": "merge_child_context_v1",
+  "module": "aes_sbox",
+  "kg_enabled": true,
+  "retrieval_requested": false,
+  "retrieval_reason": "aes_sbox is a self-contained leaf module with no child instances or submodule calls in the generated fragments.",
+  "available_child_modules": [],
+  "requested_child_modules": [],
+  "children": []
+}

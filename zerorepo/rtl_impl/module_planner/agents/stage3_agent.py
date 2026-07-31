@@ -40,6 +40,7 @@ class Stage3Agent(BaseStageAgent):
         logger=None,
         output_root: str | Path | None = None,
         module_spec_context_retriever: ModuleSpecContextRetriever | None = None,
+        planning_context_retriever: Any | None = None,
     ):
         super().__init__(llm_client, context_provider, artifact_sink, logger)
         self.output_root = Path(output_root) if output_root is not None else None
@@ -47,6 +48,7 @@ class Stage3Agent(BaseStageAgent):
             llm_client,
             logger=self.logger,
         )
+        self.planning_context_retriever = planning_context_retriever
 
     def run(self, task_input: Any, partial_artifacts: Dict[str, Any]) -> Stage3ModuleSkeletonArtifact:
         return self.run_incremental(task_input, partial_artifacts)
@@ -56,6 +58,7 @@ class Stage3Agent(BaseStageAgent):
         task_input: Any,
         partial_artifacts: Dict[str, Any],
         persist_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+        spec_context_persist_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> Stage3ModuleSkeletonArtifact:
         self._last_quality_errors = []
         task = task_input if isinstance(task_input, PlannerTaskInput) else validate_model(PlannerTaskInput, task_input)
@@ -76,6 +79,9 @@ class Stage3Agent(BaseStageAgent):
             global_summary,
             partial_artifacts.get("stage3"),
         )
+        requested_fingerprint = str(partial_artifacts.get("stage3_input_fingerprint") or "")
+        if requested_fingerprint:
+            artifact.input_fingerprint = requested_fingerprint
 
         bundle_by_module = {item.module: item for item in modules_artifact.modules}
         repo_module_by_name = {item.module: item for item in repo_skeleton.modules}
@@ -96,11 +102,44 @@ class Stage3Agent(BaseStageAgent):
                 repo_module=repo_module,
                 partial_artifacts=partial_artifacts,
             )
+            if spec_context_persist_callback is not None:
+                spec_context_persist_callback(
+                    {
+                        "task": task,
+                        "module": module_name,
+                        "spec_context_file": self._spec_context_relative_path(module_name),
+                        "spec_context_payload": model_dump(spec_context_result),
+                        "input_fingerprint": requested_fingerprint,
+                    }
+                )
+            if self.planning_context_retriever is not None:
+                try:
+                    kg_context = self.planning_context_retriever.get_module_context(
+                        module_name,
+                        require_spec=True,
+                        expected_fingerprints={"spec_context": requested_fingerprint},
+                    )
+                    module_spec_markdown = self.planning_context_retriever.spec_markdown(kg_context)
+                except Exception as exc:
+                    mode = str(getattr(self.planning_context_retriever.kg_service, "mode", "required"))
+                    if mode == "required":
+                        raise
+                    self.logger.warning(
+                        "[%s] Planning KG spec context unavailable for %s; using sidecar: %s",
+                        self.stage_name,
+                        module_name,
+                        exc,
+                    )
             expected_file_path = f"rtl/{module_name}.v"
             source_refs = SourceRefs(
                 module_contract_ref=f"{modules_artifact.schema_version}::{module_name}",
                 repo_skeleton_ref=f"{repo_skeleton.schema_version}::{module_name}",
                 module_spec_file=str(Path(module_spec_path).resolve()),
+            )
+            architecture_timing = partial_artifacts.get("architecture_timing")
+            architecture_timing_slice = self._architecture_timing_slice(
+                architecture_timing,
+                module_name=module_name,
             )
             prompt = stage3_module_skeleton.build_prompt(
                 module_name=module_name,
@@ -108,6 +147,7 @@ class Stage3Agent(BaseStageAgent):
                 module_spec_markdown=module_spec_markdown,
                 module_contract_json=self.to_pretty_json(bundle),
                 repo_module_json=self.to_pretty_json(repo_module),
+                architecture_timing_json=self.to_pretty_json(architecture_timing_slice),
                 stage_context=self.to_pretty_json(
                     {
                         **stage_context,
@@ -152,6 +192,8 @@ class Stage3Agent(BaseStageAgent):
                 persist_callback(
                     {
                         "manifest": model_dump(artifact),
+                        "task": task,
+                        "input_fingerprint": requested_fingerprint,
                         "module": module_name,
                         "doc_file": record.doc_file,
                         "doc_text": doc_text,
@@ -176,6 +218,32 @@ class Stage3Agent(BaseStageAgent):
         self._log_stage_output(artifact)
         self.artifact_sink.record_stage_output(self.stage_name, artifact, task)
         return artifact
+
+    def _architecture_timing_slice(self, architecture_timing: Any, *, module_name: str) -> Dict[str, Any]:
+        if architecture_timing is None:
+            return {}
+        payload = model_dump(architecture_timing) if hasattr(architecture_timing, "model_dump") else dict(architecture_timing)
+        return {
+            "module_assignment": next(
+                (
+                    item
+                    for item in payload.get("module_assignments", [])
+                    if item.get("module") == module_name
+                ),
+                None,
+            ),
+            "cross_module_transfers": [
+                item
+                for item in payload.get("cross_module_transfers", [])
+                if item.get("producer") == module_name or item.get("consumer") == module_name
+            ],
+            "module_obligations": [
+                item
+                for item in payload.get("module_obligations", [])
+                if item.get("module") == module_name
+            ],
+            "assumptions": list(payload.get("assumptions", [])),
+        }
 
     def build_prompt(
         self,
@@ -258,6 +326,7 @@ class Stage3Agent(BaseStageAgent):
     ) -> Stage3ModuleSkeletonArtifact:
         payload = {
             "task_id": task.task_id,
+            "input_fingerprint": str(existing.input_fingerprint) if isinstance(existing, Stage3ModuleSkeletonArtifact) else "",
             "source_schema_versions": {
                 "modules": modules_artifact.schema_version,
                 "repo_skeleton": repo_skeleton.schema_version,
@@ -272,6 +341,8 @@ class Stage3Agent(BaseStageAgent):
             "open_issues": list(repo_skeleton.open_issues),
             "quality_report": None,
         }
+        if not payload["input_fingerprint"]:
+            payload["input_fingerprint"] = ""
         artifact = validate_model(Stage3ModuleSkeletonArtifact, payload)
         if existing is None:
             return artifact

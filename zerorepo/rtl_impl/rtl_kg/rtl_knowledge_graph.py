@@ -113,6 +113,7 @@ class KnowledgeGraphRTL:
         )
 
         builder = RTLFileGraphBuilder(repo_uid=repo_uid, repo_root=repo_root)
+        module_definition_paths: Dict[str, str] = {}
 
         # DFS traversal
         stack = deque([(repo_root, root_file)])
@@ -173,6 +174,16 @@ class KnowledgeGraphRTL:
                     # keep graph building robust; skip bad file but continue
                     continue
                 for n in res.nodes:
+                    if isinstance(n.node, ModuleNode):
+                        module_name = str(getattr(n.node, "name", "") or "")
+                        module_path = str(getattr(n.node, "path", "") or "")
+                        previous_path = module_definition_paths.get(module_name)
+                        if previous_path is not None and previous_path != module_path:
+                            raise ValueError(
+                                "Duplicate RTL Module definition in one repo partition: "
+                                f"{module_name!r} appears in {previous_path!r} and {module_path!r}"
+                            )
+                        module_definition_paths[module_name] = module_path
                     if n.uid not in uid2node:
                         nodes.append(n)
                         uid2node[n.uid] = n

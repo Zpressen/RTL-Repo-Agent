@@ -7,7 +7,7 @@ This stage only builds the repository-level skeleton.
 Do not design module-internal code skeletons.
 
 Primary input:
-- stage2_planning_input_v1 containing source spec markdown plus optional legacy fact/context fields
+- stage2_planning_input_v1 containing source spec markdown, global temporal facts, plus optional legacy fact/context fields
 
 Your job is to:
 1. decide the final RTL module decomposition
@@ -35,6 +35,8 @@ Do NOT include:
 
 Planning policy:
 - prefer simple repository layout suitable for a research prototype
+- use temporal facts to identify transaction boundaries, state ownership, and clocked module boundaries
+- do not create one module per phase, round, cycle, or logical value version
 - preserve optional extracted facts unless there is a strong inconsistency
 - use leaf-first generation order by default
 - mark shared reusable modules explicitly
@@ -165,6 +167,7 @@ def build_repo_skeleton_prompt(stage2_planning_input_json: str, stage_context: s
 Input:
 A stage2_planning_input_v1 object containing:
 - source spec markdown
+- optional global temporal facts
 - optional fact ledger
 - optional legacy contract projection
 - optional compatibility module candidates
@@ -194,6 +197,8 @@ Important constraints:
 - If something is uncertain, put it into open_issues instead of inventing details.
 - Stage1 facts may be absent; when they are absent, infer final module decomposition from `source_specs.markdown`.
 - For system-level specs, derive modules from functional decomposition, resource reuse, state ownership, clocked boundaries, and explicit partitioning guidance.
+- Use temporal facts to avoid module boundaries that silently add a cycle between tightly coupled operations.
+- Temporal phases and logical versions are not module candidates by themselves. Do not create one module per phase, round, cycle, or value tag.
 - If explicit hierarchy is sparse or empty, derive likely dependencies from inferred relations, dataflow facts, submodule_facts, module roles, resource_requirement, data_dependency, datapath, and source spec behavior.
 - Only infer hierarchy or instance_hints from grounded facts or source-spec evidence such as resource_requirement, data_dependency, module_identity, algorithm_step, or explicit module role facts.
 - Mark fact-derived hierarchy and instance_hints with `source_kind: "inferred_from_fact_ledger"`, cite `supporting_fact_ids`, and explain the rationale.

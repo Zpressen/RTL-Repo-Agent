@@ -1,0 +1,108 @@
+{
+  "schema_version": "module_timing_binding_v1",
+  "task_id": "aes_inv_cipher_system_hard",
+  "module": "aes_inv_sbox",
+  "input_fingerprint": "e106f2316671c3920d29177e583795050eab26d63c6cc68a2f02a3c6ec96bac0",
+  "signal_bindings": [
+    {
+      "logical_object": "inv_sbox_byte_request",
+      "physical_signal": "byte_in",
+      "kind": "input",
+      "owner_block_id": "",
+      "logical_value_tags": []
+    },
+    {
+      "logical_object": "inv_sbox_byte_response",
+      "physical_signal": "byte_out",
+      "kind": "output",
+      "owner_block_id": "B2",
+      "logical_value_tags": []
+    }
+  ],
+  "transfer_bindings": [
+    {
+      "transfer_id": "XFER_INV_SBOX_REQ",
+      "endpoint": "consumer",
+      "physical_signal": "byte_in",
+      "block_id": "B2"
+    },
+    {
+      "transfer_id": "XFER_INV_SBOX_RESP",
+      "endpoint": "producer",
+      "physical_signal": "byte_out",
+      "block_id": "B2"
+    }
+  ],
+  "block_obligations": [
+    {
+      "obligation_id": "OBL_INV_SBOX_INITIAL",
+      "block_id": "B2",
+      "reads": [
+        {
+          "signal": "byte_in",
+          "at": "COMB",
+          "logical_object": "inv_sbox_byte_request",
+          "logical_value_tag": ""
+        }
+      ],
+      "writes": [],
+      "combinational_outputs": [
+        {
+          "signal": "byte_out",
+          "at": "COMB",
+          "logical_object": "inv_sbox_byte_response",
+          "logical_value_tag": ""
+        }
+      ],
+      "guard": ""
+    },
+    {
+      "obligation_id": "OBL_INV_SBOX_STANDARD",
+      "block_id": "B2",
+      "reads": [
+        {
+          "signal": "byte_in",
+          "at": "COMB",
+          "logical_object": "inv_sbox_byte_request",
+          "logical_value_tag": ""
+        }
+      ],
+      "writes": [],
+      "combinational_outputs": [
+        {
+          "signal": "byte_out",
+          "at": "COMB",
+          "logical_object": "inv_sbox_byte_response",
+          "logical_value_tag": ""
+        }
+      ],
+      "guard": ""
+    },
+    {
+      "obligation_id": "OBL_INV_SBOX_FINAL",
+      "block_id": "B2",
+      "reads": [
+        {
+          "signal": "byte_in",
+          "at": "COMB",
+          "logical_object": "inv_sbox_byte_request",
+          "logical_value_tag": ""
+        }
+      ],
+      "writes": [],
+      "combinational_outputs": [
+        {
+          "signal": "byte_out",
+          "at": "COMB",
+          "logical_object": "inv_sbox_byte_response",
+          "logical_value_tag": ""
+        }
+      ],
+      "guard": ""
+    }
+  ],
+  "assumptions": [
+    "byte_in is stable until byte_out is sampled within the same clock cycle (if clock exists) or until the combinational path settles",
+    "The inverse S-box lookup table contains the correct AES standard values"
+  ]
+}

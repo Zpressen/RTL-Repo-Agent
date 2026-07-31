@@ -104,6 +104,75 @@ RETURN m.name AS module,
 """
 
 
+GET_MODULE_NEIGHBORS = """
+MATCH (m:Module {repo_uid: $repo_uid, name: $module_name})-[:INSTANTIATES]->(inst:Instance)
+OPTIONAL MATCH (inst)-[:OF_MODULE]->(other:Module)
+RETURN "child" AS relation,
+       m.name AS module,
+       inst.name AS instance_name,
+       inst.path AS instance_path,
+       other.name AS related_module
+UNION
+MATCH (other:Module)-[:INSTANTIATES]->(inst:Instance)-[:OF_MODULE]->(m:Module {repo_uid: $repo_uid, name: $module_name})
+RETURN "parent" AS relation,
+       m.name AS module,
+       inst.name AS instance_name,
+       inst.path AS instance_path,
+       other.name AS related_module
+"""
+
+
+GET_SIGNAL_BOUNDARY_MAPPINGS = """
+MATCH (parent:Module {repo_uid: $repo_uid, name: $module_name})-[:INSTANTIATES]->(inst:Instance)
+MATCH (inst)-[:OF_MODULE]->(child:Module)
+MATCH (inst)-[conn:CONNECTS]->(target)
+OPTIONAL MATCH (child)-[:HAS]->(port:Port)
+WHERE port.name = conn.p
+RETURN "parent_to_child" AS mapping_direction,
+       parent.name AS parent_module,
+       inst.name AS instance_name,
+       inst.path AS instance_path,
+       child.name AS child_module,
+       conn.p AS child_port,
+       port.attrs AS child_port_attrs,
+       port.path AS child_port_path,
+       target.kind AS target_kind,
+       target.name AS target_name,
+       target.attrs AS target_attrs,
+       conn.x AS connection_expression,
+       properties(conn) AS connection
+UNION
+MATCH (parent:Module)-[:INSTANTIATES]->(inst:Instance)-[:OF_MODULE]->(child:Module {repo_uid: $repo_uid, name: $module_name})
+MATCH (inst)-[conn:CONNECTS]->(target)
+OPTIONAL MATCH (child)-[:HAS]->(port:Port)
+WHERE port.name = conn.p
+RETURN "child_to_parent" AS mapping_direction,
+       parent.name AS parent_module,
+       inst.name AS instance_name,
+       inst.path AS instance_path,
+       child.name AS child_module,
+       conn.p AS child_port,
+       port.attrs AS child_port_attrs,
+       port.path AS child_port_path,
+       target.kind AS target_kind,
+       target.name AS target_name,
+       target.attrs AS target_attrs,
+       conn.x AS connection_expression,
+       properties(conn) AS connection
+"""
+
+
+GET_MODULE_SOURCE = """
+MATCH (m:Module {repo_uid: $repo_uid, name: $module_name})
+RETURN m.name AS module,
+       m.actual_path AS actual_path,
+       m.path AS path,
+       m.sl AS module_start_line,
+       m.el AS module_end_line,
+       m.uid AS module_uid
+"""
+
+
 GET_FAILURE_MODULE_STATUS = """
 MATCH (m:Module {repo_uid: $repo_uid, name: $module_name})
 OPTIONAL MATCH (m)-[:HAS_SIM_RESULT]->(sim:SimulationResult)

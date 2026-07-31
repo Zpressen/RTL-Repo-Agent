@@ -29,6 +29,7 @@ _NODE_PATTERN = re.compile(
     r"\((?P<var>[A-Za-z_][A-Za-z0-9_]*)\s*:\s*(?P<label>[A-Za-z_][A-Za-z0-9_]*)(?P<props>\s*\{[^()]*\})?\)"
 )
 _RTL_ATTR_PREFIX = r"(?:\(\*.*?\*\)\s*)*"
+_KG_SCHEMA_VERSION = "module_anchor_planning_v1"
 
 
 def _strip_code_fences(text: str) -> str:
@@ -95,6 +96,7 @@ class RTLKgService:
         self._ingestor: Optional[Any] = None
         self._repo_uid: Optional[str] = None
         self._initialized = False
+        self._stage6_materialized_paths: Set[str] = set()
 
     @property
     def repo_uid(self) -> str:
@@ -109,6 +111,10 @@ class RTLKgService:
     @property
     def manifest_path(self) -> Path:
         return self.checkpoint_manager.get_path("rtl_kg_manifest")
+
+    @property
+    def planning_projection_path(self) -> Path:
+        return self.checkpoint_manager.get_path("rtl_kg_planning_projection")
 
     def is_enabled(self) -> bool:
         return self.enabled
@@ -138,16 +144,31 @@ class RTLKgService:
             logger=self.logger.info,
         )
 
+        previous_state = self._read_state()
         try:
             with conn.driver() as driver:
                 with driver.session() as session:
                     session.run("RETURN 1 AS ok").single()
+                    if previous_state.get("kg_schema_version") != _KG_SCHEMA_VERSION:
+                        # One-time partition rebuild removes legacy path-based
+                        # Module identities before the composite constraint is made.
+                        session.run(
+                            "MATCH (n {repo_uid:$repo_uid}) DETACH DELETE n",
+                            repo_uid=self.repo_uid,
+                        )
         except Exception as exc:  # pragma: no cover - environment dependent
             raise RuntimeError(
                 f"Failed to connect to Neo4j at {self.neo4j_uri} for RTL KG."
             ) from exc
 
         self._initialized = True
+        if previous_state.get("kg_schema_version") != _KG_SCHEMA_VERSION:
+            try:
+                self.planning_projection_path.unlink(missing_ok=True)
+            except OSError as exc:
+                if self.mode == "required":
+                    raise RuntimeError(f"Failed to reset legacy planning projection: {exc}") from exc
+                self.logger.warning("[rtl_kg] Could not reset legacy planning projection: %s", exc)
         self._save_state(
             {
                 "enabled": self.enabled,
@@ -156,6 +177,7 @@ class RTLKgService:
                 "neo4j_uri": self.neo4j_uri,
                 "kg_root": str(self.kg_root),
                 "initialized": True,
+                "kg_schema_version": _KG_SCHEMA_VERSION,
             }
         )
 
@@ -191,9 +213,17 @@ class RTLKgService:
     ) -> Dict[str, Any]:
         """Refresh KG from on-disk repository files at a fixed pipeline stage."""
         self.initialize()
+        approved_paths: Optional[Set[str]] = None
+        if stage in {"post_stage6_syntax", "post_module_syntax"}:
+            for changed_path in changed_paths or []:
+                normalized = self._path_relative_to_repo(changed_path)
+                if normalized:
+                    self._stage6_materialized_paths.add(normalized)
+            approved_paths = set(self._stage6_materialized_paths)
         nodes, edges = self._build_augmented_snapshot(
             stage=stage,
             filter_to_planned_skeleton=filter_to_planned_skeleton,
+            approved_code_paths=approved_paths,
         )
         ingest_stats = self._ingestor.ingest(nodes=nodes, edges=edges, mode="full", repo_uid=self.repo_uid)
         payload = {
@@ -207,6 +237,62 @@ class RTLKgService:
         }
         self._append_manifest(payload)
         return payload
+
+    def upsert_planning_projection(
+        self,
+        nodes: List[Dict[str, Any]],
+        edges: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Delta-upsert the already persisted planning projection."""
+        self.initialize()
+        stats = self._ingestor.ingest(nodes=nodes, edges=edges, mode="delta", repo_uid=self.repo_uid)
+        node_uids = [str(item.get("uid")) for item in nodes if item.get("uid")]
+        edge_uids = [
+            str(item.get("uid") or item.get("eid"))
+            for item in edges
+            if item.get("uid") or item.get("eid")
+        ]
+        conn = self._ingestor.conn
+        with conn.driver() as driver:
+            with driver.session() as session:
+                session.run(
+                    """
+                    MATCH (m:Module {repo_uid:$repo_uid})
+                    WHERE m.path IS NOT NULL AND m.path <> ''
+                    SET m.actual_path = m.path, m.implementation_status = 'materialized'
+                    """,
+                    repo_uid=self.repo_uid,
+                )
+                session.run(
+                    """
+                    MATCH (a {repo_uid:$repo_uid})-[r:SPECIFIES|HAS_SKELETON|HAS_PLAN]->()
+                    WHERE NOT r.uid IN $edge_uids
+                    DELETE r
+                    """,
+                    repo_uid=self.repo_uid,
+                    edge_uids=edge_uids,
+                )
+                session.run(
+                    """
+                    MATCH (n {repo_uid:$repo_uid})
+                    WHERE (n:SpecFragment OR n:ModuleSkeleton OR n:ModulePlan)
+                      AND NOT n.uid IN $node_uids
+                    DETACH DELETE n
+                    """,
+                    repo_uid=self.repo_uid,
+                    node_uids=node_uids,
+                )
+                session.run(
+                    """
+                    MATCH (m:Module {repo_uid:$repo_uid})
+                    WHERE NOT m.uid IN $node_uids
+                      AND (m.path IS NULL OR m.path = '')
+                    DETACH DELETE m
+                    """,
+                    repo_uid=self.repo_uid,
+                    node_uids=node_uids,
+                )
+        return stats
 
     def query(
         self,
@@ -315,6 +401,7 @@ class RTLKgService:
         self,
         stage: str,
         filter_to_planned_skeleton: bool = True,
+        approved_code_paths: Optional[Set[str]] = None,
     ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         kg = KnowledgeGraphRTL.build(self.repo_path)
         nodes = list(kg.neo4j_nodes())
@@ -322,6 +409,8 @@ class RTLKgService:
         nodes, edges = self._augment_snapshot_with_text_fallback(nodes, edges)
         if filter_to_planned_skeleton:
             nodes, edges = self._filter_snapshot_to_planned_skeleton(nodes, edges)
+        if approved_code_paths is not None:
+            nodes, edges = self._filter_snapshot_to_file_paths(nodes, edges, approved_code_paths)
         file_specs = {
             str(item.get("file_path", "")).strip(): item
             for item in (
@@ -377,7 +466,118 @@ class RTLKgService:
             node["related_test_ids"] = attrs["related_test_ids"]
             node["related_prop_ids"] = attrs["related_prop_ids"]
 
-        return nodes, edges
+        return self._merge_planning_projection(nodes, edges)
+
+    def _path_relative_to_repo(self, value: str | Path) -> str:
+        path = Path(value)
+        try:
+            if path.is_absolute():
+                return path.resolve().relative_to(self.repo_path.resolve()).as_posix()
+        except ValueError:
+            return ""
+        return self._normalize_kg_path(str(path))
+
+    def _filter_snapshot_to_file_paths(
+        self,
+        nodes: List[Dict[str, Any]],
+        edges: List[Dict[str, Any]],
+        file_paths: Set[str],
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        allowed = {self._normalize_kg_path(item) for item in file_paths if item}
+        nodes_by_uid = {
+            str(node.get("uid") or ""): node for node in nodes if str(node.get("uid") or "")
+        }
+        keep: Set[str] = {
+            uid
+            for uid, node in nodes_by_uid.items()
+            if str(node.get("kind") or "") == "Repo"
+            or (
+                str(node.get("kind") or "") == "File"
+                and self._normalize_kg_path(str(node.get("path") or "")) in allowed
+            )
+        }
+        changed = True
+        while changed:
+            changed = False
+            for edge in edges:
+                source = self._edge_endpoint_uid(edge, "source")
+                target = self._edge_endpoint_uid(edge, "target")
+                target_node = nodes_by_uid.get(target)
+                if source in keep and target_node is not None and str(target_node.get("kind") or "") != "File":
+                    if target not in keep:
+                        keep.add(target)
+                        changed = True
+        filtered_nodes = [node for node in nodes if str(node.get("uid") or "") in keep]
+        filtered_edges = [
+            edge
+            for edge in edges
+            if self._edge_endpoint_uid(edge, "source") in keep
+            and self._edge_endpoint_uid(edge, "target") in keep
+        ]
+        return filtered_nodes, filtered_edges
+
+    def _merge_planning_projection(
+        self,
+        code_nodes: List[Dict[str, Any]],
+        code_edges: List[Dict[str, Any]],
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Merge source-of-truth planning sidecar into a full code snapshot."""
+        planning_nodes: List[Dict[str, Any]] = []
+        planning_edges: List[Dict[str, Any]] = []
+        if self.planning_projection_path.exists():
+            try:
+                projection = json.loads(self.planning_projection_path.read_text(encoding="utf-8"))
+                if projection.get("repo_uid") == self.repo_uid:
+                    planning_nodes = list(projection.get("nodes") or [])
+                    planning_edges = list(projection.get("edges") or [])
+            except Exception as exc:
+                if self.mode == "required":
+                    raise RuntimeError(f"Invalid planning KG projection: {exc}") from exc
+                self.logger.warning("[rtl_kg] Ignoring invalid planning projection: %s", exc)
+
+        by_uid: Dict[str, Dict[str, Any]] = {
+            str(node.get("uid")): dict(node)
+            for node in planning_nodes
+            if str(node.get("uid") or "")
+        }
+        for code_node in code_nodes:
+            uid = str(code_node.get("uid") or "")
+            if not uid:
+                continue
+            merged = dict(by_uid.get(uid) or {})
+            merged.update(code_node)
+            if str(code_node.get("kind") or "") == "Module":
+                actual_path = str(code_node.get("path") or "")
+                if actual_path:
+                    merged["actual_path"] = actual_path
+                    merged["implementation_status"] = "materialized"
+                attrs = dict(merged.get("attrs") or {})
+                for key in (
+                    "expected_path",
+                    "actual_path",
+                    "role",
+                    "module_kind",
+                    "is_top",
+                    "generation_rank",
+                    "planned_parents",
+                    "planned_children",
+                    "stage2_fingerprint",
+                    "implementation_status",
+                ):
+                    if key in merged:
+                        attrs[key] = merged[key]
+                merged["attrs"] = attrs
+            by_uid[uid] = merged
+
+        edge_by_uid: Dict[str, Dict[str, Any]] = {}
+        for edge in [*planning_edges, *code_edges]:
+            uid = str(edge.get("uid") or edge.get("eid") or "")
+            if not uid:
+                uid = hashlib.sha1(
+                    json.dumps(edge, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
+                ).hexdigest()
+            edge_by_uid[uid] = dict(edge)
+        return list(by_uid.values()), list(edge_by_uid.values())
 
     def _augment_snapshot_with_text_fallback(
         self,
@@ -405,6 +605,11 @@ class RTLKgService:
             self._normalize_kg_path(str(node.get("path") or "")): node
             for node in nodes
             if str(node.get("kind") or "") == "File"
+        }
+        module_definition_paths = {
+            str(node.get("name") or ""): self._normalize_kg_path(str(node.get("path") or ""))
+            for node in nodes
+            if str(node.get("kind") or "") == "Module" and str(node.get("name") or "")
         }
 
         added_modules = 0
@@ -438,6 +643,13 @@ class RTLKgService:
 
             for module in self._fallback_modules(text, norm_path):
                 module_name = str(module["name"])
+                previous_path = module_definition_paths.get(module_name)
+                if previous_path is not None and previous_path != norm_path:
+                    raise ValueError(
+                        "Duplicate RTL Module definition in one repo partition: "
+                        f"{module_name!r} appears in {previous_path!r} and {norm_path!r}"
+                    )
+                module_definition_paths[module_name] = norm_path
                 if (module_name, norm_path) in module_keys:
                     continue
                 module_nodes, module_edges = self._fallback_module_graph(
@@ -492,7 +704,7 @@ class RTLKgService:
         module_name = str(module["name"])
         rel_path = str(module["path"])
         module_text = str(module["text"])
-        module_uid = self._kg_uid("module", module_name, rel_path)
+        module_uid = self._kg_uid("module", module_name)
         module_node = {
             "uid": module_uid,
             "repo_uid": self.repo_uid,
@@ -960,6 +1172,16 @@ class RTLKgService:
     def _save_state(self, data: Dict[str, Any]) -> None:
         with open(self.state_path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+
+    def _read_state(self) -> Dict[str, Any]:
+        if not self.state_path.exists():
+            return {}
+        try:
+            with open(self.state_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
 
     def _append_manifest(self, event: Dict[str, Any]) -> None:
         payload = {"events": []}
