@@ -1,17 +1,25 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
+
+import pytest
 
 import zerorepo.rtl_impl.module_planner.agents.global_defines as global_defines_mod
 import zerorepo.rtl_impl.module_planner.agents.stage6_semantic_merge as semantic_mod
-from zerorepo.rtl_impl.module_planner.agents.global_defines import copy_official_define_file
+from zerorepo.rtl_impl.module_planner.agents.global_defines import (
+    build_global_defines_context,
+    build_stage5_global_defines_summary,
+    copy_e203_canonical_define_files,
+    copy_official_define_file,
+)
 from zerorepo.rtl_impl.module_planner.agents.stage5_agent import Stage5Agent
 from zerorepo.rtl_impl.module_planner.agents.stage6_semantic_merge import (
-    SemanticMergeContext,
-    Stage6SemanticMergeRunner,
-    Stage6SemanticMergeTools,
+    SemanticMergeState,
+    Stage6MergeTools,
 )
+from zerorepo.rtl_impl.debug_agent.sim_reviewer import check_syntax
 from zerorepo.rtl_impl.module_planner.schemas import PlannerTaskInput
 
 
@@ -44,9 +52,158 @@ def test_official_define_file_is_copied_and_manifested(tmp_path: Path, monkeypat
     assert entry is not None
     merged = tmp_path / "workspace" / "merged" / "sd_defines.v"
     assert merged.read_text(encoding="utf-8") == official.read_text(encoding="utf-8")
-    manifest = json.loads((tmp_path / "workspace" / "merged" / "global_defines_manifest.json").read_text(encoding="utf-8"))
+    manifest = json.loads((tmp_path / "workspace" / "global_defines_manifest.json").read_text(encoding="utf-8"))
     assert manifest["global_define_files"][0]["mode"] == "official_copy"
     assert manifest["global_define_files"][0]["must_include"] is True
+
+
+@pytest.mark.parametrize(
+    ("top_module", "canonical_project"),
+    [
+        ("e203_ifu", "e203_ifu"),
+        ("e203_exu_alu", "e203_exu_alu"),
+        ("e203_exu_alu_system", "e203_exu_alu"),
+    ],
+)
+def test_e203_canonical_headers_are_copied_from_matching_project(
+    tmp_path: Path,
+    top_module: str,
+    canonical_project: str,
+) -> None:
+    oracle_root = tmp_path / "RealBench"
+    verification_dir = oracle_root / "e203_hbirdv2" / canonical_project / "verification"
+    verification_dir.mkdir(parents=True)
+    (verification_dir / "config.v").write_text("`define E203_CFG_XLEN 32\n", encoding="utf-8")
+    (verification_dir / "e203_defines.v").write_text(
+        '`include "config.v"\n`define E203_XLEN `E203_CFG_XLEN\n',
+        encoding="utf-8",
+    )
+
+    workspace = tmp_path / "workspace"
+    entries = copy_e203_canonical_define_files(
+        top_module=top_module,
+        oracle_root=oracle_root,
+        workspace_root=workspace,
+        output_root=tmp_path / "outputs",
+    )
+
+    assert [item["name"] for item in entries] == ["config.v", "e203_defines.v"]
+    assert entries[0]["must_include"] is False
+    assert entries[0]["included_by"] == ["e203_defines.v"]
+    assert entries[1]["must_include"] is True
+    assert Path(entries[0]["source"]).parent == verification_dir.resolve()
+    assert (workspace / "merged" / "config.v").read_text(encoding="utf-8") == "`define E203_CFG_XLEN 32\n"
+
+    manifest = json.loads((workspace / "global_defines_manifest.json").read_text(encoding="utf-8"))
+    assert [item["name"] for item in manifest["global_define_files"]] == ["config.v", "e203_defines.v"]
+    context = build_global_defines_context(workspace)
+    assert "## config.v" in context
+    assert "## e203_defines.v" in context
+
+
+def test_e203_canonical_headers_fail_atomically_when_one_is_missing(tmp_path: Path) -> None:
+    verification_dir = tmp_path / "RealBench" / "e203_hbirdv2" / "e203_ifu" / "verification"
+    verification_dir.mkdir(parents=True)
+    (verification_dir / "config.v").write_text("`define E203_CFG_XLEN 32\n", encoding="utf-8")
+    workspace = tmp_path / "workspace"
+
+    with pytest.raises(FileNotFoundError, match="e203_defines.v"):
+        copy_e203_canonical_define_files(
+            top_module="e203_ifu",
+            oracle_root=tmp_path / "RealBench",
+            workspace_root=workspace,
+        )
+
+    assert not (workspace / "global_defines_manifest.json").exists()
+    assert not (workspace / "merged").exists()
+
+
+def test_stage5_macro_summary_resolves_conditions_dependencies_and_undefined_macros(
+    tmp_path: Path,
+) -> None:
+    verification_dir = tmp_path / "RealBench" / "e203_hbirdv2" / "e203_ifu" / "verification"
+    verification_dir.mkdir(parents=True)
+    (verification_dir / "config.v").write_text(
+        "`define E203_CFG_MODE_2\n"
+        "`define E203_CFG_ADDR_SIZE 32\n",
+        encoding="utf-8",
+    )
+    (verification_dir / "e203_defines.v").write_text(
+        '`include "config.v"\n'
+        "`ifdef E203_CFG_MODE_1\n"
+        "  `define E203_DEPTH 1\n"
+        "`elsif E203_CFG_MODE_2\n"
+        "  `define E203_DEPTH 2\n"
+        "`else\n"
+        "  `define E203_DEPTH 4\n"
+        "`endif\n"
+        "`define E203_ADDR `E203_CFG_ADDR_SIZE'h8000_0000\n"
+        "`ifdef E203_CFG_HAS_FPU\n"
+        "  `define E203_HAS_FPU\n"
+        "`endif\n"
+        "`ifndef E203_CFG_HAS_FPU\n"
+        "  `define E203_NO_FPU 1\n"
+        "`endif\n"
+        "`define E203_REMOVED 1\n"
+        "`undef E203_REMOVED\n",
+        encoding="utf-8",
+    )
+    workspace = tmp_path / "workspace"
+    copy_e203_canonical_define_files(
+        top_module="e203_ifu",
+        oracle_root=tmp_path / "RealBench",
+        workspace_root=workspace,
+    )
+
+    summary = build_stage5_global_defines_summary(
+        workspace,
+        ["Use `E203_DEPTH, `E203_ADDR, `E203_HAS_FPU, `E203_NO_FPU, and `E203_REMOVED."],
+        max_chars=6000,
+    )
+
+    assert "`define E203_DEPTH 2" in summary
+    assert "`define E203_ADDR `E203_CFG_ADDR_SIZE'h8000_0000" in summary
+    assert "`define E203_CFG_ADDR_SIZE 32" in summary
+    assert "undefined `E203_HAS_FPU`" in summary
+    assert "`define E203_NO_FPU 1" in summary
+    assert "undefined `E203_REMOVED`" in summary
+    assert "`define E203_DEPTH 1" not in summary
+    assert "Stage 6 owns the canonical includes" in summary
+    assert len(summary) <= 6000
+
+
+def test_stage5_macro_summary_obeys_budget_without_partial_entries(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    merged = workspace / "merged"
+    merged.mkdir(parents=True)
+    defines = merged / "defs.v"
+    defines.write_text(
+        "\n".join(f"`define FEATURE_{index:03d} {index}" for index in range(100)) + "\n",
+        encoding="utf-8",
+    )
+    global_defines_mod.write_global_defines_manifest(
+        workspace_root=workspace,
+        output_root=None,
+        entries=[
+            {
+                "name": "defs.v",
+                "workspace_path": str(defines),
+                "source": str(defines),
+                "must_include": True,
+            }
+        ],
+    )
+
+    summary = build_stage5_global_defines_summary(
+        workspace,
+        ["Use `FEATURE_001 and `FEATURE_099."],
+        max_chars=500,
+    )
+
+    assert len(summary) <= 500
+    assert "`define FEATURE_001 1" in summary
+    assert "`define FEATURE_099 99" in summary
+    assert not summary.endswith("`define FEATURE_")
 
 
 def test_stage5_contract_fallback_extracts_writes_and_reads(tmp_path: Path) -> None:
@@ -65,92 +222,206 @@ def test_stage5_contract_fallback_extracts_writes_and_reads(tmp_path: Path) -> N
     assert contract.clocking == "posedge clk"
 
 
-def test_stage6_semantic_react_applies_patch_with_required_include_and_report(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setattr(semantic_mod, "check_syntax", lambda _path, top_module=None: (True, "lint ok"))
-    merged_file = tmp_path / "workspace" / "merged" / "m.v"
+def _make_merge_tools(tmp_path: Path, monkeypatch) -> tuple[Stage6MergeTools, dict]:
+    workspace = tmp_path / "workspace"
+    merged_dir = workspace / "merged"
+    fragments_dir = workspace / "fragments"
+    merged_dir.mkdir(parents=True)
+    fragments_dir.mkdir(parents=True)
+    (merged_dir / "config.v").write_text("`define CFG_WIDTH 8\n", encoding="utf-8")
+    (merged_dir / "e203_defines.v").write_text(
+        '`include "config.v"\n`define E203_WIDTH `CFG_WIDTH\n',
+        encoding="utf-8",
+    )
+    fragment_file = fragments_dir / "m_fragments.v"
+    fragment_file.write_text("assign y = a;\n", encoding="utf-8")
     manifest = {
         "schema_version": "global_defines_manifest_v1",
         "global_define_files": [
             {
-                "name": "sd_defines.v",
-                "module": "sd_defines",
-                "source": "/official/sd_defines.v",
-                "workspace_path": str(tmp_path / "workspace" / "merged" / "sd_defines.v"),
-                "mode": "official_copy",
+                "name": "config.v",
+                "workspace_path": str(merged_dir / "config.v"),
+                "must_include": False,
+                "included_by": ["e203_defines.v"],
+            },
+            {
+                "name": "e203_defines.v",
+                "workspace_path": str(merged_dir / "e203_defines.v"),
                 "must_include": True,
-            }
+            },
         ],
     }
-    ctx = SemanticMergeContext(
+    lint_call: dict = {}
+
+    def fake_check_syntax(path, top_module=None, include_dirs=None, support_files=None):
+        lint_call.update(
+            path=path,
+            top_module=top_module,
+            include_dirs=include_dirs,
+            support_files=support_files,
+        )
+        return True, "lint ok"
+
+    monkeypatch.setattr(semantic_mod, "check_syntax", fake_check_syntax)
+    state = SemanticMergeState(
         module_name="m",
-        merged_file=merged_file,
-        module_spec="spec",
-        module_skeleton="module m(input a, output y); endmodule",
-        kg_child_context="",
-        global_defines_context="`define BIT_BLOCK 1044",
-        generated_fragments="assign y = a;",
-        fragment_file=tmp_path / "workspace" / "fragments" / "m_fragments.v",
+        merged_file=merged_dir / "m.v",
+        draft_file=workspace / "merge_drafts" / "m_draft.v",
+        fragment_file=fragment_file,
         contracts_file=None,
         global_defines_manifest=manifest,
-        required_includes=["sd_defines.v"],
-    )
-    tools = Stage6SemanticMergeTools(ctx)
-    llm = FakeLLM(
-        [
-            json.dumps({"action": {"tool": "read_merge_context", "args": {}}}),
-            json.dumps(
-                {
-                    "action": {
-                        "tool": "apply_merge_patch",
-                        "args": {
-                            "new_code": "module m(input a, output y);\nassign y = a;\nendmodule",
-                            "reason": "merge complete",
-                        },
-                    }
-                }
-            ),
-        ]
-    )
-
-    runner = Stage6SemanticMergeRunner(llm, tools, max_steps=3)
-    code = runner.run("initial prompt", fallback_raw_merge=lambda _raw=None: "")
-    report = tools.write_merge_report(tmp_path / "workspace" / "merge_reports" / "m_merge_report.json")
-
-    assert '`include "sd_defines.v"' in code
-    assert merged_file.read_text(encoding="utf-8").startswith('`include "sd_defines.v"')
-    assert report["required_includes"] == ["sd_defines.v"]
-    assert report["static_check_summary"]["status"] == "pass"
-
-
-def test_stage6_raw_verilog_is_routed_through_semantic_patch(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setattr(semantic_mod, "check_syntax", lambda _path, top_module=None: (True, "lint ok"))
-    merged_file = tmp_path / "workspace" / "merged" / "m.v"
-    ctx = SemanticMergeContext(
-        module_name="m",
-        merged_file=merged_file,
+        required_includes=["e203_defines.v"],
         module_spec="spec",
         module_skeleton="module m(input a, output y); endmodule",
-        kg_child_context="",
-        global_defines_context="`define BIT_BLOCK 1044",
-        generated_fragments="assign y = a;",
-        fragment_file=tmp_path / "workspace" / "fragments" / "m_fragments.v",
-        contracts_file=None,
-        global_defines_manifest={
-            "schema_version": "global_defines_manifest_v1",
-            "global_define_files": [{"name": "sd_defines.v", "must_include": True}],
-        },
-        required_includes=["sd_defines.v"],
+        global_defines_context=(
+            "`define CFG_WIDTH 8\n"
+            '`include "config.v"\n'
+            "`define E203_WIDTH `CFG_WIDTH\n"
+        ),
     )
-    tools = Stage6SemanticMergeTools(ctx)
-    llm = FakeLLM(["module m(input a, output y);\nassign y = a;\nendmodule"])
-    fallback_calls = []
+    return Stage6MergeTools(state), lint_call
 
-    runner = Stage6SemanticMergeRunner(llm, tools, max_steps=2)
-    code = runner.run("initial prompt", fallback_raw_merge=lambda raw=None: fallback_calls.append(raw) or "")
-    report = tools.write_merge_report(tmp_path / "workspace" / "merge_reports" / "m_merge_report.json")
 
-    assert not fallback_calls
-    assert '`include "sd_defines.v"' in code
-    assert (tmp_path / "workspace" / "merge_snapshots" / "m" / "step_001" / "after.v").exists()
-    assert report["merge_iterations"][0]["status"] == "kept"
-    assert any(item["tool"] == "read_merge_context" for item in runner.history if item["role"] == "tool")
+def test_stage6_requires_global_context_and_includes_only_root_header(tmp_path: Path, monkeypatch) -> None:
+    tools, lint_call = _make_merge_tools(tmp_path, monkeypatch)
+    tools.read_merge_context("fragments")
+    tools.read_merge_context("spec")
+    code = "module m(input a, output y);\nassign y = a;\nendmodule"
+
+    rejected = tools.generate_merge_draft(code, "merge", "compile")
+    assert rejected["status"] == "rejected"
+    assert 'read_merge_context(kind="global_defines")' in rejected["reason"]
+
+    context = tools.read_merge_context("global_defines", max_chars=60000)
+    assert context["manifest"]["global_define_files"][0]["name"] == "config.v"
+    kept = tools.generate_merge_draft(code, "merge", "compile")
+
+    assert kept["status"] == "kept"
+    draft = tools.state.draft_file.read_text(encoding="utf-8")
+    assert draft.count('`include "e203_defines.v"') == 1
+    assert '`include "config.v"' not in draft
+    assert lint_call["top_module"] == "m"
+    assert lint_call["include_dirs"] == [str(tools.state.merged_file.parent)]
+    assert lint_call["support_files"] == []
+
+
+def test_stage6_rejects_fallback_redefinition_of_authoritative_macro(tmp_path: Path, monkeypatch) -> None:
+    tools, _ = _make_merge_tools(tmp_path, monkeypatch)
+    tools.read_merge_context("fragments")
+    tools.read_merge_context("spec")
+    tools.read_merge_context("global_defines", max_chars=60000)
+
+    rejected = tools.generate_merge_draft(
+        "`ifndef E203_WIDTH\n"
+        "`define E203_WIDTH 32\n"
+        "`endif\n"
+        "module m(input a, output y); assign y = a; endmodule",
+        "fallback",
+        "compile",
+    )
+
+    assert rejected["status"] == "rejected"
+    assert "E203_WIDTH" in rejected["reason"]
+    assert not tools.state.draft_file.exists()
+
+
+def test_stage6_static_check_does_not_require_interface_contract(tmp_path: Path, monkeypatch) -> None:
+    tools, _ = _make_merge_tools(tmp_path, monkeypatch)
+    tools.state.draft_file.parent.mkdir(parents=True)
+    tools.state.draft_file.write_text(
+        '`include "e203_defines.v"\n'
+        "module m(input a, output extra);\nassign extra = a;\nendmodule\n",
+        encoding="utf-8",
+    )
+
+    result = tools.run_static_rtl_check("draft")
+
+    assert result["status"] == "pass"
+    assert result["structure"]["outputs"] == ["extra"]
+    assert "extra" in result["structure"]["output_drivers"]
+
+    tools.state.draft_file.write_text(
+        '`include "e203_defines.v"\nmodule m(input a);\nendmodule\n',
+        encoding="utf-8",
+    )
+    no_output = tools.run_static_rtl_check("draft")
+    assert no_output["status"] == "pass"
+
+
+def test_stage6_static_check_resolves_manifest_and_local_macros(tmp_path: Path, monkeypatch) -> None:
+    tools, _ = _make_merge_tools(tmp_path, monkeypatch)
+    tools.state.draft_file.parent.mkdir(parents=True)
+    tools.state.draft_file.write_text(
+        '`include "e203_defines.v"\n'
+        "`define LOCAL_WIDTH 2\n"
+        "module m(input a, output y);\n"
+        "wire [`E203_WIDTH-1:0] official_bus;\n"
+        "wire [`LOCAL_WIDTH-1:0] local_bus;\n"
+        "assign y = a;\n"
+        "endmodule\n",
+        encoding="utf-8",
+    )
+
+    resolved = tools.run_static_rtl_check("draft")
+    assert not any("unresolved macro" in error for error in resolved["errors"])
+
+    tools.state.draft_file.write_text(
+        "module m(input a, output y);\n"
+        "wire [`MISSING_WIDTH-1:0] missing_bus;\n"
+        "assign y = a;\n"
+        "endmodule\n",
+        encoding="utf-8",
+    )
+    unresolved = tools.run_static_rtl_check("draft")
+    assert any("MISSING_WIDTH" in error for error in unresolved["errors"])
+
+
+def test_stage6_structure_parse_failure_is_fatal(tmp_path: Path, monkeypatch) -> None:
+    tools, _ = _make_merge_tools(tmp_path, monkeypatch)
+    tools.state.draft_file.parent.mkdir(parents=True)
+    tools.state.draft_file.write_text(
+        "module m(input a, output y); assign y = a; endmodule\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        semantic_mod,
+        "parse_rtl_blocks",
+        lambda _text: (_ for _ in ()).throw(ValueError("bad parse")),
+    )
+
+    structure = tools.inspect_rtl_structure("draft")
+    static = tools.run_static_rtl_check("draft")
+
+    assert structure["status"] == "parse_error"
+    assert tools.state.observed_structure is False
+    assert static["status"] == "fail"
+    assert any("bad parse" in error for error in static["errors"])
+
+
+@pytest.mark.skipif(shutil.which("verilator") is None, reason="Verilator is not available")
+def test_verilator_resolves_transitive_canonical_header_include(tmp_path: Path) -> None:
+    merged_dir = tmp_path / "merged"
+    draft_dir = tmp_path / "draft"
+    merged_dir.mkdir()
+    draft_dir.mkdir()
+    (merged_dir / "config.v").write_text("`define E203_CFG_WIDTH 8\n", encoding="utf-8")
+    (merged_dir / "e203_defines.v").write_text(
+        '`include "config.v"\n`define E203_WIDTH `E203_CFG_WIDTH\n',
+        encoding="utf-8",
+    )
+    rtl_path = draft_dir / "m.v"
+    rtl_path.write_text(
+        '`include "e203_defines.v"\n'
+        "module m(input [`E203_WIDTH-1:0] a, output [`E203_WIDTH-1:0] y);\n"
+        "assign y = a;\n"
+        "endmodule\n",
+        encoding="utf-8",
+    )
+
+    passed, output = check_syntax(
+        str(rtl_path),
+        top_module="m",
+        include_dirs=[str(merged_dir)],
+    )
+
+    assert passed, output

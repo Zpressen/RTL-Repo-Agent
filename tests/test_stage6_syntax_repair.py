@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 import zerorepo.rtl_impl.module_planner.agents.stage6_merge_agent as stage6_merge_agent_mod
 from zerorepo.rtl_impl.module_planner.agents.stage6_merge_agent import Stage6MergeAgent
 
@@ -34,7 +36,11 @@ def test_stage6_records_pass_without_retry(tmp_path: Path, monkeypatch) -> None:
     llm = FakeLLM([code])
     agent = Stage6MergeAgent(llm, output_root=tmp_path / "outputs", workspace_root=tmp_path / "workspace")
     rtl_path = tmp_path / "workspace" / "merged" / "parent.v"
-    monkeypatch.setattr(stage6_merge_agent_mod, "check_syntax", lambda _path, top_module=None: (True, "lint ok"))
+    monkeypatch.setattr(
+        stage6_merge_agent_mod,
+        "check_syntax",
+        lambda _path, top_module=None, support_files=None: (True, "lint ok"),
+    )
 
     result = agent._invoke_raw_with_repair(
         "ORIGINAL_PROMPT",
@@ -60,7 +66,10 @@ def test_stage6_delegates_syntax_failure_to_debug_without_retry(tmp_path: Path, 
     monkeypatch.setattr(
         stage6_merge_agent_mod,
         "check_syntax",
-        lambda _path, top_module=None: (False, "%Error-PINNOTFOUND: rtl.sv:1: Pin not found: 'bad_port'"),
+        lambda _path, top_module=None, support_files=None: (
+            False,
+            "%Error-PINNOTFOUND: rtl.sv:1: Pin not found: 'bad_port'",
+        ),
     )
 
     result = agent._invoke_raw_with_repair(
@@ -81,22 +90,30 @@ def test_stage6_delegates_syntax_failure_to_debug_without_retry(tmp_path: Path, 
     assert "PINNOTFOUND" in log["syntax_summary"]
 
 
-def test_stage6_delegates_empty_output_to_debug_without_retry(tmp_path: Path) -> None:
-    llm = FakeLLM([""])
+@pytest.mark.parametrize(
+    "raw_response",
+    [None, "", "null", "None", "module other; endmodule", "module parent;"],
+)
+def test_stage6_rejects_invalid_raw_output_without_overwriting_merged(
+    tmp_path: Path,
+    raw_response: object,
+) -> None:
+    llm = FakeLLM([raw_response])
     agent = Stage6MergeAgent(llm, output_root=tmp_path / "outputs", workspace_root=tmp_path / "workspace")
     rtl_path = tmp_path / "workspace" / "merged" / "parent.v"
+    rtl_path.parent.mkdir(parents=True)
+    original = "module parent; wire preserved; endmodule\n"
+    rtl_path.write_text(original, encoding="utf-8")
 
-    result = agent._invoke_raw_with_repair(
-        "ORIGINAL_PROMPT",
-        task=None,
-        partial_artifacts={},
-        module_name="parent",
-        rtl_path=rtl_path,
-    )
+    with pytest.raises(ValueError, match="Existing merged RTL was preserved"):
+        agent._invoke_raw_with_repair(
+            "ORIGINAL_PROMPT",
+            task=None,
+            partial_artifacts={},
+            module_name="parent",
+            rtl_path=rtl_path,
+        )
 
-    assert result == ""
     assert len(llm.calls) == 1
-    assert rtl_path.read_text(encoding="utf-8") == "\n"
-    log = _diagnostic(tmp_path, "parent")
-    assert log["status"] == "empty_output_delegated_to_debug"
-    assert log["syntax_passed"] is False
+    assert rtl_path.read_text(encoding="utf-8") == original
+    assert not (tmp_path / "outputs" / "stage6_syntax_repair" / "parent.json").exists()

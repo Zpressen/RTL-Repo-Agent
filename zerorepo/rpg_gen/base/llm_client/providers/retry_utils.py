@@ -13,6 +13,7 @@ def retry_with(
     func: Callable[..., T],
     provider_name: str = "OpenAI",
     max_retries: int = 3,
+    retry_if: Callable[[Exception], bool] | None = None,
 ) -> Callable[..., T]:
     """
     Decorator that adds retry logic with randomized backoff.
@@ -21,6 +22,7 @@ def retry_with(
         func: The function to decorate.
         provider_name: The name of the model provider (for logging).
         max_retries: Maximum number of retry attempts.
+        retry_if: Optional predicate for errors that can be retried.
 
     Returns:
         Decorated function with retry logic.
@@ -36,7 +38,7 @@ def retry_with(
             except Exception as e:
                 last_exception = e
 
-                if attempt == max_retries:
+                if attempt == max_retries or (retry_if is not None and not retry_if(e)):
                     raise
 
                 sleep_time = random.randint(3, 30)

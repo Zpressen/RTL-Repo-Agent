@@ -2,11 +2,16 @@ from __future__ import annotations
 
 import base64
 import importlib
+import inspect
 import mimetypes
 from pathlib import Path
 from typing import Any, Callable, Optional, Protocol
 
 from zerorepo.rpg_gen.base.llm_client import LLMClient, LLMConfig, Memory, SystemMessage, UserMessage
+from zerorepo.rpg_gen.base.llm_client.providers.completion_utils import create_chat_completion, request_with_retries
+from zerorepo.rpg_gen.base.llm_client.providers.bounded_completion import create_bounded_chat_completion
+from zerorepo.rpg_gen.base.llm_client.request_policy import LLMRequestOptions
+from zerorepo.rpg_gen.base.llm_client.providers.llm_basics import LLMResponse, LLMUsage
 
 
 class PlannerLLMBackend(Protocol):
@@ -41,13 +46,55 @@ class DefaultPlannerLLMBackend:
         self.config = LLMConfig.from_source(llm_config)
         self.client = LLMClient(self.config)
 
+    def _build_async_openai_client(self):
+        """Resolve fresh provider credentials without changing the shared client."""
+        import httpx
+        openai = self._import_openai()
+        provider = getattr(self.client.client, "provider_config", None)
+        source = provider.create_client(self.config) if provider else self._build_openai_client()
+        try:
+            kwargs = dict(api_key=source.api_key, base_url=str(source.base_url), max_retries=0,
+                          organization=source.organization, project=source.project,
+                          default_headers=dict(source._custom_headers), default_query=dict(source._custom_query),
+                          timeout=httpx.Timeout(120, connect=15))
+            if isinstance(source, openai.AzureOpenAI):
+                kwargs.update(api_version=source._api_version, azure_ad_token=source._azure_ad_token,
+                              azure_ad_token_provider=source._azure_ad_token_provider)
+                return openai.AsyncAzureOpenAI(**kwargs)
+            return openai.AsyncOpenAI(**kwargs)
+        finally:
+            source.close()
+
+    def _complete_bounded(self, memory, images, options):
+        messages = self._build_multimodal_messages_from_memory(memory=memory, images=images)
+        kwargs = {"model": self.config.model, "messages": messages, "top_p": self.config.top_p, "n": 1}
+        provider = getattr(self.client.client, "provider_config", None)
+        reasoning = provider.is_reasoning_model(self.config.model) if provider else False
+        if reasoning:
+            kwargs.update(reasoning_effort=self.config.extra.get("reasoning_effort", "high"),
+                          max_completion_tokens=options.max_tokens or self.config.max_tokens)
+        else:
+            kwargs.update(temperature=self.config.temperature, max_tokens=options.max_tokens or self.config.max_tokens)
+        if self.config.stop:
+            kwargs["stop"] = self.config.stop
+        if provider and provider.get_extra_headers():
+            kwargs["extra_headers"] = provider.get_extra_headers()
+        response = create_bounded_chat_completion(self._build_async_openai_client, kwargs,
+            stream=self.config.stream, include_usage=self.config.stream_include_usage,
+            options=options, log=self.config.log)
+        self.client._last_response = LLMResponse(content=response.choices[0].message.content,
+            model=response.model, finish_reason=response.choices[0].finish_reason,
+            usage=LLMUsage(input_tokens=response.usage.prompt_tokens, output_tokens=response.usage.completion_tokens)
+                  if response.usage is not None else None)
+        return (response.choices[0].message.content or "").strip()
+
     def _supports_openai_vision(self) -> bool:
         provider = (self.config.resolve_provider() or "").strip().lower()
         return provider in {"openai", "azure", "openrouter", "deepseek", "vllm", "doubao"}
 
     def _build_openai_client(self) -> Any:
         openai = self._import_openai()
-        kwargs: dict[str, Any] = {}
+        kwargs: dict[str, Any] = {"max_retries": 0}
         api_key = self.config.api_key
         if api_key:
             kwargs["api_key"] = api_key
@@ -70,7 +117,6 @@ class DefaultPlannerLLMBackend:
         messages: list[dict[str, Any]],
     ) -> Any:
         openai = self._import_openai()
-        client = self._build_openai_client()
 
         kwargs: dict[str, Any] = {
             "model": self.config.model,
@@ -95,7 +141,21 @@ class DefaultPlannerLLMBackend:
         if self.config.stop:
             kwargs["stop"] = self.config.stop
 
-        response = client.chat.completions.create(**kwargs)
+        def request():
+            client = self._build_openai_client()
+            try:
+                return create_chat_completion(
+                    client, kwargs, stream=self.config.stream,
+                    include_usage=self.config.stream_include_usage, log=self.config.log,
+                )
+            finally:
+                close = getattr(client, "close", None)
+                if close is not None:
+                    close()
+
+        response = request_with_retries(
+            request, provider_name=self.config.resolve_provider(), max_retries=self.config.max_retries,
+        )
         choice = response.choices[0]
         return (choice.message.content or "").strip()
 
@@ -143,7 +203,13 @@ class DefaultPlannerLLMBackend:
         system_prompt: str,
         user_prompt: str,
         images: Optional[list[str]] = None,
+        request_options: LLMRequestOptions | None = None,
     ) -> Any:
+        if request_options is not None and self._supports_openai_vision():
+            memory = Memory(context_window=6)
+            memory.add_message(SystemMessage(content=system_prompt))
+            memory.add_message(UserMessage(content=user_prompt))
+            return self._complete_bounded(memory, images, request_options)
         if images and self._supports_openai_vision():
             memory = Memory(context_window=2)
             memory.add_message(SystemMessage(content=system_prompt))
@@ -169,7 +235,10 @@ class DefaultPlannerLLMBackend:
         *,
         memory: Memory,
         images: Optional[list[str]] = None,
+        request_options: LLMRequestOptions | None = None,
     ) -> Any:
+        if request_options is not None and self._supports_openai_vision():
+            return self._complete_bounded(memory, images, request_options)
         if images and self._supports_openai_vision():
             return self._complete_multimodal_openai_compatible_messages(
                 messages=self._build_multimodal_messages_from_memory(memory=memory, images=images),
@@ -182,6 +251,7 @@ class PlannerLLMClient:
         self,
         llm_config: Optional[LLMConfig | dict | str] = None,
         backend: Optional[PlannerLLMBackend | Callable[..., Any]] = None,
+        request_policy: dict | None = None,
     ):
         if backend is None and llm_config is None:
             raise ValueError("PlannerLLMClient requires either llm_config or a custom backend.")
@@ -189,6 +259,29 @@ class PlannerLLMClient:
         self.backend = backend if backend is not None else DefaultPlannerLLMBackend(llm_config)
         if self.config is None:
             self.config = getattr(self.backend, "config", None)
+        self.request_policy = request_policy or {}
+
+    def request_options(self, *, stage, module, output_root=None, retrieval=False, attempt=1):
+        values = {"total_timeout_seconds": 180 if retrieval else 600,
+                  "max_tokens": 4096 if retrieval else None}
+        values.update(self.request_policy.get("retrieval" if retrieval else "generation", {}))
+        if stage == "stage5_codegen" and not retrieval:
+            values.update(first_content_timeout_seconds=240, retry_first_content_timeout=True)
+        values.update(self.request_policy.get("stages", {}).get(stage, {}))
+        values.update(stage=stage, module=module, repair_attempt=attempt,
+                      draft_root=Path(output_root) / ".llm_drafts" if output_root is not None else None)
+        return LLMRequestOptions(**values)
+
+    @staticmethod
+    def _call_backend(method, arguments, request_options):
+        # Existing injected backends do not have to accept the new optional interface.
+        try:
+            supported = "request_options" in inspect.signature(method).parameters
+        except (ValueError, TypeError):
+            supported = False
+        if request_options is not None and supported:
+            arguments["request_options"] = request_options
+        return method(**arguments)
 
     def complete(
         self,
@@ -196,52 +289,36 @@ class PlannerLLMClient:
         system_prompt: str,
         user_prompt: str,
         images: Optional[list[str]] = None,
+        request_options: LLMRequestOptions | None = None,
     ) -> Any:
         backend_complete = getattr(self.backend, "complete", None)
         if backend_complete is not None and not isinstance(self.backend, type):
-            return backend_complete(
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                images=images,
-            )
+            return self._call_backend(backend_complete, dict(system_prompt=system_prompt,
+                user_prompt=user_prompt, images=images), request_options)
         if callable(self.backend):
-            return self.backend(
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                images=images,
-            )
-        return self.backend.complete(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            images=images,
-        )
+            return self._call_backend(self.backend, dict(system_prompt=system_prompt,
+                user_prompt=user_prompt, images=images), request_options)
+        return self._call_backend(self.backend.complete, dict(system_prompt=system_prompt,
+            user_prompt=user_prompt, images=images), request_options)
 
     def complete_with_memory(
         self,
         *,
         memory: Memory,
         images: Optional[list[str]] = None,
+        request_options: LLMRequestOptions | None = None,
     ) -> Any:
         backend_complete_with_memory = getattr(self.backend, "complete_with_memory", None)
         if backend_complete_with_memory is not None:
-            return backend_complete_with_memory(
-                memory=memory,
-                images=images,
-            )
+            return self._call_backend(backend_complete_with_memory, dict(memory=memory, images=images), request_options)
         if callable(self.backend):
             history = memory.history
             system_prompt = next((item.content for item in history if item.role == "system"), "")
             user_prompt = next((item.content for item in reversed(history) if item.role == "user"), "")
-            return self.backend(
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                images=images,
-            )
+            return self._call_backend(self.backend, dict(system_prompt=system_prompt,
+                user_prompt=user_prompt, images=images), request_options)
         history = memory.history
         system_prompt = next((item.content for item in history if item.role == "system"), "")
         user_prompt = next((item.content for item in reversed(history) if item.role == "user"), "")
-        return self.backend.complete(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            images=images,
-        )
+        return self._call_backend(self.backend.complete, dict(system_prompt=system_prompt,
+            user_prompt=user_prompt, images=images), request_options)

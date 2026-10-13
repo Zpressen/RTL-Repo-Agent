@@ -116,7 +116,7 @@ do not generate code before reading the required context, and do not commit befo
 
 Hard constraints:
 - Preserve the declared top module name, all ports, and all port widths.
-- Include every must_include global macro file with the Verilog include directive. The official define files are authoritative and must not be rewritten.
+- Include every must_include global macro file with the Verilog include directive. The official define files are authoritative and must not be rewritten or replaced by local fallback definitions.
 - Do not create multiple drivers for any output signal.
 - Do not connect ports that do not exist on a child module.
 - Do not use always @(*) or always @*. Use explicit sensitivity lists.
@@ -125,7 +125,7 @@ Hard constraints:
 - Global macro definitions take priority over conflicting parameter or localparam values.
 
 Required workflow:
-1. Read the minimum required context: fragments, spec, and global_defines when required includes exist.
+1. Read the minimum required context: fragments, spec, and global_defines whenever the global-defines manifest is non-empty.
    Read module_skeleton, module_plan, fragment_contracts, kg_child_context, or learned_merge_rules only when they are needed to resolve merge structure, child interfaces, fragment ownership, or prior lessons.
 2. Generate a draft with generate_merge_draft.
 3. Inspect structure with inspect_rtl_structure(target="draft").
@@ -174,7 +174,7 @@ You have received only an index. Start with the smallest useful context, then lo
 Minimum context before generating a draft:
 1. read_merge_context(kind="fragments")      - Stage5 code fragments
 2. read_merge_context(kind="spec")           - original module specification
-3. read_merge_context(kind="global_defines") - authoritative macro definitions; mandatory when required include files are listed below
+3. read_merge_context(kind="global_defines", max_chars=60000) - authoritative macro definitions; mandatory when the manifest is non-empty
 
 Optional context to read on demand:
 - read_merge_context(kind="module_skeleton")    - when block organization or intended code regions are unclear

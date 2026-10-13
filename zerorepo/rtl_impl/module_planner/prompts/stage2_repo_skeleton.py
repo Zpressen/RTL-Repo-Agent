@@ -7,7 +7,7 @@ This stage only builds the repository-level skeleton.
 Do not design module-internal code skeletons.
 
 Primary input:
-- stage2_planning_input_v1 containing source spec markdown, global temporal facts, plus optional legacy fact/context fields
+- stage2_prompt_context_v1 containing the primary source spec, compact architecture facts, and module hints
 
 Your job is to:
 1. decide the final RTL module decomposition
@@ -35,7 +35,6 @@ Do NOT include:
 
 Planning policy:
 - prefer simple repository layout suitable for a research prototype
-- use temporal facts to identify transaction boundaries, state ownership, and clocked module boundaries
 - do not create one module per phase, round, cycle, or logical value version
 - preserve optional extracted facts unless there is a strong inconsistency
 - use leaf-first generation order by default
@@ -162,22 +161,21 @@ REPO_SKELETON_EXAMPLE = """
 """.strip()
 
 
-def build_repo_skeleton_prompt(stage2_planning_input_json: str, stage_context: str = "") -> str:
+def build_repo_skeleton_prompt(stage2_prompt_context_json: str, stage_context: str = "") -> str:
     return f"""
 Input:
-A stage2_planning_input_v1 object containing:
-- source spec markdown
-- optional global temporal facts
-- optional fact ledger
-- optional legacy contract projection
-- optional compatibility module candidates
+A compact stage2_prompt_context_v1 object containing:
+- one complete primary source spec
+- supplemental source file metadata
+- compact architecture facts and explicit hierarchy
+- top-module and compatibility module hints
 
 Task:
 Infer repo_skeleton_v1 from the evidence.
 
 Requirements:
 1. Treat source spec markdown as the primary evidence.
-2. Treat optional fact ledger, compatibility module candidates, and legacy contract projection as hints only, not as hard module-set constraints.
+2. Treat architecture facts and module candidates as hints unless they carry explicit structural evidence.
 3. Produce repository-level architecture planning only.
 4. Keep the schema compact and directly usable in a research prototype.
 5. Fill the following fields:
@@ -195,9 +193,8 @@ Important constraints:
 - Do not emit a separate `module_order` field. Use `planning_decisions.generation_order` as the only execution order.
 - Keep `modules` in the same order as `planning_decisions.generation_order`.
 - If something is uncertain, put it into open_issues instead of inventing details.
-- Stage1 facts may be absent; when they are absent, infer final module decomposition from `source_specs.markdown`.
+- Architecture facts may be absent; when they are absent, infer final module decomposition from `primary_source_spec.markdown`.
 - For system-level specs, derive modules from functional decomposition, resource reuse, state ownership, clocked boundaries, and explicit partitioning guidance.
-- Use temporal facts to avoid module boundaries that silently add a cycle between tightly coupled operations.
 - Temporal phases and logical versions are not module candidates by themselves. Do not create one module per phase, round, cycle, or value tag.
 - If explicit hierarchy is sparse or empty, derive likely dependencies from inferred relations, dataflow facts, submodule_facts, module roles, resource_requirement, data_dependency, datapath, and source spec behavior.
 - Only infer hierarchy or instance_hints from grounded facts or source-spec evidence such as resource_requirement, data_dependency, module_identity, algorithm_step, or explicit module role facts.
@@ -222,8 +219,8 @@ Return exactly one JSON object and no prose.
 Example:
 {REPO_SKELETON_EXAMPLE}
 
-stage2_planning_input:
-{stage2_planning_input_json}
+stage2_prompt_context:
+{stage2_prompt_context_json}
 
 Additional stage context:
 {stage_context or "None"}

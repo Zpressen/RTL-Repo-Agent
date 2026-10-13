@@ -1214,6 +1214,7 @@ def build_first_divergence_report(
     *,
     rtl_path: Path,
     output_dir: Path,
+    vcd: Any | None = None,
     sim_log_json: str | None = None,
     signals: list[str] | None = None,
     time_window: tuple[int, int] | None = None,
@@ -1229,7 +1230,7 @@ def build_first_divergence_report(
     decision.
     """
     vcd_path = output_dir / "wave.vcd"
-    if not vcd_path.exists() or VCDVCD is None:
+    if vcd is None and (not vcd_path.exists() or VCDVCD is None):
         return {"status": "missing_vcd", "error": "wave.vcd not found or vcdvcd unavailable"}
 
     rtl_text = rtl_path.read_text(encoding="utf-8")
@@ -1266,7 +1267,8 @@ def build_first_divergence_report(
             raw_fail_outputs = []
             real_fail_outputs = []
 
-    vcd = VCDVCD(str(vcd_path), store_tvs=True)  # type: ignore[operator]
+    if vcd is None:
+        vcd = VCDVCD(str(vcd_path), store_tvs=True)  # type: ignore[operator]
     ref_instance = _resolve_ref_instance(vcd)
     candidate_signals = signals or ports["outputs"]
     candidate_signals = [
@@ -1689,11 +1691,14 @@ def build_trace_report(
             dut_instance = None
 
     first_divergence_report: dict[str, Any] | None = None
+    vcd: Any | None = None
     if vcd_available:
         try:
+            vcd = VCDVCD(str(vcd_path), store_tvs=True)  # type: ignore[operator]
             first_divergence_report = build_first_divergence_report(
                 rtl_path=rtl_path,
                 output_dir=output_dir,
+                vcd=vcd,
                 sim_log_json=sim_log_json,
                 signals=ports["outputs"],
                 context_cycles=3,
@@ -1730,9 +1735,7 @@ def build_trace_report(
     value_backtrace: dict[str, Any] = {"chains": [], "fallback_reason": "vcd_unavailable"}
     diagnostic_narrative: list[str] = []
 
-    if vcd_available and fail_time_star is not None:
-        vcd = VCDVCD(str(vcd_path), store_tvs=True)  # type: ignore[operator]
-
+    if vcd is not None and fail_time_star is not None:
         # Resolve the clock signal name from contract or common candidates.
         clock_name_from_contract = _find_clock_from_contract(output_dir)
         times = _build_window_times(

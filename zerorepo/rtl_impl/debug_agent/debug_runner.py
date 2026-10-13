@@ -23,24 +23,72 @@ DebugStatus = Literal["disabled", "skipped", "pass", "fixed", "fail", "error"]
 @dataclass(frozen=True)
 class RtlDebugConfig:
     enabled: bool = True
+    backend: Literal["repo_react", "codex"] = "repo_react"
     oracle_root: str = "/home/mokita/RealBench"
     max_trials: int = 30
     allow_failure: bool = False
     toolchain_bin: str = ""
+    codex_bin: str = "codex"
+    codex_profile: str = "proxy-a"
+    codex_model: str = ""
+    codex_timeout: int = 10800
+    codex_multi_agent: bool = False
     openai_config: OpenAIConfig | None = None
 
     @classmethod
-    def from_env(cls) -> "RtlDebugConfig":
-        enabled_env = os.environ.get("ZEROREPO_RTL_DEBUG", "1").strip().lower()
-        allow_failure_env = os.environ.get("ZEROREPO_RTL_DEBUG_ALLOW_FAILURE", "0").strip().lower()
+    def from_mapping(
+        cls,
+        values: dict[str, Any] | None,
+        *,
+        openai_config: OpenAIConfig | None = None,
+    ) -> "RtlDebugConfig":
+        """Build debug settings from YAML values with environment overrides."""
+
+        data = dict(values or {})
+
+        def env_or(name: str, key: str, default: Any) -> Any:
+            value = os.environ.get(name)
+            return data.get(key, default) if value is None else value
+
+        def as_bool(value: Any) -> bool:
+            if isinstance(value, bool):
+                return value
+            return str(value).strip().lower() not in {"0", "false", "no", "off", ""}
+
+        backend_value = str(env_or("ZEROREPO_RTL_DEBUG_BACKEND", "backend", cls.backend)).strip().lower()
+        if backend_value not in {"repo_react", "codex"}:
+            raise ValueError("rtl_debug.backend must be `repo_react` or `codex`")
+        backend: Literal["repo_react", "codex"] = "codex" if backend_value == "codex" else "repo_react"
         return cls(
-            enabled=enabled_env not in {"0", "false", "no", "off"},
-            oracle_root=os.environ.get("ZEROREPO_RTL_DEBUG_ORACLE_ROOT", cls.oracle_root),
-            max_trials=int(os.environ.get("ZEROREPO_RTL_DEBUG_MAX_TRIALS", str(cls.max_trials))),
-            allow_failure=allow_failure_env not in {"0", "false", "no", "off"},
-            toolchain_bin=os.environ.get("ZEROREPO_RTL_DEBUG_TOOLCHAIN_BIN", ""),
-            openai_config=load_openai_config(),
+            enabled=as_bool(env_or("ZEROREPO_RTL_DEBUG", "enabled", cls.enabled)),
+            backend=backend,
+            oracle_root=str(env_or("ZEROREPO_RTL_DEBUG_ORACLE_ROOT", "oracle_root", cls.oracle_root)),
+            max_trials=int(env_or("ZEROREPO_RTL_DEBUG_MAX_TRIALS", "max_trials", cls.max_trials)),
+            allow_failure=as_bool(
+                env_or("ZEROREPO_RTL_DEBUG_ALLOW_FAILURE", "allow_failure", cls.allow_failure)
+            ),
+            toolchain_bin=str(
+                env_or("ZEROREPO_RTL_DEBUG_TOOLCHAIN_BIN", "toolchain_bin", cls.toolchain_bin)
+            ),
+            codex_bin=str(env_or("ZEROREPO_CODEX_BIN", "codex_bin", cls.codex_bin)),
+            codex_profile=str(
+                env_or("ZEROREPO_CODEX_PROFILE", "codex_profile", cls.codex_profile)
+            ).strip(),
+            codex_model=str(env_or("ZEROREPO_CODEX_MODEL", "codex_model", cls.codex_model)),
+            codex_timeout=int(env_or("ZEROREPO_CODEX_TIMEOUT", "codex_timeout", cls.codex_timeout)),
+            codex_multi_agent=as_bool(
+                env_or(
+                    "ZEROREPO_CODEX_MULTI_AGENT",
+                    "codex_multi_agent",
+                    cls.codex_multi_agent,
+                )
+            ),
+            openai_config=openai_config or load_openai_config(),
         )
+
+    @classmethod
+    def from_env(cls) -> "RtlDebugConfig":
+        return cls.from_mapping({})
 
 
 def _resolve_oracle_dir(oracle_root: Path, module_name: str) -> Path | None:
@@ -305,6 +353,12 @@ class ModuleDebugRunner:
         """Run a module-level syntax/elaboration gate without module oracle simulation."""
         if not self.config.enabled:
             return ModuleDebugResult(module=module_name, status="disabled", reason="RTL debug is disabled.")
+        if self.logger is not None:
+            self.logger.info(
+                "[rtl_module_debug] module_syntax_repair=repo_react "
+                "(system_debug_backend=%s)",
+                self.config.backend,
+            )
 
         merged_path = Path(merged_file)
         workdir = (self.debug_root / module_name).resolve()
@@ -442,9 +496,20 @@ class ModuleDebugRunner:
         self._write_text(workdir / "contract.json", contract_json.rstrip() + "\n")
 
         merged_root = merged_file.parent
+        global_define_files = self._global_define_files_for_syntax_gate()
+        global_define_sources = {source.resolve() for source, _name in global_define_files}
+        staged_global_defines: list[str] = []
+        for source, name in global_define_files:
+            destination = workdir / name
+            shutil.copyfile(source, destination)
+            staged_global_defines.append(str(destination))
+
         support_chunks: list[str] = []
-        for path in sorted([*merged_root.glob("*.sv"), *merged_root.glob("*.v")], key=lambda item: item.name):
-            if path.resolve() == merged_file.resolve():
+        for path in sorted(
+            [*merged_root.glob("*.sv"), *merged_root.glob("*.v")],
+            key=lambda item: item.name,
+        ):
+            if path.resolve() == merged_file.resolve() or path.resolve() in global_define_sources:
                 continue
             try:
                 support_chunks.append(f"// support source: {path.name}\n{path.read_text(encoding='utf-8')}")
@@ -454,17 +519,67 @@ class ModuleDebugRunner:
 
         for path in sorted(merged_root.iterdir(), key=lambda item: item.name):
             if path.is_file() and path.suffix.lower() in {".vh", ".svh", ".inc"}:
-                shutil.copyfile(path, workdir / path.name)
+                destination = workdir / path.name
+                if not destination.exists():
+                    shutil.copyfile(path, destination)
 
         manifest = {
             "module": module_name,
             "merged_file": str(merged_file),
             "support_file": str(workdir / "support.sv"),
+            "staged_global_define_files": staged_global_defines,
             "spec_source_path": spec_source_path or "",
             "debug_behavior_source": "syntax_gate_only",
             "tb_visibility": "none",
         }
         self._write_text(workdir / "debug_input_manifest.json", json.dumps(manifest, indent=2) + "\n")
+
+    def _global_define_files_for_syntax_gate(self) -> list[tuple[Path, str]]:
+        """Resolve manifest-listed headers for an isolated syntax workdir."""
+        manifest_path = self.workspace_root / "global_defines_manifest.json"
+        if not manifest_path.is_file():
+            legacy_path = self.workspace_root / "merged" / "global_defines_manifest.json"
+            if not legacy_path.is_file():
+                return []
+            manifest_path = legacy_path
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except Exception as exc:  # noqa: BLE001
+            raise ValueError(f"Invalid global defines manifest {manifest_path}: {exc}") from exc
+        entries = manifest.get("global_define_files", []) if isinstance(manifest, dict) else []
+        if not isinstance(entries, list):
+            raise ValueError(
+                f"Invalid global defines manifest {manifest_path}: "
+                "global_define_files must be a list"
+            )
+
+        resolved: list[tuple[Path, str]] = []
+        names: dict[str, Path] = {}
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            raw_path = str(entry.get("workspace_path") or "").strip()
+            if not raw_path:
+                raise ValueError(f"Global define entry in {manifest_path} has no workspace_path")
+            source = Path(raw_path).expanduser()
+            if not source.is_absolute():
+                source = self.workspace_root / source
+            source = source.resolve()
+            if not source.is_file():
+                raise FileNotFoundError(f"Manifest-listed global define file not found: {source}")
+            name = str(entry.get("name") or source.name).strip()
+            if not name or Path(name).name != name:
+                raise ValueError(f"Global define entry has unsafe filename: {name!r}")
+            prior = names.get(name)
+            if prior is not None and prior != source:
+                raise ValueError(
+                    f"Multiple global define files map to debug filename {name}: "
+                    f"{prior}, {source}"
+                )
+            if prior is None:
+                names[name] = source
+                resolved.append((source, name))
+        return resolved
 
     def _write_syntax_gate_log(
         self,

@@ -467,3 +467,9 @@ rtl_outputs/rtl_spec_/trae-agent-artifacts/
 
 # Generated RTL outputs (large, not version-controlled)
 rtl_outputs/
+
+# ZeroRepo runtime workspaces (planner outputs, debug journals, KG state)
+**/.zerorepo/
+
+# Run records containing large simulation artifacts (waveforms, logs)
+Accurate_Records_gpt5.6/

@@ -17,6 +17,34 @@ from zerorepo.rtl_impl.debug_agent.sim_reviewer import check_syntax
 from zerorepo.rtl_impl.debug_agent.trace_slicer import parse_rtl_blocks
 
 
+_PREPROCESSOR_CONTROL_DIRECTIVES = {
+    "begin_keywords",
+    "celldefine",
+    "default_nettype",
+    "define",
+    "else",
+    "elsif",
+    "end_keywords",
+    "endcelldefine",
+    "endif",
+    "ifdef",
+    "ifndef",
+    "include",
+    "line",
+    "nounconnected_drive",
+    "pragma",
+    "resetall",
+    "timescale",
+    "unconnected_drive",
+    "undef",
+    "undefineall",
+}
+_PREDEFINED_MACROS = {"__FILE__", "__LINE__"}
+_MACRO_TOKEN_RE = re.compile(r"`([A-Za-z_][A-Za-z0-9_$]*)")
+_DEFINE_RE = re.compile(r"^\s*`define\s+([A-Za-z_][A-Za-z0-9_$]*)(?:\s*\([^\n)]*\))?(?P<body>.*)$")
+_INCLUDE_RE = re.compile(r'^\s*`include\s+"([^"]+)"', re.MULTILINE)
+
+
 # ---------------------------------------------------------------------------
 # 保留的工具函数
 # ---------------------------------------------------------------------------
@@ -99,6 +127,7 @@ class SemanticMergeState:
     contracts_file: Path | None
     global_defines_manifest: dict[str, Any]
     required_includes: list[str]
+    lint_support_files: list[str] = field(default_factory=list)
     module_spec: str = ""
     module_skeleton: str = ""
     module_plan: str = ""
@@ -279,8 +308,16 @@ class Stage6MergeTools:
         driver_map: dict[str, list[str]] = {}
         try:
             parsed = parse_rtl_blocks(text)
-        except Exception:
-            parsed = []
+        except Exception as exc:
+            result = {
+                "status": "parse_error",
+                "target": target,
+                "module": self.state.module_name,
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+            self.state.last_structure = result
+            self.state.observed_structure = False
+            return result
         for block in parsed:
             block_text = getattr(block, "text", "") or "\n".join(
                 text.splitlines()[block.start_line - 1 : block.end_line]
@@ -334,14 +371,22 @@ class Stage6MergeTools:
 
     def _check_syntax(self, path: Path) -> tuple[bool, str]:
         include_dirs = [str(self.state.merged_file.parent)]
+        for entry in self.state.global_defines_manifest.get("global_define_files", []) or []:
+            if not isinstance(entry, dict):
+                continue
+            workspace_path = Path(str(entry.get("workspace_path") or ""))
+            if workspace_path.is_file():
+                include_dirs.append(str(workspace_path.parent))
+        include_dirs = list(dict.fromkeys(include_dirs))
         try:
             return check_syntax(
                 str(path),
                 top_module=self.state.module_name,
                 include_dirs=include_dirs,
+                support_files=self.state.lint_support_files,
             )
         except TypeError as exc:
-            if "include_dirs" not in str(exc):
+            if "include_dirs" not in str(exc) and "support_files" not in str(exc):
                 raise
             return check_syntax(str(path), top_module=self.state.module_name)
 
@@ -350,10 +395,32 @@ class Stage6MergeTools:
     def run_static_rtl_check(self, target: str = "draft") -> dict[str, Any]:
         structure = self.inspect_rtl_structure(target)
         if structure.get("status") != "ok":
-            return {"status": "error", "target": target, "error": structure.get("error", "Cannot inspect target")}
+            result = {
+                "status": "fail",
+                "target": target,
+                "errors": [structure.get("error", "Cannot inspect target")],
+                "warnings": [],
+                "structure": structure,
+            }
+            self.state.last_static_check = result
+            return result
 
         errors: list[str] = []
         warnings: list[str] = []
+
+        macro_redefinitions = self._authoritative_macro_redefinitions(self._read_target(target))
+        if macro_redefinitions:
+            errors.append(
+                "Draft redefines authoritative global macro(s): "
+                + ", ".join(macro_redefinitions)
+                + ". Include the official define file instead of adding fallback definitions."
+            )
+
+        unresolved_macros = self._unresolved_macro_references(self._read_target(target))
+        if unresolved_macros:
+            errors.append(
+                "Draft references unresolved macro(s): " + ", ".join(unresolved_macros) + "."
+            )
 
         # module 数量
         if structure["module_count"] != 1:
@@ -445,8 +512,14 @@ class Stage6MergeTools:
             return {"status": "rejected", "reason": "Must call read_merge_context(kind=\"fragments\") before generating a draft."}
         if not self.state.observed_spec:
             return {"status": "rejected", "reason": "Must call read_merge_context(kind=\"spec\") before generating a draft."}
-        if self.state.required_includes and not self.state.observed_global_defines:
-            return {"status": "rejected", "reason": "Must call read_merge_context(kind=\"global_defines\") before generating a draft — required includes are specified."}
+        has_global_defines = bool(
+            self.state.global_defines_manifest.get("global_define_files", [])
+        )
+        if has_global_defines and not self.state.observed_global_defines:
+            return {
+                "status": "rejected",
+                "reason": "Must call read_merge_context(kind=\"global_defines\") before generating a draft — authoritative global defines are available.",
+            }
 
         if not str(code).strip():
             return {"status": "rejected", "reason": "code must be non-empty"}
@@ -454,6 +527,17 @@ class Stage6MergeTools:
         extracted = _extract_verilog_code(code)
         if not extracted.strip():
             return {"status": "rejected", "reason": "No Verilog code found in the provided input."}
+
+        macro_redefinitions = self._authoritative_macro_redefinitions(extracted)
+        if macro_redefinitions:
+            return {
+                "status": "rejected",
+                "reason": (
+                    "Draft redefines authoritative global macro(s): "
+                    + ", ".join(macro_redefinitions)
+                    + ". Use the official include rather than local fallback definitions."
+                ),
+            }
 
         candidate = self._ensure_required_includes(extracted)
         step = self.state.action_calls + 1
@@ -568,6 +652,81 @@ class Stage6MergeTools:
         ):
             idx += 1
         return "\n".join(lines[:idx] + insert + lines[idx:])
+
+    def _authoritative_macro_redefinitions(self, code: str) -> list[str]:
+        if not code or not self.state.global_defines_context:
+            return []
+        official_names = set(
+            re.findall(
+                r"(?m)^\s*`define\s+([A-Za-z_][A-Za-z0-9_$]*)\b",
+                _strip_comments(self.state.global_defines_context),
+            )
+        )
+        if not official_names:
+            return []
+        draft_names = set(
+            re.findall(
+                r"(?m)^\s*`define\s+([A-Za-z_][A-Za-z0-9_$]*)\b",
+                _strip_comments(code),
+            )
+        )
+        return sorted(official_names & draft_names)
+
+    def _unresolved_macro_references(self, code: str) -> list[str]:
+        references, local_definitions = self._macro_references_and_definitions(code)
+        available = set(local_definitions)
+        available.update(self._manifest_macro_definitions())
+        available.update(_PREDEFINED_MACROS)
+        return sorted(references - available)
+
+    def _manifest_macro_definitions(self) -> set[str]:
+        definitions: set[str] = set()
+        visited: set[Path] = set()
+        include_dirs = {
+            Path(str(entry.get("workspace_path") or "")).resolve().parent
+            for entry in self.state.global_defines_manifest.get("global_define_files", []) or []
+            if isinstance(entry, dict) and Path(str(entry.get("workspace_path") or "")).is_file()
+        }
+
+        def visit(path: Path) -> None:
+            resolved = path.resolve()
+            if resolved in visited or not resolved.is_file():
+                return
+            visited.add(resolved)
+            text = resolved.read_text(encoding="utf-8", errors="replace")
+            _references, local = self._macro_references_and_definitions(text)
+            definitions.update(local)
+            for match in _INCLUDE_RE.finditer(_strip_comments(text)):
+                include_name = match.group(1)
+                candidates = [resolved.parent / include_name]
+                candidates.extend(directory / include_name for directory in sorted(include_dirs, key=str))
+                dependency = next((item for item in candidates if item.is_file()), None)
+                if dependency is not None:
+                    visit(dependency)
+
+        for entry in self.state.global_defines_manifest.get("global_define_files", []) or []:
+            if not isinstance(entry, dict):
+                continue
+            path = Path(str(entry.get("workspace_path") or ""))
+            if path.is_file():
+                visit(path)
+        return definitions
+
+    @staticmethod
+    def _macro_references_and_definitions(code: str) -> tuple[set[str], set[str]]:
+        references: set[str] = set()
+        definitions: set[str] = set()
+        for line in _strip_comments(code).splitlines():
+            define_match = _DEFINE_RE.match(line)
+            if define_match:
+                definitions.add(define_match.group(1))
+                references.update(_MACRO_TOKEN_RE.findall(define_match.group("body") or ""))
+                continue
+            directive = re.match(r"^\s*`([A-Za-z_][A-Za-z0-9_$]*)", line)
+            if directive and directive.group(1) in _PREPROCESSOR_CONTROL_DIRECTIVES:
+                continue
+            references.update(_MACRO_TOKEN_RE.findall(line))
+        return references, definitions
 
     def _extract_outputs(self, text: str) -> list[str]:
         names: set[str] = set()

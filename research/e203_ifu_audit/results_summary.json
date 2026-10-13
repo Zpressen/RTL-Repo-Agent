@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "snapshot_date": "2026-09-15",
+  "selection_metric": "Spec Feature Macro Score (SFMS)",
+  "seeds": [1, 7, 19],
+  "scenario_count": 92,
+  "scenario_seed_cells": 276,
+  "public_default_single_run": {
+    "warning": "The public stimulus uses $urandom without an explicit seed; this is one dated run, not a pass rate.",
+    "codex": {"compile": "PASS", "simulation": "FAIL", "first_reported_mismatch": "ifu2itcm_icb_cmd_valid@205"},
+    "repo_agent": {"compile": "PASS", "simulation": "PASS", "first_reported_mismatch": null}
+  },
+  "hidden_seed_1_to_100": {
+    "codex": {"compile": "PASS", "passed": 0, "failed": 100, "first_signal_counts": {"inspect_pc": 79, "ifu2itcm_icb_cmd_valid": 21}},
+    "repo_agent": {"compile": "PASS", "passed": 0, "failed": 100, "first_signal_counts": {"inspect_pc": 97, "ifu2itcm_icb_cmd_addr": 3}}
+  },
+  "targeted": {
+    "golden": {
+      "compile": "PASS",
+      "strict_trace": "PASS",
+      "passed_cells": 276,
+      "failed_cells": 0,
+      "sfms_percent": 100.0,
+      "trace_micro_percent": 100.0
+    },
+    "codex": {
+      "compile": "PASS",
+      "strict_trace": "FAIL",
+      "passed_cells": 65,
+      "failed_cells": 211,
+      "sfms_percent": 20.58,
+      "trace_micro_percent": 86.11,
+      "categories_percent": {
+        "pc_fetch_control": 0.0,
+        "itcm_fetch": 39.58,
+        "biu_fetch": 34.72,
+        "instruction_assembly": 25.0,
+        "pipeline_control": 0.0,
+        "exceptional_cases": 8.33,
+        "prediction_decode": 36.39
+      }
+    },
+    "repo_agent": {
+      "compile": "PASS",
+      "strict_trace": "FAIL",
+      "passed_cells": 55,
+      "failed_cells": 221,
+      "sfms_percent": 19.09,
+      "trace_micro_percent": 87.73,
+      "categories_percent": {
+        "pc_fetch_control": 0.0,
+        "itcm_fetch": 0.0,
+        "biu_fetch": 0.0,
+        "instruction_assembly": 16.67,
+        "pipeline_control": 61.11,
+        "exceptional_cases": 50.0,
+        "prediction_decode": 5.83
+      }
+    }
+  },
+  "interpretation_limits": [
+    "Scenario-cell pass count and SFMS are different quantities.",
+    "Trace micro-score is diagnostic and is not a functional-correctness percentage.",
+    "Results apply only to this local task and candidate snapshot."
+  ]
+}

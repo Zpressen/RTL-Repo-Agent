@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import re
 from pathlib import Path
@@ -12,24 +13,34 @@ from ..schemas import (
     ModulePlanArtifact,
     ModulePlanSubtask,
     ModuleSpecBlocks,
-    ModuleTimingBindingArtifact,
     PlannerTaskInput,
     Stage3ModuleSkeletonArtifact,
-    Stage3TimingBindingsArtifact,
     Stage4ModulePlansArtifact,
     Stage4SpecBlocksArtifact,
     Stage5CodegenArtifact,
     SubtaskCodeArtifact,
 )
-from .base import BaseStageAgent, model_dump, validate_model
-from .global_defines import copy_official_define_file, is_define_only_module, read_global_defines_manifest
+from .base import BaseStageAgent, StageGenerationError, model_dump, validate_model
+from ..utils.artifact_store import atomic_write_json, atomic_write_text
+from ..utils.local_repair import ArtifactIssue, REPAIR_POLICY_VERSION, fingerprint
+from ..utils.codegen_repair import SubtaskCodeRepairAdapter
+from ..utils.stage5_sources import SOURCE_VERSION, Stage5LogEvidence, changed_components, compact_stage5_interfaces, source_snapshot, stable_planning_context, stage5_prompt_context
+from ..utils.stage5_store import Stage5Store
+from zerorepo.rtl_impl.port_contracts import ansi_module_ports
+from .global_defines import (
+    build_stage5_global_defines_summary,
+    copy_e203_canonical_define_files,
+    copy_official_define_file,
+    is_define_only_module,
+    read_global_defines_manifest,
+)
 
 
 class Stage5Agent(BaseStageAgent):
     stage_name = "stage5_codegen"
     output_model = Stage5CodegenArtifact
     system_role = stage5_subtask_codegen.SYSTEM_ROLE
-    allow_best_effort_quality_fallback = True
+    allow_best_effort_quality_fallback = False
     max_quality_attempts = 3  # 1 initial + 2 retries
     workspace_dirname = "workspace"
 
@@ -42,11 +53,16 @@ class Stage5Agent(BaseStageAgent):
         output_root: str | Path | None = None,
         workspace_root: str | Path | None = None,
         planning_context_retriever: Any | None = None,
+        oracle_root: str | Path = "/home/mokita/RealBench",
     ):
         super().__init__(llm_client, context_provider, artifact_sink, logger)
         self.output_root = Path(output_root) if output_root is not None else None
         self.workspace_root = Path(workspace_root) if workspace_root is not None else self._default_workspace_root()
         self.planning_context_retriever = planning_context_retriever
+        self.oracle_root = Path(oracle_root).expanduser()
+        self._validated_subtasks_by_module: dict[str, list[str]] = {}
+        self._candidate_keys = {}
+        self._source_evidence = None
 
     def run(self, task_input: Any, partial_artifacts: Dict[str, Any]) -> Stage5CodegenArtifact:
         return self.run_incremental(task_input, partial_artifacts)
@@ -79,11 +95,7 @@ class Stage5Agent(BaseStageAgent):
         )
         quality_errors = self.validate_quality(artifact, task, partial_artifacts)
         if quality_errors:
-            self.logger.warning(
-                "[%s] Final quality check has issues (non-fatal, continuing): %s",
-                self.stage_name,
-                quality_errors,
-            )
+            raise ValueError(f"{self.stage_name} final validation failed: {quality_errors}")
         if persist_callback is not None:
             persist_callback({"manifest": model_dump(artifact)})
         self.artifact_sink.record_stage_output(self.stage_name, artifact, task)
@@ -94,8 +106,12 @@ class Stage5Agent(BaseStageAgent):
         task_input: Any,
         partial_artifacts: Dict[str, Any],
         module_name: str,
+        *,
+        reuse_only: bool = False,
     ) -> ModuleCodegenRecord:
         task = task_input if isinstance(task_input, PlannerTaskInput) else validate_model(PlannerTaskInput, task_input)
+        self._validated_subtasks_by_module[module_name] = []
+        self._ensure_global_defines_copied(task, partial_artifacts)
         stage4 = self._get_stage4_artifact(partial_artifacts)
         spec_blocks = self._get_spec_blocks_artifact(partial_artifacts)
         stage3 = self._get_stage3_artifact(partial_artifacts)
@@ -116,16 +132,11 @@ class Stage5Agent(BaseStageAgent):
         module_skeleton, module_skeleton_file = self._read_module_skeleton_context(
             skeleton_record_by_module.get(module_name)
         )
-        timing_binding = self._read_timing_binding_for_module(partial_artifacts, module_name)
-        timing_obligation_by_id = (
-            {item.obligation_id: item for item in timing_binding.block_obligations}
-            if timing_binding is not None
-            else {}
-        )
-        planning_kg_context = ""
+        skeleton_document = Path(module_skeleton_file).read_text() if module_skeleton_file and Path(module_skeleton_file).is_file() else None
+        planning_kg_source: Dict[str, Any] | None = None
         if self.planning_context_retriever is not None:
             try:
-                context = self.planning_context_retriever.get_module_context(
+                planning_kg_source = self.planning_context_retriever.get_module_context(
                     module_name,
                     require_spec=True,
                     require_skeleton=True,
@@ -137,7 +148,6 @@ class Stage5Agent(BaseStageAgent):
                         "plan": str(getattr(stage4, "input_fingerprint", "") or ""),
                     },
                 )
-                planning_kg_context = self.planning_context_retriever.to_prompt_json(context)
             except Exception as exc:
                 mode = str(getattr(self.planning_context_retriever.kg_service, "mode", "required"))
                 if mode == "required":
@@ -151,6 +161,29 @@ class Stage5Agent(BaseStageAgent):
 
         workspace_file = self._workspace_file(module_name)
         repo_skeleton = partial_artifacts.get("stage2") or partial_artifacts.get("repo_skeleton")
+        repo_modules = repo_skeleton.get("modules", []) if isinstance(repo_skeleton, dict) else getattr(repo_skeleton, "modules", [])
+        repo_module = next((item for item in repo_modules if (item.get("module") if isinstance(item, dict) else item.module) == module_name), None)
+        module_info = repo_module if isinstance(repo_module, dict) else model_dump(repo_module) if repo_module is not None else {}
+        responsibility = {key: module_info[key] for key in ("module", "role", "rationale", "module_kind", "parents", "children", "module_decision") if key in module_info}
+        for key in ("parents", "children"):
+            if key in responsibility:
+                responsibility[key] = sorted(responsibility[key] or [])
+        child_interfaces = []
+        for child in sorted(module_info.get("children") or []):
+            # Only the runner supplies this map after verifying a whole accepted
+            # debug generation and its immutable original dependency contracts.
+            child_path = Path(partial_artifacts.get("_stage5_dependency_files", {}).get(
+                child, self.workspace_root / "merged" / f"{child}.v"))
+            if child_path.is_file():
+                ports = [{"name": p.name, "direction": p.direction, "width": p.width} for p in ansi_module_ports(child_path.read_text())]
+            else:
+                interface = next((c for c in (planning_kg_source or {}).get("child_code_interfaces", []) if c.get("module") == child), {})
+                ports = stable_planning_context({"child_code_interfaces": [interface]}).get("child_code_interfaces", [{}])[0].get("ports", [])
+            child_interfaces.append({"module": child, "ports": sorted(ports, key=lambda p: p["name"])})
+        candidate_key = fingerprint({"task": task.task_id, "module": module_name, "plan": module_plan,
+            "spec": module_spec, "skeleton": module_skeleton, "skeleton_document": skeleton_document, "responsibility": responsibility,
+            "child_interfaces": child_interfaces, "defines": read_global_defines_manifest(self.workspace_root)})
+        self._candidate_keys[module_name] = candidate_key
         if is_define_only_module(module_name, repo_skeleton):
             entry = copy_official_define_file(
                 task=task,
@@ -190,26 +223,94 @@ class Stage5Agent(BaseStageAgent):
 
         completed_subtasks: List[str] = []
         contract_entries: List[Dict[str, Any]] = []
-        global_defines_context = self._build_global_defines_context()
-        for subtask in module_plan.subtasks:
-            timing_obligations = [
-                timing_obligation_by_id[item]
-                for item in subtask.timing_obligation_ids
-                if item in timing_obligation_by_id
-            ]
-            missing_timing_ids = [
-                item for item in subtask.timing_obligation_ids if item not in timing_obligation_by_id
-            ]
-            if missing_timing_ids:
+        saved = self._read_checkpoint(module_name, task.task_id)
+        store = Stage5Store(self.workspace_root)
+        if not reuse_only:
+            candidate_path = store.candidate_file(module_name, candidate_key)
+            if candidate_path.exists():
+                try:
+                    candidate = json.loads(candidate_path.read_text())
+                    store.validate(candidate)
+                    saved = candidate
+                except (OSError, ValueError, KeyError, TypeError) as exc:
+                    self.logger.info("[%s] Ignoring invalid candidate for %s: %s", self.stage_name, module_name, exc)
+        if saved and not saved.get("bundle_path"):
+            # Preserve legacy state before any replacement, including failed imports.
+            try:
+                text = workspace_file.read_text()
+                contract_payload = json.loads(self._contracts_file(module_name).read_text())
+                if fingerprint(text) == saved["fragment_fingerprint"] and fingerprint(contract_payload) == saved["contracts_fingerprint"]:
+                    preserved = store.bundle(saved, text, contract_payload)
+                    atomic_write_json(self.workspace_root / ".stage5_history" / module_name / f"{fingerprint(saved)}.json", preserved)
+            except (OSError, ValueError, KeyError, TypeError) as exc:
+                self.logger.info("[%s] Legacy checkpoint preservation unavailable: %s", self.stage_name, exc)
+        if reuse_only:
+            if saved.get("status") != "completed":
+                raise StageGenerationError("No completed Stage5 checkpoint")
+            try:
+                if saved["fragment_fingerprint"] != fingerprint(workspace_file.read_text(encoding="utf-8")):
+                    raise ValueError("Fragment content changed since validation")
+                contracts_payload = json.loads(self._contracts_file(module_name).read_text(encoding="utf-8"))
+                if saved["contracts_fingerprint"] != fingerprint(contracts_payload):
+                    raise ValueError("Contract content changed since validation")
+                sections = self._fragment_sections(workspace_file.read_text(encoding="utf-8"))
+                if list(sections) != [item.id for item in module_plan.subtasks]:
+                    raise ValueError("Fragment identities/order mismatch")
+            except (OSError, ValueError, KeyError) as exc:
+                raise StageGenerationError(str(exc)) from exc
+        saved_entries = saved.get("subtasks", []) + saved.get("pending_subtasks", [])
+        if reuse_only and len(saved_entries) != len(module_plan.subtasks):
+            raise StageGenerationError("Checkpoint does not cover the complete module plan")
+        accepted_entries = []
+        migrated_sources = False
+        reusable_prefix = True
+        previous_snippets = ""
+        for subtask_index, subtask in enumerate(module_plan.subtasks):
+            if subtask.timing_obligation_ids or subtask.logical_value_tags:
                 raise ValueError(
-                    f"Stage5 missing timing obligations for {module_name}/{subtask.id}: {missing_timing_ids}"
+                    f"Stage5 requires empty compatibility timing fields for {module_name}/{subtask.id}"
                 )
-            previous_snippets = self._read_text_if_exists(workspace_file)
             selected_blocks = self._select_spec_blocks(module_spec, subtask.spec_refs)
             selected_block_ids = {item["block_id"] for item in selected_blocks}
             supplemental_interface_blocks = [
                 item for item in module_interface_blocks if item["block_id"] not in selected_block_ids
             ]
+            current_subtask_payload = model_dump(subtask)
+            current_subtask_payload.pop("timing_obligation_ids", None)
+            current_subtask_payload.pop("logical_value_tags", None)
+            current_subtask_json = self.to_pretty_json(current_subtask_payload)
+            selected_spec_blocks_json = self.to_pretty_json(selected_blocks)
+            module_interface_spec_blocks_json = self.to_pretty_json(supplemental_interface_blocks)
+            global_defines_context = self._build_stage5_global_defines_summary(
+                relevant_texts=[
+                    current_subtask_json,
+                    module_skeleton,
+                    selected_spec_blocks_json,
+                    module_interface_spec_blocks_json,
+                    previous_snippets,
+                ],
+            )
+            planning_kg_context = ""
+            if planning_kg_source is not None:
+                try:
+                    planning_kg_context = self.planning_context_retriever.to_stage5_prompt_json(
+                        stage5_prompt_context(planning_kg_source),
+                        subtask.spec_refs,
+                        max_chars=12000,
+                    )
+                    planning_kg_context = compact_stage5_interfaces(planning_kg_context, child_interfaces)
+                except Exception as exc:
+                    mode = str(getattr(self.planning_context_retriever.kg_service, "mode", "required"))
+                    if mode == "required":
+                        raise
+                    self.logger.warning(
+                        "[%s] Compact planning KG context unavailable for %s/%s; "
+                        "using sidecars: %s",
+                        self.stage_name,
+                        module_name,
+                        subtask.id,
+                        exc,
+                    )
             stage_context = {
                 "task_id": task.task_id,
                 "module": module_name,
@@ -223,78 +324,130 @@ class Stage5Agent(BaseStageAgent):
                 "module_skeleton_chars": len(module_skeleton),
                 "previous_module_snippets_chars": len(previous_snippets),
                 "global_define_files": self._global_define_file_names(),
-                "timing_obligation_ids": list(subtask.timing_obligation_ids),
+                "global_defines_summary_chars": len(global_defines_context),
+                "planning_kg_context_chars": len(planning_kg_context),
             }
             prompt = stage5_subtask_codegen.build_prompt(
                 task_id=task.task_id,
                 module_name=module_name,
-                current_subtask=self.to_pretty_json(model_dump(subtask)),
+                current_subtask=current_subtask_json,
                 module_skeleton=module_skeleton,
-                selected_spec_blocks=self.to_pretty_json(selected_blocks),
-                module_interface_spec_blocks=self.to_pretty_json(supplemental_interface_blocks),
+                selected_spec_blocks=selected_spec_blocks_json,
+                module_interface_spec_blocks=module_interface_spec_blocks_json,
                 previous_module_snippets=previous_snippets,
-                timing_obligations=self.to_pretty_json(timing_obligations),
                 global_defines_context=global_defines_context,
                 planning_kg_context=planning_kg_context,
                 stage_context=self.to_pretty_json(stage_context),
             )
-            self.logger.info(
-                "[%s] Generating %s/%s into %s",
-                self.stage_name,
-                module_name,
-                subtask.id,
-                workspace_file,
-            )
-            self._log_stage_input(prompt=prompt, images=[], stage_context=stage_context)
-            artifact = self._invoke_with_repair(
-                prompt,
-                [],
-                task,
-                partial_artifacts,
-                output_model=SubtaskCodeArtifact,
-                quality_validator=lambda candidate, expected_module=module_name, expected_subtask=subtask, expected_timing=timing_obligations: (
+            adapter = SubtaskCodeRepairAdapter(
+                task_id=task.task_id, module=module_name, subtask=subtask, context=prompt,
+                validator=lambda candidate, expected_module=module_name, expected_subtask=subtask: (
                     self._validate_subtask_code(
                         candidate,
                         task,
                         expected_module,
                         expected_subtask,
-                        expected_timing,
                     )
-                ),
+                ), contract_validator=self._contract_quality_issues,
             )
-            if subtask.timing_obligation_ids and self._last_quality_errors:
-                hard_errors = [
-                    item
-                    for item in self._last_quality_errors
-                    if not self._is_nonfatal_timing_diagnostic(item)
-                ]
-                if hard_errors:
-                    raise ValueError(
-                        f"Stage5 timing-constrained subtask {module_name}/{subtask.id} "
-                        f"failed validation: {hard_errors}"
-                    )
-                self.logger.warning(
-                    "[%s] Timing diagnostics remain for %s/%s; continuing with the "
-                    "best-effort local fragment: %s",
-                    self.stage_name,
-                    module_name,
-                    subtask.id,
-                    self._last_quality_errors,
+            legacy = {
+                "policy": REPAIR_POLICY_VERSION, "task_id": task.task_id, "module": module_name,
+                "subtask": subtask, "skeleton": module_skeleton,
+                "spec_blocks": selected_blocks, "interface_blocks": supplemental_interface_blocks,
+                "previous_snippets": previous_snippets, "global_defines": global_defines_context,
+                "planning_kg": planning_kg_context,
+            }
+            legacy["planning_kg"] = self.planning_context_retriever.to_stage5_prompt_json(
+                planning_kg_source, subtask.spec_refs, max_chars=12000) if planning_kg_source is not None else ""
+            snapshot = source_snapshot(legacy=legacy, responsibility=responsibility, child_interfaces=child_interfaces,
+                                       skeleton_document=skeleton_document)
+            unit_fingerprint = fingerprint(snapshot)
+            provenance = None
+            artifact = None
+            if reusable_prefix and subtask_index < len(saved_entries):
+                entry = saved_entries[subtask_index]
+                try:
+                    if entry["subtask_id"] != subtask.id:
+                        raise ValueError("Subtask identity changed")
+                    if entry.get("fingerprint_version") == SOURCE_VERSION:
+                        if fingerprint(entry.get("source_snapshot")) != entry.get("source_fingerprint"):
+                            raise ValueError("Source snapshot checksum mismatch")
+                        if entry.get("source_fingerprint") != unit_fingerprint:
+                            canonical = copy.deepcopy(entry["source_snapshot"])
+                            for key in ("parents", "children"):
+                                if key in canonical.get("responsibility", {}):
+                                    canonical["responsibility"][key] = sorted(canonical["responsibility"][key] or [])
+                            if fingerprint(canonical) != unit_fingerprint:
+                                raise ValueError("Source components changed: " + ", ".join(changed_components(entry.get("source_snapshot"), snapshot)))
+                            provenance = {"kind": "canonical_dependency_order", "previous_source_fingerprint": entry["source_fingerprint"]}
+                    else:
+                        if self._source_evidence is None:
+                            self._source_evidence = Stage5LogEvidence(self.workspace_root.parent / "zerorepo.log")
+                        provenance = self._source_evidence.proves_legacy(entry, legacy, responsibility, child_interfaces)
+                        if provenance and skeleton_document is not None and not self._source_evidence.proves_full_skeleton(module_name):
+                            provenance = None
+                        if not provenance:
+                            raise ValueError("Legacy checkpoint lacks matching source evidence; regeneration required")
+                    if entry["artifact_fingerprint"] != fingerprint(entry["artifact"]):
+                        raise ValueError("Checkpoint artifact checksum mismatch")
+                    cached = validate_model(SubtaskCodeArtifact, entry["artifact"])
+                    errors = self._validate_subtask_code(cached, task, module_name, subtask)
+                    errors.extend(issue.message for issue in adapter.inspect(entry["artifact"]).issues)
+                    if errors:
+                        raise ValueError("; ".join(errors))
+                    artifact = cached
+                    migrated_sources = migrated_sources or provenance is not None
+                    self.logger.info("[%s] Reusing validated subtask %s/%s", self.stage_name, module_name, subtask.id)
+                except (ValueError, KeyError, TypeError) as exc:
+                    self.logger.info("[%s] Subtask %s invalidated: %s", self.stage_name, subtask.id, exc)
+            if artifact is None:
+                if reuse_only:
+                    raise StageGenerationError(f"Subtask checkpoint is stale: {subtask.id}")
+                self.logger.info("[%s] Generating %s/%s into %s", self.stage_name, module_name, subtask.id, workspace_file)
+                self._log_stage_input(prompt=prompt, images=[], stage_context=stage_context)
+                reusable_prefix = False
+                artifact = self._invoke_local_repair(
+                    prompt=prompt, images=[], adapter=adapter,
+                    max_attempts=max(self.max_parse_attempts, self.max_quality_attempts),
+                ).artifact
+            if artifact.timing_obligation_ids:
+                raise ValueError(
+                    f"Stage5 generated non-empty retired timing fields for {module_name}/{subtask.id}"
                 )
             updated_text = self._upsert_subtask_section(previous_snippets, subtask, artifact.code)
-            self._write_text(workspace_file, updated_text)
             contract_entries.append(
                 self._contract_entry(
                     artifact=artifact,
                     subtask=subtask,
                 )
             )
-            self._write_contracts_file(
-                module_name,
-                contract_entries,
-                input_fingerprint=str(partial_artifacts.get("stage5_input_fingerprint") or ""),
-            )
+            accepted_entries.append({
+                "subtask_id": subtask.id, "input_fingerprint": unit_fingerprint,
+                "fingerprint_version": SOURCE_VERSION, "source_fingerprint": unit_fingerprint,
+                "source_snapshot": snapshot, **({"migration_evidence": provenance} if provenance else {}),
+                "artifact": model_dump(artifact), "artifact_fingerprint": fingerprint(model_dump(artifact)),
+            })
+            if not reuse_only:
+                self._commit_subtasks(
+                    module_name=module_name, task_id=task.task_id, entries=accepted_entries,
+                    fragments=updated_text, contracts=contract_entries,
+                    input_fingerprint=str(partial_artifacts.get("stage5_input_fingerprint") or ""),
+                    complete=subtask_index == len(module_plan.subtasks) - 1,
+                    pending=saved_entries[len(accepted_entries):] if reusable_prefix else [],
+                )
+            previous_snippets = updated_text
             completed_subtasks.append(subtask.id)
+            self._validated_subtasks_by_module[module_name] = list(completed_subtasks)
+
+        if reuse_only:
+            if previous_snippets != workspace_file.read_text(encoding="utf-8"):
+                raise StageGenerationError("Checkpoint artifacts do not reproduce the fragment file")
+            if contract_entries != contracts_payload.get("contracts"):
+                raise StageGenerationError("Checkpoint artifacts do not reproduce the contract sidecar")
+            if migrated_sources:
+                self._commit_subtasks(module_name=module_name, task_id=task.task_id, entries=accepted_entries,
+                    fragments=previous_snippets, contracts=contract_entries,
+                    input_fingerprint=str(partial_artifacts.get("stage5_input_fingerprint") or ""), complete=True)
 
         return ModuleCodegenRecord(
             module=module_name,
@@ -302,27 +455,98 @@ class Stage5Agent(BaseStageAgent):
             completed_subtasks=completed_subtasks,
         )
 
+    def _checkpoint_file(self, module_name):
+        return (self.workspace_root / "fragments" / f"{module_name}_checkpoint.json").resolve()
+
+    def _read_checkpoint(self, module_name, task_id=None):
+        path = self._checkpoint_file(module_name)
+        if not path.exists():
+            return {}
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if payload.get("schema_version") != "stage5_subtasks_v1" or payload.get("policy") != REPAIR_POLICY_VERSION:
+                return {}
+            if payload.get("module") != module_name or (task_id is not None and payload.get("task_id") != task_id):
+                return {}
+            if not isinstance(payload.get("subtasks"), list) or not all(isinstance(item, dict) for item in payload["subtasks"]):
+                return {}
+            if not isinstance(payload.get("pending_subtasks", []), list) or not all(isinstance(item, dict) for item in payload.get("pending_subtasks", [])):
+                return {}
+            if payload.get("bundle_path"):
+                Stage5Store(self.workspace_root).validate(payload)
+                publishing = self.workspace_root / ".stage5_publish" / f"{module_name}.json"
+                if publishing.exists():
+                    Stage5Store(self.workspace_root).restore_aliases(payload)
+                    publishing.unlink()
+            return payload
+        except (ValueError, TypeError, OSError) as exc:
+            self.logger.info("[%s] Ignoring invalid checkpoint %s: %s", self.stage_name, path, exc)
+            return {}
+
+    def _commit_subtasks(self, *, module_name, task_id, entries, fragments, contracts, input_fingerprint, complete, pending=None):
+        contract_payload = {"schema_version": "stage5_fragment_contracts_v1", "module": module_name,
+                            "input_fingerprint": input_fingerprint, "contracts": contracts}
+        checkpoint = {
+            "schema_version": "stage5_subtasks_v1", "policy": REPAIR_POLICY_VERSION,
+            "module": module_name, "task_id": task_id,
+            "status": "completed" if complete else "in_progress",
+            "input_fingerprint": input_fingerprint, "subtasks": entries,
+            "pending_subtasks": [] if complete else (pending or []),
+            "fragment_fingerprint": fingerprint(fragments),
+            "contracts_fingerprint": fingerprint(contract_payload),
+        }
+        store = Stage5Store(self.workspace_root)
+        marker = store.bundle(checkpoint, fragments, contract_payload)
+        candidate_path = store.candidate_file(module_name, self._candidate_keys.get(module_name, "import"))
+        atomic_write_json(candidate_path, marker)
+        current = self._read_checkpoint(module_name, task_id)
+        if current.get("status") == "completed" and not complete:
+            return
+        # Immutable bundles make a crash between alias writes recoverable from
+        # the previous active marker. The marker changes only after all writes.
+        publishing = self.workspace_root / ".stage5_publish" / f"{module_name}.json"
+        atomic_write_json(publishing, {"candidate": marker.get("bundle_path")})
+        atomic_write_text(self._workspace_file(module_name), fragments)
+        self._write_contracts_file(module_name, contracts, input_fingerprint=input_fingerprint)
+        atomic_write_json(self._checkpoint_file(module_name), marker)
+        publishing.unlink()
+
+    def _contract_quality_issues(self, artifact):
+        if artifact.contract is None:
+            return []
+        # Limit hard mismatches to simple assignment statements. The broad
+        # extraction below is a diagnostic hint (e.g. <= in an if can be a
+        # comparison), and must not manufacture contract obligations.
+        obvious = set(re.findall(
+            r"(?m)^\s*(?:assign\s+)?([A-Za-z_][A-Za-z0-9_$]*)\s*(?:\[[^\]]+\])?\s*(?:<=|(?<![=!<>])=(?![=]))",
+            _strip_verilog_comments(artifact.code),
+        ))
+        missing = sorted(obvious - set(artifact.contract.writes))
+        if missing:
+            return [ArtifactIssue(
+                "contract.writes", "contract_code_mismatch",
+                f"Contract omits apparent assignment targets {missing}; review against code and source",
+                expected=sorted(obvious), actual=list(artifact.contract.writes),
+                category="hardware", unit_id=artifact.subtask_id,
+            )]
+        return []
+
     def _contract_entry(self, *, artifact: SubtaskCodeArtifact, subtask: ModulePlanSubtask) -> Dict[str, Any]:
         extracted = self._extract_fragment_contract(artifact.code)
-        if artifact.contract is not None:
-            contract = model_dump(artifact.contract)
-            writes = sorted(set(str(item) for item in contract.get("writes", []) if item) | set(extracted.writes))
-            reads = sorted((set(str(item) for item in contract.get("reads", []) if item) | set(extracted.reads)) - set(writes))
-            contract["writes"] = writes
-            contract["reads"] = reads
-            if not contract.get("clocking"):
-                contract["clocking"] = extracted.clocking
-        else:
-            contract = model_dump(extracted)
+        if artifact.contract is None:
+            raise ValueError("Cannot commit a generated fragment without its explicit contract")
+        contract = model_dump(artifact.contract)
         return {
             "subtask_id": subtask.id,
             "target": subtask.target,
             "spec_refs": list(subtask.spec_refs),
-            "timing_obligation_ids": list(subtask.timing_obligation_ids),
+            "timing_obligation_ids": [],
             "contract": contract,
             "analysis": {
                 "extracted_writes": extracted.writes,
                 "extracted_reads": extracted.reads,
+                "mode": "heuristic_hints_only",
+                "timing_validation": "unverified",
             },
         }
 
@@ -340,7 +564,7 @@ class Stage5Agent(BaseStageAgent):
             "input_fingerprint": input_fingerprint,
             "contracts": entries,
         }
-        self._write_text(path, json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
+        atomic_write_json(path, payload)
         return path
 
     def _contracts_file(self, module_name: str) -> Path:
@@ -413,11 +637,24 @@ class Stage5Agent(BaseStageAgent):
             errors.append("schema_version must remain stage5_codegen_v1")
         if artifact.task_id != task_input.task_id:
             errors.append(f"task_id must remain {task_input.task_id}")
+        if artifact.status != "completed":
+            errors.append(f"stage5 is {artifact.status}, not completed")
         if artifact.module_order != spec_blocks.module_order:
             errors.append("module_order must exactly match spec_blocks.module_order")
         if [item.module for item in artifact.module_files] != artifact.module_order:
             errors.append("module_files[].module must exactly match module_order")
         for record in artifact.module_files:
+            if record.status != "completed":
+                errors.append(f"{record.module}: {record.status}: {record.error}")
+                continue
+            if "stage4" in partial_artifacts:
+                stage4 = self._get_stage4_artifact(partial_artifacts)
+                plan_record = next((item for item in stage4.module_plan_files if item.module == record.module), None)
+                if plan_record:
+                    expected = [item.id for item in self._read_module_plan(plan_record.plan_file).subtasks]
+                    official = record.completed_subtasks == ["official_copy"] and is_define_only_module(record.module, partial_artifacts.get("stage2"))
+                    if record.completed_subtasks != expected and not official:
+                        errors.append(f"{record.module}: completed_subtasks must cover the complete plan in order")
             path = Path(record.workspace_file)
             if path.name != f"{record.module}_fragments.v":
                 errors.append(f"{record.module}: workspace_file must end with {record.module}_fragments.v")
@@ -433,7 +670,6 @@ class Stage5Agent(BaseStageAgent):
         task: PlannerTaskInput,
         expected_module: str,
         expected_subtask: ModulePlanSubtask,
-        expected_timing_obligations: List[Any] | None = None,
     ) -> List[str]:
         errors: List[str] = []
         if artifact.task_id != task.task_id:
@@ -446,10 +682,8 @@ class Stage5Agent(BaseStageAgent):
             errors.append(f"target must equal {expected_subtask.target}")
         if artifact.spec_refs != expected_subtask.spec_refs:
             errors.append(f"spec_refs must equal {expected_subtask.spec_refs}")
-        if artifact.timing_obligation_ids != expected_subtask.timing_obligation_ids:
-            errors.append(
-                f"timing_obligation_ids must equal {expected_subtask.timing_obligation_ids}"
-            )
+        if artifact.timing_obligation_ids:
+            errors.append("timing_obligation_ids compatibility field must be empty")
         if not artifact.code.strip():
             errors.append("code must not be empty")
         if "```" in artifact.code:
@@ -466,42 +700,7 @@ class Stage5Agent(BaseStageAgent):
             errors.append("code must not use multidimensional signal references; flatten arrays into scalar signals")
         if re.search(r"\b(?:generate|endgenerate|genvar)\b", code_without_comments):
             errors.append("code must not use generate/genvar; explicitly unroll repeated logic and instances")
-        obligations = expected_timing_obligations or []
-        contract_clocking = str(artifact.contract.clocking if artifact.contract is not None else "")
-        for obligation in obligations:
-            has_post_edge_write = any(
-                access.at == "POST_EDGE" for access in obligation.writes
-            )
-            has_edge_access = has_post_edge_write or any(
-                access.at in {"PRE_EDGE", "POST_EDGE"}
-                for access in [
-                    *obligation.reads,
-                    *obligation.combinational_outputs,
-                ]
-            )
-            has_comb_output = any(
-                access.at == "COMB" for access in obligation.combinational_outputs
-            )
-            if has_post_edge_write and (
-                "posedge" not in contract_clocking and "negedge" not in contract_clocking
-            ):
-                errors.append(
-                    f"{obligation.obligation_id}: POST_EDGE writes require a clocked fragment contract"
-                )
-            if has_comb_output and not has_edge_access and (
-                "posedge" in contract_clocking or "negedge" in contract_clocking
-            ):
-                errors.append(
-                    f"{obligation.obligation_id}: pure combinational obligation uses registered clocking"
-                )
         return errors
-
-    @staticmethod
-    def _is_nonfatal_timing_diagnostic(message: str) -> bool:
-        return (
-            "POST_EDGE writes require a clocked fragment contract" in message
-            or "pure combinational obligation uses registered clocking" in message
-        )
 
     def _validate_inputs(
         self,
@@ -566,18 +765,43 @@ class Stage5Agent(BaseStageAgent):
             f"{code.strip()}\n"
             f"// STAGE5_SUBTASK_END {subtask.id}\n"
         )
-        pattern = re.compile(
-            rf"// STAGE5_SUBTASK_BEGIN {re.escape(subtask.id)}(?::[^\n]*)?\n"
-            rf".*?"
-            rf"// STAGE5_SUBTASK_END {re.escape(subtask.id)}\n?",
-            flags=re.DOTALL,
-        )
-        if pattern.search(existing_text):
-            updated = pattern.sub(section, existing_text)
+        if re.search(r"[\s:]", subtask.id):
+            raise ValueError("Subtask marker identity must not contain whitespace or colon")
+        sections = self._fragment_sections(existing_text)
+        if subtask.id in sections:
+            start, end, _ = sections[subtask.id]
+            updated = existing_text[:start] + section + existing_text[end:]
         else:
             prefix = existing_text.rstrip()
             updated = f"{prefix}\n\n{section}" if prefix else section
         return updated.rstrip() + "\n"
+
+    def _fragment_sections(self, text):
+        sections = {}
+        opened = None
+        offset = 0
+        outside = []
+        for line in text.splitlines(keepends=True):
+            begin = re.fullmatch(r"\s*// STAGE5_SUBTASK_BEGIN ([^\s:]+)(?::[^\n]*)?\s*", line)
+            end = re.fullmatch(r"\s*// STAGE5_SUBTASK_END ([^\s:]+)\s*", line)
+            if begin:
+                unit = begin.group(1)
+                if opened or unit in sections:
+                    raise ValueError(f"Duplicate or nested Stage5 marker: {unit}")
+                opened = (unit, offset, offset + len(line))
+            elif end:
+                if opened is None or opened[0] != end.group(1):
+                    raise ValueError("Mismatched Stage5 marker")
+                sections[opened[0]] = (opened[1], offset + len(line), text[opened[2]:offset].strip())
+                opened = None
+            elif opened is None:
+                outside.append(line)
+            offset += len(line)
+        if opened:
+            raise ValueError(f"Unclosed Stage5 marker: {opened[0]}")
+        if "".join(outside).strip():
+            raise ValueError("Unexpected code outside Stage5 subtask markers")
+        return sections
 
     def _sanitize_marker_description(self, description: str) -> str:
         collapsed = " ".join(description.replace("\r\n", "\n").split())
@@ -587,6 +811,19 @@ class Stage5Agent(BaseStageAgent):
         repo_skeleton = partial_artifacts.get("stage2") or partial_artifacts.get("repo_skeleton")
         if repo_skeleton is None:
             return
+        canonical_entries = copy_e203_canonical_define_files(
+            top_module=str(_get(repo_skeleton, "top_module", "") or ""),
+            oracle_root=self.oracle_root,
+            workspace_root=self.workspace_root,
+            output_root=self.output_root,
+        )
+        for entry in canonical_entries:
+            self.logger.info(
+                "[%s] Copied canonical E203 defines %s -> %s",
+                self.stage_name,
+                entry.get("source"),
+                entry.get("workspace_path"),
+            )
         for module_name in self._detect_global_defines_modules(repo_skeleton):
             copied = copy_official_define_file(
                 task=task,
@@ -636,48 +873,16 @@ class Stage5Agent(BaseStageAgent):
                 names.append(name)
         return names
 
-    def _build_global_defines_context(self, max_chars: int = 20000) -> str:
-        manifest = read_global_defines_manifest(self.workspace_root)
-        entries = [
-            item
-            for item in manifest.get("global_define_files", []) or []
-            if isinstance(item, dict) and item.get("must_include")
-        ]
-        if not entries:
-            return ""
-
-        chunks: List[str] = [
-            "Official global macro definitions are available for this task.",
-            "Use these macro names and values as authoritative compile-time context.",
-            "Do not redefine these macros in Stage5 fragments; the merge stage owns final include placement.",
-            "",
-        ]
-        for entry in entries:
-            name = str(entry.get("name") or entry.get("module") or "global_defines")
-            path = Path(str(entry.get("workspace_path") or ""))
-            if not path.is_file():
-                continue
-            content = path.read_text(encoding="utf-8", errors="replace").replace("\r\n", "\n").strip()
-            if not content:
-                continue
-            chunks.extend(
-                [
-                    f"## {name}",
-                    f"- source: {entry.get('source', '')}",
-                    f"- workspace_path: {path}",
-                    "```verilog",
-                    content,
-                    "```",
-                    "",
-                ]
-            )
-
-        text = "\n".join(chunks).strip()
-        if not text or text.count("```verilog") == 0:
-            return ""
-        if len(text) > max_chars:
-            text = text[:max_chars].rstrip() + "\n...<global defines truncated>..."
-        return text
+    def _build_stage5_global_defines_summary(
+        self,
+        relevant_texts: List[str],
+        max_chars: int = 6000,
+    ) -> str:
+        return build_stage5_global_defines_summary(
+            self.workspace_root,
+            relevant_texts=relevant_texts,
+            max_chars=max_chars,
+        )
 
     def _workspace_file(self, module_name: str) -> Path:
         return (self.workspace_root / "fragments" / f"{module_name}_fragments.v").resolve()
@@ -721,28 +926,6 @@ class Stage5Agent(BaseStageAgent):
         if isinstance(candidate, Stage3ModuleSkeletonArtifact):
             return candidate
         return validate_model(Stage3ModuleSkeletonArtifact, candidate)
-
-    def _read_timing_binding_for_module(
-        self,
-        partial_artifacts: Dict[str, Any],
-        module_name: str,
-    ) -> ModuleTimingBindingArtifact | None:
-        candidate = partial_artifacts.get("timing_bindings")
-        if candidate is None:
-            return None
-        manifest = (
-            candidate
-            if isinstance(candidate, Stage3TimingBindingsArtifact)
-            else validate_model(Stage3TimingBindingsArtifact, candidate)
-        )
-        record = next((item for item in manifest.module_binding_files if item.module == module_name), None)
-        if record is None:
-            raise ValueError(f"Stage5 timing bindings missing module `{module_name}`")
-        path = self._resolve_output_path(record.binding_file)
-        if not path.exists():
-            raise FileNotFoundError(f"missing module timing binding sidecar: {path}")
-        with open(path, "r", encoding="utf-8") as f:
-            return validate_model(ModuleTimingBindingArtifact, json.load(f))
 
     def _get_spec_blocks_artifact(self, partial_artifacts: Dict[str, Any]) -> Stage4SpecBlocksArtifact:
         candidate = partial_artifacts.get("spec_blocks")

@@ -290,6 +290,8 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
 
                 if args.phase == "rtl_planner":
                     from zerorepo.rpg_gen.base.llm_client import LLMConfig
+                    from zerorepo.rtl_impl.debug_agent.adapters import debug_openai_config_from_planner_config
+                    from zerorepo.rtl_impl.debug_agent.debug_runner import RtlDebugConfig
                     from zerorepo.rtl_impl.module_planner import PlannerRunner, PlannerTaskInput
 
                     planner_llm_config = None
@@ -391,13 +393,19 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
                     planner_runner = PlannerRunner(
                         output_root=planner_output_root,
                         llm_config=planner_llm_config,
+                        request_policy=(config.get("rtl_module_planner", {}) or {}).get("request_policy"),
+                        retrieval_limits=(config.get("rtl_module_planner", {}) or {}).get("retrieval_limits"),
+                        debug_config=RtlDebugConfig.from_mapping(
+                            config.get("rtl_debug", {}) or {},
+                            openai_config=debug_openai_config_from_planner_config(planner_llm_config),
+                        ),
                         logger=logger,
                         kg_service=kg_service,
                         checkpoint_dir=spec_checkpoint_dir,
                         temporal_planning_enabled=bool(
                             (config.get("rtl_module_planner", {}) or {})
                             .get("temporal_planning", {})
-                            .get("enabled", True)
+                            .get("enabled", False)
                         ),
                         temporal_failure_policy=str(
                             (config.get("rtl_module_planner", {}) or {})
@@ -405,7 +413,14 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
                             .get("failure_policy", "degrade")
                         ),
                     )
-                    merge_artifact = planner_runner.run(task_input, resume=args.resume, end_stage="stage6")
+                    merge_artifact = planner_runner.run(task_input, resume=args.resume, end_stage="stage6",
+                                                        force_rebuild=args.force_rebuild)
+                    if merge_artifact.status != "completed":
+                        failures = "; ".join(
+                            f"{record.module}: {record.error}"
+                            for record in merge_artifact.module_files if record.status != "completed"
+                        )
+                        raise RuntimeError(f"RTL module planner incomplete; checkpoints retained for resume: {failures}")
                     stage1_artifact_path = planner_output_root / "contracts.json"
                     modules_artifact_path = planner_output_root / "modules.json"
                     repo_skeleton_artifact_path = planner_output_root / "repo_skeleton.json"
@@ -414,10 +429,6 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
                     module_plans_artifact_path = planner_output_root / "module_plans.json"
                     stage5_codegen_artifact_path = planner_output_root / "stage5_codegen.json"
                     stage6_merge_artifact_path = planner_output_root / "stage6_merge.json"
-                    temporal_facts_artifact_path = planner_output_root / "global_temporal_facts.json"
-                    architecture_timing_artifact_path = planner_output_root / "architecture_timing_contract.json"
-                    timing_bindings_artifact_path = planner_output_root / "module_timing_bindings.json"
-                    timing_check_artifact_path = planner_output_root / "timing_binding_check.json"
                     module_plan_json_dir = planner_output_root / "module_plan_json"
                     fragments_dir = workspace_dir / "fragments"
 
@@ -432,10 +443,6 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
                     logger.info("  - module plan json dir: %s", module_plan_json_dir)
                     logger.info("  - stage5 codegen artifact: %s", stage5_codegen_artifact_path)
                     logger.info("  - stage6 merge artifact: %s", stage6_merge_artifact_path)
-                    logger.info("  - global temporal facts artifact: %s", temporal_facts_artifact_path)
-                    logger.info("  - architecture timing artifact: %s", architecture_timing_artifact_path)
-                    logger.info("  - module timing bindings artifact: %s", timing_bindings_artifact_path)
-                    logger.info("  - timing binding check artifact: %s", timing_check_artifact_path)
                     logger.info("  - stage5 fragments dir: %s", fragments_dir)
                     logger.info("  - stage6 merged dir: %s", merged_dir)
                     logger.info("  - Stage6 merged modules: %s module(s)", len(merge_artifact.module_files))

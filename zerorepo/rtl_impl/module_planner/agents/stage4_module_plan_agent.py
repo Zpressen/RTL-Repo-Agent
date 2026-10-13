@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from zerorepo.rtl_impl.retrieval_agent import BlockSpecRetriever
+from zerorepo.rtl_impl.retrieval_agent import BlockSpecRetriever, BlockSpecRetrievalResult
 from zerorepo.rtl_impl.retrieval_agent.utils import interface_block_refs
 
 from ..prompts import stage4_module_plan
@@ -14,14 +14,15 @@ from ..schemas import (
     ModulePlanRecord,
     ModuleSpecBlocks,
     ModuleSkeletonExport,
-    ModuleTimingBindingArtifact,
     PlannerTaskInput,
     Stage3ModuleSkeletonArtifact,
-    Stage3TimingBindingsArtifact,
     Stage4ModulePlansArtifact,
     Stage4SpecBlocksArtifact,
 )
 from .base import BaseStageAgent, model_dump, validate_model
+from ..utils.artifact_store import atomic_write_json
+from ..utils.local_repair import REPAIR_POLICY_VERSION, fingerprint
+from ..utils.codegen_repair import ModulePlanRepairAdapter
 
 
 class Stage4ModulePlanAgent(BaseStageAgent):
@@ -47,8 +48,10 @@ class Stage4ModulePlanAgent(BaseStageAgent):
         self.block_spec_retriever = block_spec_retriever or BlockSpecRetriever(
             llm_client=self.llm_client,
             logger=self.logger,
+            output_root=self.output_root,
         )
         self.planning_context_retriever = planning_context_retriever
+        self.cache_enabled = True
 
     def run(self, task_input: Any, partial_artifacts: Dict[str, Any]) -> Stage4ModulePlansArtifact:
         return self.run_incremental(task_input, partial_artifacts)
@@ -90,9 +93,7 @@ class Stage4ModulePlanAgent(BaseStageAgent):
             spec_block_ids = {item.block_id for item in module_spec_by_name[module_name].blocks}
             interface_spec_ids = _find_interface_spec_block_ids(module_spec_by_name[module_name])
             skeleton_context = self._read_skeleton_export_context(record_by_module[module_name])
-            timing_binding = self._read_timing_binding_for_module(partial_artifacts, module_name)
-            timing_by_block = self._timing_requirements_by_block(timing_binding)
-            retrieval_result = self.block_spec_retriever.select_block_spec_refs(
+            retrieval_result = self._retrieve_with_cache(
                 module_name=module_name,
                 module_spec=module_spec_by_name[module_name],
                 module_skeleton=skeleton_markdown,
@@ -115,7 +116,9 @@ class Stage4ModulePlanAgent(BaseStageAgent):
                             "skeleton": str(getattr(stage3, "input_fingerprint", "") or "")
                         },
                     )
-                    planning_kg_context = self.planning_context_retriever.to_prompt_json(context)
+                    planning_kg_context = self.planning_context_retriever.to_prompt_json(
+                        self._without_temporal_compat_fields(context)
+                    )
                 except Exception as exc:
                     mode = str(getattr(self.planning_context_retriever.kg_service, "mode", "required"))
                     if mode == "required":
@@ -136,12 +139,6 @@ class Stage4ModulePlanAgent(BaseStageAgent):
                             "id": block.subtask_id,
                             "target": block.target,
                             "spec_refs": expected_spec_refs_by_id[block.subtask_id],
-                            "timing_obligation_ids": timing_by_block.get(block.block_id, {}).get(
-                                "timing_obligation_ids", []
-                            ),
-                            "logical_value_tags": timing_by_block.get(block.block_id, {}).get(
-                                "logical_value_tags", []
-                            ),
                         }
                         for block in skeleton_blocks
                     ]
@@ -165,23 +162,22 @@ class Stage4ModulePlanAgent(BaseStageAgent):
                 skeleton_path,
                 len(spec_block_ids),
             )
-            module_plan = self._invoke_with_repair(
-                prompt,
-                [],
-                task,
-                partial_artifacts,
-                output_model=ModulePlanArtifact,
-                quality_validator=lambda artifact, expected_module=module_name, expected_blocks=skeleton_blocks, valid_spec_ids=spec_block_ids, expected_refs=expected_spec_refs_by_id, expected_timing=timing_by_block: (
-                    self._validate_module_plan(
-                        artifact,
-                        expected_module=expected_module,
-                        expected_blocks=expected_blocks,
-                        valid_spec_ids=valid_spec_ids,
-                        expected_spec_refs_by_id=expected_refs,
-                        expected_timing_by_block=expected_timing,
-                    )
-                ),
+            def validator(candidate):
+                return self._validate_module_plan(
+                    candidate,
+                    expected_module=module_name,
+                    expected_blocks=skeleton_blocks,
+                    valid_spec_ids=spec_block_ids,
+                    expected_spec_refs_by_id=expected_spec_refs_by_id,
+                )
+            adapter = ModulePlanRepairAdapter(
+                module=module_name,
+                required=[{"id": block.subtask_id, "target": block.target, "spec_refs": expected_spec_refs_by_id[block.subtask_id]} for block in skeleton_blocks],
+                context=f"{stage4_module_plan.SCHEMA_AND_RULES}\nModule: {module_name}\nModule skeleton:\n{skeleton_markdown}\nPlanning context:\n{planning_kg_context}",
+                source_blocks=[model_dump(item) for item in module_spec_by_name[module_name].blocks],
+                validator=validator,
             )
+            module_plan = self._invoke_local_repair(prompt=prompt, images=[], adapter=adapter).artifact
             plan_file = self._plan_relative_path(module_name)
             retrieval_file = self._retrieval_relative_path(module_name)
             records.append(ModulePlanRecord(module=module_name, plan_file=plan_file))
@@ -226,6 +222,33 @@ class Stage4ModulePlanAgent(BaseStageAgent):
         self.artifact_sink.record_stage_output(self.stage_name, artifact, task)
         return artifact
 
+    def _retrieve_with_cache(self, **arguments):
+        key = fingerprint({"policy": REPAIR_POLICY_VERSION, "module": arguments["module_name"],
+                           "spec": arguments["module_spec"], "skeleton": arguments["module_skeleton"],
+                           "context": arguments["skeleton_context"]})
+        path = (self.output_root / ".repair_cache" / "block_spec" / f"{arguments['module_name']}.json") if self.output_root else None
+        if path and self.cache_enabled and path.exists():
+            try:
+                cached = json.loads(path.read_text(encoding="utf-8"))
+                if cached["input_fingerprint"] == key:
+                    result = BlockSpecRetrievalResult.model_validate(cached["result"])
+                    if result.module != arguments["module_name"]:
+                        raise ValueError("Cached retrieval module mismatch")
+                    expected = {block.subtask_id: block.target for block in arguments["skeleton_blocks"]}
+                    valid = {item.block_id for item in arguments["module_spec"].blocks}
+                    if len(result.selections) != len(expected) or {item.id for item in result.selections} != set(expected):
+                        raise ValueError("Cached retrieval identities mismatch")
+                    if any(item.target != expected[item.id] or not set(item.spec_refs) <= valid for item in result.selections):
+                        raise ValueError("Cached retrieval references mismatch")
+                    self.logger.info("[%s] Reusing block retrieval for %s", self.stage_name, result.module)
+                    return result
+            except (ValueError, KeyError, TypeError) as exc:
+                self.logger.info("[%s] Ignoring invalid retrieval cache: %s", self.stage_name, exc)
+        result = self.block_spec_retriever.select_block_spec_refs(**arguments)
+        if path:
+            atomic_write_json(path, {"input_fingerprint": key, "result": model_dump(result)})
+        return result
+
     def build_prompt(self, task_input: PlannerTaskInput, partial_artifacts: Dict[str, Any], stage_context: Dict[str, Any]):
         raise NotImplementedError("Stage4ModulePlanAgent uses a custom per-module flow.")
 
@@ -266,11 +289,9 @@ class Stage4ModulePlanAgent(BaseStageAgent):
         expected_blocks: List["_SkeletonBlock"],
         valid_spec_ids: set[str],
         expected_spec_refs_by_id: Dict[str, List[str]] | None = None,
-        expected_timing_by_block: Dict[str, Dict[str, List[str]]] | None = None,
     ) -> List[str]:
         errors: List[str] = []
         expected_refs = expected_spec_refs_by_id or {}
-        expected_timing = expected_timing_by_block or {}
         if artifact.schema_version != "module_plan_v1":
             errors.append("schema_version must remain module_plan_v1")
         if artifact.module != expected_module:
@@ -296,15 +317,10 @@ class Stage4ModulePlanAgent(BaseStageAgent):
                 )
             if len(subtask.constraints) > 3:
                 errors.append(f"{subtask.id}: constraints must contain at most 3 items")
-            timing_requirement = expected_timing.get(expected_block.block_id, {})
-            expected_obligation_ids = timing_requirement.get("timing_obligation_ids", [])
-            expected_tags = timing_requirement.get("logical_value_tags", [])
-            if subtask.timing_obligation_ids != expected_obligation_ids:
-                errors.append(
-                    f"{subtask.id}: timing_obligation_ids must exactly match {expected_obligation_ids}"
-                )
-            if subtask.logical_value_tags != expected_tags:
-                errors.append(f"{subtask.id}: logical_value_tags must exactly match {expected_tags}")
+            if subtask.timing_obligation_ids:
+                errors.append(f"{subtask.id}: timing_obligation_ids compatibility field must be empty")
+            if subtask.logical_value_tags:
+                errors.append(f"{subtask.id}: logical_value_tags compatibility field must be empty")
         return errors
 
     def _get_stage3_artifact(self, partial_artifacts: Dict[str, Any]) -> Stage3ModuleSkeletonArtifact:
@@ -341,6 +357,7 @@ class Stage4ModulePlanAgent(BaseStageAgent):
         export_file = getattr(record, "export_file", None)
         if not export_file:
             return None
+
         export_path = self._resolve_output_path(str(export_file))
         if not export_path.exists():
             self.logger.warning("[%s] Module skeleton export is missing: %s", self.stage_name, export_path)
@@ -358,46 +375,28 @@ class Stage4ModulePlanAgent(BaseStageAgent):
             )
             return None
 
-    def _read_timing_binding_for_module(
-        self,
-        partial_artifacts: Dict[str, Any],
-        module_name: str,
-    ) -> ModuleTimingBindingArtifact | None:
-        candidate = partial_artifacts.get("timing_bindings")
-        if candidate is None:
-            return None
-        manifest = (
-            candidate
-            if isinstance(candidate, Stage3TimingBindingsArtifact)
-            else validate_model(Stage3TimingBindingsArtifact, candidate)
-        )
-        record = next((item for item in manifest.module_binding_files if item.module == module_name), None)
-        if record is None:
-            raise ValueError(f"Stage4 timing bindings missing module `{module_name}`")
-        binding_path = self._resolve_output_path(record.binding_file)
-        if not binding_path.exists():
-            raise FileNotFoundError(f"missing module timing binding sidecar: {binding_path}")
-        with open(binding_path, "r", encoding="utf-8") as f:
-            return validate_model(ModuleTimingBindingArtifact, json.load(f))
-
-    def _timing_requirements_by_block(
-        self,
-        binding: ModuleTimingBindingArtifact | None,
-    ) -> Dict[str, Dict[str, List[str]]]:
-        if binding is None:
-            return {}
-        result: Dict[str, Dict[str, List[str]]] = {}
-        for obligation in binding.block_obligations:
-            entry = result.setdefault(
-                obligation.block_id,
-                {"timing_obligation_ids": [], "logical_value_tags": []},
-            )
-            entry["timing_obligation_ids"].append(obligation.obligation_id)
-            for access in [*obligation.reads, *obligation.writes, *obligation.combinational_outputs]:
-                tag = access.logical_value_tag
-                if tag and tag not in entry["logical_value_tags"]:
-                    entry["logical_value_tags"].append(tag)
-        return result
+    @classmethod
+    def _without_temporal_compat_fields(cls, value: Any) -> Any:
+        """Keep old KG artifacts readable without reinjecting the retired timing plan."""
+        retired = {
+            "architecture_timing",
+            "temporal_facts",
+            "timing_bindings",
+            "timing_check",
+            "timing_obligation_ids",
+            "logical_value_tags",
+            "module_obligations",
+            "block_obligations",
+        }
+        if isinstance(value, dict):
+            return {
+                key: cls._without_temporal_compat_fields(item)
+                for key, item in value.items()
+                if key not in retired
+            }
+        if isinstance(value, list):
+            return [cls._without_temporal_compat_fields(item) for item in value]
+        return value
 
     def _plan_relative_path(self, module_name: str) -> str:
         return f"{self.plans_dirname}/{module_name}.json"

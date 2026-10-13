@@ -5,13 +5,16 @@
 # LLM Configuration
 # ============================================================================
 llm:
-  model: "gpt-5.5"
+  stream: true
+  stream_include_usage: true
+  model: "gpt-6.1-sol"
   max_tokens: 65536
   temperature: 0.6
   reasoning_effort: "high"
   provider: "openai"
-  api_key: "sk-uQLg5J4Xnlf6RYcIoSwEOuCn6JKa7JtC"
-  base_url: "https://xtoken.work/v1"
+  # Never commit real keys — export ZEROREPO_API_KEY in your shell instead.
+  api_key: "${ZEROREPO_API_KEY}"
+  base_url: "https://www.inroi.shop/v1"
   # api_version: ""
   # tenant_id: ""
   # token_scope: ""
@@ -72,9 +75,49 @@ rtl_kg:
 # RTL Module Planner Configuration
 # ============================================================================
 rtl_module_planner:
+  retrieval_limits:
+    max_chunks: 24
+    chunk_chars: 6000
+    candidate_chars: 48000
+    fact_chars: 8000
+    prompt_chars: 64000
+  request_policy:
+    retrieval:
+      total_timeout_seconds: 180
+      max_tokens: 4096
+      first_content_timeout_seconds: 120
+      idle_timeout_seconds: 120
+      max_retries: 1
+    generation:
+      total_timeout_seconds: 600
+      first_content_timeout_seconds: 120
+      idle_timeout_seconds: 120
+      max_retries: 1
+    stages:
+      stage5_codegen:
+        first_content_timeout_seconds: 240
+        retry_first_content_timeout: true
   temporal_planning:
     # Enabled by default in code; set false only for baseline/ablation runs.
     enabled: true
+
+# ============================================================================
+# RTL Debug Configuration
+# ============================================================================
+rtl_debug:
+  # "repo_react" uses the existing AgentScope debugger; "codex" starts the
+  # task-scoped Codex Debug MCP backend.
+  backend: "codex"
+  # Named Codex CLI profile. Leave codex_model empty so the profile selects
+  # both the model and reasoning effort.
+  codex_profile: "proxy-a"
+  codex_model: ""
+  # Each non-empty validate_rtl_changes(action="evaluate") consumes one trial.
+  max_trials: 30
+  # Enable Codex subagents only for explicit multi-agent experiment groups.
+  codex_multi_agent: false
+  # Maximum wall-clock time for the full Codex Debug session, including resumes.
+  codex_timeout: 10800
 
 # ============================================================================
 # Code Generation Configuration (IterativeCodeGenerator)

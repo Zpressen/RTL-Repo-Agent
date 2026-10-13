@@ -92,8 +92,16 @@ class SubtaskCodeArtifact(BaseModel):
 
 class ModuleCodegenRecord(BaseModel):
     module: str = Field(..., min_length=1)
-    workspace_file: str = Field(..., min_length=1)
+    status: Literal["completed", "in_progress", "failed", "blocked"] = "completed"
+    error: str = ""
+    workspace_file: str = ""
     completed_subtasks: List[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_completion(self):
+        if self.status == "completed" and not self.workspace_file.strip():
+            raise ValueError("A completed module must have a workspace_file")
+        return self
 
 
 class Stage5CodegenArtifact(BaseModel):
@@ -102,19 +110,30 @@ class Stage5CodegenArtifact(BaseModel):
     input_fingerprint: str = Field(default="")
     module_order: List[str] = Field(..., min_length=1)
     module_files: List[ModuleCodegenRecord] = Field(..., min_length=1)
+    status: Literal["completed", "in_progress", "failed"] = "completed"
 
     @model_validator(mode="after")
     def validate_structure(self) -> "Stage5CodegenArtifact":
         modules = [item.module for item in self.module_files]
         if modules != self.module_order:
             raise ValueError("module_files[].module must exactly match module_order")
+        if any(item.status != "completed" for item in self.module_files):
+            self.status = "failed" if any(item.status in {"failed", "blocked"} for item in self.module_files) else "in_progress"
         return self
 
 
 class ModuleMergeRecord(BaseModel):
     module: str = Field(..., min_length=1)
-    fragment_file: str = Field(..., min_length=1)
-    merged_file: str = Field(..., min_length=1)
+    status: Literal["completed", "failed", "blocked"] = "completed"
+    error: str = ""
+    fragment_file: str = ""
+    merged_file: str = ""
+
+    @model_validator(mode="after")
+    def validate_completion(self):
+        if self.status == "completed" and (not self.fragment_file.strip() or not self.merged_file.strip()):
+            raise ValueError("A completed merge must have fragment_file and merged_file")
+        return self
 
 
 class ModuleDebugRecord(BaseModel):
@@ -150,12 +169,16 @@ class Stage6MergeArtifact(BaseModel):
     module_files: List[ModuleMergeRecord] = Field(..., min_length=1)
     debug_files: List[ModuleDebugRecord] = Field(default_factory=list)
     system_debug: SystemDebugRecord | None = None
+    latest_system_debug: SystemDebugRecord | None = None
+    status: Literal["completed", "failed"] = "completed"
 
     @model_validator(mode="after")
     def validate_structure(self) -> "Stage6MergeArtifact":
         modules = [item.module for item in self.module_files]
         if modules != self.module_order:
             raise ValueError("module_files[].module must exactly match module_order")
+        if any(item.status != "completed" for item in self.module_files):
+            self.status = "failed"
         if self.debug_files:
             debug_modules = [item.module for item in self.debug_files]
             if debug_modules != self.module_order:

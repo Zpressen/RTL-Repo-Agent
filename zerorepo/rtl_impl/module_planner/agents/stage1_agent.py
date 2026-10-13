@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
@@ -23,7 +24,9 @@ from ..schemas import (
     TimingContract,
 )
 from ..utils import (
+    extract_markdown_port_sections,
     format_documents_for_prompt,
+    interface_contract_errors,
     load_markdown_files,
 )
 from .base import BaseStageAgent, model_dump, validate_model
@@ -33,21 +36,29 @@ class _FactRoundPayload(BaseModel):
     fact_ledger: Stage1FactLedger = Field(default_factory=Stage1FactLedger)
 
 
+class _TopInterfaceRoundPayload(BaseModel):
+    interface_contract: InterfaceContract = Field(default_factory=InterfaceContract)
+
+
 class Stage1Agent(BaseStageAgent):
     stage_name = "stage1_contracts"
     output_model = Stage1ContractsArtifact
     system_role = stage1_ingest_extract.SYSTEM_ROLE
+    allow_best_effort_quality_fallback = False
 
     _MAX_FILES_PER_BATCH = 5
 
-    _ROUND_SEQUENCE = ["facts"]
+    _ROUND_SEQUENCE = ["facts", "top_interface"]
+    _BATCH_ROUND_SEQUENCE = ["facts"]
 
     _ROUND_OUTPUT_MODELS = {
         "facts": _FactRoundPayload,
+        "top_interface": _TopInterfaceRoundPayload,
     }
 
     _ROUND_SYSTEM_ROLES = {
         "facts": stage1_ingest_extract.FACTS_SYSTEM_ROLE,
+        "top_interface": stage1_ingest_extract.TOP_INTERFACE_SYSTEM_ROLE,
     }
 
     def run(self, task_input: Any, partial_artifacts: Dict[str, Any]) -> Stage1ContractsArtifact:
@@ -81,7 +92,7 @@ class Stage1Agent(BaseStageAgent):
                 "batch_modules": [self._infer_module_name_from_document(document) for document in batch],
                 "max_files_per_batch": self._MAX_FILES_PER_BATCH,
             }
-            for round_name in self._ROUND_SEQUENCE:
+            for round_name in self._BATCH_ROUND_SEQUENCE:
                 if self._should_skip_legacy_completed_round(artifact, batch_index, round_name):
                     continue
                 payload = self._run_round(
@@ -103,6 +114,23 @@ class Stage1Agent(BaseStageAgent):
                 persist_callback(model_dump(artifact))
 
         artifact = self._finalize_structure_contract(artifact, task)
+        artifact.completed_rounds = ["facts"]
+        if not artifact.structure_contract.top_module:
+            artifact = self._repair_missing_top_identity(
+                artifact=artifact,
+                task_input=task,
+                partial_artifacts=partial_artifacts,
+                stage_context=stage_context,
+            )
+            if persist_callback is not None:
+                persist_callback(model_dump(artifact))
+        top_interface_payload = self._run_top_interface_round(
+            artifact=artifact,
+            task_input=task,
+            partial_artifacts=partial_artifacts,
+            stage_context=stage_context,
+        )
+        artifact = self._merge_top_interface_payload(artifact, top_interface_payload)
         artifact.completed_rounds = list(self._ROUND_SEQUENCE)
         artifact.stage1_status = "contracts_completed"
         errors = self.validate_quality(artifact, task, partial_artifacts)
@@ -137,6 +165,8 @@ class Stage1Agent(BaseStageAgent):
         expected_prefix = self._ROUND_SEQUENCE[: len(artifact.completed_rounds)]
         if artifact.completed_rounds != expected_prefix:
             errors.append(f"completed_rounds must preserve round order: expected prefix {expected_prefix}, got {artifact.completed_rounds}")
+        if artifact.stage1_status == "contracts_completed" and artifact.completed_rounds != self._ROUND_SEQUENCE:
+            errors.append(f"completed contracts must include rounds {self._ROUND_SEQUENCE}")
         errors.extend(self._validate_fact_ledger(artifact.fact_ledger))
         errors.extend(self._validate_interface_contracts(artifact.interface_contracts, require_grounding=False))
         errors.extend(self._validate_timing_contracts(artifact.timing_contracts, require_grounding=False))
@@ -144,6 +174,7 @@ class Stage1Agent(BaseStageAgent):
         errors.extend(self._validate_unique_modules(artifact.datapath_contracts, "datapath_contracts", require_grounding=False))
         errors.extend(self._validate_planning_facts(artifact.planning_facts, require_grounding=False))
         errors.extend(self._validate_structure_contract(artifact.structure_contract, require_grounding=False))
+        errors.extend(self._validate_top_interface_contract(artifact, task_input))
         return errors
 
     def _prepare_inputs(self, task_input: PlannerTaskInput) -> None:
@@ -187,7 +218,12 @@ class Stage1Agent(BaseStageAgent):
         batch_index: int,
         round_name: str,
     ) -> bool:
-        return batch_index == 1 and not artifact.completed_batches and round_name in artifact.completed_rounds
+        return (
+            batch_index == 1
+            and not artifact.completed_batches
+            and round_name in artifact.completed_rounds
+            and bool(artifact.fact_ledger.facts)
+        )
 
     def _run_round(
         self,
@@ -240,6 +276,8 @@ class Stage1Agent(BaseStageAgent):
     def _validate_round_payload(self, round_name: str, payload: BaseModel) -> List[str]:
         if round_name == "facts":
             return self._validate_fact_ledger(payload.fact_ledger)
+        if round_name == "top_interface":
+            return self._validate_interface_contracts([payload.interface_contract])
         raise ValueError(f"Unsupported stage1 round: {round_name}")
 
     def _merge_round_payload(
@@ -257,6 +295,237 @@ class Stage1Agent(BaseStageAgent):
             raise ValueError(f"Unsupported stage1 round: {round_name}")
         merged["completed_modules"] = self._collect_completed_modules(validate_model(Stage1ContractsArtifact, merged))
         return validate_model(Stage1ContractsArtifact, merged)
+
+    def _repair_missing_top_identity(
+        self,
+        *,
+        artifact: Stage1ContractsArtifact,
+        task_input: PlannerTaskInput,
+        partial_artifacts: Dict[str, Any],
+        stage_context: Dict[str, Any],
+    ) -> Stage1ContractsArtifact:
+        prompt, images = self._build_round_prompt(
+            "facts",
+            artifact,
+            {**stage_context, "repair_target": "top_module_identity"},
+            self._formatted_documents,
+        )
+        prompt += (
+            "\n\nThe current contracts do not identify the explicit top module. "
+            "Re-extract the directly stated top-module identity and its explicit interface facts. "
+            "Do not infer a top module from filenames."
+        )
+
+        def validate_candidate(candidate: BaseModel) -> List[str]:
+            merged = self._merge_round_payload(artifact, "facts", candidate)
+            finalized = self._finalize_structure_contract(merged, task_input)
+            return [] if finalized.structure_contract.top_module else [
+                "fact_ledger must contain enough explicit evidence to identify structure_contract.top_module"
+            ]
+
+        original_role = self.system_role
+        self.system_role = stage1_ingest_extract.FACTS_SYSTEM_ROLE
+        try:
+            payload = self._invoke_with_repair(
+                prompt,
+                images,
+                task_input,
+                partial_artifacts,
+                output_model=_FactRoundPayload,
+                quality_validator=validate_candidate,
+            )
+        finally:
+            self.system_role = original_role
+        return self._finalize_structure_contract(
+            self._merge_round_payload(artifact, "facts", payload),
+            task_input,
+        )
+
+    def _run_top_interface_round(
+        self,
+        *,
+        artifact: Stage1ContractsArtifact,
+        task_input: PlannerTaskInput,
+        partial_artifacts: Dict[str, Any],
+        stage_context: Dict[str, Any],
+    ) -> _TopInterfaceRoundPayload:
+        top_module = artifact.structure_contract.top_module
+        if not top_module:
+            raise ValueError("Stage1 top_interface requires a resolved top module")
+        document = self._resolve_top_spec_document(artifact, task_input)
+        sections = extract_markdown_port_sections(document.get("content", ""))
+        projected = next(
+            (
+                contract
+                for contract in artifact.interface_contracts
+                if contract.module == top_module and contract.ports
+            ),
+            None,
+        )
+        if not sections and projected is not None:
+            return _TopInterfaceRoundPayload(interface_contract=projected)
+        authoritative_markdown = "\n\n".join(section.text for section in sections)
+        if not authoritative_markdown:
+            authoritative_markdown = str(document.get("content", ""))
+        expected_ports = [port for section in sections for port in section.ports]
+        current_top_interface = next(
+            (
+                contract
+                for contract in artifact.interface_contracts
+                if contract.module == top_module
+            ),
+            None,
+        )
+        identity_context = {
+            "top_module": top_module,
+            "system": artifact.structure_contract.system,
+            "source_spec_file": document.get("path", ""),
+            "current_top_interface_contract": (
+                model_dump(current_top_interface) if current_top_interface is not None else None
+            ),
+        }
+        prompt = stage1_ingest_extract.build_top_interface_prompt(
+            top_module=top_module,
+            port_sections_markdown=authoritative_markdown,
+            expected_ports_json=self.to_pretty_json(
+                [
+                    {"name": port.name, "direction": port.direction, "width": port.width}
+                    for port in expected_ports
+                ]
+            ),
+            current_contracts_json=self.to_pretty_json(identity_context),
+            stage_context=self.to_pretty_json(
+                {
+                    **stage_context,
+                    "top_module": top_module,
+                    "source_spec_file": document.get("path", ""),
+                    "recognized_port_sections": len(sections),
+                }
+            ),
+        )
+        self._log_stage_input(
+            prompt=prompt,
+            images=[],
+            stage_context={**stage_context, "round": "top_interface", "top_module": top_module},
+        )
+
+        def validate_candidate(candidate: BaseModel) -> List[str]:
+            contract = candidate.interface_contract
+            errors = self._validate_interface_contracts([contract])
+            if contract.module != top_module:
+                errors.append(f"top interface module must be {top_module}, got {contract.module}")
+            if not contract.ports:
+                errors.append(f"top interface contract for {top_module} must contain at least one port")
+            if expected_ports:
+                errors.extend(
+                    interface_contract_errors(
+                        contract.ports,
+                        expected_ports,
+                        label=f"top interface contract `{top_module}`",
+                    )
+                )
+            return errors
+
+        original_role = self.system_role
+        self.system_role = stage1_ingest_extract.TOP_INTERFACE_SYSTEM_ROLE
+        try:
+            payload = self._invoke_with_repair(
+                prompt,
+                [],
+                task_input,
+                partial_artifacts,
+                output_model=_TopInterfaceRoundPayload,
+                quality_validator=validate_candidate,
+            )
+        finally:
+            self.system_role = original_role
+        self._log_stage_output(payload)
+        return payload
+
+    def _merge_top_interface_payload(
+        self,
+        artifact: Stage1ContractsArtifact,
+        payload: _TopInterfaceRoundPayload,
+    ) -> Stage1ContractsArtifact:
+        top_module = artifact.structure_contract.top_module
+        merged = model_dump(artifact)
+        merged["interface_contracts"] = [
+            model_dump(contract)
+            for contract in artifact.interface_contracts
+            if contract.module != top_module
+        ]
+        merged["interface_contracts"].append(model_dump(payload.interface_contract))
+        return validate_model(Stage1ContractsArtifact, merged)
+
+    def _validate_top_interface_contract(
+        self,
+        artifact: Stage1ContractsArtifact,
+        task_input: PlannerTaskInput,
+    ) -> List[str]:
+        top_module = str(artifact.structure_contract.top_module or "").strip()
+        if not top_module:
+            return ["structure_contract.top_module must be non-empty"]
+        matches = [contract for contract in artifact.interface_contracts if contract.module == top_module]
+        if len(matches) != 1:
+            return [f"exactly one interface contract is required for top module `{top_module}`"]
+        contract = matches[0]
+        errors: list[str] = []
+        if not contract.ports:
+            errors.append(f"top interface contract for `{top_module}` must contain at least one port")
+        document = self._resolve_top_spec_document(artifact, task_input)
+        expected_ports = [
+            port
+            for section in extract_markdown_port_sections(document.get("content", ""))
+            for port in section.ports
+        ]
+        if expected_ports:
+            errors.extend(
+                interface_contract_errors(
+                    contract.ports,
+                    expected_ports,
+                    label=f"top interface contract `{top_module}`",
+                )
+            )
+        return errors
+
+    def _resolve_top_spec_document(
+        self,
+        artifact: Stage1ContractsArtifact,
+        task_input: PlannerTaskInput,
+    ) -> dict[str, str]:
+        documents = load_markdown_files(task_input.spec_md_files)
+        if not documents:
+            return {"path": "", "content": ""}
+        top_module = str(artifact.structure_contract.top_module or "").strip()
+        grounded_paths = [
+            grounding.source_md_file
+            for fact in artifact.fact_ledger.facts
+            if fact.module == top_module
+            for grounding in fact.text_grounding
+            if grounding.source_md_file
+        ]
+        for grounded_path in grounded_paths:
+            resolved = str(Path(grounded_path).resolve())
+            match = next((item for item in documents if str(Path(item["path"]).resolve()) == resolved), None)
+            if match is not None:
+                return match
+        exact = next((item for item in documents if Path(item["path"]).stem == top_module), None)
+        if exact is not None:
+            return exact
+        explicit = next(
+            (
+                item
+                for item in documents
+                if top_module
+                and re.search(
+                    rf"(?:top(?:-level)?(?:\s+design-unit)?(?:\s+name)?|top\s+module)[^\n]*`?{re.escape(top_module)}`?",
+                    item["content"],
+                    flags=re.IGNORECASE,
+                )
+            ),
+            None,
+        )
+        return explicit or documents[0]
 
     def _collect_completed_modules(self, artifact: Stage1ContractsArtifact) -> List[str]:
         return _ordered_unique(

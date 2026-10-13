@@ -7,6 +7,7 @@ import shlex
 import shutil
 import sys
 import textwrap
+import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -92,10 +93,74 @@ class SystemSimReviewer:
 
                 import importlib.util
                 import pathlib
+                import re
                 import shutil
                 import sys
                 import tempfile
                 import traceback
+
+
+                MODULE_RE = re.compile(
+                    r"^\s*module\s+([A-Za-z_][A-Za-z0-9_$]*)\b",
+                    re.MULTILINE,
+                )
+
+
+                def install_system_suffix_testbench_compat(module, generated_dir, output_dir):
+                    """Patch only the staged verifier testbench, never generated RTL."""
+                    script_dir = pathlib.Path(str(getattr(module, "SCRIPT_DIR", "")))
+                    testbench_name = str(getattr(module, "TESTBENCH_FILE", ""))
+                    if not script_dir.is_dir() or not testbench_name:
+                        return
+                    testbench_path = script_dir / testbench_name
+                    if not testbench_path.is_file():
+                        return
+
+                    declared = set()
+                    for rtl_path in generated_dir.iterdir():
+                        if not rtl_path.is_file() or rtl_path.suffix.lower() not in {".v", ".sv"}:
+                            continue
+                        try:
+                            declared.update(MODULE_RE.findall(rtl_path.read_text(encoding="utf-8", errors="ignore")))
+                        except OSError:
+                            pass
+
+                    try:
+                        patched = testbench_path.read_text(encoding="utf-8", errors="ignore")
+                    except OSError:
+                        return
+                    replacements = []
+                    for actual_module in sorted(declared):
+                        if not actual_module.endswith("_system"):
+                            continue
+                        testbench_module = actual_module[:-7]
+                        if not testbench_module or testbench_module in declared:
+                            continue
+                        instantiation = re.compile(
+                            rf"\b{re.escape(testbench_module)}\b"
+                            r"(?=\s+(?:#\s*\([^;]*\)\s*)?[A-Za-z_][A-Za-z0-9_$]*\s*\()"
+                        )
+                        patched, count = instantiation.subn(actual_module, patched)
+                        if count:
+                            replacements.append((testbench_module, actual_module, count))
+                    if not replacements:
+                        return
+
+                    # Some verifiers resolve the testbench relative to SCRIPT_DIR.
+                    # Copy that flat directory and point only the imported verifier
+                    # module at the compatibility copy.
+                    compat_dir = output_dir / "simulation_compat" / "verify_files"
+                    compat_dir.mkdir(parents=True, exist_ok=True)
+                    for source in script_dir.iterdir():
+                        if source.is_file():
+                            shutil.copy2(source, compat_dir / source.name)
+                    (compat_dir / testbench_name).write_text(patched, encoding="utf-8")
+                    module.SCRIPT_DIR = str(compat_dir)
+                    for old_name, new_name, count in replacements:
+                        print(
+                            f"ZEROREPO_TB_MODULE_ALIAS: {old_name} -> {new_name} "
+                            f"({count} instantiation(s), simulation-only)"
+                        )
 
 
                 def main() -> int:
@@ -132,6 +197,11 @@ class SystemSimReviewer:
                             raise RuntimeError(f"Could not import verifier: {verify_script}")
                         module = importlib.util.module_from_spec(spec)
                         spec.loader.exec_module(module)
+                        install_system_suffix_testbench_compat(
+                            module,
+                            generated_dir,
+                            output_dir,
+                        )
                         verify_system = getattr(module, "verify_system", None)
                         if verify_system is None:
                             raise RuntimeError(f"Verifier does not expose verify_system(generated_dir): {verify_script}")
@@ -191,6 +261,8 @@ class SystemDebugRunner:
         self.debug_root = self.workspace_root / "debug_system"
         self.logger = logger
         self.kg_service = kg_service
+        self._last_backend_reason = ""
+        self._last_backend_mismatch_count: int | None = None
 
     def run_system(
         self,
@@ -210,10 +282,21 @@ class SystemDebugRunner:
                 status="disabled",
                 reason="RTL debug is disabled.",
             )
+        if self.logger is not None:
+            self.logger.info(
+                "[rtl_system_debug] system_debug_backend=%s "
+                "(module_syntax_repair=repo_react)",
+                self.config.backend,
+            )
         if not planner_top_module:
-            return SystemDebugResult(status="error", top_module="", reason="System-level debug requires a non-empty top module.")
+            return SystemDebugResult(
+                status="error",
+                top_module="",
+                reason="System-level debug requires a non-empty top module.",
+            )
 
-        verify_dir = self._resolve_verify_dir(runtime_top_module)
+        project_hint = self._infer_project_hint(task)
+        verify_dir = self._resolve_verify_dir(runtime_top_module, project_hint=project_hint)
         extra_top_rtl: Path | None = None
         if verify_dir is None:
             try:
@@ -234,13 +317,17 @@ class SystemDebugRunner:
                         planner_top_module,
                     )
         if verify_dir is None:
+            expected_dirs = ", ".join(
+                str(item)
+                for item in self._verify_dir_candidates(runtime_top_module, project_hint)
+            )
             return SystemDebugResult(
                 top_module=runtime_top_module,
                 planner_top_module=planner_top_module,
                 status="error",
                 reason=(
                     f"System verify directory not found for {runtime_top_module}. "
-                    f"Expected {self._default_verify_dir(runtime_top_module)}."
+                    f"Expected one of {expected_dirs}."
                 ),
             )
         verify_script = self._select_verify_script(verify_dir)
@@ -253,12 +340,26 @@ class SystemDebugRunner:
                 reason=f"No *_verify.py script found in {verify_dir}.",
             )
 
+        testbench_dut_module = self._resolve_system_suffix_testbench_module(
+            planner_top_module,
+            verify_dir,
+        )
+        if testbench_dut_module != planner_top_module:
+            if self.logger is not None:
+                self.logger.info(
+                    "[rtl_system_debug] Simulation-only testbench module alias %s -> %s.",
+                    testbench_dut_module,
+                    planner_top_module,
+                )
+
         workdir = (self.debug_root / runtime_top_module).resolve()
         generated_dir = workdir / "generated"
         try:
+            self._ensure_toolchain_path()
             dut_instance, runtime_rtl_path = self._prepare_workdir(
                 planner_top_module=planner_top_module,
                 runtime_top_module=runtime_top_module,
+                testbench_dut_module=testbench_dut_module,
                 workdir=workdir,
                 generated_dir=generated_dir,
                 verify_dir=verify_dir,
@@ -292,6 +393,8 @@ class SystemDebugRunner:
                     runtime_top_module,
                     self._summarize_command_result(sim_output),
                 )
+            self._last_backend_reason = ""
+            self._last_backend_mismatch_count = None
             final_pass, used_trials = self._run_repo_react(
                 planner_top_module=planner_top_module,
                 runtime_top_module=runtime_top_module,
@@ -314,7 +417,15 @@ class SystemDebugRunner:
                 dut_instance=dut_instance,
                 runtime_rtl_path=str(runtime_rtl_path),
                 status="fixed" if final_pass else "fail",
-                mismatch_count=0 if final_pass else int(mismatch_count),
+                mismatch_count=(
+                    0
+                    if final_pass
+                    else int(
+                        self._last_backend_mismatch_count
+                        if self._last_backend_mismatch_count is not None
+                        else mismatch_count
+                    )
+                ),
                 debug_trials=int(used_trials),
                 workdir=str(workdir),
                 generated_dir=str(generated_dir),
@@ -322,7 +433,11 @@ class SystemDebugRunner:
                 verify_script=str(verify_script),
                 sim_output_path=str(debug_sim_path if debug_sim_path.exists() else initial_sim_path),
                 trace_report_path=str(workdir / "trace_report.json") if (workdir / "trace_report.json").exists() else "",
-                reason="" if final_pass else "System debug trials ended without passing top simulation.",
+                reason=(
+                    ""
+                    if final_pass
+                    else self._last_backend_reason or "System debug trials ended without passing top simulation."
+                ),
             )
         except Exception as exc:  # noqa: BLE001
             result = SystemDebugResult(
@@ -339,10 +454,36 @@ class SystemDebugRunner:
                 raise RuntimeError(result.reason) from exc
             return result
 
-    def _resolve_verify_dir(self, top_module: str) -> Path | None:
-        candidate = self._default_verify_dir(top_module)
-        if candidate.is_dir():
-            return candidate
+    def _infer_project_hint(self, task: Any) -> str:
+        """Infer the RealBench system-task directory from a dataset spec path."""
+        for raw_path in list(getattr(task, "spec_md_files", []) or []):
+            parts = Path(str(raw_path)).expanduser().parts
+            try:
+                index = parts.index("rtl_dataset")
+            except ValueError:
+                continue
+            if index + 1 < len(parts):
+                project = str(parts[index + 1]).strip()
+                if project and project not in {".", ".."}:
+                    return project
+        return ""
+
+    def _verify_dir_candidates(self, top_module: str, project_hint: str = "") -> list[Path]:
+        names = [project_hint, top_module] if project_hint else [top_module]
+        candidates: list[Path] = []
+        seen: set[Path] = set()
+        for name in names:
+            candidate = self._default_verify_dir(name)
+            if candidate in seen:
+                continue
+            seen.add(candidate)
+            candidates.append(candidate)
+        return candidates
+
+    def _resolve_verify_dir(self, top_module: str, project_hint: str = "") -> Path | None:
+        for candidate in self._verify_dir_candidates(top_module, project_hint):
+            if candidate.is_dir():
+                return candidate
         return None
 
     def _resolve_merged_top_alias(self, planner_top: str) -> tuple[str, Path, Path] | None:
@@ -375,17 +516,57 @@ class SystemDebugRunner:
     def _default_verify_dir(self, top_module: str) -> Path:
         return Path(self.config.oracle_root) / "system_task" / top_module / "verify_test"
 
+    def _ensure_toolchain_path(self) -> None:
+        if shutil.which("verilator"):
+            return
+        candidates = [
+            Path(self.config.toolchain_bin).expanduser() if self.config.toolchain_bin else None,
+            Path("/home/mokita/miniconda3/envs/realbench/bin"),
+            Path("/home/mokita/miniconda3/bin"),
+        ]
+        for candidate in candidates:
+            if candidate is not None and (candidate / "verilator").is_file():
+                os.environ["PATH"] = f"{candidate}{os.pathsep}{os.environ.get('PATH', '')}"
+                return
+
     def _select_verify_script(self, verify_dir: Path) -> Path | None:
         candidates = sorted(verify_dir.glob("*_verify.py"))
         if not candidates:
             candidates = sorted(verify_dir.glob("*verify*.py"))
         return candidates[0] if candidates else None
 
+    def _resolve_system_suffix_testbench_module(
+        self,
+        planner_top: str,
+        verify_dir: Path,
+    ) -> str:
+        """Detect a ``foo`` testbench instance for the real ``foo_system`` top."""
+        suffix = "_system"
+        if not planner_top.endswith(suffix) or len(planner_top) <= len(suffix):
+            return planner_top
+        compatibility_top = planner_top[: -len(suffix)]
+        tb_candidates = sorted(verify_dir.glob("*testbench*.sv")) + sorted(
+            verify_dir.glob("*tb*.sv")
+        )
+        for tb_path in tb_candidates:
+            try:
+                tb_text = tb_path.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
+            if re.search(
+                rf"\b{re.escape(compatibility_top)}\b\s+"
+                r"[a-zA-Z_][a-zA-Z0-9_]*\s*\(",
+                tb_text,
+            ):
+                return compatibility_top
+        return planner_top
+
     def _prepare_workdir(
         self,
         *,
         planner_top_module: str,
         runtime_top_module: str,
+        testbench_dut_module: str,
         workdir: Path,
         generated_dir: Path,
         verify_dir: Path,
@@ -394,8 +575,16 @@ class SystemDebugRunner:
         contract_json: str,
         extra_top_rtl: Path | None = None,
     ) -> tuple[str, Path]:
+        # Verification scratch files may be recreated, but Codex state and
+        # archived runs belong to the persistent debug session, not scratch.
         if workdir.exists():
-            shutil.rmtree(workdir)
+            for entry in workdir.iterdir():
+                if entry.name in {"codex_task", "codex_private", "history", "latest_debug_result.json"}:
+                    continue
+                if entry.is_dir() and not entry.is_symlink():
+                    shutil.rmtree(entry)
+                else:
+                    entry.unlink()
         generated_dir.mkdir(parents=True, exist_ok=True)
         copied: list[str] = []
         for record in merged_records:
@@ -443,12 +632,27 @@ class SystemDebugRunner:
                 rf"\b{re.escape(runtime_top_module)}\b\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(",
                 tb_text,
             )
+            if match is None and testbench_dut_module != runtime_top_module:
+                match = re.search(
+                    rf"\b{re.escape(testbench_dut_module)}\b\s+"
+                    r"([a-zA-Z_][a-zA-Z0-9_]*)\s*\(",
+                    tb_text,
+                )
             dut_instance = match.group(1) if match else ""
         (workdir / "contract.json").write_text(contract_json.rstrip() + "\n", encoding="utf-8")
         manifest = {
             "top_module": runtime_top_module,
             "planner_module_name": planner_top_module,
             "runtime_top_module": runtime_top_module,
+            "runtime_top_alias_of": (
+                planner_top_module if planner_top_module != runtime_top_module else ""
+            ),
+            "testbench_dut_module": testbench_dut_module,
+            "simulation_module_aliases": (
+                {testbench_dut_module: runtime_top_module}
+                if testbench_dut_module != runtime_top_module
+                else {}
+            ),
             "dut_instance": dut_instance,
             "runtime_rtl_path": str(runtime_rtl_path),
             "generated_dir": str(generated_dir),
@@ -478,6 +682,19 @@ class SystemDebugRunner:
         mismatch_count: int,
         sim_reviewer: SystemSimReviewer,
     ) -> tuple[bool, int]:
+        if self.config.backend == "codex":
+            return self._run_codex_debug(
+                planner_top_module=planner_top_module,
+                runtime_top_module=runtime_top_module,
+                task=task,
+                spec_text=spec_text,
+                contract_json=contract_json,
+                workdir=workdir,
+                generated_dir=generated_dir,
+                verify_script=verify_script,
+                sim_output=sim_output,
+                mismatch_count=mismatch_count,
+            )
         from zerorepo.rtl_impl.repo_react import RepoReActInput, RepoReActRunner
 
         cfg = self.config.openai_config or load_openai_config()
@@ -537,6 +754,164 @@ class SystemDebugRunner:
         )
         result = self._run_async(runner.chat(repo_input))
         return bool(result.is_pass), int(result.action_calls)
+
+    def _run_codex_debug(
+        self,
+        *,
+        planner_top_module: str,
+        runtime_top_module: str,
+        task: Any,
+        spec_text: str,
+        contract_json: str,
+        workdir: Path,
+        generated_dir: Path,
+        verify_script: Path,
+        sim_output: str,
+        mismatch_count: int,
+    ) -> tuple[bool, int]:
+        from zerorepo.rtl_impl.codex_debug.runner import CodexDebugRunner
+        from zerorepo.rtl_impl.codex_debug.schemas import CodexDebugRunDescriptor, KgRunConfig
+        from zerorepo.rtl_impl.codex_debug.history import DebugHistory, debug_binding
+        from zerorepo.rtl_impl.module_planner.utils.artifact_store import atomic_write_json
+
+        task_root = workdir / "codex_task"
+        spec_root = task_root / "spec"
+        merged_root = task_root / "merged"
+        private_root = workdir / "codex_private"
+        raw_spec_paths = [str(p) for p in (getattr(task, "spec_md_files", []) or []) if Path(p).is_file()]
+        binding = debug_binding(top_module=runtime_top_module, spec_text=spec_text, spec_paths=raw_spec_paths,
+                                contract_json=contract_json, verify_script=verify_script)
+        history = DebugHistory(workdir, self.logger)
+        restored = history.select(binding, generated_dir)
+        spec_root.mkdir(parents=True, exist_ok=True)
+        merged_root.mkdir(parents=True, exist_ok=True)
+        private_root.mkdir(parents=True, exist_ok=True)
+        if not restored:
+            self._copy_rtl_tree(generated_dir, merged_root)
+
+        copied_specs: list[Path] = []
+        for index, raw_path in enumerate(raw_spec_paths):
+            source = Path(str(raw_path))
+            if not source.is_file():
+                continue
+            name = source.name
+            target = spec_root / name
+            if target.exists() and not restored:
+                target = spec_root / f"{index:03d}_{name}"
+            if not restored:
+                shutil.copyfile(source, target)
+            copied_specs.append(target)
+        inline_spec = spec_root / "initial_spec.md"
+        if not restored:
+            inline_spec.write_text(spec_text.rstrip() + "\n", encoding="utf-8")
+        if inline_spec not in copied_specs:
+            copied_specs.append(inline_spec)
+
+        top_rtl = self._select_top_rtl(merged_root, runtime_top_module)
+        kg_enabled = bool(
+            self.kg_service is not None
+            and getattr(self.kg_service, "is_enabled", lambda: False)()
+        )
+        planning_projection = None
+        if self.kg_service is not None:
+            candidate = getattr(self.kg_service, "planning_projection_path", None)
+            if candidate is not None and Path(candidate).is_file():
+                planning_projection = Path(candidate)
+        kg_config = KgRunConfig(
+            enabled=kg_enabled,
+            config=dict(getattr(self.kg_service, "config", {}) or {}) if self.kg_service is not None else {},
+            checkpoint_dir=private_root / "kg_checkpoint",
+            planning_projection_path=planning_projection,
+        )
+        descriptor = CodexDebugRunDescriptor(
+            run_id=f"{runtime_top_module}-{uuid.uuid4().hex[:12]}",
+            task_root=task_root,
+            spec_root=spec_root,
+            merged_root=merged_root,
+            private_root=private_root,
+            debug_workdir=private_root / "debug_artifacts",
+            planner_module_name=planner_top_module,
+            top_module=runtime_top_module,
+            top_rtl=top_rtl,
+            verify_script=verify_script,
+            planning_output_root=self.output_root,
+            contract_json=contract_json,
+            spec_text=spec_text,
+            spec_paths=copied_specs,
+            initial_sim_output=sim_output,
+            initial_wave_path=(workdir / "wave.vcd") if (workdir / "wave.vcd").is_file() else None,
+            initial_mismatch_count=int(mismatch_count),
+            max_validation_trials=int(self.config.max_trials),
+            kg=kg_config,
+        )
+        if restored:
+            previous = CodexDebugRunDescriptor.model_validate(restored["descriptor"])
+            state = json.loads((private_root / "session_state.json").read_text())
+            used = int(state["counters"]["validation_trials"])
+            descriptor = previous.model_copy(update={
+                "codex_session_id": restored["runtime"]["session_id"],
+                "codex_episode": int(restored["runtime"]["episode"]) + 1,
+                "validation_trial_offset": used,
+                "max_validation_trials": used + int(self.config.max_trials), "kg": kg_config,
+            })
+        launch_id = uuid.uuid4().hex
+        launch = {"launch_id": launch_id, "run_id": descriptor.run_id,
+                  "validation_trial_offset": descriptor.validation_trial_offset,
+                  "validation_limit": descriptor.max_validation_trials,
+                  "validation_allowance": int(self.config.max_trials)}
+        atomic_write_json(private_root / "launches" / f"{launch_id}.json", launch)
+        atomic_write_json(private_root / "run_record.json", {"run_id": descriptor.run_id, "binding": binding, **launch})
+        if self.logger:
+            self.logger.info("[codex_debug] New invocation allowance %s; cumulative validations %s -> limit %s",
+                self.config.max_trials, descriptor.validation_trial_offset, descriptor.max_validation_trials)
+        runner = CodexDebugRunner(
+            codex_bin=self.config.codex_bin,
+            profile=self.config.codex_profile,
+            model=self.config.codex_model,
+            timeout=self.config.codex_timeout,
+            multi_agent=self.config.codex_multi_agent,
+            logger=self.logger,
+        )
+        result = runner.run(descriptor)
+        atomic_write_json(private_root / "run_result.json", result.model_dump(mode="json"))
+        atomic_write_json(workdir / "latest_debug_result.json", {
+            "run_id": descriptor.run_id, "result": result.model_dump(mode="json"), "binding": binding,
+        })
+        self._last_backend_reason = result.reason
+        self._last_backend_mismatch_count = int(result.mismatch_count)
+        self._copy_rtl_tree(merged_root, generated_dir, replace=True)
+        final_output = Path(result.sim_output_path) if result.sim_output_path else None
+        if final_output is not None and final_output.is_file():
+            shutil.copyfile(final_output, workdir / "debug_sim_output.json")
+        final_wave = private_root / "final_verify" / "wave.vcd"
+        if final_wave.is_file():
+            shutil.copyfile(final_wave, workdir / "wave.vcd")
+        return bool(result.is_pass), max(0, int(result.patch_attempts) - descriptor.validation_trial_offset)
+
+    @staticmethod
+    def _copy_rtl_tree(source: Path, target: Path, *, replace: bool = False) -> None:
+        source = Path(source)
+        target = Path(target)
+        target.mkdir(parents=True, exist_ok=True)
+        if replace:
+            for existing in list(target.rglob("*")):
+                if existing.is_file() or existing.is_symlink():
+                    existing.unlink(missing_ok=True)
+            for directory in sorted(
+                [path for path in target.rglob("*") if path.is_dir()],
+                key=lambda path: len(path.parts),
+                reverse=True,
+            ):
+                directory.rmdir()
+        for source_path in sorted(source.rglob("*")):
+            if not source_path.is_file() or source_path.is_symlink():
+                continue
+            if source_path.suffix.lower() not in {".v", ".sv"}:
+                continue
+            relative = source_path.relative_to(source)
+            destination = target / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source_path, destination)
 
     def _select_top_rtl(self, generated_dir: Path, top_module: str) -> Path:
         for suffix in (".v", ".sv"):

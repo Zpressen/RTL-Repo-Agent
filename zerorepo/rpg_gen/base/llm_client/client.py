@@ -7,6 +7,7 @@ Architecture follows trae-agent's pattern:
 """
 
 import os
+import re
 import time
 import json
 import yaml
@@ -17,6 +18,7 @@ from typing import Any, Dict, List, Optional, Union, Type
 from pydantic import BaseModel
 
 from .memory import Memory
+from .errors import LLMRequestError
 from .providers import (
     LLMProvider,
     PROVIDER_AZURE,
@@ -37,6 +39,21 @@ from zerorepo.utils.api import parse_thinking_output
 
 
 # ---------------------------------------------------------------------------
+# Environment placeholder expansion
+# ---------------------------------------------------------------------------
+_ENV_PLACEHOLDER = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+
+def expand_env_vars(value: str) -> str:
+    """Expand ``${VAR}`` placeholders from the environment.
+
+    Unset variables expand to an empty string, which lets the providers fall
+    back to their own environment variables (e.g. OPENAI_API_KEY).
+    """
+    return _ENV_PLACEHOLDER.sub(lambda m: os.environ.get(m.group(1), ""), value)
+
+
+# ---------------------------------------------------------------------------
 # LLMConfig
 # ---------------------------------------------------------------------------
 @dataclass
@@ -48,6 +65,7 @@ class LLMConfig:
     max_tokens: int = 2000
     top_p: float = 1.0
     stream: bool = False
+    stream_include_usage: bool = False
     stop: Optional[List[str]] = None
 
     # Provider & connection
@@ -83,6 +101,7 @@ class LLMConfig:
             "max_tokens": self.max_tokens,
             "top_p": self.top_p,
             "stream": self.stream,
+            "stream_include_usage": self.stream_include_usage,
             "stop": self.stop,
             "provider": self.provider,
             "api_key": self.api_key,
@@ -116,8 +135,10 @@ class LLMConfig:
         filtered = {}
         extra: Dict[str, Any] = {}
         for k, v in data.items():
-            if k in strip_fields and isinstance(v, str):
-                v = v.strip()
+            if isinstance(v, str):
+                v = expand_env_vars(v)
+                if k in strip_fields:
+                    v = v.strip()
             if k in valid_fields:
                 filtered[k] = v
             else:
@@ -282,6 +303,8 @@ class LLMClient:
 
                 return result
 
+            except LLMRequestError:
+                raise
             except Exception as e:
                 error_str = str(e).lower()
 
@@ -414,6 +437,8 @@ class LLMClient:
 
                 return result, raw_response
 
+            except LLMRequestError:
+                raise
             except Exception as e:
                 print(f"[LLMClient] Error in call_with_structure_output: {e}")
                 if retries >= max_retries:

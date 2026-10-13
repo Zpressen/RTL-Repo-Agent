@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
+import re
+import json
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from zerorepo.rpg_gen.base.llm_client import AssistantMessage, SystemMessage, UserMessage
 from zerorepo.rtl_impl.retrieval_agent import ModuleSpecContextRetriever
 
 from ..prompts import stage3_module_skeleton
@@ -18,8 +19,11 @@ from ..schemas import (
     Stage2RepoSkeletonArtifact,
     Stage3ModuleSkeletonArtifact,
 )
-from ..utils import parse_module_skeleton_doc
+from ..utils import ansi_module_ports, parse_module_skeleton_doc, interface_contract_errors, markdown_ports
+from ..utils.local_repair import ArtifactIssue
+from ..utils.skeleton_repair import SkeletonRepairAdapter
 from .base import BaseStageAgent, model_dump, validate_model
+from .global_defines import is_define_only_module
 
 
 class Stage3Agent(BaseStageAgent):
@@ -41,12 +45,15 @@ class Stage3Agent(BaseStageAgent):
         output_root: str | Path | None = None,
         module_spec_context_retriever: ModuleSpecContextRetriever | None = None,
         planning_context_retriever: Any | None = None,
+        retrieval_limits: dict | None = None,
     ):
         super().__init__(llm_client, context_provider, artifact_sink, logger)
         self.output_root = Path(output_root) if output_root is not None else None
         self.module_spec_context_retriever = module_spec_context_retriever or ModuleSpecContextRetriever(
             llm_client,
             logger=self.logger,
+            cache_root=self.output_root / ".repair_cache" / "module_spec" if self.output_root else None,
+            limits=retrieval_limits,
         )
         self.planning_context_retriever = planning_context_retriever
 
@@ -96,12 +103,17 @@ class Stage3Agent(BaseStageAgent):
             if repo_module is None:
                 raise ValueError(f"Stage3 requires repo_skeleton.json slice for `{module_name}`")
 
+            require_ports = not is_define_only_module(module_name, repo_skeleton)
             module_spec_markdown, module_spec_path, spec_context_result = self._module_spec_context(
                 task,
                 module_name=module_name,
                 repo_module=repo_module,
                 partial_artifacts=partial_artifacts,
             )
+            if spec_context_result.fallback_used:
+                warning = f"retrieval_degraded: {module_name}: {spec_context_result.fallback_reason}"
+                if warning not in artifact.open_issues:
+                    artifact.open_issues.append(warning)
             if spec_context_persist_callback is not None:
                 spec_context_persist_callback(
                     {
@@ -136,9 +148,8 @@ class Stage3Agent(BaseStageAgent):
                 repo_skeleton_ref=f"{repo_skeleton.schema_version}::{module_name}",
                 module_spec_file=str(Path(module_spec_path).resolve()),
             )
-            architecture_timing = partial_artifacts.get("architecture_timing")
-            architecture_timing_slice = self._architecture_timing_slice(
-                architecture_timing,
+            boundary_contract_slice = self._boundary_contract_slice(
+                partial_artifacts.get("stage2_decomposition"),
                 module_name=module_name,
             )
             prompt = stage3_module_skeleton.build_prompt(
@@ -147,7 +158,7 @@ class Stage3Agent(BaseStageAgent):
                 module_spec_markdown=module_spec_markdown,
                 module_contract_json=self.to_pretty_json(bundle),
                 repo_module_json=self.to_pretty_json(repo_module),
-                architecture_timing_json=self.to_pretty_json(architecture_timing_slice),
+                boundary_contract_json=self.to_pretty_json(boundary_contract_slice),
                 stage_context=self.to_pretty_json(
                     {
                         **stage_context,
@@ -171,6 +182,8 @@ class Stage3Agent(BaseStageAgent):
                 expected_module=module_name,
                 expected_file_path=expected_file_path,
                 source_refs=source_refs,
+                require_ports=require_ports,
+                expected_ports=self._authoritative_ports(bundle, module_spec_path),
             )
 
             record = self._build_module_record(export)
@@ -213,36 +226,29 @@ class Stage3Agent(BaseStageAgent):
         if final_errors:
             raise ValueError(f"{self.stage_name} output failed quality checks after synthesis: {final_errors}")
         artifact.quality_report = self._build_quality_report(final_errors)
+        for issue in artifact.open_issues:
+            if issue.startswith("retrieval_degraded:"):
+                artifact.quality_report.warnings.append(issue)
+        artifact.quality_report.soft_warning_count = len(artifact.quality_report.warnings)
         if persist_callback is not None:
             persist_callback({"manifest": model_dump(artifact)})
         self._log_stage_output(artifact)
         self.artifact_sink.record_stage_output(self.stage_name, artifact, task)
         return artifact
 
-    def _architecture_timing_slice(self, architecture_timing: Any, *, module_name: str) -> Dict[str, Any]:
-        if architecture_timing is None:
-            return {}
-        payload = model_dump(architecture_timing) if hasattr(architecture_timing, "model_dump") else dict(architecture_timing)
+    def _boundary_contract_slice(self, decomposition: Any, *, module_name: str) -> Dict[str, Any]:
+        if decomposition is None:
+            return {"module": module_name, "incoming": [], "outgoing": []}
+        payload = model_dump(decomposition) if hasattr(decomposition, "model_dump") else dict(decomposition)
+        contracts = payload.get("selected_boundary_contracts") or []
         return {
-            "module_assignment": next(
-                (
-                    item
-                    for item in payload.get("module_assignments", [])
-                    if item.get("module") == module_name
-                ),
-                None,
-            ),
-            "cross_module_transfers": [
-                item
-                for item in payload.get("cross_module_transfers", [])
-                if item.get("producer") == module_name or item.get("consumer") == module_name
+            "module": module_name,
+            "incoming": [
+                item for item in contracts if item.get("consumer_module") == module_name
             ],
-            "module_obligations": [
-                item
-                for item in payload.get("module_obligations", [])
-                if item.get("module") == module_name
+            "outgoing": [
+                item for item in contracts if item.get("producer_module") == module_name
             ],
-            "assumptions": list(payload.get("assumptions", [])),
         }
 
     def build_prompt(
@@ -372,6 +378,20 @@ class Stage3Agent(BaseStageAgent):
             artifact.module_records.append(next_record)
             artifact.completed_modules.append(module_name)
             artifact.resume_cursor = len(artifact.completed_modules)
+            if next_record.spec_context_file:
+                context_path = self._resolve_stage3_path(next_record.spec_context_file)
+                if context_path.exists():
+                    try:
+                        context = json.loads(context_path.read_text(encoding="utf-8"))
+                        if not isinstance(context, dict):
+                            raise ValueError("Saved retrieval context must be an object")
+                    except (OSError, ValueError) as exc:
+                        self.logger.warning("[%s] Cannot restore retrieval warning for %s: %s", self.stage_name, module_name, exc)
+                        context = {"fallback_used": True, "fallback_reason": "Saved retrieval context is unreadable; Stage4 must retrieve it again"}
+                    if context.get("fallback_used"):
+                        warning = f"retrieval_degraded: {module_name}: {context.get('fallback_reason', '')}"
+                        if warning not in artifact.open_issues:
+                            artifact.open_issues.append(warning)
         if artifact.completed_modules == planned_order and existing_artifact.stage3_status == "module_skeletons_planned":
             artifact.stage3_status = "module_skeletons_planned"
             artifact.quality_report = existing_artifact.quality_report
@@ -456,59 +476,68 @@ class Stage3Agent(BaseStageAgent):
             deduped.append(normalized)
         return deduped
 
+    def _authoritative_ports(self, bundle, spec_path):
+        # A standalone module port table takes precedence over extracted facts.
+        path = Path(spec_path)
+        if path.stem == bundle.module and path.is_file():
+            ports = markdown_ports(path.read_text(encoding="utf-8"))
+            if ports:
+                return ports
+        contract = getattr(bundle, "interface_contract", None)
+        return list(getattr(contract, "ports", []) or [])
+
     def _invoke_skeleton_doc_with_repair(
-        self,
-        *,
-        prompt: str,
-        images: List[str],
-        expected_module: str,
-        expected_file_path: str,
-        source_refs: SourceRefs,
+        self, *, prompt: str, images: List[str], expected_module: str,
+        expected_file_path: str, source_refs: SourceRefs, require_ports: bool = False,
+        expected_ports=None,
     ) -> tuple[str, ModuleSkeletonExport]:
-        memory = self._create_stage_memory()
-        memory.add_message(SystemMessage(content=self.system_role))
-        parse_errors: List[str] = []
-        parse_attempt_limit = max(1, int(getattr(self, "max_parse_attempts", 2)))
+        def quality(export):
+            issues = []
+            for error in self._validate_export(
+                export, expected_module=expected_module,
+                expected_spec_path=source_refs.module_spec_file, require_ports=require_ports,
+            ):
+                if "module_frame" in error or "Module Frame" in error:
+                    continue  # independently checked on the candidate frame
+                section = "Module Frame"
+                path = "module_frame"
+                if "chosen_decisions" in error:
+                    section, path = "Decision Ledger", "decision_ledger.chosen_decisions"
+                elif "control_style" in error:
+                    section, path = "Behavioral Overlay", "module_behavior.control_style"
+                issues.append(ArtifactIssue(path, "hardware_constraint", error, category="hardware", section=section))
+            return issues
 
-        for parse_attempt in range(1, parse_attempt_limit + 1):
-            retry_prompt = prompt if parse_attempt == 1 else self._build_doc_retry_prompt(prompt, parse_errors[-1:])
-            if parse_attempt > 1:
-                self._log_retry_prompt(retry_prompt, reason=f"doc_parse_failure_attempt_{parse_attempt - 1}")
-            memory.add_message(UserMessage(content=retry_prompt))
-            raw = self.llm_client.complete_with_memory(memory=memory, images=images or None)
-            raw_text = raw if isinstance(raw, str) else self.to_pretty_json(raw)
-            if parse_attempt == 1:
-                self._log_llm_raw_output(raw_text, attempt_label="initial")
-            else:
-                self._log_llm_raw_output(raw_text, attempt_label=f"retry_after_doc_parse_failure_{parse_attempt - 1}")
-            memory.add_message(AssistantMessage(content=raw_text))
-            try:
-                export = parse_module_skeleton_doc(
-                    raw_text,
-                    expected_module=expected_module,
-                    expected_file_path=expected_file_path,
-                    source_refs=source_refs,
-                )
-                return raw_text, export
-            except Exception as exc:
-                parse_errors.append(str(exc))
-                self.logger.warning(
-                    "[%s] SkeletonDoc parse failed on attempt %d/%d: %s",
-                    self.stage_name,
-                    parse_attempt,
-                    parse_attempt_limit,
-                    exc,
-                )
-        raise ValueError(
-            f"{self.stage_name} output failed doc parse after {parse_attempt_limit} attempts: {parse_errors[-1]}"
-        )
+        def partial_quality(candidate):
+            if "module_frame" not in candidate:
+                return []
+            errors = self._validate_module_frame_interface(
+                candidate["module_frame"], expected_module=expected_module, require_ports=require_ports,
+            )
+            if expected_ports:
+                errors.extend(interface_contract_errors(
+                    ansi_module_ports(candidate["module_frame"]), expected_ports, label=f"{expected_module} Module Frame",
+                ))
+            return [ArtifactIssue("module_frame.ports", "interface_mismatch", error,
+                                  category="hardware", section="Module Frame") for error in errors]
 
-    def _build_doc_retry_prompt(self, original_prompt: str, errors: List[str]) -> str:
-        return (
-            f"{original_prompt}\n\n"
-            "The previous output was invalid. Fix it and return the full MODULE_SKELETON_DOC v1 again.\n"
-            f"Issues:\n- " + "\n- ".join(errors)
+        # The example and general formatting rules are supplied per target; retain
+        # the current module's authoritative source context for semantic repairs.
+        context = prompt.split("Global summary:\n", 1)[-1]
+        adapter = SkeletonRepairAdapter(
+            expected_module=expected_module, expected_file_path=expected_file_path,
+            source_refs=source_refs, context="Global summary:\n" + context,
+            example=stage3_module_skeleton.EXAMPLE_OUTPUT, quality_validator=quality, partial_validator=partial_quality,
         )
+        result = self._invoke_local_repair(
+            prompt=prompt, images=images, adapter=adapter, max_attempts=self.max_parse_attempts,
+        )
+        self.logger.info(
+            "[%s] Validation coverage for %s: format/structure checked; interface %s; "
+            "natural-language timing/ownership/boundary completeness requires downstream behavioral validation",
+            self.stage_name, expected_module, "checked" if expected_ports else "unverified (no authoritative port list)",
+        )
+        return result.candidate, result.artifact
 
     def _build_module_record(self, export: ModuleSkeletonExport) -> ModuleRecord:
         return ModuleRecord(
@@ -532,6 +561,12 @@ class Stage3Agent(BaseStageAgent):
             with open(export_path, "r", encoding="utf-8") as f:
                 payload = json.load(f)
             export = validate_model(ModuleSkeletonExport, payload)
+            parsed = parse_module_skeleton_doc(
+                doc_path.read_text(encoding="utf-8"), expected_module=expected_module,
+                expected_file_path=f"rtl/{expected_module}.v", source_refs=record.source_refs,
+            )
+            if model_dump(parsed) != model_dump(export):
+                return False
         except Exception:
             return False
         return not self._validate_export(export, expected_module=expected_module, expected_spec_path=expected_spec_path)
@@ -574,6 +609,7 @@ class Stage3Agent(BaseStageAgent):
         *,
         expected_module: str,
         expected_spec_path: str,
+        require_ports: bool = False,
     ) -> List[str]:
         errors: List[str] = []
         if export.schema_version != "module_skeleton_export_v1":
@@ -587,12 +623,50 @@ class Stage3Agent(BaseStageAgent):
             errors.append(f"{expected_module}: export source_refs.module_spec_file must match the resolved spec file path")
         if not export.module_frame.strip():
             errors.append(f"{expected_module}: module_frame must not be empty")
+        errors.extend(
+            self._validate_module_frame_interface(
+                export.module_frame,
+                expected_module=expected_module,
+                require_ports=require_ports,
+            )
+        )
         if not export.structural_blocks:
             errors.append(f"{expected_module}: structural_blocks must not be empty")
         if not export.decision_ledger.chosen_decisions:
             errors.append(f"{expected_module}: decision_ledger.chosen_decisions must not be empty")
         if export.module_behavior.control_style == "undecided" and self._module_requires_strict_behavior(expected_module):
             errors.append(f"{expected_module}: module_behavior.control_style must not remain undecided")
+        return errors
+
+    def _validate_module_frame_interface(
+        self,
+        module_frame: str,
+        *,
+        expected_module: str,
+        require_ports: bool = False,
+    ) -> List[str]:
+        errors: list[str] = []
+        placeholder_patterns = [
+            r"port\s+list\s+placeholder",
+            r"//\s*ports?\b",
+            r"\bTODO\b",
+            r"<\s*ports?\s*>",
+        ]
+        for pattern in placeholder_patterns:
+            if re.search(pattern, module_frame, flags=re.IGNORECASE):
+                errors.append(f"{expected_module}: module_frame must not contain a port placeholder")
+                break
+        module_names = re.findall(r"\bmodule\s+([A-Za-z_][A-Za-z0-9_$]*)", module_frame)
+        if module_names != [expected_module]:
+            errors.append(
+                f"{expected_module}: module_frame must declare exactly one module named {expected_module}"
+            )
+        if len(re.findall(r"\bendmodule\b", module_frame)) != 1:
+            errors.append(f"{expected_module}: module_frame must contain exactly one endmodule")
+        if require_ports and not ansi_module_ports(module_frame):
+            errors.append(
+                f"{expected_module}: Module Frame must declare at least one concrete ANSI port"
+            )
         return errors
 
     def _module_requires_strict_behavior(self, module_name: str) -> bool:
@@ -636,11 +710,15 @@ class Stage3Agent(BaseStageAgent):
         repo_module: Any | None,
         partial_artifacts: Dict[str, Any],
     ) -> tuple[str, str, Any]:
+        primary_spec_file = self._resolve_module_spec_file(task_input, module_name)
+        repo_skeleton = self._get_repo_skeleton_artifact(partial_artifacts)
         result = self.module_spec_context_retriever.select_module_spec_context(
             module_name=module_name,
             spec_md_files=task_input.spec_md_files,
             repo_module=repo_module,
             fact_ledger=self._fact_ledger(partial_artifacts),
+            is_top_module=module_name == repo_skeleton.top_module,
+            primary_spec_file=primary_spec_file,
         )
         lines = [
             f"# Retrieved specification context for {module_name}",
@@ -665,9 +743,9 @@ class Stage3Agent(BaseStageAgent):
             )
         if result.open_issues:
             lines.extend(["## Retrieval Open Issues", *[f"- {item}" for item in result.open_issues]])
-        source_file = next((block.source_file for block in result.blocks if block.source_file), "")
-        source_file = source_file or self._resolve_module_spec_file(task_input, module_name)
-        return "\n".join(lines).strip(), source_file, result
+        # The source ref is the module's resolved primary spec, not whichever
+        # supplemental retrieval block happened to appear first.
+        return "\n".join(lines).strip(), primary_spec_file, result
 
     def _fact_ledger(self, partial_artifacts: Dict[str, Any]) -> Any | None:
         stage2_input = partial_artifacts.get("stage2_input")
@@ -715,9 +793,14 @@ class Stage3Agent(BaseStageAgent):
 
     @staticmethod
     def _build_quality_report(errors: List[str]) -> QualityReport:
+        unchecked = [
+            "unverified: prose timing/reset/latency obligations require downstream behavioral validation",
+            "unverified: prose shared-object ownership has not been mechanically proven",
+            "unverified: prose logical-boundary coverage has not been mechanically proven",
+        ]
         return QualityReport(
             hard_fail_count=len(errors),
-            soft_warning_count=0,
-            warnings=[],
+            soft_warning_count=len(unchecked),
+            warnings=unchecked,
             auto_fixes=[],
         )

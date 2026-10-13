@@ -27,7 +27,6 @@ Return JSON only with this schema:
   "subtask_id": "<current subtask id>",
   "target": "<current subtask target>",
   "spec_refs": ["Sxxx"],
-  "timing_obligation_ids": ["OBL_xxx"],
   "code": "<Verilog fragment for only this subtask>",
   "contract": {
     "writes": ["signals written by this fragment"],
@@ -41,15 +40,15 @@ Return JSON only with this schema:
 }
 
 Core rules:
-1. The JSON identity fields, spec_refs, and timing_obligation_ids must exactly match CURRENT_SUBTASK.
+1. The JSON identity fields and spec_refs must exactly match CURRENT_SUBTASK.
 2. Generate only the local code fragment for CURRENT_SUBTASK.description, target, and constraints.
 3. The fragment does not need to compile standalone. Do not add wrapper code just to make it standalone.
 4. The module boundary is owned by the skeleton/merge stage. 
 5. Treat CURRENT_SUBTASK as an anchor-level task. The code should fit inside the assigned skeleton region, not define the whole module.
 6. Use SELECTED_SPEC_BLOCKS as the main behavior evidence.
 7. Use MODULE_INTERFACE_SPEC_BLOCKS only to keep signal names, directions, and widths consistent. They may be used only for module boundary facts. Do not recreate the module interface unless this is a module_header task.
-8. Use GLOBAL_DEFINES_CONTEXT as authoritative compile-time context. Prefer the official macro names and values over inventing local parameters or numeric constants.
-9. Do not redefine or rewrite global macros from GLOBAL_DEFINES_CONTEXT. The merge stage owns final include directive placement.
+8. GLOBAL_DEFINES_CONTEXT is a bounded summary of the official macros relevant to this subtask. Prefer those official macro names and effective values over inventing local parameters or numeric constants.
+9. Do not redefine, undefine, or create fallback values for macros named in GLOBAL_DEFINES_CONTEXT. Stage 6 reads the complete canonical files and owns final include placement and lint configuration.
 10. Treat PREVIOUS_MODULE_SNIPPETS as already generated context. You may reference symbols they define, but do not duplicate their code.
 11. Do not implement later subtasks. If the current fragment depends on later logic, leave that dependency to the later subtask.
 12. Prefer Verilog-compatible constructs when the spec does not require SystemVerilog features.
@@ -61,15 +60,8 @@ Core rules:
 18. Prefer semantic correctness over perfect local syntax. The merge stage will repair integration details, declarations, and final syntax.
 19. Do not include Markdown fences.
 20. Fill contract from the code you generate. If unsure, use "unknown" but still list obvious writes and reads.
-21. TIMING_OBLIGATIONS are cycle-level requirements assigned to this subtask. Preserve their logical
-    value tags and PRE_EDGE/POST_EDGE/COMB meaning.
-22. Physical signal names in TIMING_OBLIGATIONS are planned names, not mandatory final RTL spelling.
-    Prefer an already-established name from MODULE_SKELETON, SELECTED_SPEC_BLOCKS, module interface,
-    or PREVIOUS_MODULE_SNIPPETS when it represents the same logical object.
-23. A local fragment only implements the portion of an obligation owned by CURRENT_SUBTASK. Do not
-    duplicate combinational logic owned by another Block merely to mention every planned signal.
-24. For a mixed obligation containing both COMB values and POST_EDGE updates, a sequential fragment
-    should report its own clock edge; the COMB value may be produced by an earlier fragment.
+21. contract.writes is the complete list of signals assigned by this fragment, including internal helper signals and module outputs in continuous, combinational and sequential assignments. Do not list only the outputs or only the newly added signals.
+22. In PLANNING_KG_CONTEXT, child ports use compact [name, direction, width] arrays as identified by port_fields. These are complete child boundary contracts.
 """.strip()
 
 
@@ -82,7 +74,6 @@ def build_prompt(
     selected_spec_blocks: str,
     module_interface_spec_blocks: str,
     previous_module_snippets: str,
-    timing_obligations: str = "",
     global_defines_context: str = "",
     planning_kg_context: str = "",
     stage_context: str = "",
@@ -98,9 +89,6 @@ def build_prompt(
 
 [CURRENT_SUBTASK]
 {current_subtask}
-
-[TIMING_OBLIGATIONS]
-{timing_obligations or "None"}
 
 [MODULE_SKELETON]
 {module_skeleton or "None"}

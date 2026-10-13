@@ -13,9 +13,10 @@ from .utils import block_id, block_text, blocks, interface_block_refs, repair_js
 class BlockSpecRetriever:
     """Select module spec blocks for each Stage3 skeleton block."""
 
-    def __init__(self, llm_client: Any, logger: Any | None = None):
+    def __init__(self, llm_client: Any, logger: Any | None = None, output_root=None):
         self.llm_client = llm_client
         self.logger = logger
+        self.output_root = output_root
 
     def select_block_spec_refs(
         self,
@@ -41,11 +42,12 @@ class BlockSpecRetriever:
             ),
         )
         try:
-            raw = self.llm_client.complete(
-                system_prompt=block_spec_select.SYSTEM_ROLE,
-                user_prompt=prompt,
-                images=None,
-            )
+            arguments = dict(system_prompt=block_spec_select.SYSTEM_ROLE, user_prompt=prompt, images=None)
+            options = getattr(self.llm_client, "request_options", None)
+            if options:
+                arguments["request_options"] = options(stage="stage4_block_spec_retrieval", module=module_name,
+                                                       output_root=self.output_root, retrieval=True)
+            raw = self.llm_client.complete(**arguments)
             self._print_console(
                 title=f"BLOCK SPEC RETRIEVAL RAW OUTPUT [{module_name}]",
                 body=raw if isinstance(raw, str) else self._to_pretty_json(raw),

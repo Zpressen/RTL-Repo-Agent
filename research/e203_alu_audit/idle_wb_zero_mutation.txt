@@ -1,0 +1,1 @@
+Only zero writeback payload when wbck_o_valid=0; preserve all handshakes and every valid payload.

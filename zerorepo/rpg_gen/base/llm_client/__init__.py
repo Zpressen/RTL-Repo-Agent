@@ -16,5 +16,6 @@ from .client import (
     LLMUsage,
 )
 from .providers import LLMProvider
+from .request_policy import LLMRequestOptions
 from .memory import Memory
 from .message import Message, SystemMessage, UserMessage, AssistantMessage, ToolMessage

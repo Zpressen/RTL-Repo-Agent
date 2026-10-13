@@ -25,7 +25,7 @@ from openai.types.shared_params.function_definition import FunctionDefinition
 
 from .base_client import BaseLLMClient
 from .llm_basics import LLMMessage, LLMResponse, LLMUsage, ToolCall
-from .retry_utils import retry_with
+from .completion_utils import create_chat_completion, request_with_retries
 
 if TYPE_CHECKING:
     from ..client import LLMConfig
@@ -78,7 +78,9 @@ class OpenAICompatibleClient(BaseLLMClient):
     ) -> ChatCompletion:
         """Create a response using the provider's API."""
         # Re-create client to refresh credentials (e.g. Azure token)
+        previous_client = self.client
         self.client = self.provider_config.create_client(self.config)
+        previous_client.close()
 
         kwargs: dict = {
             "model": self.model,
@@ -103,7 +105,10 @@ class OpenAICompatibleClient(BaseLLMClient):
         if self.config.stop:
             kwargs["stop"] = self.config.stop
 
-        return self.client.chat.completions.create(**kwargs)
+        return create_chat_completion(
+            self.client, kwargs, stream=self.config.stream,
+            include_usage=self.config.stream_include_usage, log=self.config.log,
+        )
 
     def chat(
         self,
@@ -135,12 +140,11 @@ class OpenAICompatibleClient(BaseLLMClient):
         extra_headers = self.provider_config.get_extra_headers()
 
         # Apply retry decorator to the API call
-        retry_fn = retry_with(
-            func=self._create_response,
+        response = request_with_retries(
+            func=lambda: self._create_response(tool_schemas, extra_headers),
             provider_name=self.provider_config.get_service_name(),
             max_retries=self.config.max_retries,
         )
-        response = retry_fn(tool_schemas, extra_headers)
 
         choice = response.choices[0]
 

@@ -259,7 +259,14 @@ endmodule
     (tmp_path / "contract.json").write_text(json.dumps({"module_name": "m", "clocking": {"clock": {"name": "clk"}}}) + "\n", encoding="utf-8")
     (tmp_path / "tb.sv").write_text("module tb; m dut(); endmodule\n", encoding="utf-8")
     (tmp_path / "wave.vcd").write_text("$date\n$date\n", encoding="utf-8")
-    monkeypatch.setattr(trace_report_module, "VCDVCD", _BacktraceVcd)
+    parse_calls = 0
+
+    def parse_vcd(path: str, store_tvs: bool = True) -> _BacktraceVcd:
+        nonlocal parse_calls
+        parse_calls += 1
+        return _BacktraceVcd(path, store_tvs=store_tvs)
+
+    monkeypatch.setattr(trace_report_module, "VCDVCD", parse_vcd)
     sim_log = CommandResult(
         stdout="Hint: Output 'q' has 1 mismatches. First mismatch occurred at time 5.\nMismatches: 1 in 1 samples\n",
         stderr="",
@@ -272,6 +279,7 @@ endmodule
     )
 
     assert suspect_blocks
+    assert parse_calls == 1
     assert report["value_backtrace"]["chains"][0]["chain"][0]["classification"] == "condition_blocks_update"
     assert "condition_blocks_update" in report["diagnostic_narrative"][0]
 

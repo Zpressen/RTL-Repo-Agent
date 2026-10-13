@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List
+from typing import Any, List, Literal
 
 from pydantic import BaseModel, Field
 
@@ -37,8 +37,24 @@ class ModuleSpecContextBlock(BaseModel):
     text: str = Field(..., min_length=1)
     source_file: str = Field(default="")
     source_chunk_ids: List[str] = Field(default_factory=list)
+    source_ranges: List[dict[str, Any]] = Field(default_factory=list)
     relevance_reason: List[str] = Field(default_factory=list)
     confidence: str = Field(default="")
+
+
+class ModuleSpecSelection(BaseModel):
+    model_config = {"extra": "forbid"}
+    source_chunk_id: str = Field(..., min_length=1)
+    relevance_reason: List[str] = Field(default_factory=list)
+    confidence: Literal["high", "medium", "low"] = "medium"
+
+
+class ModuleSpecSelectionResult(BaseModel):
+    model_config = {"extra": "forbid"}
+    schema_version: Literal["module_spec_selection_v2"] = "module_spec_selection_v2"
+    module: str = Field(..., min_length=1)
+    selections: List[ModuleSpecSelection] = Field(..., min_length=1)
+    open_issues: List[str] = Field(default_factory=list)
 
 
 class ModuleSpecContextRetrievalResult(BaseModel):

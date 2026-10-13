@@ -1,0 +1,1618 @@
+[
+  {
+    "seed": "default",
+    "passed": true,
+    "reason": "Passed",
+    "audit": [
+      "AUDIT valid=93 normal=8 exception=85 stalls=48 stall_changes_excluding_current_flush=13 flush_cycles=98 cmd=0 rsp=103 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=2 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=2",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=2 accepted=0"
+    ]
+  },
+  {
+    "seed": "1",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 4 mismatches. First mismatch occurred at time 675.\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 615.\nHint: Output 'cmt_o_valid' has 4 mismatches. First mismatch occurred at time 995.\nHint: Output 'cmt_o_ifu_ilegl' has 2 mismatches. First mismatch occurred at time 1615.\nHint: Output 'cmt_o_ld' has 4 mismatches. First mismatch occurred at time 615.\nHint: Output 'cmt_o_stamo' has 2 mismatches. First mismatch occurred at time 1035.\nHint: Output 'cmt_o_badaddr' has 4 mismatches. First mismatch occurred at time 615.\nHint: Output 'wbck_o_valid' has 4 mismatches. First mismatch occurred at time 1435.\nHint: Output 'wbck_o_wdat' has 6 mismatches. First mismatch occurred at time 455.\nHint: Output 'wbck_csr_dat' has 2 mismatches. First mismatch occurred at time 975.",
+    "audit": [
+      "AUDIT valid=98 normal=20 exception=78 stalls=40 stall_changes_excluding_current_flush=14 flush_cycles=99 cmd=0 rsp=95 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=4 accepted=2",
+      "AUDIT group=1 selected_cycles=4 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=4 accepted=2",
+      "AUDIT group=6 selected_cycles=4 accepted=0",
+      "AUDIT group=7 selected_cycles=2 accepted=0"
+    ]
+  },
+  {
+    "seed": "2",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 855.\nHint: Output 'cmt_o_bjp_rslv' has 4 mismatches. First mismatch occurred at time 1135.\nHint: Output 'wbck_o_wdat' has 20 mismatches. First mismatch occurred at time 415.\nHint: Output 'wbck_csr_dat' has 2 mismatches. First mismatch occurred at time 315.\nHint: Output 'agu_icb_cmd_addr' has 14 mismatches. First mismatch occurred at time 535.\nHint: Output 'agu_icb_cmd_wdata' has 2 mismatches. First mismatch occurred at time 855.\nHint: Output 'agu_icb_cmd_wmask' has 8 mismatches. First mismatch occurred at time 535.\nHint: Output 'agu_icb_cmd_usign' has 2 mismatches. First mismatch occurred at time 855.\nHint: Output 'nice_req_valid' has 2 mismatches. First mismatch occurred at time 875.",
+    "audit": [
+      "AUDIT valid=86 normal=14 exception=72 stalls=42 stall_changes_excluding_current_flush=14 flush_cycles=93 cmd=0 rsp=116 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=6 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=2 accepted=0"
+    ]
+  },
+  {
+    "seed": "3",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 275.\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 1895.\nHint: Output 'cmt_o_valid' has 6 mismatches. First mismatch occurred at time 915.\nHint: Output 'cmt_o_fencei' has 2 mismatches. First mismatch occurred at time 535.\nHint: Output 'cmt_o_ifu_ilegl' has 4 mismatches. First mismatch occurred at time 275.\nHint: Output 'cmt_o_bjp_prdt' has 4 mismatches. First mismatch occurred at time 535.\nHint: Output 'cmt_o_bjp_rslv' has 6 mismatches. First mismatch occurred at time 535.\nHint: Output 'cmt_o_ld' has 2 mismatches. First mismatch occurred at time 575.\nHint: Output 'wbck_o_wdat' has 2 mismatches. First mismatch occurred at time 1355.\nHint: Output 'csr_ena' has 2 mismatches. First mismatch occurred at time 915.",
+    "audit": [
+      "AUDIT valid=103 normal=10 exception=93 stalls=57 stall_changes_excluding_current_flush=14 flush_cycles=97 cmd=0 rsp=110 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=0",
+      "AUDIT group=3 selected_cycles=2 accepted=2",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=0",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=2 accepted=0"
+    ]
+  },
+  {
+    "seed": "4",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 2115.\nHint: Output 'cmt_o_valid' has 4 mismatches. First mismatch occurred at time 1235.\nHint: Output 'cmt_o_ifu_ilegl' has 2 mismatches. First mismatch occurred at time 1235.\nHint: Output 'cmt_o_bjp_rslv' has 2 mismatches. First mismatch occurred at time 1775.\nHint: Output 'wbck_o_valid' has 2 mismatches. First mismatch occurred at time 1115.\nHint: Output 'wbck_o_wdat' has 10 mismatches. First mismatch occurred at time 255.\nHint: Output 'csr_ena' has 2 mismatches. First mismatch occurred at time 1795.\nHint: Output 'csr_wr_en' has 2 mismatches. First mismatch occurred at time 1795.\nHint: Output 'csr_rd_en' has 2 mismatches. First mismatch occurred at time 1795.\nHint: Output 'agu_icb_cmd_addr' has 10 mismatches. First mismatch occurred at time 1055.",
+    "audit": [
+      "AUDIT valid=104 normal=12 exception=92 stalls=52 stall_changes_excluding_current_flush=14 flush_cycles=108 cmd=0 rsp=91 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=4 accepted=4",
+      "AUDIT group=1 selected_cycles=2 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=2 accepted=2",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=4 accepted=0",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "5",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_longpipe' has 6 mismatches. First mismatch occurred at time 1615.\nHint: Output 'cmt_o_fencei' has 4 mismatches. First mismatch occurred at time 1415.\nHint: Output 'cmt_o_ifu_ilegl' has 2 mismatches. First mismatch occurred at time 1735.\nHint: Output 'cmt_o_bjp_prdt' has 2 mismatches. First mismatch occurred at time 1695.\nHint: Output 'cmt_o_bjp_rslv' has 4 mismatches. First mismatch occurred at time 1695.\nHint: Output 'cmt_o_misalgn' has 2 mismatches. First mismatch occurred at time 1915.\nHint: Output 'cmt_o_ld' has 2 mismatches. First mismatch occurred at time 1915.\nHint: Output 'cmt_o_stamo' has 2 mismatches. First mismatch occurred at time 1915.\nHint: Output 'cmt_o_badaddr' has 2 mismatches. First mismatch occurred at time 1915.\nHint: Output 'wbck_o_valid' has 2 mismatches. First mismatch occurred at time 775.",
+    "audit": [
+      "AUDIT valid=105 normal=17 exception=88 stalls=59 stall_changes_excluding_current_flush=16 flush_cycles=112 cmd=0 rsp=105 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=2",
+      "AUDIT group=1 selected_cycles=4 accepted=0",
+      "AUDIT group=2 selected_cycles=4 accepted=2",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=5 accepted=0"
+    ]
+  },
+  {
+    "seed": "6",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 355.\nHint: Output 'i_longpipe' has 4 mismatches. First mismatch occurred at time 355.\nHint: Output 'cmt_o_valid' has 2 mismatches. First mismatch occurred at time 355.\nHint: Output 'cmt_o_bjp_rslv' has 2 mismatches. First mismatch occurred at time 735.\nHint: Output 'cmt_o_misalgn' has 6 mismatches. First mismatch occurred at time 355.\nHint: Output 'cmt_o_ld' has 4 mismatches. First mismatch occurred at time 355.\nHint: Output 'cmt_o_stamo' has 4 mismatches. First mismatch occurred at time 355.\nHint: Output 'cmt_o_badaddr' has 6 mismatches. First mismatch occurred at time 355.\nHint: Output 'wbck_o_wdat' has 8 mismatches. First mismatch occurred at time 355.\nHint: Output 'wbck_csr_dat' has 6 mismatches. First mismatch occurred at time 515.",
+    "audit": [
+      "AUDIT valid=105 normal=16 exception=89 stalls=50 stall_changes_excluding_current_flush=11 flush_cycles=110 cmd=0 rsp=102 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=0",
+      "AUDIT group=1 selected_cycles=4 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=2",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=6 accepted=0"
+    ]
+  },
+  {
+    "seed": "7",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 6 mismatches. First mismatch occurred at time 315.\nHint: Output 'i_longpipe' has 4 mismatches. First mismatch occurred at time 1035.\nHint: Output 'cmt_o_valid' has 6 mismatches. First mismatch occurred at time 275.\nHint: Output 'cmt_o_fencei' has 4 mismatches. First mismatch occurred at time 335.\nHint: Output 'cmt_o_ifu_ilegl' has 2 mismatches. First mismatch occurred at time 1035.\nHint: Output 'cmt_o_bjp_rslv' has 4 mismatches. First mismatch occurred at time 335.\nHint: Output 'cmt_o_misalgn' has 2 mismatches. First mismatch occurred at time 1695.\nHint: Output 'cmt_o_stamo' has 2 mismatches. First mismatch occurred at time 315.\nHint: Output 'wbck_o_valid' has 2 mismatches. First mismatch occurred at time 1135.\nHint: Output 'wbck_o_wdat' has 4 mismatches. First mismatch occurred at time 1115.",
+    "audit": [
+      "AUDIT valid=100 normal=14 exception=86 stalls=50 stall_changes_excluding_current_flush=20 flush_cycles=70 cmd=2 rsp=120 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=2",
+      "AUDIT group=1 selected_cycles=4 accepted=2",
+      "AUDIT group=2 selected_cycles=2 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=4 accepted=0",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "8",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'cmt_o_valid' has 2 mismatches. First mismatch occurred at time 835.\nHint: Output 'cmt_o_fencei' has 2 mismatches. First mismatch occurred at time 795.\nHint: Output 'cmt_o_ifu_ilegl' has 2 mismatches. First mismatch occurred at time 835.\nHint: Output 'wbck_o_wdat' has 2 mismatches. First mismatch occurred at time 795.\nHint: Output 'wbck_csr_dat' has 2 mismatches. First mismatch occurred at time 1015.\nHint: Output 'agu_icb_cmd_addr' has 2 mismatches. First mismatch occurred at time 795.\nHint: Output 'agu_icb_cmd_wmask' has 2 mismatches. First mismatch occurred at time 795.",
+    "audit": [
+      "AUDIT valid=93 normal=6 exception=87 stalls=52 stall_changes_excluding_current_flush=8 flush_cycles=107 cmd=0 rsp=86 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=0",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=4 accepted=0"
+    ]
+  },
+  {
+    "seed": "9",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 4 mismatches. First mismatch occurred at time 1255.\nHint: Output 'i_longpipe' has 8 mismatches. First mismatch occurred at time 815.\nHint: Output 'cmt_o_valid' has 6 mismatches. First mismatch occurred at time 755.\nHint: Output 'cmt_o_ifu_ilegl' has 8 mismatches. First mismatch occurred at time 815.\nHint: Output 'cmt_o_stamo' has 4 mismatches. First mismatch occurred at time 335.\nHint: Output 'wbck_o_wdat' has 21 mismatches. First mismatch occurred at time 255.\nHint: Output 'csr_wr_en' has 2 mismatches. First mismatch occurred at time 755.\nHint: Output 'csr_rd_en' has 2 mismatches. First mismatch occurred at time 755.\nHint: Output 'wbck_csr_dat' has 2 mismatches. First mismatch occurred at time 755.\nHint: Output 'agu_icb_cmd_addr' has 14 mismatches. First mismatch occurred at time 255.",
+    "audit": [
+      "AUDIT valid=96 normal=14 exception=82 stalls=50 stall_changes_excluding_current_flush=13 flush_cycles=107 cmd=0 rsp=108 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=4 accepted=4",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=2 accepted=0",
+      "AUDIT group=4 selected_cycles=4 accepted=0",
+      "AUDIT group=5 selected_cycles=4 accepted=0",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "10",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 835.\nHint: Output 'cmt_o_valid' has 2 mismatches. First mismatch occurred at time 795.\nHint: Output 'cmt_o_fencei' has 2 mismatches. First mismatch occurred at time 1455.\nHint: Output 'cmt_o_bjp_rslv' has 2 mismatches. First mismatch occurred at time 1455.\nHint: Output 'cmt_o_stamo' has 2 mismatches. First mismatch occurred at time 835.\nHint: Output 'cmt_o_badaddr' has 2 mismatches. First mismatch occurred at time 835.\nHint: Output 'wbck_o_wdat' has 12 mismatches. First mismatch occurred at time 735.\nHint: Output 'csr_rd_en' has 2 mismatches. First mismatch occurred at time 795.\nHint: Output 'wbck_csr_dat' has 2 mismatches. First mismatch occurred at time 615.\nHint: Output 'agu_icb_cmd_addr' has 8 mismatches. First mismatch occurred at time 835.",
+    "audit": [
+      "AUDIT valid=100 normal=10 exception=90 stalls=52 stall_changes_excluding_current_flush=9 flush_cycles=93 cmd=0 rsp=99 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=2",
+      "AUDIT group=3 selected_cycles=2 accepted=0",
+      "AUDIT group=4 selected_cycles=4 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=2 accepted=0"
+    ]
+  },
+  {
+    "seed": "11",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'cmt_o_valid' has 6 mismatches. First mismatch occurred at time 315.\nHint: Output 'cmt_o_badaddr' has 2 mismatches. First mismatch occurred at time 1835.\nHint: Output 'csr_wr_en' has 2 mismatches. First mismatch occurred at time 315.\nHint: Output 'csr_rd_en' has 2 mismatches. First mismatch occurred at time 315.\nHint: Output 'wbck_csr_dat' has 4 mismatches. First mismatch occurred at time 315.\nHint: Output 'agu_icb_cmd_addr' has 2 mismatches. First mismatch occurred at time 1835.\nHint: Output 'agu_icb_cmd_read' has 2 mismatches. First mismatch occurred at time 1835.\nHint: Output 'agu_icb_cmd_wdata' has 2 mismatches. First mismatch occurred at time 1835.\nHint: Output 'agu_icb_cmd_wmask' has 2 mismatches. First mismatch occurred at time 1835.\nHint: Output 'agu_icb_cmd_lock' has 2 mismatches. First mismatch occurred at time 1835.",
+    "audit": [
+      "AUDIT valid=101 normal=12 exception=89 stalls=55 stall_changes_excluding_current_flush=11 flush_cycles=113 cmd=0 rsp=101 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=4 accepted=2",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=0",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=4 accepted=0"
+    ]
+  },
+  {
+    "seed": "12",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'cmt_o_valid' has 2 mismatches. First mismatch occurred at time 1295.\nHint: Output 'cmt_o_fencei' has 2 mismatches. First mismatch occurred at time 855.\nHint: Output 'cmt_o_bjp_rslv' has 2 mismatches. First mismatch occurred at time 855.\nHint: Output 'wbck_o_wdat' has 8 mismatches. First mismatch occurred at time 855.\nHint: Output 'agu_icb_cmd_addr' has 6 mismatches. First mismatch occurred at time 855.\nHint: Output 'agu_icb_cmd_read' has 2 mismatches. First mismatch occurred at time 1975.\nHint: Output 'agu_icb_cmd_wmask' has 6 mismatches. First mismatch occurred at time 855.\nHint: Output 'nice_req_valid' has 4 mismatches. First mismatch occurred at time 935.",
+    "audit": [
+      "AUDIT valid=102 normal=10 exception=92 stalls=44 stall_changes_excluding_current_flush=14 flush_cycles=92 cmd=0 rsp=84 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=2 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=2",
+      "AUDIT group=3 selected_cycles=2 accepted=2",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=0",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "13",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 1335.\nHint: Output 'cmt_o_valid' has 4 mismatches. First mismatch occurred at time 1795.\nHint: Output 'cmt_o_fencei' has 2 mismatches. First mismatch occurred at time 415.\nHint: Output 'cmt_o_ifu_ilegl' has 4 mismatches. First mismatch occurred at time 515.\nHint: Output 'cmt_o_bjp_rslv' has 2 mismatches. First mismatch occurred at time 1815.\nHint: Output 'wbck_o_valid' has 2 mismatches. First mismatch occurred at time 815.\nHint: Output 'wbck_o_wdat' has 6 mismatches. First mismatch occurred at time 415.\nHint: Output 'csr_ena' has 2 mismatches. First mismatch occurred at time 1795.\nHint: Output 'wbck_csr_dat' has 6 mismatches. First mismatch occurred at time 815.\nHint: Output 'agu_icb_cmd_addr' has 4 mismatches. First mismatch occurred at time 415.",
+    "audit": [
+      "AUDIT valid=111 normal=27 exception=84 stalls=65 stall_changes_excluding_current_flush=14 flush_cycles=88 cmd=0 rsp=98 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=0",
+      "AUDIT group=3 selected_cycles=6 accepted=4",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=4 accepted=2",
+      "AUDIT group=6 selected_cycles=4 accepted=0",
+      "AUDIT group=7 selected_cycles=9 accepted=0"
+    ]
+  },
+  {
+    "seed": "14",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'cmt_o_valid' has 2 mismatches. First mismatch occurred at time 1375.\nHint: Output 'cmt_o_ld' has 2 mismatches. First mismatch occurred at time 315.\nHint: Output 'wbck_o_wdat' has 6 mismatches. First mismatch occurred at time 795.\nHint: Output 'csr_ena' has 2 mismatches. First mismatch occurred at time 1375.\nHint: Output 'csr_wr_en' has 2 mismatches. First mismatch occurred at time 1375.\nHint: Output 'csr_rd_en' has 2 mismatches. First mismatch occurred at time 1375.\nHint: Output 'wbck_csr_dat' has 2 mismatches. First mismatch occurred at time 1375.\nHint: Output 'agu_icb_cmd_addr' has 2 mismatches. First mismatch occurred at time 795.\nHint: Output 'agu_icb_cmd_wmask' has 2 mismatches. First mismatch occurred at time 795.\nHint: Output 'agu_icb_cmd_usign' has 2 mismatches. First mismatch occurred at time 315.",
+    "audit": [
+      "AUDIT valid=103 normal=12 exception=91 stalls=48 stall_changes_excluding_current_flush=11 flush_cycles=94 cmd=0 rsp=105 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=2",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=2 accepted=2",
+      "AUDIT group=4 selected_cycles=6 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "15",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 935.\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 935.\nHint: Output 'cmt_o_valid' has 2 mismatches. First mismatch occurred at time 935.\nHint: Output 'cmt_o_fencei' has 2 mismatches. First mismatch occurred at time 2135.\nHint: Output 'cmt_o_ifu_ilegl' has 2 mismatches. First mismatch occurred at time 935.\nHint: Output 'wbck_o_wdat' has 8 mismatches. First mismatch occurred at time 555.\nHint: Output 'wbck_csr_dat' has 2 mismatches. First mismatch occurred at time 1655.\nHint: Output 'agu_icb_cmd_addr' has 6 mismatches. First mismatch occurred at time 875.\nHint: Output 'agu_icb_cmd_wmask' has 2 mismatches. First mismatch occurred at time 1075.\nHint: Output 'nice_req_valid' has 2 mismatches. First mismatch occurred at time 935.",
+    "audit": [
+      "AUDIT valid=106 normal=14 exception=92 stalls=62 stall_changes_excluding_current_flush=15 flush_cycles=110 cmd=0 rsp=83 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=4 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=0",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=4 accepted=0"
+    ]
+  },
+  {
+    "seed": "16",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 1135.\nHint: Output 'cmt_o_fencei' has 2 mismatches. First mismatch occurred at time 1155.\nHint: Output 'cmt_o_misalgn' has 2 mismatches. First mismatch occurred at time 2035.\nHint: Output 'cmt_o_ld' has 4 mismatches. First mismatch occurred at time 1135.\nHint: Output 'cmt_o_stamo' has 2 mismatches. First mismatch occurred at time 1335.\nHint: Output 'cmt_o_badaddr' has 4 mismatches. First mismatch occurred at time 1135.\nHint: Output 'wbck_o_wdat' has 6 mismatches. First mismatch occurred at time 255.\nHint: Output 'wbck_csr_dat' has 4 mismatches. First mismatch occurred at time 715.\nHint: Output 'agu_icb_cmd_valid' has 2 mismatches. First mismatch occurred at time 2035.\nHint: Output 'agu_icb_cmd_addr' has 6 mismatches. First mismatch occurred at time 1135.",
+    "audit": [
+      "AUDIT valid=115 normal=14 exception=101 stalls=63 stall_changes_excluding_current_flush=16 flush_cycles=101 cmd=4 rsp=92 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=6 accepted=2",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=6 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "17",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'cmt_o_fencei' has 2 mismatches. First mismatch occurred at time 995.\nHint: Output 'cmt_o_ifu_ilegl' has 2 mismatches. First mismatch occurred at time 255.\nHint: Output 'cmt_o_bjp_prdt' has 2 mismatches. First mismatch occurred at time 995.\nHint: Output 'cmt_o_bjp_rslv' has 6 mismatches. First mismatch occurred at time 995.\nHint: Output 'wbck_o_wdat' has 6 mismatches. First mismatch occurred at time 355.\nHint: Output 'agu_icb_cmd_addr' has 6 mismatches. First mismatch occurred at time 995.\nHint: Output 'agu_icb_cmd_wmask' has 6 mismatches. First mismatch occurred at time 995.\nHint: Output 'nice_req_valid' has 2 mismatches. First mismatch occurred at time 1075.",
+    "audit": [
+      "AUDIT valid=114 normal=8 exception=106 stalls=60 stall_changes_excluding_current_flush=15 flush_cycles=117 cmd=0 rsp=98 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=6 accepted=0"
+    ]
+  },
+  {
+    "seed": "18",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 1535.\nHint: Output 'i_longpipe' has 4 mismatches. First mismatch occurred at time 1535.\nHint: Output 'cmt_o_valid' has 2 mismatches. First mismatch occurred at time 1915.\nHint: Output 'cmt_o_ifu_ilegl' has 2 mismatches. First mismatch occurred at time 1695.\nHint: Output 'cmt_o_misalgn' has 2 mismatches. First mismatch occurred at time 1915.\nHint: Output 'cmt_o_ld' has 2 mismatches. First mismatch occurred at time 1535.\nHint: Output 'cmt_o_stamo' has 2 mismatches. First mismatch occurred at time 1535.\nHint: Output 'cmt_o_badaddr' has 2 mismatches. First mismatch occurred at time 1535.\nHint: Output 'wbck_o_wdat' has 2 mismatches. First mismatch occurred at time 1475.\nHint: Output 'agu_icb_cmd_valid' has 2 mismatches. First mismatch occurred at time 1915.",
+    "audit": [
+      "AUDIT valid=86 normal=4 exception=82 stalls=32 stall_changes_excluding_current_flush=7 flush_cycles=83 cmd=2 rsp=121 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=4 accepted=2",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "19",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 1435.\nHint: Output 'cmt_o_fencei' has 2 mismatches. First mismatch occurred at time 275.\nHint: Output 'cmt_o_ifu_ilegl' has 2 mismatches. First mismatch occurred at time 1435.\nHint: Output 'cmt_o_ld' has 2 mismatches. First mismatch occurred at time 1955.\nHint: Output 'wbck_o_wdat' has 4 mismatches. First mismatch occurred at time 275.\nHint: Output 'agu_icb_cmd_addr' has 2 mismatches. First mismatch occurred at time 275.\nHint: Output 'agu_icb_cmd_wmask' has 2 mismatches. First mismatch occurred at time 275.\nHint: Output 'nice_req_valid' has 2 mismatches. First mismatch occurred at time 1435.\nHint: Output 'nice_rsp_multicyc_ready' has 6 mismatches. First mismatch occurred at time 1455.\nHint: Output 'nice_longp_wbck_valid' has 8 mismatches. First mismatch occurred at time 1475.",
+    "audit": [
+      "AUDIT valid=107 normal=6 exception=101 stalls=52 stall_changes_excluding_current_flush=20 flush_cycles=103 cmd=0 rsp=91 nice_req=2 nice_rsp=2 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=2",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=2 accepted=0"
+    ]
+  },
+  {
+    "seed": "20",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'cmt_o_valid' has 6 mismatches. First mismatch occurred at time 695.\nHint: Output 'cmt_o_fencei' has 2 mismatches. First mismatch occurred at time 815.\nHint: Output 'cmt_o_ifu_ilegl' has 4 mismatches. First mismatch occurred at time 695.\nHint: Output 'cmt_o_bjp_prdt' has 2 mismatches. First mismatch occurred at time 815.\nHint: Output 'cmt_o_bjp_rslv' has 4 mismatches. First mismatch occurred at time 435.\nHint: Output 'cmt_o_misalgn' has 2 mismatches. First mismatch occurred at time 515.\nHint: Output 'cmt_o_ld' has 2 mismatches. First mismatch occurred at time 515.\nHint: Output 'cmt_o_stamo' has 4 mismatches. First mismatch occurred at time 515.\nHint: Output 'wbck_o_wdat' has 8 mismatches. First mismatch occurred at time 435.\nHint: Output 'wbck_csr_dat' has 4 mismatches. First mismatch occurred at time 875.",
+    "audit": [
+      "AUDIT valid=108 normal=18 exception=90 stalls=56 stall_changes_excluding_current_flush=16 flush_cycles=82 cmd=0 rsp=106 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=4 accepted=0",
+      "AUDIT group=1 selected_cycles=4 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=2",
+      "AUDIT group=3 selected_cycles=4 accepted=2",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=4 accepted=2",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "21",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 2115.\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 1735.\nHint: Output 'cmt_o_valid' has 2 mismatches. First mismatch occurred at time 2115.\nHint: Output 'cmt_o_ld' has 2 mismatches. First mismatch occurred at time 1735.\nHint: Output 'wbck_o_valid' has 2 mismatches. First mismatch occurred at time 2115.\nHint: Output 'wbck_o_wdat' has 4 mismatches. First mismatch occurred at time 1655.\nHint: Output 'wbck_csr_dat' has 2 mismatches. First mismatch occurred at time 1135.\nHint: Output 'agu_icb_cmd_addr' has 2 mismatches. First mismatch occurred at time 1655.\nHint: Output 'agu_icb_cmd_wmask' has 2 mismatches. First mismatch occurred at time 1655.",
+    "audit": [
+      "AUDIT valid=89 normal=6 exception=83 stalls=48 stall_changes_excluding_current_flush=10 flush_cycles=102 cmd=0 rsp=120 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=4 accepted=4",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "22",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'cmt_o_valid' has 2 mismatches. First mismatch occurred at time 555.\nHint: Output 'cmt_o_stamo' has 2 mismatches. First mismatch occurred at time 1935.\nHint: Output 'wbck_o_wdat' has 6 mismatches. First mismatch occurred at time 535.\nHint: Output 'agu_icb_cmd_addr' has 6 mismatches. First mismatch occurred at time 535.\nHint: Output 'agu_icb_cmd_wmask' has 6 mismatches. First mismatch occurred at time 535.\nHint: Output 'nice_req_valid' has 4 mismatches. First mismatch occurred at time 555.\nHint: Output 'nice_rsp_multicyc_ready' has 5 mismatches. First mismatch occurred at time 1665.\nHint: Output 'nice_longp_wbck_valid' has 4 mismatches. First mismatch occurred at time 1695.",
+    "audit": [
+      "AUDIT valid=129 normal=8 exception=121 stalls=69 stall_changes_excluding_current_flush=18 flush_cycles=104 cmd=0 rsp=95 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=4 accepted=2",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=4 accepted=2",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "23",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 535.\nHint: Output 'cmt_o_valid' has 6 mismatches. First mismatch occurred at time 315.\nHint: Output 'cmt_o_fencei' has 4 mismatches. First mismatch occurred at time 275.\nHint: Output 'cmt_o_ifu_ilegl' has 2 mismatches. First mismatch occurred at time 315.\nHint: Output 'cmt_o_bjp_rslv' has 2 mismatches. First mismatch occurred at time 275.\nHint: Output 'cmt_o_stamo' has 2 mismatches. First mismatch occurred at time 2135.\nHint: Output 'wbck_o_valid' has 2 mismatches. First mismatch occurred at time 535.\nHint: Output 'wbck_o_wdat' has 13 mismatches. First mismatch occurred at time 275.\nHint: Output 'wbck_csr_dat' has 4 mismatches. First mismatch occurred at time 1095.\nHint: Output 'agu_icb_cmd_addr' has 9 mismatches. First mismatch occurred at time 275.",
+    "audit": [
+      "AUDIT valid=96 normal=16 exception=80 stalls=64 stall_changes_excluding_current_flush=13 flush_cycles=96 cmd=0 rsp=89 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=2",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=0",
+      "AUDIT group=3 selected_cycles=2 accepted=2",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=4 accepted=2",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=4 accepted=0"
+    ]
+  },
+  {
+    "seed": "24",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 415.\nHint: Output 'i_longpipe' has 6 mismatches. First mismatch occurred at time 415.\nHint: Output 'cmt_o_valid' has 4 mismatches. First mismatch occurred at time 415.\nHint: Output 'cmt_o_fencei' has 2 mismatches. First mismatch occurred at time 775.\nHint: Output 'cmt_o_ifu_ilegl' has 2 mismatches. First mismatch occurred at time 415.\nHint: Output 'cmt_o_bjp_rslv' has 2 mismatches. First mismatch occurred at time 775.\nHint: Output 'cmt_o_ld' has 4 mismatches. First mismatch occurred at time 655.\nHint: Output 'cmt_o_stamo' has 4 mismatches. First mismatch occurred at time 655.\nHint: Output 'cmt_o_badaddr' has 4 mismatches. First mismatch occurred at time 655.\nHint: Output 'wbck_o_wdat' has 8 mismatches. First mismatch occurred at time 235.",
+    "audit": [
+      "AUDIT valid=97 normal=16 exception=81 stalls=59 stall_changes_excluding_current_flush=8 flush_cycles=121 cmd=0 rsp=83 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=4 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=4 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=0",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=4 accepted=0"
+    ]
+  },
+  {
+    "seed": "25",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'cmt_o_valid' has 2 mismatches. First mismatch occurred at time 375.\nHint: Output 'cmt_o_fencei' has 2 mismatches. First mismatch occurred at time 875.\nHint: Output 'cmt_o_ifu_ilegl' has 2 mismatches. First mismatch occurred at time 2135.\nHint: Output 'cmt_o_bjp_prdt' has 2 mismatches. First mismatch occurred at time 1575.\nHint: Output 'cmt_o_bjp_rslv' has 2 mismatches. First mismatch occurred at time 1575.\nHint: Output 'cmt_o_stamo' has 2 mismatches. First mismatch occurred at time 435.\nHint: Output 'cmt_o_badaddr' has 2 mismatches. First mismatch occurred at time 435.\nHint: Output 'wbck_o_wdat' has 10 mismatches. First mismatch occurred at time 435.\nHint: Output 'csr_wr_en' has 2 mismatches. First mismatch occurred at time 375.\nHint: Output 'csr_rd_en' has 2 mismatches. First mismatch occurred at time 375.",
+    "audit": [
+      "AUDIT valid=104 normal=20 exception=84 stalls=68 stall_changes_excluding_current_flush=15 flush_cycles=121 cmd=0 rsp=113 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=0",
+      "AUDIT group=1 selected_cycles=4 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=0",
+      "AUDIT group=3 selected_cycles=2 accepted=0",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=2",
+      "AUDIT group=6 selected_cycles=4 accepted=0",
+      "AUDIT group=7 selected_cycles=2 accepted=0"
+    ]
+  },
+  {
+    "seed": "26",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'cmt_o_valid' has 4 mismatches. First mismatch occurred at time 895.\nHint: Output 'cmt_o_fencei' has 2 mismatches. First mismatch occurred at time 1595.\nHint: Output 'cmt_o_bjp_prdt' has 2 mismatches. First mismatch occurred at time 435.\nHint: Output 'cmt_o_bjp_rslv' has 4 mismatches. First mismatch occurred at time 435.\nHint: Output 'wbck_o_wdat' has 10 mismatches. First mismatch occurred at time 715.\nHint: Output 'csr_ena' has 2 mismatches. First mismatch occurred at time 895.\nHint: Output 'csr_wr_en' has 2 mismatches. First mismatch occurred at time 895.\nHint: Output 'csr_rd_en' has 2 mismatches. First mismatch occurred at time 895.\nHint: Output 'wbck_csr_dat' has 2 mismatches. First mismatch occurred at time 1875.\nHint: Output 'agu_icb_cmd_addr' has 8 mismatches. First mismatch occurred at time 435.",
+    "audit": [
+      "AUDIT valid=76 normal=14 exception=62 stalls=36 stall_changes_excluding_current_flush=10 flush_cycles=95 cmd=0 rsp=102 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=4 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=4 accepted=4",
+      "AUDIT group=4 selected_cycles=4 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=0",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "27",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 1175.\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 1675.\nHint: Output 'cmt_o_valid' has 2 mismatches. First mismatch occurred at time 675.\nHint: Output 'cmt_o_misalgn' has 2 mismatches. First mismatch occurred at time 1675.\nHint: Output 'cmt_o_stamo' has 2 mismatches. First mismatch occurred at time 1675.\nHint: Output 'cmt_o_badaddr' has 4 mismatches. First mismatch occurred at time 1175.\nHint: Output 'wbck_o_wdat' has 10 mismatches. First mismatch occurred at time 495.\nHint: Output 'csr_rd_en' has 2 mismatches. First mismatch occurred at time 675.\nHint: Output 'wbck_csr_dat' has 2 mismatches. First mismatch occurred at time 675.\nHint: Output 'agu_icb_cmd_valid' has 2 mismatches. First mismatch occurred at time 1675.",
+    "audit": [
+      "AUDIT valid=89 normal=12 exception=77 stalls=46 stall_changes_excluding_current_flush=10 flush_cycles=99 cmd=0 rsp=88 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=4 accepted=2",
+      "AUDIT group=1 selected_cycles=2 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=2 accepted=0",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=4 accepted=0"
+    ]
+  },
+  {
+    "seed": "28",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'cmt_o_valid' has 4 mismatches. First mismatch occurred at time 1055.\nHint: Output 'cmt_o_stamo' has 2 mismatches. First mismatch occurred at time 255.\nHint: Output 'wbck_o_valid' has 2 mismatches. First mismatch occurred at time 1795.\nHint: Output 'wbck_o_wdat' has 14 mismatches. First mismatch occurred at time 615.\nHint: Output 'csr_ena' has 4 mismatches. First mismatch occurred at time 1055.\nHint: Output 'csr_rd_en' has 2 mismatches. First mismatch occurred at time 1055.\nHint: Output 'wbck_csr_dat' has 4 mismatches. First mismatch occurred at time 1275.\nHint: Output 'agu_icb_cmd_addr' has 8 mismatches. First mismatch occurred at time 955.\nHint: Output 'agu_icb_cmd_wmask' has 6 mismatches. First mismatch occurred at time 955.",
+    "audit": [
+      "AUDIT valid=90 normal=16 exception=74 stalls=40 stall_changes_excluding_current_flush=9 flush_cycles=110 cmd=0 rsp=85 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=4 accepted=2",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=0",
+      "AUDIT group=3 selected_cycles=4 accepted=4",
+      "AUDIT group=4 selected_cycles=4 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=2 accepted=0"
+    ]
+  },
+  {
+    "seed": "29",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'cmt_o_fencei' has 2 mismatches. First mismatch occurred at time 975.\nHint: Output 'cmt_o_bjp_prdt' has 2 mismatches. First mismatch occurred at time 975.\nHint: Output 'cmt_o_bjp_rslv' has 2 mismatches. First mismatch occurred at time 975.\nHint: Output 'wbck_o_wdat' has 2 mismatches. First mismatch occurred at time 255.\nHint: Output 'agu_icb_cmd_addr' has 4 mismatches. First mismatch occurred at time 255.\nHint: Output 'agu_icb_cmd_wmask' has 2 mismatches. First mismatch occurred at time 975.",
+    "audit": [
+      "AUDIT valid=103 normal=6 exception=97 stalls=42 stall_changes_excluding_current_flush=10 flush_cycles=106 cmd=0 rsp=107 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=2 accepted=0"
+    ]
+  },
+  {
+    "seed": "30",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 315.\nHint: Output 'i_longpipe' has 4 mismatches. First mismatch occurred at time 315.\nHint: Output 'cmt_o_valid' has 2 mismatches. First mismatch occurred at time 935.\nHint: Output 'cmt_o_fencei' has 2 mismatches. First mismatch occurred at time 1535.\nHint: Output 'cmt_o_ifu_ilegl' has 4 mismatches. First mismatch occurred at time 315.\nHint: Output 'cmt_o_bjp_rslv' has 4 mismatches. First mismatch occurred at time 1535.\nHint: Output 'cmt_o_ld' has 4 mismatches. First mismatch occurred at time 915.\nHint: Output 'cmt_o_stamo' has 4 mismatches. First mismatch occurred at time 395.\nHint: Output 'cmt_o_badaddr' has 4 mismatches. First mismatch occurred at time 395.\nHint: Output 'wbck_o_wdat' has 10 mismatches. First mismatch occurred at time 915.",
+    "audit": [
+      "AUDIT valid=103 normal=8 exception=95 stalls=63 stall_changes_excluding_current_flush=17 flush_cycles=100 cmd=0 rsp=88 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=4 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=2 accepted=2",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=2 accepted=0"
+    ]
+  },
+  {
+    "seed": "31",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 575.\nHint: Output 'cmt_o_valid' has 10 mismatches. First mismatch occurred at time 475.\nHint: Output 'cmt_o_ifu_ilegl' has 4 mismatches. First mismatch occurred at time 575.\nHint: Output 'cmt_o_stamo' has 2 mismatches. First mismatch occurred at time 1615.\nHint: Output 'wbck_o_valid' has 2 mismatches. First mismatch occurred at time 575.\nHint: Output 'wbck_o_wdat' has 15 mismatches. First mismatch occurred at time 535.\nHint: Output 'csr_ena' has 4 mismatches. First mismatch occurred at time 475.\nHint: Output 'csr_wr_en' has 6 mismatches. First mismatch occurred at time 475.\nHint: Output 'csr_rd_en' has 4 mismatches. First mismatch occurred at time 475.\nHint: Output 'wbck_csr_dat' has 10 mismatches. First mismatch occurred at time 475.",
+    "audit": [
+      "AUDIT valid=118 normal=30 exception=88 stalls=62 stall_changes_excluding_current_flush=14 flush_cycles=116 cmd=0 rsp=98 nice_req=4 nice_rsp=4 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=4 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=0",
+      "AUDIT group=3 selected_cycles=10 accepted=4",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=8 accepted=6",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=2 accepted=0"
+    ]
+  },
+  {
+    "seed": "32",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 1775.\nHint: Output 'cmt_o_bjp_prdt' has 2 mismatches. First mismatch occurred at time 1335.\nHint: Output 'cmt_o_bjp_rslv' has 2 mismatches. First mismatch occurred at time 1335.\nHint: Output 'cmt_o_ld' has 2 mismatches. First mismatch occurred at time 1775.\nHint: Output 'cmt_o_stamo' has 2 mismatches. First mismatch occurred at time 1375.\nHint: Output 'wbck_o_wdat' has 4 mismatches. First mismatch occurred at time 335.\nHint: Output 'agu_icb_cmd_addr' has 2 mismatches. First mismatch occurred at time 1335.\nHint: Output 'agu_icb_cmd_wmask' has 2 mismatches. First mismatch occurred at time 1335.\nHint: Output 'nice_req_valid' has 2 mismatches. First mismatch occurred at time 475.",
+    "audit": [
+      "AUDIT valid=107 normal=2 exception=105 stalls=61 stall_changes_excluding_current_flush=21 flush_cycles=95 cmd=0 rsp=111 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=2 accepted=0"
+    ]
+  },
+  {
+    "seed": "33",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 835.\nHint: Output 'cmt_o_valid' has 4 mismatches. First mismatch occurred at time 675.\nHint: Output 'cmt_o_misalgn' has 2 mismatches. First mismatch occurred at time 355.\nHint: Output 'wbck_o_valid' has 2 mismatches. First mismatch occurred at time 835.\nHint: Output 'wbck_o_wdat' has 4 mismatches. First mismatch occurred at time 1615.\nHint: Output 'wbck_csr_dat' has 4 mismatches. First mismatch occurred at time 675.\nHint: Output 'agu_icb_cmd_addr' has 2 mismatches. First mismatch occurred at time 1835.\nHint: Output 'agu_icb_cmd_read' has 2 mismatches. First mismatch occurred at time 355.\nHint: Output 'agu_icb_cmd_wmask' has 2 mismatches. First mismatch occurred at time 1835.\nHint: Output 'agu_icb_cmd_lock' has 2 mismatches. First mismatch occurred at time 355.",
+    "audit": [
+      "AUDIT valid=90 normal=14 exception=76 stalls=44 stall_changes_excluding_current_flush=7 flush_cycles=103 cmd=0 rsp=109 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=2",
+      "AUDIT group=1 selected_cycles=4 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=4 accepted=0",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=2 accepted=0"
+    ]
+  },
+  {
+    "seed": "34",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'cmt_o_valid' has 8 mismatches. First mismatch occurred at time 415.\nHint: Output 'cmt_o_bjp_rslv' has 4 mismatches. First mismatch occurred at time 1275.\nHint: Output 'wbck_o_wdat' has 12 mismatches. First mismatch occurred at time 555.\nHint: Output 'csr_ena' has 4 mismatches. First mismatch occurred at time 1055.\nHint: Output 'csr_wr_en' has 2 mismatches. First mismatch occurred at time 1055.\nHint: Output 'csr_rd_en' has 4 mismatches. First mismatch occurred at time 1055.\nHint: Output 'wbck_csr_dat' has 8 mismatches. First mismatch occurred at time 375.\nHint: Output 'agu_icb_cmd_addr' has 10 mismatches. First mismatch occurred at time 555.\nHint: Output 'agu_icb_cmd_wmask' has 8 mismatches. First mismatch occurred at time 555.\nHint: Output 'nice_req_valid' has 2 mismatches. First mismatch occurred at time 1675.",
+    "audit": [
+      "AUDIT valid=106 normal=18 exception=88 stalls=56 stall_changes_excluding_current_flush=15 flush_cycles=113 cmd=0 rsp=90 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=2",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=2",
+      "AUDIT group=3 selected_cycles=6 accepted=4",
+      "AUDIT group=4 selected_cycles=4 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=0",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "35",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 1355.\nHint: Output 'cmt_o_fencei' has 2 mismatches. First mismatch occurred at time 675.\nHint: Output 'cmt_o_bjp_rslv' has 2 mismatches. First mismatch occurred at time 675.\nHint: Output 'wbck_o_wdat' has 12 mismatches. First mismatch occurred at time 735.\nHint: Output 'wbck_csr_dat' has 8 mismatches. First mismatch occurred at time 275.\nHint: Output 'agu_icb_cmd_addr' has 6 mismatches. First mismatch occurred at time 675.\nHint: Output 'agu_icb_cmd_wmask' has 4 mismatches. First mismatch occurred at time 675.",
+    "audit": [
+      "AUDIT valid=87 normal=8 exception=79 stalls=40 stall_changes_excluding_current_flush=8 flush_cycles=117 cmd=0 rsp=132 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=2",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=4 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=2 accepted=0"
+    ]
+  },
+  {
+    "seed": "36",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 4 mismatches. First mismatch occurred at time 535.\nHint: Output 'i_longpipe' has 4 mismatches. First mismatch occurred at time 535.\nHint: Output 'cmt_o_valid' has 6 mismatches. First mismatch occurred at time 855.\nHint: Output 'cmt_o_ifu_ilegl' has 4 mismatches. First mismatch occurred at time 855.\nHint: Output 'cmt_o_misalgn' has 2 mismatches. First mismatch occurred at time 1115.\nHint: Output 'cmt_o_ld' has 2 mismatches. First mismatch occurred at time 535.\nHint: Output 'cmt_o_badaddr' has 2 mismatches. First mismatch occurred at time 535.\nHint: Output 'wbck_o_wdat' has 8 mismatches. First mismatch occurred at time 635.\nHint: Output 'csr_ena' has 2 mismatches. First mismatch occurred at time 975.\nHint: Output 'csr_rd_en' has 2 mismatches. First mismatch occurred at time 975.",
+    "audit": [
+      "AUDIT valid=104 normal=16 exception=88 stalls=50 stall_changes_excluding_current_flush=12 flush_cycles=108 cmd=0 rsp=93 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=4 accepted=2",
+      "AUDIT group=1 selected_cycles=2 accepted=2",
+      "AUDIT group=2 selected_cycles=2 accepted=2",
+      "AUDIT group=3 selected_cycles=2 accepted=2",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=4 accepted=2",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "37",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'cmt_o_valid' has 4 mismatches. First mismatch occurred at time 995.\nHint: Output 'cmt_o_bjp_rslv' has 2 mismatches. First mismatch occurred at time 735.\nHint: Output 'cmt_o_ld' has 2 mismatches. First mismatch occurred at time 535.\nHint: Output 'wbck_o_wdat' has 8 mismatches. First mismatch occurred at time 255.\nHint: Output 'wbck_csr_dat' has 4 mismatches. First mismatch occurred at time 1015.\nHint: Output 'agu_icb_cmd_addr' has 4 mismatches. First mismatch occurred at time 735.\nHint: Output 'nice_rsp_multicyc_ready' has 1 mismatches. First mismatch occurred at time 595.\nHint: Output 'nice_longp_wbck_valid' has 1 mismatches. First mismatch occurred at time 405.",
+    "audit": [
+      "AUDIT valid=109 normal=16 exception=93 stalls=56 stall_changes_excluding_current_flush=11 flush_cycles=112 cmd=0 rsp=115 nice_req=2 nice_rsp=2 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=2",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=4 accepted=2",
+      "AUDIT group=6 selected_cycles=4 accepted=0",
+      "AUDIT group=7 selected_cycles=4 accepted=0"
+    ]
+  },
+  {
+    "seed": "38",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'wbck_o_wdat' has 6 mismatches. First mismatch occurred at time 295.\nHint: Output 'wbck_csr_dat' has 6 mismatches. First mismatch occurred at time 615.\nHint: Output 'agu_icb_cmd_addr' has 4 mismatches. First mismatch occurred at time 1415.\nHint: Output 'agu_icb_cmd_wmask' has 2 mismatches. First mismatch occurred at time 1415.",
+    "audit": [
+      "AUDIT valid=105 normal=8 exception=97 stalls=55 stall_changes_excluding_current_flush=12 flush_cycles=110 cmd=0 rsp=104 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=4 accepted=0",
+      "AUDIT group=7 selected_cycles=2 accepted=0"
+    ]
+  },
+  {
+    "seed": "39",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_longpipe' has 4 mismatches. First mismatch occurred at time 1195.\nHint: Output 'cmt_o_bjp_prdt' has 2 mismatches. First mismatch occurred at time 515.\nHint: Output 'cmt_o_bjp_rslv' has 2 mismatches. First mismatch occurred at time 515.\nHint: Output 'cmt_o_misalgn' has 2 mismatches. First mismatch occurred at time 1695.\nHint: Output 'cmt_o_ld' has 2 mismatches. First mismatch occurred at time 1675.\nHint: Output 'cmt_o_stamo' has 4 mismatches. First mismatch occurred at time 1675.\nHint: Output 'cmt_o_badaddr' has 2 mismatches. First mismatch occurred at time 1675.\nHint: Output 'wbck_o_valid' has 2 mismatches. First mismatch occurred at time 275.\nHint: Output 'wbck_o_wdat' has 11 mismatches. First mismatch occurred at time 355.\nHint: Output 'wbck_csr_dat' has 2 mismatches. First mismatch occurred at time 275.",
+    "audit": [
+      "AUDIT valid=104 normal=16 exception=88 stalls=62 stall_changes_excluding_current_flush=19 flush_cycles=94 cmd=0 rsp=106 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=4 accepted=0",
+      "AUDIT group=3 selected_cycles=2 accepted=0",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=0",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=2 accepted=0"
+    ]
+  },
+  {
+    "seed": "40",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_longpipe' has 6 mismatches. First mismatch occurred at time 955.\nHint: Output 'cmt_o_valid' has 2 mismatches. First mismatch occurred at time 1235.\nHint: Output 'cmt_o_fencei' has 2 mismatches. First mismatch occurred at time 255.\nHint: Output 'cmt_o_ifu_ilegl' has 4 mismatches. First mismatch occurred at time 955.\nHint: Output 'cmt_o_ld' has 2 mismatches. First mismatch occurred at time 1875.\nHint: Output 'cmt_o_stamo' has 2 mismatches. First mismatch occurred at time 1875.\nHint: Output 'cmt_o_badaddr' has 2 mismatches. First mismatch occurred at time 1875.\nHint: Output 'wbck_o_valid' has 2 mismatches. First mismatch occurred at time 1995.\nHint: Output 'wbck_o_wdat' has 2 mismatches. First mismatch occurred at time 255.\nHint: Output 'csr_wr_en' has 2 mismatches. First mismatch occurred at time 1995.",
+    "audit": [
+      "AUDIT valid=97 normal=10 exception=87 stalls=53 stall_changes_excluding_current_flush=12 flush_cycles=99 cmd=0 rsp=96 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=2 accepted=0",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=0",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=4 accepted=0"
+    ]
+  },
+  {
+    "seed": "41",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'wbck_o_wdat' has 8 mismatches. First mismatch occurred at time 595.\nHint: Output 'wbck_csr_dat' has 2 mismatches. First mismatch occurred at time 255.\nHint: Output 'agu_icb_cmd_addr' has 2 mismatches. First mismatch occurred at time 735.\nHint: Output 'agu_icb_cmd_wmask' has 2 mismatches. First mismatch occurred at time 735.\nHint: Output 'nice_req_valid' has 2 mismatches. First mismatch occurred at time 1195.",
+    "audit": [
+      "AUDIT valid=104 normal=14 exception=90 stalls=56 stall_changes_excluding_current_flush=17 flush_cycles=99 cmd=0 rsp=110 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=4 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=0",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=6 accepted=0"
+    ]
+  },
+  {
+    "seed": "42",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'cmt_o_valid' has 2 mismatches. First mismatch occurred at time 1115.\nHint: Output 'cmt_o_fencei' has 2 mismatches. First mismatch occurred at time 1795.\nHint: Output 'cmt_o_ifu_ilegl' has 2 mismatches. First mismatch occurred at time 495.\nHint: Output 'cmt_o_bjp_rslv' has 2 mismatches. First mismatch occurred at time 1795.\nHint: Output 'cmt_o_stamo' has 2 mismatches. First mismatch occurred at time 1455.\nHint: Output 'wbck_o_wdat' has 10 mismatches. First mismatch occurred at time 855.\nHint: Output 'csr_ena' has 2 mismatches. First mismatch occurred at time 1115.\nHint: Output 'csr_wr_en' has 4 mismatches. First mismatch occurred at time 1115.\nHint: Output 'csr_rd_en' has 2 mismatches. First mismatch occurred at time 1115.\nHint: Output 'wbck_csr_dat' has 4 mismatches. First mismatch occurred at time 1115.",
+    "audit": [
+      "AUDIT valid=104 normal=16 exception=88 stalls=52 stall_changes_excluding_current_flush=11 flush_cycles=117 cmd=0 rsp=101 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=2",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=0",
+      "AUDIT group=3 selected_cycles=6 accepted=6",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=4 accepted=0"
+    ]
+  },
+  {
+    "seed": "43",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 1215.\nHint: Output 'cmt_o_fencei' has 2 mismatches. First mismatch occurred at time 2055.\nHint: Output 'cmt_o_ifu_ilegl' has 2 mismatches. First mismatch occurred at time 1135.\nHint: Output 'cmt_o_misalgn' has 2 mismatches. First mismatch occurred at time 1215.\nHint: Output 'cmt_o_ld' has 2 mismatches. First mismatch occurred at time 1215.\nHint: Output 'wbck_o_wdat' has 4 mismatches. First mismatch occurred at time 1215.\nHint: Output 'wbck_csr_dat' has 4 mismatches. First mismatch occurred at time 995.\nHint: Output 'agu_icb_cmd_addr' has 2 mismatches. First mismatch occurred at time 2055.\nHint: Output 'agu_icb_cmd_read' has 2 mismatches. First mismatch occurred at time 1215.\nHint: Output 'agu_icb_cmd_wmask' has 2 mismatches. First mismatch occurred at time 2055.",
+    "audit": [
+      "AUDIT valid=93 normal=2 exception=91 stalls=44 stall_changes_excluding_current_flush=13 flush_cycles=97 cmd=0 rsp=103 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=2",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "44",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 795.\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 955.\nHint: Output 'cmt_o_valid' has 4 mismatches. First mismatch occurred at time 955.\nHint: Output 'cmt_o_fencei' has 2 mismatches. First mismatch occurred at time 515.\nHint: Output 'cmt_o_bjp_rslv' has 2 mismatches. First mismatch occurred at time 515.\nHint: Output 'cmt_o_misalgn' has 2 mismatches. First mismatch occurred at time 795.\nHint: Output 'cmt_o_stamo' has 4 mismatches. First mismatch occurred at time 295.\nHint: Output 'cmt_o_buserr' has 2 mismatches. First mismatch occurred at time 295.\nHint: Output 'cmt_o_badaddr' has 6 mismatches. First mismatch occurred at time 295.\nHint: Output 'wbck_o_wdat' has 10 mismatches. First mismatch occurred at time 295.",
+    "audit": [
+      "AUDIT valid=110 normal=14 exception=96 stalls=54 stall_changes_excluding_current_flush=13 flush_cycles=112 cmd=0 rsp=106 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=4 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=0",
+      "AUDIT group=3 selected_cycles=2 accepted=2",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=4 accepted=2",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=2 accepted=0"
+    ]
+  },
+  {
+    "seed": "45",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'cmt_o_valid' has 6 mismatches. First mismatch occurred at time 415.\nHint: Output 'cmt_o_ifu_ilegl' has 4 mismatches. First mismatch occurred at time 615.\nHint: Output 'cmt_o_buserr' has 2 mismatches. First mismatch occurred at time 775.\nHint: Output 'wbck_o_valid' has 2 mismatches. First mismatch occurred at time 615.\nHint: Output 'wbck_o_wdat' has 4 mismatches. First mismatch occurred at time 315.\nHint: Output 'csr_wr_en' has 2 mismatches. First mismatch occurred at time 1095.\nHint: Output 'wbck_csr_dat' has 6 mismatches. First mismatch occurred at time 415.\nHint: Output 'agu_icb_cmd_addr' has 4 mismatches. First mismatch occurred at time 315.\nHint: Output 'agu_icb_cmd_wmask' has 2 mismatches. First mismatch occurred at time 315.\nHint: Output 'nice_req_valid' has 2 mismatches. First mismatch occurred at time 535.",
+    "audit": [
+      "AUDIT valid=99 normal=10 exception=89 stalls=42 stall_changes_excluding_current_flush=11 flush_cycles=100 cmd=0 rsp=80 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=2 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=6 accepted=4",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=2",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "46",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 1875.\nHint: Output 'cmt_o_bjp_rslv' has 2 mismatches. First mismatch occurred at time 795.\nHint: Output 'cmt_o_misalgn' has 2 mismatches. First mismatch occurred at time 1875.\nHint: Output 'cmt_o_stamo' has 4 mismatches. First mismatch occurred at time 575.\nHint: Output 'cmt_o_badaddr' has 2 mismatches. First mismatch occurred at time 1875.\nHint: Output 'wbck_o_wdat' has 12 mismatches. First mismatch occurred at time 235.\nHint: Output 'wbck_csr_dat' has 4 mismatches. First mismatch occurred at time 395.\nHint: Output 'agu_icb_cmd_valid' has 2 mismatches. First mismatch occurred at time 1875.\nHint: Output 'agu_icb_cmd_addr' has 12 mismatches. First mismatch occurred at time 235.\nHint: Output 'agu_icb_cmd_read' has 2 mismatches. First mismatch occurred at time 1875.",
+    "audit": [
+      "AUDIT valid=103 normal=12 exception=91 stalls=59 stall_changes_excluding_current_flush=16 flush_cycles=106 cmd=0 rsp=119 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=4 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=4 accepted=0"
+    ]
+  },
+  {
+    "seed": "47",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'cmt_o_valid' has 4 mismatches. First mismatch occurred at time 295.\nHint: Output 'cmt_o_fencei' has 3 mismatches. First mismatch occurred at time 2195.\nHint: Output 'cmt_o_ifu_ilegl' has 4 mismatches. First mismatch occurred at time 775.\nHint: Output 'cmt_o_bjp_rslv' has 4 mismatches. First mismatch occurred at time 735.\nHint: Output 'wbck_o_wdat' has 5 mismatches. First mismatch occurred at time 935.\nHint: Output 'csr_ena' has 2 mismatches. First mismatch occurred at time 295.\nHint: Output 'csr_wr_en' has 2 mismatches. First mismatch occurred at time 295.\nHint: Output 'csr_rd_en' has 2 mismatches. First mismatch occurred at time 295.\nHint: Output 'wbck_csr_dat' has 2 mismatches. First mismatch occurred at time 295.\nHint: Output 'agu_icb_cmd_addr' has 7 mismatches. First mismatch occurred at time 735.",
+    "audit": [
+      "AUDIT valid=102 normal=18 exception=84 stalls=56 stall_changes_excluding_current_flush=15 flush_cycles=106 cmd=0 rsp=97 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=2 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=2 accepted=2",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=0",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=8 accepted=0"
+    ]
+  },
+  {
+    "seed": "48",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 9 mismatches. First mismatch occurred at time 355.\nHint: Output 'i_longpipe' has 6 mismatches. First mismatch occurred at time 355.\nHint: Output 'amo_wait' has 2 mismatches. First mismatch occurred at time 545.\nHint: Output 'cmt_o_valid' has 9 mismatches. First mismatch occurred at time 545.\nHint: Output 'cmt_o_fencei' has 6 mismatches. First mismatch occurred at time 615.\nHint: Output 'cmt_o_ifu_ilegl' has 4 mismatches. First mismatch occurred at time 355.\nHint: Output 'cmt_o_bjp_prdt' has 2 mismatches. First mismatch occurred at time 955.\nHint: Output 'cmt_o_ld' has 2 mismatches. First mismatch occurred at time 535.\nHint: Output 'cmt_o_stamo' has 2 mismatches. First mismatch occurred at time 695.\nHint: Output 'cmt_o_badaddr' has 4 mismatches. First mismatch occurred at time 695.",
+    "audit": [
+      "AUDIT valid=107 normal=20 exception=87 stalls=44 stall_changes_excluding_current_flush=7 flush_cycles=97 cmd=2 rsp=102 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=6 accepted=6",
+      "AUDIT group=1 selected_cycles=4 accepted=0",
+      "AUDIT group=2 selected_cycles=4 accepted=2",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=0",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=2 accepted=0"
+    ]
+  },
+  {
+    "seed": "49",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'cmt_o_valid' has 4 mismatches. First mismatch occurred at time 295.\nHint: Output 'cmt_o_fencei' has 4 mismatches. First mismatch occurred at time 315.\nHint: Output 'cmt_o_bjp_rslv' has 4 mismatches. First mismatch occurred at time 315.\nHint: Output 'cmt_o_badaddr' has 2 mismatches. First mismatch occurred at time 535.\nHint: Output 'wbck_o_wdat' has 8 mismatches. First mismatch occurred at time 255.\nHint: Output 'csr_wr_en' has 2 mismatches. First mismatch occurred at time 295.\nHint: Output 'csr_rd_en' has 2 mismatches. First mismatch occurred at time 295.\nHint: Output 'wbck_csr_dat' has 2 mismatches. First mismatch occurred at time 295.\nHint: Output 'agu_icb_cmd_addr' has 8 mismatches. First mismatch occurred at time 255.\nHint: Output 'agu_icb_cmd_read' has 2 mismatches. First mismatch occurred at time 535.",
+    "audit": [
+      "AUDIT valid=110 normal=12 exception=98 stalls=62 stall_changes_excluding_current_flush=24 flush_cycles=89 cmd=0 rsp=116 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=0",
+      "AUDIT group=3 selected_cycles=2 accepted=0",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=4 accepted=0",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "50",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_longpipe' has 4 mismatches. First mismatch occurred at time 695.\nHint: Output 'cmt_o_valid' has 6 mismatches. First mismatch occurred at time 295.\nHint: Output 'cmt_o_fencei' has 4 mismatches. First mismatch occurred at time 215.\nHint: Output 'cmt_o_ifu_ilegl' has 6 mismatches. First mismatch occurred at time 775.\nHint: Output 'cmt_o_bjp_rslv' has 4 mismatches. First mismatch occurred at time 215.\nHint: Output 'cmt_o_misalgn' has 2 mismatches. First mismatch occurred at time 2115.\nHint: Output 'cmt_o_ld' has 4 mismatches. First mismatch occurred at time 295.\nHint: Output 'cmt_o_stamo' has 8 mismatches. First mismatch occurred at time 295.\nHint: Output 'cmt_o_badaddr' has 8 mismatches. First mismatch occurred at time 295.\nHint: Output 'wbck_o_wdat' has 4 mismatches. First mismatch occurred at time 295.",
+    "audit": [
+      "AUDIT valid=94 normal=12 exception=82 stalls=52 stall_changes_excluding_current_flush=20 flush_cycles=95 cmd=0 rsp=115 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=6 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=4 accepted=4",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=2",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "51",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 1555.\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 1295.\nHint: Output 'cmt_o_valid' has 2 mismatches. First mismatch occurred at time 1555.\nHint: Output 'cmt_o_fencei' has 6 mismatches. First mismatch occurred at time 715.\nHint: Output 'cmt_o_ifu_ilegl' has 2 mismatches. First mismatch occurred at time 1295.\nHint: Output 'wbck_o_valid' has 2 mismatches. First mismatch occurred at time 1555.\nHint: Output 'wbck_o_wdat' has 12 mismatches. First mismatch occurred at time 275.\nHint: Output 'agu_icb_cmd_addr' has 14 mismatches. First mismatch occurred at time 275.\nHint: Output 'agu_icb_cmd_wmask' has 10 mismatches. First mismatch occurred at time 275.",
+    "audit": [
+      "AUDIT valid=103 normal=8 exception=95 stalls=51 stall_changes_excluding_current_flush=7 flush_cycles=99 cmd=0 rsp=117 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=2",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=6 accepted=6",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "52",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 895.\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 1515.\nHint: Output 'wbck_o_valid' has 2 mismatches. First mismatch occurred at time 475.\nHint: Output 'wbck_o_wdat' has 14 mismatches. First mismatch occurred at time 315.\nHint: Output 'agu_icb_cmd_addr' has 6 mismatches. First mismatch occurred at time 895.\nHint: Output 'agu_icb_cmd_wdata' has 2 mismatches. First mismatch occurred at time 1515.\nHint: Output 'agu_icb_cmd_wmask' has 4 mismatches. First mismatch occurred at time 895.\nHint: Output 'nice_req_valid' has 2 mismatches. First mismatch occurred at time 435.",
+    "audit": [
+      "AUDIT valid=96 normal=16 exception=80 stalls=48 stall_changes_excluding_current_flush=14 flush_cycles=90 cmd=0 rsp=112 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=2",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=6 accepted=0",
+      "AUDIT group=5 selected_cycles=4 accepted=0",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=4 accepted=0"
+    ]
+  },
+  {
+    "seed": "53",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 2095.\nHint: Output 'cmt_o_valid' has 2 mismatches. First mismatch occurred at time 755.\nHint: Output 'cmt_o_ifu_ilegl' has 2 mismatches. First mismatch occurred at time 2095.\nHint: Output 'cmt_o_stamo' has 2 mismatches. First mismatch occurred at time 755.\nHint: Output 'wbck_o_wdat' has 8 mismatches. First mismatch occurred at time 215.\nHint: Output 'wbck_csr_dat' has 2 mismatches. First mismatch occurred at time 1215.\nHint: Output 'agu_icb_cmd_addr' has 4 mismatches. First mismatch occurred at time 215.\nHint: Output 'agu_icb_cmd_wmask' has 2 mismatches. First mismatch occurred at time 995.\nHint: Output 'nice_req_valid' has 2 mismatches. First mismatch occurred at time 1235.",
+    "audit": [
+      "AUDIT valid=105 normal=11 exception=94 stalls=61 stall_changes_excluding_current_flush=12 flush_cycles=110 cmd=0 rsp=102 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=2 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=0",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=5 accepted=0"
+    ]
+  },
+  {
+    "seed": "54",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'cmt_o_ifu_ilegl' has 2 mismatches. First mismatch occurred at time 2015.\nHint: Output 'cmt_o_bjp_prdt' has 2 mismatches. First mismatch occurred at time 1895.\nHint: Output 'cmt_o_bjp_rslv' has 2 mismatches. First mismatch occurred at time 1895.\nHint: Output 'wbck_o_wdat' has 8 mismatches. First mismatch occurred at time 355.\nHint: Output 'agu_icb_cmd_addr' has 8 mismatches. First mismatch occurred at time 355.\nHint: Output 'agu_icb_cmd_wmask' has 8 mismatches. First mismatch occurred at time 355.\nHint: Output 'nice_req_valid' has 2 mismatches. First mismatch occurred at time 595.",
+    "audit": [
+      "AUDIT valid=109 normal=8 exception=101 stalls=62 stall_changes_excluding_current_flush=20 flush_cycles=104 cmd=0 rsp=101 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=2",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "55",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 1055.\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 1895.\nHint: Output 'cmt_o_valid' has 2 mismatches. First mismatch occurred at time 1115.\nHint: Output 'cmt_o_fencei' has 4 mismatches. First mismatch occurred at time 275.\nHint: Output 'cmt_o_ifu_ilegl' has 4 mismatches. First mismatch occurred at time 215.\nHint: Output 'cmt_o_bjp_prdt' has 2 mismatches. First mismatch occurred at time 275.\nHint: Output 'cmt_o_bjp_rslv' has 6 mismatches. First mismatch occurred at time 275.\nHint: Output 'cmt_o_ld' has 2 mismatches. First mismatch occurred at time 1895.\nHint: Output 'cmt_o_stamo' has 2 mismatches. First mismatch occurred at time 1895.\nHint: Output 'wbck_o_wdat' has 8 mismatches. First mismatch occurred at time 435.",
+    "audit": [
+      "AUDIT valid=88 normal=14 exception=74 stalls=62 stall_changes_excluding_current_flush=15 flush_cycles=104 cmd=0 rsp=95 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=4 accepted=0",
+      "AUDIT group=3 selected_cycles=2 accepted=0",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=4 accepted=0"
+    ]
+  },
+  {
+    "seed": "56",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'cmt_o_fencei' has 6 mismatches. First mismatch occurred at time 295.\nHint: Output 'cmt_o_ifu_ilegl' has 4 mismatches. First mismatch occurred at time 535.\nHint: Output 'cmt_o_bjp_rslv' has 4 mismatches. First mismatch occurred at time 1595.\nHint: Output 'wbck_o_valid' has 2 mismatches. First mismatch occurred at time 535.\nHint: Output 'wbck_o_wdat' has 12 mismatches. First mismatch occurred at time 295.\nHint: Output 'agu_icb_cmd_addr' has 14 mismatches. First mismatch occurred at time 295.\nHint: Output 'agu_icb_cmd_wmask' has 10 mismatches. First mismatch occurred at time 315.\nHint: Output 'nice_req_valid' has 2 mismatches. First mismatch occurred at time 2035.\nHint: Output 'nice_rsp_multicyc_ready' has 3 mismatches. First mismatch occurred at time 2045.\nHint: Output 'nice_longp_wbck_valid' has 2 mismatches. First mismatch occurred at time 2055.",
+    "audit": [
+      "AUDIT valid=105 normal=12 exception=93 stalls=56 stall_changes_excluding_current_flush=18 flush_cycles=97 cmd=0 rsp=105 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=4 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=4 accepted=2",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=2 accepted=0"
+    ]
+  },
+  {
+    "seed": "57",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 4 mismatches. First mismatch occurred at time 535.\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 1595.\nHint: Output 'cmt_o_valid' has 4 mismatches. First mismatch occurred at time 1495.\nHint: Output 'cmt_o_fencei' has 4 mismatches. First mismatch occurred at time 215.\nHint: Output 'cmt_o_ifu_ilegl' has 4 mismatches. First mismatch occurred at time 535.\nHint: Output 'cmt_o_bjp_prdt' has 2 mismatches. First mismatch occurred at time 215.\nHint: Output 'cmt_o_bjp_rslv' has 2 mismatches. First mismatch occurred at time 215.\nHint: Output 'cmt_o_badaddr' has 2 mismatches. First mismatch occurred at time 1695.\nHint: Output 'wbck_o_valid' has 2 mismatches. First mismatch occurred at time 1595.\nHint: Output 'wbck_o_wdat' has 10 mismatches. First mismatch occurred at time 435.",
+    "audit": [
+      "AUDIT valid=92 normal=14 exception=78 stalls=50 stall_changes_excluding_current_flush=12 flush_cycles=97 cmd=0 rsp=95 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=4 accepted=4",
+      "AUDIT group=3 selected_cycles=2 accepted=2",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=4 accepted=2",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "58",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 4 mismatches. First mismatch occurred at time 755.\nHint: Output 'cmt_o_valid' has 4 mismatches. First mismatch occurred at time 695.\nHint: Output 'cmt_o_fencei' has 2 mismatches. First mismatch occurred at time 495.\nHint: Output 'cmt_o_ifu_ilegl' has 2 mismatches. First mismatch occurred at time 755.\nHint: Output 'cmt_o_bjp_prdt' has 2 mismatches. First mismatch occurred at time 495.\nHint: Output 'cmt_o_bjp_rslv' has 2 mismatches. First mismatch occurred at time 495.\nHint: Output 'cmt_o_stamo' has 2 mismatches. First mismatch occurred at time 1115.\nHint: Output 'wbck_o_wdat' has 6 mismatches. First mismatch occurred at time 1115.\nHint: Output 'csr_wr_en' has 2 mismatches. First mismatch occurred at time 695.\nHint: Output 'csr_rd_en' has 2 mismatches. First mismatch occurred at time 695.",
+    "audit": [
+      "AUDIT valid=108 normal=8 exception=100 stalls=56 stall_changes_excluding_current_flush=8 flush_cycles=127 cmd=0 rsp=100 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=0",
+      "AUDIT group=3 selected_cycles=2 accepted=0",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=2",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "59",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 935.\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 1495.\nHint: Output 'cmt_o_valid' has 4 mismatches. First mismatch occurred at time 935.\nHint: Output 'cmt_o_fencei' has 4 mismatches. First mismatch occurred at time 1575.\nHint: Output 'cmt_o_ifu_ilegl' has 4 mismatches. First mismatch occurred at time 935.\nHint: Output 'cmt_o_bjp_prdt' has 4 mismatches. First mismatch occurred at time 1575.\nHint: Output 'cmt_o_bjp_rslv' has 4 mismatches. First mismatch occurred at time 1575.\nHint: Output 'cmt_o_misalgn' has 2 mismatches. First mismatch occurred at time 555.\nHint: Output 'wbck_o_wdat' has 12 mismatches. First mismatch occurred at time 455.\nHint: Output 'csr_ena' has 2 mismatches. First mismatch occurred at time 1795.",
+    "audit": [
+      "AUDIT valid=101 normal=14 exception=87 stalls=61 stall_changes_excluding_current_flush=17 flush_cycles=107 cmd=0 rsp=102 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=0",
+      "AUDIT group=1 selected_cycles=2 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=0",
+      "AUDIT group=3 selected_cycles=2 accepted=2",
+      "AUDIT group=4 selected_cycles=4 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=2",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "60",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'cmt_o_ifu_ilegl' has 4 mismatches. First mismatch occurred at time 215.\nHint: Output 'wbck_o_valid' has 2 mismatches. First mismatch occurred at time 855.\nHint: Output 'wbck_o_wdat' has 6 mismatches. First mismatch occurred at time 855.\nHint: Output 'agu_icb_cmd_addr' has 4 mismatches. First mismatch occurred at time 855.\nHint: Output 'agu_icb_cmd_wmask' has 2 mismatches. First mismatch occurred at time 2055.",
+    "audit": [
+      "AUDIT valid=94 normal=6 exception=88 stalls=44 stall_changes_excluding_current_flush=11 flush_cycles=106 cmd=0 rsp=119 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=2",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "61",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 4 mismatches. First mismatch occurred at time 255.\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 255.\nHint: Output 'cmt_o_fencei' has 2 mismatches. First mismatch occurred at time 1335.\nHint: Output 'cmt_o_ifu_ilegl' has 4 mismatches. First mismatch occurred at time 1495.\nHint: Output 'cmt_o_bjp_rslv' has 2 mismatches. First mismatch occurred at time 1335.\nHint: Output 'cmt_o_ld' has 2 mismatches. First mismatch occurred at time 255.\nHint: Output 'cmt_o_stamo' has 2 mismatches. First mismatch occurred at time 495.\nHint: Output 'cmt_o_badaddr' has 2 mismatches. First mismatch occurred at time 255.\nHint: Output 'wbck_o_wdat' has 6 mismatches. First mismatch occurred at time 935.\nHint: Output 'agu_icb_cmd_addr' has 8 mismatches. First mismatch occurred at time 255.",
+    "audit": [
+      "AUDIT valid=111 normal=11 exception=100 stalls=53 stall_changes_excluding_current_flush=15 flush_cycles=94 cmd=0 rsp=101 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=0",
+      "AUDIT group=1 selected_cycles=2 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=2",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=5 accepted=0"
+    ]
+  },
+  {
+    "seed": "62",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 815.\nHint: Output 'cmt_o_bjp_prdt' has 2 mismatches. First mismatch occurred at time 595.\nHint: Output 'cmt_o_bjp_rslv' has 4 mismatches. First mismatch occurred at time 375.\nHint: Output 'cmt_o_ld' has 2 mismatches. First mismatch occurred at time 815.\nHint: Output 'cmt_o_stamo' has 2 mismatches. First mismatch occurred at time 815.\nHint: Output 'cmt_o_badaddr' has 2 mismatches. First mismatch occurred at time 815.\nHint: Output 'wbck_o_wdat' has 6 mismatches. First mismatch occurred at time 215.\nHint: Output 'agu_icb_cmd_addr' has 8 mismatches. First mismatch occurred at time 375.\nHint: Output 'agu_icb_cmd_read' has 2 mismatches. First mismatch occurred at time 815.\nHint: Output 'agu_icb_cmd_wdata' has 2 mismatches. First mismatch occurred at time 815.",
+    "audit": [
+      "AUDIT valid=91 normal=0 exception=91 stalls=60 stall_changes_excluding_current_flush=14 flush_cycles=112 cmd=0 rsp=114 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "63",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'cmt_o_ifu_ilegl' has 2 mismatches. First mismatch occurred at time 1875.\nHint: Output 'wbck_o_wdat' has 12 mismatches. First mismatch occurred at time 755.\nHint: Output 'wbck_csr_dat' has 2 mismatches. First mismatch occurred at time 455.\nHint: Output 'agu_icb_cmd_addr' has 6 mismatches. First mismatch occurred at time 875.\nHint: Output 'agu_icb_cmd_wmask' has 6 mismatches. First mismatch occurred at time 875.",
+    "audit": [
+      "AUDIT valid=110 normal=6 exception=104 stalls=50 stall_changes_excluding_current_flush=14 flush_cycles=96 cmd=0 rsp=108 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=2 accepted=0"
+    ]
+  },
+  {
+    "seed": "64",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 295.\nHint: Output 'cmt_o_valid' has 4 mismatches. First mismatch occurred at time 295.\nHint: Output 'cmt_o_fencei' has 2 mismatches. First mismatch occurred at time 435.\nHint: Output 'cmt_o_ifu_ilegl' has 2 mismatches. First mismatch occurred at time 295.\nHint: Output 'cmt_o_bjp_prdt' has 4 mismatches. First mismatch occurred at time 435.\nHint: Output 'cmt_o_bjp_rslv' has 6 mismatches. First mismatch occurred at time 435.\nHint: Output 'wbck_o_wdat' has 4 mismatches. First mismatch occurred at time 575.\nHint: Output 'agu_icb_cmd_addr' has 8 mismatches. First mismatch occurred at time 435.\nHint: Output 'agu_icb_cmd_wmask' has 6 mismatches. First mismatch occurred at time 435.\nHint: Output 'nice_req_valid' has 2 mismatches. First mismatch occurred at time 1595.",
+    "audit": [
+      "AUDIT valid=104 normal=12 exception=92 stalls=56 stall_changes_excluding_current_flush=18 flush_cycles=89 cmd=0 rsp=122 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=6 accepted=2",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=4 accepted=0",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "65",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_longpipe' has 6 mismatches. First mismatch occurred at time 495.\nHint: Output 'cmt_o_valid' has 4 mismatches. First mismatch occurred at time 1075.\nHint: Output 'cmt_o_fencei' has 2 mismatches. First mismatch occurred at time 2175.\nHint: Output 'cmt_o_ifu_ilegl' has 2 mismatches. First mismatch occurred at time 495.\nHint: Output 'cmt_o_bjp_rslv' has 2 mismatches. First mismatch occurred at time 2175.\nHint: Output 'cmt_o_stamo' has 6 mismatches. First mismatch occurred at time 635.\nHint: Output 'cmt_o_badaddr' has 4 mismatches. First mismatch occurred at time 635.\nHint: Output 'wbck_o_wdat' has 16 mismatches. First mismatch occurred at time 355.\nHint: Output 'csr_ena' has 2 mismatches. First mismatch occurred at time 1075.\nHint: Output 'csr_wr_en' has 2 mismatches. First mismatch occurred at time 1075.",
+    "audit": [
+      "AUDIT valid=109 normal=19 exception=90 stalls=53 stall_changes_excluding_current_flush=9 flush_cycles=113 cmd=0 rsp=100 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=4 accepted=2",
+      "AUDIT group=1 selected_cycles=2 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=0",
+      "AUDIT group=3 selected_cycles=2 accepted=2",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=0",
+      "AUDIT group=6 selected_cycles=3 accepted=0",
+      "AUDIT group=7 selected_cycles=2 accepted=0"
+    ]
+  },
+  {
+    "seed": "66",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 4 mismatches. First mismatch occurred at time 275.\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 2015.\nHint: Output 'cmt_o_valid' has 10 mismatches. First mismatch occurred at time 275.\nHint: Output 'cmt_o_fencei' has 2 mismatches. First mismatch occurred at time 1555.\nHint: Output 'cmt_o_ifu_ilegl' has 2 mismatches. First mismatch occurred at time 935.\nHint: Output 'cmt_o_misalgn' has 4 mismatches. First mismatch occurred at time 275.\nHint: Output 'cmt_o_ld' has 2 mismatches. First mismatch occurred at time 2015.\nHint: Output 'cmt_o_stamo' has 2 mismatches. First mismatch occurred at time 2015.\nHint: Output 'cmt_o_badaddr' has 4 mismatches. First mismatch occurred at time 995.\nHint: Output 'wbck_o_wdat' has 10 mismatches. First mismatch occurred at time 755.",
+    "audit": [
+      "AUDIT valid=93 normal=26 exception=67 stalls=42 stall_changes_excluding_current_flush=12 flush_cycles=83 cmd=0 rsp=103 nice_req=2 nice_rsp=2 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=4 accepted=2",
+      "AUDIT group=1 selected_cycles=8 accepted=2",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=4 accepted=4",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=4 accepted=2",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=4 accepted=0"
+    ]
+  },
+  {
+    "seed": "67",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'cmt_o_valid' has 4 mismatches. First mismatch occurred at time 295.\nHint: Output 'cmt_o_ifu_ilegl' has 2 mismatches. First mismatch occurred at time 375.\nHint: Output 'wbck_o_wdat' has 2 mismatches. First mismatch occurred at time 1615.\nHint: Output 'csr_wr_en' has 2 mismatches. First mismatch occurred at time 295.\nHint: Output 'csr_rd_en' has 2 mismatches. First mismatch occurred at time 295.\nHint: Output 'wbck_csr_dat' has 6 mismatches. First mismatch occurred at time 295.\nHint: Output 'agu_icb_cmd_addr' has 2 mismatches. First mismatch occurred at time 1615.\nHint: Output 'agu_icb_cmd_wdata' has 2 mismatches. First mismatch occurred at time 435.\nHint: Output 'agu_icb_cmd_wmask' has 4 mismatches. First mismatch occurred at time 435.",
+    "audit": [
+      "AUDIT valid=92 normal=6 exception=86 stalls=50 stall_changes_excluding_current_flush=9 flush_cycles=103 cmd=0 rsp=117 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=2 accepted=0",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=0",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "68",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 4 mismatches. First mismatch occurred at time 235.\nHint: Output 'i_longpipe' has 4 mismatches. First mismatch occurred at time 235.\nHint: Output 'cmt_o_valid' has 8 mismatches. First mismatch occurred at time 235.\nHint: Output 'cmt_o_fencei' has 4 mismatches. First mismatch occurred at time 935.\nHint: Output 'cmt_o_ifu_ilegl' has 4 mismatches. First mismatch occurred at time 235.\nHint: Output 'cmt_o_stamo' has 4 mismatches. First mismatch occurred at time 1075.\nHint: Output 'wbck_o_valid' has 4 mismatches. First mismatch occurred at time 235.\nHint: Output 'wbck_o_wdat' has 10 mismatches. First mismatch occurred at time 935.\nHint: Output 'agu_icb_cmd_addr' has 6 mismatches. First mismatch occurred at time 935.\nHint: Output 'agu_icb_cmd_wdata' has 2 mismatches. First mismatch occurred at time 1755.",
+    "audit": [
+      "AUDIT valid=103 normal=16 exception=87 stalls=56 stall_changes_excluding_current_flush=13 flush_cycles=114 cmd=0 rsp=116 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=2",
+      "AUDIT group=1 selected_cycles=4 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=2",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=4 accepted=0",
+      "AUDIT group=6 selected_cycles=4 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "69",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'cmt_o_bjp_prdt' has 2 mismatches. First mismatch occurred at time 395.\nHint: Output 'cmt_o_bjp_rslv' has 2 mismatches. First mismatch occurred at time 395.\nHint: Output 'wbck_o_wdat' has 4 mismatches. First mismatch occurred at time 695.\nHint: Output 'agu_icb_cmd_addr' has 6 mismatches. First mismatch occurred at time 395.\nHint: Output 'agu_icb_cmd_wmask' has 6 mismatches. First mismatch occurred at time 395.\nHint: Output 'nice_longp_wbck_valid' has 1 mismatches. First mismatch occurred at time 865.\nHint: Output 'nice_o_itag' has 2 mismatches. First mismatch occurred at time 865.",
+    "audit": [
+      "AUDIT valid=86 normal=8 exception=78 stalls=40 stall_changes_excluding_current_flush=8 flush_cycles=102 cmd=0 rsp=102 nice_req=2 nice_rsp=2 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=2",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "70",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 1975.\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 275.\nHint: Output 'cmt_o_ifu_ilegl' has 4 mismatches. First mismatch occurred at time 1015.\nHint: Output 'cmt_o_ld' has 2 mismatches. First mismatch occurred at time 275.\nHint: Output 'cmt_o_badaddr' has 2 mismatches. First mismatch occurred at time 275.\nHint: Output 'wbck_o_valid' has 2 mismatches. First mismatch occurred at time 1015.\nHint: Output 'wbck_o_wdat' has 6 mismatches. First mismatch occurred at time 495.\nHint: Output 'agu_icb_cmd_addr' has 4 mismatches. First mismatch occurred at time 275.\nHint: Output 'agu_icb_cmd_read' has 2 mismatches. First mismatch occurred at time 275.\nHint: Output 'agu_icb_cmd_wdata' has 2 mismatches. First mismatch occurred at time 275.",
+    "audit": [
+      "AUDIT valid=106 normal=6 exception=100 stalls=52 stall_changes_excluding_current_flush=10 flush_cycles=116 cmd=0 rsp=113 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=4 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=2",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "71",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 755.\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 895.\nHint: Output 'cmt_o_valid' has 2 mismatches. First mismatch occurred at time 1195.\nHint: Output 'cmt_o_fencei' has 4 mismatches. First mismatch occurred at time 935.\nHint: Output 'cmt_o_ifu_ilegl' has 2 mismatches. First mismatch occurred at time 355.\nHint: Output 'cmt_o_misalgn' has 2 mismatches. First mismatch occurred at time 755.\nHint: Output 'cmt_o_ld' has 2 mismatches. First mismatch occurred at time 895.\nHint: Output 'cmt_o_stamo' has 6 mismatches. First mismatch occurred at time 335.\nHint: Output 'cmt_o_badaddr' has 2 mismatches. First mismatch occurred at time 895.\nHint: Output 'wbck_o_valid' has 2 mismatches. First mismatch occurred at time 355.",
+    "audit": [
+      "AUDIT valid=103 normal=16 exception=87 stalls=49 stall_changes_excluding_current_flush=16 flush_cycles=84 cmd=0 rsp=119 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=2",
+      "AUDIT group=1 selected_cycles=2 accepted=0",
+      "AUDIT group=2 selected_cycles=4 accepted=2",
+      "AUDIT group=3 selected_cycles=4 accepted=2",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=2",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "72",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 1975.\nHint: Output 'i_longpipe' has 4 mismatches. First mismatch occurred at time 735.\nHint: Output 'cmt_o_valid' has 6 mismatches. First mismatch occurred at time 815.\nHint: Output 'cmt_o_fencei' has 2 mismatches. First mismatch occurred at time 2155.\nHint: Output 'cmt_o_ifu_ilegl' has 4 mismatches. First mismatch occurred at time 815.\nHint: Output 'cmt_o_bjp_rslv' has 2 mismatches. First mismatch occurred at time 2155.\nHint: Output 'cmt_o_misalgn' has 4 mismatches. First mismatch occurred at time 1255.\nHint: Output 'cmt_o_stamo' has 4 mismatches. First mismatch occurred at time 1255.\nHint: Output 'cmt_o_badaddr' has 6 mismatches. First mismatch occurred at time 515.\nHint: Output 'wbck_o_wdat' has 6 mismatches. First mismatch occurred at time 395.",
+    "audit": [
+      "AUDIT valid=106 normal=14 exception=92 stalls=56 stall_changes_excluding_current_flush=11 flush_cycles=109 cmd=0 rsp=101 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=0",
+      "AUDIT group=1 selected_cycles=2 accepted=2",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=4 accepted=0",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=4 accepted=0"
+    ]
+  },
+  {
+    "seed": "73",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 2015.\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 1435.\nHint: Output 'cmt_o_valid' has 7 mismatches. First mismatch occurred at time 1035.\nHint: Output 'cmt_o_bjp_rslv' has 2 mismatches. First mismatch occurred at time 335.\nHint: Output 'cmt_o_ld' has 2 mismatches. First mismatch occurred at time 555.\nHint: Output 'cmt_o_stamo' has 4 mismatches. First mismatch occurred at time 555.\nHint: Output 'cmt_o_badaddr' has 4 mismatches. First mismatch occurred at time 555.\nHint: Output 'wbck_o_valid' has 2 mismatches. First mismatch occurred at time 2015.\nHint: Output 'wbck_o_wdat' has 11 mismatches. First mismatch occurred at time 295.\nHint: Output 'csr_rd_en' has 2 mismatches. First mismatch occurred at time 1035.",
+    "audit": [
+      "AUDIT valid=103 normal=15 exception=88 stalls=51 stall_changes_excluding_current_flush=14 flush_cycles=101 cmd=2 rsp=111 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=5 accepted=2",
+      "AUDIT group=1 selected_cycles=2 accepted=2",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=2 accepted=0",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=0",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=2 accepted=0"
+    ]
+  },
+  {
+    "seed": "74",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 1335.\nHint: Output 'cmt_o_valid' has 2 mismatches. First mismatch occurred at time 1335.\nHint: Output 'wbck_o_valid' has 2 mismatches. First mismatch occurred at time 1335.\nHint: Output 'wbck_o_wdat' has 6 mismatches. First mismatch occurred at time 1335.\nHint: Output 'agu_icb_cmd_addr' has 4 mismatches. First mismatch occurred at time 1335.\nHint: Output 'agu_icb_cmd_wmask' has 4 mismatches. First mismatch occurred at time 1335.",
+    "audit": [
+      "AUDIT valid=111 normal=8 exception=103 stalls=48 stall_changes_excluding_current_flush=12 flush_cycles=103 cmd=0 rsp=80 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=2",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=2 accepted=0"
+    ]
+  },
+  {
+    "seed": "75",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'cmt_o_valid' has 2 mismatches. First mismatch occurred at time 1415.\nHint: Output 'cmt_o_bjp_prdt' has 2 mismatches. First mismatch occurred at time 775.\nHint: Output 'cmt_o_bjp_rslv' has 2 mismatches. First mismatch occurred at time 775.\nHint: Output 'wbck_o_wdat' has 6 mismatches. First mismatch occurred at time 855.\nHint: Output 'wbck_csr_dat' has 2 mismatches. First mismatch occurred at time 1415.\nHint: Output 'agu_icb_cmd_addr' has 4 mismatches. First mismatch occurred at time 775.\nHint: Output 'agu_icb_cmd_wmask' has 2 mismatches. First mismatch occurred at time 775.",
+    "audit": [
+      "AUDIT valid=118 normal=6 exception=112 stalls=68 stall_changes_excluding_current_flush=17 flush_cycles=91 cmd=0 rsp=118 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=2 accepted=2",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=2 accepted=0"
+    ]
+  },
+  {
+    "seed": "76",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 1015.\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 1155.\nHint: Output 'cmt_o_valid' has 2 mismatches. First mismatch occurred at time 815.\nHint: Output 'cmt_o_ifu_ilegl' has 4 mismatches. First mismatch occurred at time 1015.\nHint: Output 'wbck_o_valid' has 2 mismatches. First mismatch occurred at time 1675.\nHint: Output 'wbck_o_wdat' has 4 mismatches. First mismatch occurred at time 1675.\nHint: Output 'wbck_csr_dat' has 6 mismatches. First mismatch occurred at time 815.\nHint: Output 'agu_icb_cmd_addr' has 2 mismatches. First mismatch occurred at time 1675.\nHint: Output 'nice_req_valid' has 4 mismatches. First mismatch occurred at time 1155.\nHint: Output 'nice_rsp_multicyc_ready' has 5 mismatches. First mismatch occurred at time 1175.",
+    "audit": [
+      "AUDIT valid=81 normal=12 exception=69 stalls=36 stall_changes_excluding_current_flush=5 flush_cycles=102 cmd=0 rsp=107 nice_req=2 nice_rsp=2 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=2",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=2 accepted=2",
+      "AUDIT group=4 selected_cycles=4 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=2",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "77",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'cmt_o_valid' has 2 mismatches. First mismatch occurred at time 1635.\nHint: Output 'cmt_o_bjp_rslv' has 2 mismatches. First mismatch occurred at time 235.\nHint: Output 'wbck_o_wdat' has 8 mismatches. First mismatch occurred at time 375.\nHint: Output 'wbck_csr_dat' has 2 mismatches. First mismatch occurred at time 1635.\nHint: Output 'agu_icb_cmd_addr' has 6 mismatches. First mismatch occurred at time 235.\nHint: Output 'agu_icb_cmd_wmask' has 4 mismatches. First mismatch occurred at time 235.\nHint: Output 'nice_req_valid' has 2 mismatches. First mismatch occurred at time 1495.",
+    "audit": [
+      "AUDIT valid=96 normal=12 exception=84 stalls=64 stall_changes_excluding_current_flush=15 flush_cycles=98 cmd=0 rsp=109 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=2",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=0",
+      "AUDIT group=3 selected_cycles=2 accepted=0",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=4 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "78",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'cmt_o_valid' has 2 mismatches. First mismatch occurred at time 1895.\nHint: Output 'cmt_o_fencei' has 4 mismatches. First mismatch occurred at time 615.\nHint: Output 'cmt_o_bjp_prdt' has 2 mismatches. First mismatch occurred at time 435.\nHint: Output 'cmt_o_bjp_rslv' has 4 mismatches. First mismatch occurred at time 435.\nHint: Output 'wbck_o_wdat' has 10 mismatches. First mismatch occurred at time 1015.\nHint: Output 'agu_icb_cmd_addr' has 10 mismatches. First mismatch occurred at time 435.\nHint: Output 'agu_icb_cmd_wmask' has 8 mismatches. First mismatch occurred at time 435.",
+    "audit": [
+      "AUDIT valid=100 normal=18 exception=82 stalls=62 stall_changes_excluding_current_flush=16 flush_cycles=112 cmd=0 rsp=94 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=4 accepted=2",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=6 accepted=4",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=4 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=2 accepted=0"
+    ]
+  },
+  {
+    "seed": "79",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_longpipe' has 4 mismatches. First mismatch occurred at time 1115.\nHint: Output 'cmt_o_valid' has 4 mismatches. First mismatch occurred at time 1035.\nHint: Output 'cmt_o_ifu_ilegl' has 2 mismatches. First mismatch occurred at time 1215.\nHint: Output 'cmt_o_misalgn' has 2 mismatches. First mismatch occurred at time 1895.\nHint: Output 'cmt_o_ld' has 4 mismatches. First mismatch occurred at time 1115.\nHint: Output 'cmt_o_stamo' has 6 mismatches. First mismatch occurred at time 1155.\nHint: Output 'cmt_o_badaddr' has 6 mismatches. First mismatch occurred at time 1115.\nHint: Output 'wbck_o_wdat' has 8 mismatches. First mismatch occurred at time 875.\nHint: Output 'csr_ena' has 4 mismatches. First mismatch occurred at time 1035.\nHint: Output 'csr_wr_en' has 4 mismatches. First mismatch occurred at time 1035.",
+    "audit": [
+      "AUDIT valid=113 normal=14 exception=99 stalls=55 stall_changes_excluding_current_flush=14 flush_cycles=104 cmd=0 rsp=92 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=2 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=2",
+      "AUDIT group=3 selected_cycles=6 accepted=6",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=4 accepted=0"
+    ]
+  },
+  {
+    "seed": "80",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'cmt_o_valid' has 4 mismatches. First mismatch occurred at time 1135.\nHint: Output 'cmt_o_ifu_ilegl' has 2 mismatches. First mismatch occurred at time 1135.\nHint: Output 'cmt_o_stamo' has 6 mismatches. First mismatch occurred at time 215.\nHint: Output 'cmt_o_badaddr' has 2 mismatches. First mismatch occurred at time 795.\nHint: Output 'wbck_o_wdat' has 2 mismatches. First mismatch occurred at time 355.\nHint: Output 'wbck_csr_dat' has 4 mismatches. First mismatch occurred at time 1775.\nHint: Output 'agu_icb_cmd_addr' has 4 mismatches. First mismatch occurred at time 795.\nHint: Output 'agu_icb_cmd_read' has 2 mismatches. First mismatch occurred at time 795.\nHint: Output 'agu_icb_cmd_wdata' has 4 mismatches. First mismatch occurred at time 715.\nHint: Output 'agu_icb_cmd_wmask' has 6 mismatches. First mismatch occurred at time 715.",
+    "audit": [
+      "AUDIT valid=88 normal=14 exception=74 stalls=48 stall_changes_excluding_current_flush=10 flush_cycles=99 cmd=0 rsp=119 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=4 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=0",
+      "AUDIT group=3 selected_cycles=2 accepted=0",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=0",
+      "AUDIT group=6 selected_cycles=4 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "81",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 835.\nHint: Output 'i_longpipe' has 4 mismatches. First mismatch occurred at time 515.\nHint: Output 'cmt_o_valid' has 2 mismatches. First mismatch occurred at time 375.\nHint: Output 'cmt_o_fencei' has 2 mismatches. First mismatch occurred at time 495.\nHint: Output 'cmt_o_ifu_ilegl' has 6 mismatches. First mismatch occurred at time 335.\nHint: Output 'cmt_o_stamo' has 2 mismatches. First mismatch occurred at time 1115.\nHint: Output 'cmt_o_badaddr' has 2 mismatches. First mismatch occurred at time 1115.\nHint: Output 'wbck_o_wdat' has 8 mismatches. First mismatch occurred at time 815.\nHint: Output 'wbck_csr_dat' has 4 mismatches. First mismatch occurred at time 1215.\nHint: Output 'agu_icb_cmd_addr' has 8 mismatches. First mismatch occurred at time 495.",
+    "audit": [
+      "AUDIT valid=97 normal=12 exception=85 stalls=44 stall_changes_excluding_current_flush=11 flush_cycles=107 cmd=0 rsp=97 nice_req=2 nice_rsp=3 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=6 accepted=2",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=2 accepted=0"
+    ]
+  },
+  {
+    "seed": "82",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'cmt_o_valid' has 2 mismatches. First mismatch occurred at time 635.\nHint: Output 'cmt_o_ifu_ilegl' has 2 mismatches. First mismatch occurred at time 2135.\nHint: Output 'cmt_o_ld' has 2 mismatches. First mismatch occurred at time 1355.\nHint: Output 'wbck_o_wdat' has 6 mismatches. First mismatch occurred at time 795.\nHint: Output 'wbck_csr_dat' has 4 mismatches. First mismatch occurred at time 635.\nHint: Output 'agu_icb_cmd_addr' has 2 mismatches. First mismatch occurred at time 835.\nHint: Output 'agu_icb_cmd_wmask' has 2 mismatches. First mismatch occurred at time 835.\nHint: Output 'agu_icb_cmd_usign' has 2 mismatches. First mismatch occurred at time 1355.\nHint: Output 'nice_req_valid' has 2 mismatches. First mismatch occurred at time 1115.\nHint: Output 'nice_rsp_multicyc_ready' has 4 mismatches. First mismatch occurred at time 1135.",
+    "audit": [
+      "AUDIT valid=113 normal=6 exception=107 stalls=45 stall_changes_excluding_current_flush=12 flush_cycles=105 cmd=0 rsp=98 nice_req=2 nice_rsp=2 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=2 accepted=0",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=2",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "83",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 855.\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 1875.\nHint: Output 'cmt_o_valid' has 2 mismatches. First mismatch occurred at time 615.\nHint: Output 'cmt_o_fencei' has 2 mismatches. First mismatch occurred at time 1815.\nHint: Output 'cmt_o_bjp_rslv' has 2 mismatches. First mismatch occurred at time 1815.\nHint: Output 'cmt_o_misalgn' has 2 mismatches. First mismatch occurred at time 1355.\nHint: Output 'cmt_o_ld' has 4 mismatches. First mismatch occurred at time 1355.\nHint: Output 'cmt_o_stamo' has 2 mismatches. First mismatch occurred at time 1355.\nHint: Output 'cmt_o_badaddr' has 4 mismatches. First mismatch occurred at time 1355.\nHint: Output 'wbck_o_wdat' has 4 mismatches. First mismatch occurred at time 1355.",
+    "audit": [
+      "AUDIT valid=108 normal=14 exception=94 stalls=60 stall_changes_excluding_current_flush=13 flush_cycles=93 cmd=0 rsp=104 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=2 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=0",
+      "AUDIT group=3 selected_cycles=2 accepted=0",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=0",
+      "AUDIT group=6 selected_cycles=4 accepted=0",
+      "AUDIT group=7 selected_cycles=2 accepted=0"
+    ]
+  },
+  {
+    "seed": "84",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'cmt_o_valid' has 2 mismatches. First mismatch occurred at time 875.\nHint: Output 'cmt_o_fencei' has 4 mismatches. First mismatch occurred at time 295.\nHint: Output 'cmt_o_ifu_ilegl' has 2 mismatches. First mismatch occurred at time 655.\nHint: Output 'wbck_o_wdat' has 10 mismatches. First mismatch occurred at time 295.\nHint: Output 'csr_wr_en' has 2 mismatches. First mismatch occurred at time 875.\nHint: Output 'csr_rd_en' has 2 mismatches. First mismatch occurred at time 875.\nHint: Output 'wbck_csr_dat' has 4 mismatches. First mismatch occurred at time 875.\nHint: Output 'agu_icb_cmd_addr' has 10 mismatches. First mismatch occurred at time 295.\nHint: Output 'agu_icb_cmd_wmask' has 6 mismatches. First mismatch occurred at time 295.",
+    "audit": [
+      "AUDIT valid=103 normal=12 exception=91 stalls=53 stall_changes_excluding_current_flush=15 flush_cycles=104 cmd=0 rsp=101 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=4 accepted=2",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=0",
+      "AUDIT group=3 selected_cycles=2 accepted=0",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=2 accepted=0"
+    ]
+  },
+  {
+    "seed": "85",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 815.\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 2155.\nHint: Output 'cmt_o_valid' has 4 mismatches. First mismatch occurred at time 815.\nHint: Output 'cmt_o_fencei' has 2 mismatches. First mismatch occurred at time 1515.\nHint: Output 'cmt_o_ifu_ilegl' has 2 mismatches. First mismatch occurred at time 2155.\nHint: Output 'cmt_o_bjp_prdt' has 2 mismatches. First mismatch occurred at time 1515.\nHint: Output 'cmt_o_bjp_rslv' has 2 mismatches. First mismatch occurred at time 1515.\nHint: Output 'wbck_o_valid' has 4 mismatches. First mismatch occurred at time 815.\nHint: Output 'wbck_o_wdat' has 12 mismatches. First mismatch occurred at time 215.\nHint: Output 'wbck_csr_dat' has 2 mismatches. First mismatch occurred at time 1635.",
+    "audit": [
+      "AUDIT valid=106 normal=14 exception=92 stalls=46 stall_changes_excluding_current_flush=10 flush_cycles=108 cmd=0 rsp=103 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=6 accepted=4",
+      "AUDIT group=1 selected_cycles=2 accepted=2",
+      "AUDIT group=2 selected_cycles=4 accepted=4",
+      "AUDIT group=3 selected_cycles=2 accepted=2",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "86",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 355.\nHint: Output 'cmt_o_ld' has 2 mismatches. First mismatch occurred at time 355.\nHint: Output 'cmt_o_stamo' has 2 mismatches. First mismatch occurred at time 355.\nHint: Output 'cmt_o_badaddr' has 2 mismatches. First mismatch occurred at time 355.\nHint: Output 'wbck_o_wdat' has 4 mismatches. First mismatch occurred at time 775.\nHint: Output 'wbck_csr_dat' has 2 mismatches. First mismatch occurred at time 1215.\nHint: Output 'agu_icb_cmd_addr' has 2 mismatches. First mismatch occurred at time 355.\nHint: Output 'agu_icb_cmd_read' has 2 mismatches. First mismatch occurred at time 355.\nHint: Output 'agu_icb_cmd_wdata' has 2 mismatches. First mismatch occurred at time 355.\nHint: Output 'agu_icb_cmd_wmask' has 2 mismatches. First mismatch occurred at time 355.",
+    "audit": [
+      "AUDIT valid=102 normal=6 exception=96 stalls=54 stall_changes_excluding_current_flush=13 flush_cycles=118 cmd=0 rsp=104 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=2",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "87",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 1 mismatches. First mismatch occurred at time 1515.\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 1855.\nHint: Output 'amo_wait' has 2 mismatches. First mismatch occurred at time 1525.\nHint: Output 'cmt_o_valid' has 3 mismatches. First mismatch occurred at time 1525.\nHint: Output 'cmt_o_fencei' has 2 mismatches. First mismatch occurred at time 1435.\nHint: Output 'cmt_o_ld' has 2 mismatches. First mismatch occurred at time 1855.\nHint: Output 'cmt_o_stamo' has 2 mismatches. First mismatch occurred at time 1855.\nHint: Output 'cmt_o_badaddr' has 2 mismatches. First mismatch occurred at time 1855.\nHint: Output 'wbck_o_wdat' has 8 mismatches. First mismatch occurred at time 1195.\nHint: Output 'csr_wr_en' has 2 mismatches. First mismatch occurred at time 1995.",
+    "audit": [
+      "AUDIT valid=111 normal=12 exception=99 stalls=60 stall_changes_excluding_current_flush=16 flush_cycles=102 cmd=2 rsp=102 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=2 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=0",
+      "AUDIT group=3 selected_cycles=2 accepted=0",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=2 accepted=0"
+    ]
+  },
+  {
+    "seed": "88",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_longpipe' has 4 mismatches. First mismatch occurred at time 455.\nHint: Output 'cmt_o_fencei' has 2 mismatches. First mismatch occurred at time 1235.\nHint: Output 'cmt_o_ifu_ilegl' has 4 mismatches. First mismatch occurred at time 455.\nHint: Output 'cmt_o_bjp_rslv' has 4 mismatches. First mismatch occurred at time 1035.\nHint: Output 'cmt_o_misalgn' has 2 mismatches. First mismatch occurred at time 1315.\nHint: Output 'cmt_o_badaddr' has 2 mismatches. First mismatch occurred at time 615.\nHint: Output 'wbck_o_wdat' has 4 mismatches. First mismatch occurred at time 1035.\nHint: Output 'agu_icb_cmd_addr' has 8 mismatches. First mismatch occurred at time 615.\nHint: Output 'agu_icb_cmd_read' has 4 mismatches. First mismatch occurred at time 615.\nHint: Output 'agu_icb_cmd_wdata' has 2 mismatches. First mismatch occurred at time 615.",
+    "audit": [
+      "AUDIT valid=98 normal=8 exception=90 stalls=42 stall_changes_excluding_current_flush=7 flush_cycles=115 cmd=0 rsp=80 nice_req=2 nice_rsp=2 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=2",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "89",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 1315.\nHint: Output 'cmt_o_valid' has 2 mismatches. First mismatch occurred at time 1755.\nHint: Output 'cmt_o_fencei' has 4 mismatches. First mismatch occurred at time 1255.\nHint: Output 'cmt_o_bjp_rslv' has 2 mismatches. First mismatch occurred at time 1615.\nHint: Output 'cmt_o_stamo' has 2 mismatches. First mismatch occurred at time 1635.\nHint: Output 'wbck_o_wdat' has 4 mismatches. First mismatch occurred at time 1315.\nHint: Output 'wbck_csr_dat' has 2 mismatches. First mismatch occurred at time 1755.\nHint: Output 'agu_icb_cmd_addr' has 8 mismatches. First mismatch occurred at time 215.\nHint: Output 'agu_icb_cmd_wdata' has 2 mismatches. First mismatch occurred at time 1635.\nHint: Output 'agu_icb_cmd_wmask' has 10 mismatches. First mismatch occurred at time 215.",
+    "audit": [
+      "AUDIT valid=91 normal=14 exception=77 stalls=40 stall_changes_excluding_current_flush=10 flush_cycles=107 cmd=0 rsp=98 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=4 accepted=0",
+      "AUDIT group=3 selected_cycles=2 accepted=2",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=4 accepted=0",
+      "AUDIT group=7 selected_cycles=2 accepted=0"
+    ]
+  },
+  {
+    "seed": "90",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 1275.\nHint: Output 'cmt_o_valid' has 2 mismatches. First mismatch occurred at time 515.\nHint: Output 'wbck_o_wdat' has 10 mismatches. First mismatch occurred at time 235.\nHint: Output 'csr_ena' has 2 mismatches. First mismatch occurred at time 515.\nHint: Output 'csr_wr_en' has 2 mismatches. First mismatch occurred at time 515.\nHint: Output 'csr_rd_en' has 2 mismatches. First mismatch occurred at time 515.\nHint: Output 'wbck_csr_dat' has 2 mismatches. First mismatch occurred at time 515.\nHint: Output 'agu_icb_cmd_addr' has 8 mismatches. First mismatch occurred at time 235.\nHint: Output 'agu_icb_cmd_wmask' has 8 mismatches. First mismatch occurred at time 235.",
+    "audit": [
+      "AUDIT valid=99 normal=8 exception=91 stalls=59 stall_changes_excluding_current_flush=14 flush_cycles=105 cmd=0 rsp=85 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=2 accepted=2",
+      "AUDIT group=4 selected_cycles=4 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "91",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 1295.\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 215.\nHint: Output 'cmt_o_valid' has 4 mismatches. First mismatch occurred at time 1275.\nHint: Output 'cmt_o_misalgn' has 3 mismatches. First mismatch occurred at time 2195.\nHint: Output 'cmt_o_ld' has 4 mismatches. First mismatch occurred at time 215.\nHint: Output 'cmt_o_stamo' has 6 mismatches. First mismatch occurred at time 215.\nHint: Output 'cmt_o_badaddr' has 4 mismatches. First mismatch occurred at time 215.\nHint: Output 'wbck_o_valid' has 2 mismatches. First mismatch occurred at time 1295.\nHint: Output 'wbck_o_wdat' has 8 mismatches. First mismatch occurred at time 655.\nHint: Output 'agu_icb_cmd_addr' has 8 mismatches. First mismatch occurred at time 215.",
+    "audit": [
+      "AUDIT valid=110 normal=4 exception=106 stalls=56 stall_changes_excluding_current_flush=13 flush_cycles=93 cmd=0 rsp=107 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=4 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "92",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 2035.\nHint: Output 'cmt_o_ld' has 4 mismatches. First mismatch occurred at time 2035.\nHint: Output 'cmt_o_stamo' has 2 mismatches. First mismatch occurred at time 2035.\nHint: Output 'cmt_o_badaddr' has 2 mismatches. First mismatch occurred at time 2035.\nHint: Output 'wbck_o_wdat' has 10 mismatches. First mismatch occurred at time 455.\nHint: Output 'wbck_csr_dat' has 6 mismatches. First mismatch occurred at time 215.\nHint: Output 'agu_icb_cmd_addr' has 8 mismatches. First mismatch occurred at time 455.\nHint: Output 'agu_icb_cmd_read' has 4 mismatches. First mismatch occurred at time 2035.\nHint: Output 'agu_icb_cmd_wdata' has 2 mismatches. First mismatch occurred at time 2035.\nHint: Output 'agu_icb_cmd_wmask' has 2 mismatches. First mismatch occurred at time 895.",
+    "audit": [
+      "AUDIT valid=105 normal=16 exception=89 stalls=55 stall_changes_excluding_current_flush=10 flush_cycles=120 cmd=0 rsp=98 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=0",
+      "AUDIT group=1 selected_cycles=4 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=2",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=4 accepted=0",
+      "AUDIT group=7 selected_cycles=2 accepted=0"
+    ]
+  },
+  {
+    "seed": "93",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 1275.\nHint: Output 'cmt_o_valid' has 6 mismatches. First mismatch occurred at time 295.\nHint: Output 'cmt_o_fencei' has 4 mismatches. First mismatch occurred at time 1175.\nHint: Output 'cmt_o_bjp_prdt' has 2 mismatches. First mismatch occurred at time 1095.\nHint: Output 'cmt_o_bjp_rslv' has 2 mismatches. First mismatch occurred at time 1095.\nHint: Output 'cmt_o_misalgn' has 2 mismatches. First mismatch occurred at time 1155.\nHint: Output 'cmt_o_ld' has 4 mismatches. First mismatch occurred at time 1275.\nHint: Output 'cmt_o_badaddr' has 2 mismatches. First mismatch occurred at time 1275.\nHint: Output 'wbck_o_wdat' has 12 mismatches. First mismatch occurred at time 855.\nHint: Output 'csr_ena' has 4 mismatches. First mismatch occurred at time 295.",
+    "audit": [
+      "AUDIT valid=100 normal=20 exception=80 stalls=56 stall_changes_excluding_current_flush=10 flush_cycles=116 cmd=0 rsp=108 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=2",
+      "AUDIT group=1 selected_cycles=4 accepted=0",
+      "AUDIT group=2 selected_cycles=6 accepted=2",
+      "AUDIT group=3 selected_cycles=4 accepted=4",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=2 accepted=0"
+    ]
+  },
+  {
+    "seed": "94",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_longpipe' has 4 mismatches. First mismatch occurred at time 295.\nHint: Output 'cmt_o_valid' has 4 mismatches. First mismatch occurred at time 1155.\nHint: Output 'cmt_o_fencei' has 2 mismatches. First mismatch occurred at time 915.\nHint: Output 'cmt_o_ifu_ilegl' has 4 mismatches. First mismatch occurred at time 295.\nHint: Output 'wbck_o_valid' has 2 mismatches. First mismatch occurred at time 295.\nHint: Output 'wbck_o_wdat' has 8 mismatches. First mismatch occurred at time 215.\nHint: Output 'wbck_csr_dat' has 4 mismatches. First mismatch occurred at time 1375.\nHint: Output 'agu_icb_cmd_addr' has 4 mismatches. First mismatch occurred at time 895.\nHint: Output 'agu_icb_cmd_wmask' has 2 mismatches. First mismatch occurred at time 895.\nHint: Output 'nice_req_valid' has 4 mismatches. First mismatch occurred at time 295.",
+    "audit": [
+      "AUDIT valid=96 normal=12 exception=84 stalls=46 stall_changes_excluding_current_flush=7 flush_cycles=94 cmd=0 rsp=103 nice_req=2 nice_rsp=2 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=6 accepted=2",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=2 accepted=0"
+    ]
+  },
+  {
+    "seed": "95",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 1075.\nHint: Output 'cmt_o_valid' has 2 mismatches. First mismatch occurred at time 1115.\nHint: Output 'cmt_o_ifu_ilegl' has 2 mismatches. First mismatch occurred at time 1355.\nHint: Output 'wbck_o_wdat' has 8 mismatches. First mismatch occurred at time 415.\nHint: Output 'csr_rd_en' has 2 mismatches. First mismatch occurred at time 1115.\nHint: Output 'wbck_csr_dat' has 2 mismatches. First mismatch occurred at time 1575.\nHint: Output 'agu_icb_cmd_addr' has 6 mismatches. First mismatch occurred at time 1075.\nHint: Output 'agu_icb_cmd_wmask' has 4 mismatches. First mismatch occurred at time 1195.\nHint: Output 'nice_req_valid' has 2 mismatches. First mismatch occurred at time 2115.",
+    "audit": [
+      "AUDIT valid=97 normal=10 exception=87 stalls=62 stall_changes_excluding_current_flush=13 flush_cycles=102 cmd=0 rsp=101 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=4 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=2 accepted=0",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=4 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "96",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 1735.\nHint: Output 'cmt_o_valid' has 2 mismatches. First mismatch occurred at time 1735.\nHint: Output 'cmt_o_fencei' has 2 mismatches. First mismatch occurred at time 675.\nHint: Output 'wbck_o_valid' has 2 mismatches. First mismatch occurred at time 1735.\nHint: Output 'wbck_o_wdat' has 8 mismatches. First mismatch occurred at time 1555.\nHint: Output 'agu_icb_cmd_addr' has 6 mismatches. First mismatch occurred at time 675.\nHint: Output 'agu_icb_cmd_wmask' has 4 mismatches. First mismatch occurred at time 675.",
+    "audit": [
+      "AUDIT valid=92 normal=14 exception=78 stalls=50 stall_changes_excluding_current_flush=14 flush_cycles=85 cmd=0 rsp=100 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=2",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=2",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=6 accepted=0"
+    ]
+  },
+  {
+    "seed": "97",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 1015.\nHint: Output 'i_longpipe' has 6 mismatches. First mismatch occurred at time 1015.\nHint: Output 'cmt_o_valid' has 10 mismatches. First mismatch occurred at time 595.\nHint: Output 'cmt_o_fencei' has 2 mismatches. First mismatch occurred at time 1515.\nHint: Output 'cmt_o_ifu_ilegl' has 4 mismatches. First mismatch occurred at time 1015.\nHint: Output 'cmt_o_bjp_rslv' has 4 mismatches. First mismatch occurred at time 935.\nHint: Output 'cmt_o_misalgn' has 2 mismatches. First mismatch occurred at time 1635.\nHint: Output 'cmt_o_ld' has 2 mismatches. First mismatch occurred at time 1635.\nHint: Output 'wbck_o_wdat' has 4 mismatches. First mismatch occurred at time 735.\nHint: Output 'csr_wr_en' has 4 mismatches. First mismatch occurred at time 595.",
+    "audit": [
+      "AUDIT valid=101 normal=20 exception=81 stalls=56 stall_changes_excluding_current_flush=14 flush_cycles=101 cmd=2 rsp=110 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=2 accepted=0",
+      "AUDIT group=1 selected_cycles=4 accepted=2",
+      "AUDIT group=2 selected_cycles=2 accepted=0",
+      "AUDIT group=3 selected_cycles=6 accepted=0",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=0",
+      "AUDIT group=6 selected_cycles=0 accepted=0",
+      "AUDIT group=7 selected_cycles=4 accepted=0"
+    ]
+  },
+  {
+    "seed": "98",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 1915.\nHint: Output 'cmt_o_valid' has 2 mismatches. First mismatch occurred at time 275.\nHint: Output 'cmt_o_fencei' has 4 mismatches. First mismatch occurred at time 1115.\nHint: Output 'cmt_o_bjp_rslv' has 4 mismatches. First mismatch occurred at time 635.\nHint: Output 'cmt_o_misalgn' has 4 mismatches. First mismatch occurred at time 675.\nHint: Output 'cmt_o_ld' has 2 mismatches. First mismatch occurred at time 675.\nHint: Output 'cmt_o_stamo' has 2 mismatches. First mismatch occurred at time 1915.\nHint: Output 'wbck_o_wdat' has 12 mismatches. First mismatch occurred at time 655.\nHint: Output 'csr_wr_en' has 2 mismatches. First mismatch occurred at time 275.\nHint: Output 'csr_rd_en' has 2 mismatches. First mismatch occurred at time 275.",
+    "audit": [
+      "AUDIT valid=105 normal=18 exception=87 stalls=69 stall_changes_excluding_current_flush=19 flush_cycles=87 cmd=0 rsp=113 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=2 accepted=2",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=2 accepted=0",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=4 accepted=0",
+      "AUDIT group=6 selected_cycles=4 accepted=0",
+      "AUDIT group=7 selected_cycles=4 accepted=0"
+    ]
+  },
+  {
+    "seed": "99",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_ready' has 2 mismatches. First mismatch occurred at time 855.\nHint: Output 'cmt_o_valid' has 2 mismatches. First mismatch occurred at time 2175.\nHint: Output 'cmt_o_misalgn' has 4 mismatches. First mismatch occurred at time 855.\nHint: Output 'cmt_o_ld' has 2 mismatches. First mismatch occurred at time 855.\nHint: Output 'cmt_o_stamo' has 2 mismatches. First mismatch occurred at time 855.\nHint: Output 'wbck_o_wdat' has 10 mismatches. First mismatch occurred at time 435.\nHint: Output 'csr_wr_en' has 2 mismatches. First mismatch occurred at time 1335.\nHint: Output 'wbck_csr_dat' has 2 mismatches. First mismatch occurred at time 2175.\nHint: Output 'agu_icb_cmd_addr' has 6 mismatches. First mismatch occurred at time 695.\nHint: Output 'agu_icb_cmd_read' has 4 mismatches. First mismatch occurred at time 855.",
+    "audit": [
+      "AUDIT valid=92 normal=8 exception=84 stalls=58 stall_changes_excluding_current_flush=10 flush_cycles=123 cmd=0 rsp=103 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=0 accepted=0",
+      "AUDIT group=2 selected_cycles=0 accepted=0",
+      "AUDIT group=3 selected_cycles=4 accepted=2",
+      "AUDIT group=4 selected_cycles=0 accepted=0",
+      "AUDIT group=5 selected_cycles=2 accepted=0",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  },
+  {
+    "seed": "100",
+    "passed": false,
+    "reason": "Functional mismatches:\nHint: Output 'i_longpipe' has 2 mismatches. First mismatch occurred at time 1075.\nHint: Output 'cmt_o_ifu_ilegl' has 2 mismatches. First mismatch occurred at time 1275.\nHint: Output 'cmt_o_bjp_rslv' has 2 mismatches. First mismatch occurred at time 1935.\nHint: Output 'cmt_o_ld' has 2 mismatches. First mismatch occurred at time 1075.\nHint: Output 'cmt_o_stamo' has 4 mismatches. First mismatch occurred at time 875.\nHint: Output 'cmt_o_badaddr' has 2 mismatches. First mismatch occurred at time 1075.\nHint: Output 'wbck_o_wdat' has 8 mismatches. First mismatch occurred at time 375.\nHint: Output 'agu_icb_cmd_addr' has 6 mismatches. First mismatch occurred at time 375.\nHint: Output 'agu_icb_cmd_read' has 4 mismatches. First mismatch occurred at time 875.\nHint: Output 'agu_icb_cmd_wdata' has 2 mismatches. First mismatch occurred at time 875.",
+    "audit": [
+      "AUDIT valid=95 normal=8 exception=87 stalls=53 stall_changes_excluding_current_flush=15 flush_cycles=106 cmd=0 rsp=90 nice_req=0 nice_rsp=0 mdv_wb=0 amo_wb=0",
+      "AUDIT group=0 selected_cycles=0 accepted=0",
+      "AUDIT group=1 selected_cycles=2 accepted=0",
+      "AUDIT group=2 selected_cycles=2 accepted=0",
+      "AUDIT group=3 selected_cycles=0 accepted=0",
+      "AUDIT group=4 selected_cycles=2 accepted=0",
+      "AUDIT group=5 selected_cycles=0 accepted=0",
+      "AUDIT group=6 selected_cycles=2 accepted=0",
+      "AUDIT group=7 selected_cycles=0 accepted=0"
+    ]
+  }
+]

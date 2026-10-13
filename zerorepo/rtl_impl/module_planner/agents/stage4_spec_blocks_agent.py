@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -14,7 +15,7 @@ from ..schemas import (
     Stage3ModuleSkeletonArtifact,
     Stage4SpecBlocksArtifact,
 )
-from ..utils import split_spec_blocks
+from ..utils import interface_contract_errors, markdown_ports, split_spec_blocks
 from .base import BaseStageAgent, validate_model
 
 
@@ -30,13 +31,18 @@ class Stage4SpecBlocksAgent(BaseStageAgent):
         logger=None,
         output_root: str | Path | None = None,
         module_spec_context_retriever: ModuleSpecContextRetriever | None = None,
+        retrieval_limits: dict | None = None,
     ):
         super().__init__(llm_client, context_provider, artifact_sink, logger)
         self.output_root = Path(output_root) if output_root is not None else None
         self.module_spec_context_retriever = module_spec_context_retriever or ModuleSpecContextRetriever(
             llm_client,
             logger=self.logger,
+            cache_root=self.output_root / ".repair_cache" / "module_spec" if self.output_root else None,
+            limits=retrieval_limits,
         )
+        if isinstance(self.module_spec_context_retriever, ModuleSpecContextRetriever):
+            self.module_spec_context_retriever.stage_name = "stage4_spec_retrieval"
 
     def run(self, task_input: Any, partial_artifacts: Dict[str, Any]) -> Stage4SpecBlocksArtifact:
         task = task_input if isinstance(task_input, PlannerTaskInput) else validate_model(PlannerTaskInput, task_input)
@@ -61,6 +67,8 @@ class Stage4SpecBlocksAgent(BaseStageAgent):
                     repo_module=repo_module_by_name.get(module_name),
                     fact_ledger=self._fact_ledger(partial_artifacts),
                     skeleton_context=self._stage3_module_context(stage3, module_name),
+                    is_top_module=module_name == repo_skeleton.top_module,
+                    primary_spec_file=self._stage3_spec_file(stage3, module_name) or self._first_spec_file(task),
                 )
             source_file = next((block.source_file for block in retrieval_result.blocks if block.source_file), "")
             source_file = source_file or self._first_spec_file(task)
@@ -120,6 +128,28 @@ class Stage4SpecBlocksAgent(BaseStageAgent):
                     errors.append(f"{module.module}: expected block_id {expected_id}, got {block.block_id}")
                 if not block.text.strip():
                     errors.append(f"{module.module}: {block.block_id} text must not be empty")
+        top_module = repo_skeleton.top_module
+        top_blocks = next((item for item in artifact.modules if item.module == top_module), None)
+        expected_ports = self._top_interface_ports(partial_artifacts, top_module)
+        if top_blocks is not None and expected_ports:
+            block_text = "\n\n".join(block.text for block in top_blocks.blocks)
+            retrieved_ports = markdown_ports(block_text)
+            if retrieved_ports:
+                errors.extend(
+                    interface_contract_errors(
+                        retrieved_ports,
+                        expected_ports,
+                        label=f"top spec blocks `{top_module}`",
+                    )
+                )
+            else:
+                missing = [
+                    port.name
+                    for port in expected_ports
+                    if not re.search(rf"\b{re.escape(port.name)}\b", block_text)
+                ]
+                if missing:
+                    errors.append(f"{top_module}: top spec blocks are missing interface ports {missing}")
         return errors
 
     def _generation_order(self, repo_skeleton: Stage2RepoSkeletonArtifact) -> List[str]:
@@ -145,6 +175,10 @@ class Stage4SpecBlocksAgent(BaseStageAgent):
                 f"block_ids: {', '.join(record.block_ids)}",
             ]
         )
+
+    def _stage3_spec_file(self, stage3: Stage3ModuleSkeletonArtifact, module_name: str) -> str:
+        record = next((item for item in stage3.module_records if item.module == module_name), None)
+        return str(record.source_refs.module_spec_file) if record is not None else ""
 
     def _read_stage3_spec_context(
         self,
@@ -212,6 +246,25 @@ class Stage4SpecBlocksAgent(BaseStageAgent):
                 stage1.get("fact_ledger") if isinstance(stage1, dict) else None
             )
         return None
+
+    def _top_interface_ports(self, partial_artifacts: Dict[str, Any], top_module: str) -> List[Any]:
+        modules = partial_artifacts.get("modules")
+        bundles = getattr(modules, "modules", None)
+        if bundles is None and isinstance(modules, dict):
+            bundles = modules.get("modules")
+        for bundle in bundles or []:
+            module_name = bundle.get("module") if isinstance(bundle, dict) else getattr(bundle, "module", "")
+            if module_name != top_module:
+                continue
+            contract = (
+                bundle.get("interface_contract")
+                if isinstance(bundle, dict)
+                else getattr(bundle, "interface_contract", None)
+            )
+            if contract is None:
+                return []
+            return list(contract.get("ports") if isinstance(contract, dict) else getattr(contract, "ports", []))
+        return []
 
     def _get_repo_skeleton_artifact(self, partial_artifacts: Dict[str, Any]) -> Stage2RepoSkeletonArtifact:
         candidate = partial_artifacts.get("stage2")

@@ -568,6 +568,171 @@ class PlanningContextRetriever:
         return json.dumps(context, ensure_ascii=False, indent=2, sort_keys=True)
 
     @staticmethod
+    def to_stage5_prompt_json(
+        context: Mapping[str, Any],
+        spec_refs: Iterable[str],
+        max_chars: int = 12000,
+    ) -> str:
+        """Serialize only planning facts that are unique and relevant to a subtask.
+
+        The full hydrated context remains available to callers for fingerprint
+        validation.  Stage 5 already receives the current spec blocks,
+        skeleton, and plan separately, so duplicating those artifact bodies in
+        its prompt is both expensive and a source of conflicting emphasis.
+        """
+
+        if max_chars <= 0:
+            return ""
+        wanted_refs = {str(item) for item in spec_refs if str(item)}
+        module = context.get("module") or {}
+        skeleton = context.get("skeleton") or {}
+        plan = context.get("plan") or {}
+
+        def select(source: Mapping[str, Any], keys: Iterable[str]) -> Dict[str, Any]:
+            return {
+                key: source[key]
+                for key in keys
+                if key in source and source[key] not in (None, "", [], {})
+            }
+
+        payload: Dict[str, Any] = {
+            "schema_version": "stage5_planning_context_v1",
+            "module": select(
+                module,
+                (
+                    "name",
+                    "role",
+                    "module_kind",
+                    "expected_path",
+                    "actual_path",
+                    "implementation_status",
+                    "is_top",
+                    "planned_parents",
+                    "planned_children",
+                    "stage2_fingerprint",
+                ),
+            ),
+            "bindings": {
+                "skeleton": select(
+                    skeleton,
+                    (
+                        "artifact_path",
+                        "schema_version",
+                        "content_hash",
+                        "input_fingerprint",
+                        "spec_context_fingerprint",
+                    ),
+                ),
+                "plan": select(
+                    plan,
+                    (
+                        "artifact_path",
+                        "schema_version",
+                        "content_hash",
+                        "input_fingerprint",
+                        "skeleton_content_hash",
+                    ),
+                ),
+            },
+            "selected_spec_links": [],
+            "code_interface": [],
+            "child_code_interfaces": [],
+        }
+
+        for item in context.get("specs") or []:
+            relation = item.get("relation") or {}
+            local_ref = str(relation.get("local_ref") or "")
+            if local_ref not in wanted_refs:
+                continue
+            fragment = item.get("fragment") or {}
+            payload["selected_spec_links"].append(
+                {
+                    **select(
+                        relation,
+                        ("local_ref", "confidence", "relevance_reason", "input_fingerprint"),
+                    ),
+                    **select(fragment, ("content_hash", "source_file")),
+                }
+            )
+        payload["selected_spec_links"].sort(key=lambda item: str(item.get("local_ref") or ""))
+
+        payload["code_interface"] = [
+            select(port, ("name", "direction", "width", "path"))
+            for port in context.get("code_interface") or []
+            if isinstance(port, Mapping)
+        ]
+        planned_children = {
+            str(item) for item in module.get("planned_children") or [] if str(item)
+        }
+        payload["child_code_interfaces"] = [
+            {
+                **select(child, ("module", "actual_path", "implementation_status")),
+                "ports": [
+                    select(port, ("name", "direction", "width"))
+                    for port in child.get("ports") or []
+                    if isinstance(port, Mapping)
+                ],
+            }
+            for child in context.get("child_code_interfaces") or []
+            if isinstance(child, Mapping)
+            and (not planned_children or str(child.get("module") or "") in planned_children)
+        ]
+
+        omitted: Dict[str, int] = {}
+
+        def render() -> str:
+            if omitted:
+                payload["truncated"] = True
+                payload["omitted_count"] = dict(sorted(omitted.items()))
+            return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+        text = render()
+        if len(text) <= max_chars:
+            return text
+
+        for link in payload["selected_spec_links"]:
+            if link.pop("relevance_reason", None) is not None:
+                omitted["spec_relevance_reason"] = omitted.get("spec_relevance_reason", 0) + 1
+        for port in payload["code_interface"]:
+            if port.pop("path", None) is not None:
+                omitted["port_path"] = omitted.get("port_path", 0) + 1
+        text = render()
+        if len(text) <= max_chars:
+            return text
+
+        # Preserve module identity, bindings, selected links, and the beginning
+        # of each deterministic interface list.  Every removal is represented
+        # structurally rather than by slicing serialized JSON.
+        while len(text) > max_chars and payload["child_code_interfaces"]:
+            child = payload["child_code_interfaces"][-1]
+            if child.get("ports"):
+                child["ports"].pop()
+                omitted["child_ports"] = omitted.get("child_ports", 0) + 1
+            else:
+                payload["child_code_interfaces"].pop()
+                omitted["child_interfaces"] = omitted.get("child_interfaces", 0) + 1
+            text = render()
+        while len(text) > max_chars and payload["code_interface"]:
+            payload["code_interface"].pop()
+            omitted["module_ports"] = omitted.get("module_ports", 0) + 1
+            text = render()
+        while len(text) > max_chars and payload["selected_spec_links"]:
+            payload["selected_spec_links"].pop()
+            omitted["selected_spec_links"] = omitted.get("selected_spec_links", 0) + 1
+            text = render()
+        if len(text) <= max_chars:
+            return text
+
+        minimal = {
+            "schema_version": "stage5_planning_context_v1",
+            "module": select(module, ("name", "stage2_fingerprint")),
+            "truncated": True,
+            "omitted_count": {"context": 1},
+        }
+        text = json.dumps(minimal, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return text if len(text) <= max_chars else ""
+
+    @staticmethod
     def spec_markdown(context: Mapping[str, Any]) -> str:
         sections = []
         for item in context.get("specs") or []:

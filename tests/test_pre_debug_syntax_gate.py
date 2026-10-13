@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
+
+import pytest
 
 import zerorepo.rtl_impl.debug_agent.debug_runner as debug_runner_module
 from zerorepo.rtl_impl.debug_agent.debug_runner import ModuleDebugRunner, RtlDebugConfig
+from zerorepo.rtl_impl.debug_agent.sim_reviewer import check_syntax
 
 
 def _runner(tmp_path: Path) -> ModuleDebugRunner:
@@ -248,6 +252,124 @@ def test_run_module_syntax_gate_does_not_require_oracle_or_sim_review(tmp_path: 
     assert result.status == "pass"
     assert events == ["syntax:m"]
     assert "module child" in (Path(result.workdir) / "support.sv").read_text(encoding="utf-8")
+
+
+def test_syntax_gate_stages_manifest_headers_and_excludes_them_from_support(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    merged_dir = workspace / "merged"
+    merged_dir.mkdir(parents=True)
+    merged_file = merged_dir / "m.v"
+    merged_file.write_text(
+        '`include "e203_defines.v"\nmodule m(output [`E203_W-1:0] y); assign y = 0; endmodule\n',
+        encoding="utf-8",
+    )
+    config_text = "`define E203_W 8\n"
+    defines_text = '`include "config.v"\n'
+    (merged_dir / "config.v").write_text(config_text, encoding="utf-8")
+    (merged_dir / "e203_defines.v").write_text(defines_text, encoding="utf-8")
+    (merged_dir / "child.v").write_text("module child; endmodule\n", encoding="utf-8")
+    (workspace / "global_defines_manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "global_defines_manifest_v1",
+                "global_define_files": [
+                    {
+                        "name": "config.v",
+                        "workspace_path": str(merged_dir / "config.v"),
+                        "must_include": False,
+                    },
+                    {
+                        "name": "e203_defines.v",
+                        "workspace_path": str(merged_dir / "e203_defines.v"),
+                        "must_include": True,
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    runner = ModuleDebugRunner(config=RtlDebugConfig(openai_config=None), workspace_root=workspace)
+    workdir = workspace / "debug" / "m"
+
+    runner._prepare_syntax_gate_workdir(
+        module_name="m",
+        merged_file=merged_file,
+        workdir=workdir,
+        contract_json='{"module_name":"m"}',
+        spec_source_path=None,
+    )
+
+    assert (workdir / "config.v").read_text(encoding="utf-8") == config_text
+    assert (workdir / "e203_defines.v").read_text(encoding="utf-8") == defines_text
+    support = (workdir / "support.sv").read_text(encoding="utf-8")
+    assert "module child" in support
+    assert "support source: config.v" not in support
+    assert "support source: e203_defines.v" not in support
+    manifest = json.loads((workdir / "debug_input_manifest.json").read_text(encoding="utf-8"))
+    assert {Path(item).name for item in manifest["staged_global_define_files"]} == {
+        "config.v",
+        "e203_defines.v",
+    }
+
+
+def test_staged_nested_headers_lint_before_and_after_candidate_patch(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    merged_dir = workspace / "merged"
+    merged_dir.mkdir(parents=True)
+    merged_file = merged_dir / "m.v"
+    merged_file.write_text(
+        '`include "e203_defines.v"\n'
+        "module m(output [`E203_W-1:0] y);\n"
+        "child u_child(.y(y));\n"
+        "endmodule\n",
+        encoding="utf-8",
+    )
+    (merged_dir / "config.v").write_text("`define E203_W 8\n", encoding="utf-8")
+    (merged_dir / "e203_defines.v").write_text('`include "config.v"\n', encoding="utf-8")
+    (merged_dir / "child.v").write_text(
+        '`include "e203_defines.v"\n'
+        "module child(output [`E203_W-1:0] y); assign y = 0; endmodule\n",
+        encoding="utf-8",
+    )
+    (workspace / "global_defines_manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "global_defines_manifest_v1",
+                "global_define_files": [
+                    {"name": "config.v", "workspace_path": str(merged_dir / "config.v")},
+                    {"name": "e203_defines.v", "workspace_path": str(merged_dir / "e203_defines.v")},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    runner = ModuleDebugRunner(config=RtlDebugConfig(openai_config=None), workspace_root=workspace)
+    runner._ensure_toolchain_path()
+    if shutil.which("verilator") is None:
+        pytest.skip("Verilator is not installed")
+    workdir = workspace / "debug" / "m"
+    runner._prepare_syntax_gate_workdir(
+        module_name="m",
+        merged_file=merged_file,
+        workdir=workdir,
+        contract_json='{"module_name":"m"}',
+        spec_source_path=None,
+    )
+
+    initial_passed, initial_output = check_syntax(str(workdir / "rtl.sv"), top_module="m")
+    assert initial_passed, initial_output
+
+    (workdir / "rtl.sv").write_text(
+        '`include "e203_defines.v"\n'
+        "module m(output [`E203_W-1:0] y);\n"
+        "wire [`E203_W-1:0] child_y;\n"
+        "child u_child(.y(child_y));\n"
+        "assign y = child_y;\n"
+        "endmodule\n",
+        encoding="utf-8",
+    )
+    patched_passed, patched_output = check_syntax(str(workdir / "rtl.sv"), top_module="m")
+    assert patched_passed, patched_output
 
 
 def test_run_module_syntax_gate_repairs_and_writes_back_to_merged(tmp_path: Path, monkeypatch) -> None:

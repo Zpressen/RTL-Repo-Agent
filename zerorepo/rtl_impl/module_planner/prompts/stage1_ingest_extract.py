@@ -2,6 +2,10 @@ FACTS_SYSTEM_ROLE = (
     "You extract explicit RTL specification facts into a flexible fact ledger. "
     "Do not infer hierarchy, missing ports, or implementation choices."
 )
+TOP_INTERFACE_SYSTEM_ROLE = (
+    "You extract the complete explicit top-level RTL interface from authoritative port sections. "
+    "Do not invent, omit, rename, or reinterpret ports."
+)
 SYSTEM_ROLE = FACTS_SYSTEM_ROLE
 
 TEXT_GROUNDING_EXAMPLE = """
@@ -195,4 +199,50 @@ Example:
 
 Current batch markdown source:
 {document_markdown}
+""".strip()
+
+
+def build_top_interface_prompt(
+    *,
+    top_module: str,
+    port_sections_markdown: str,
+    expected_ports_json: str,
+    current_contracts_json: str,
+    stage_context: str = "",
+) -> str:
+    return f"""
+Stage1 round: top_interface
+
+Extract exactly one complete interface contract for top module \u0060{top_module}\u0060.
+
+Hard rules:
+- Return valid JSON with exactly one key: \u0060interface_contract\u0060.
+- \u0060interface_contract.module\u0060 must be \u0060{top_module}\u0060.
+- Include every port listed in Expected explicit ports exactly once.
+- Preserve each port name, direction, and width exactly as specified.
+- Do not add ports that are not present in the supplied authoritative sections.
+- Optional or macro-controlled ports are still interface ports and must be included.
+- Module-level \u0060text_grounding\u0060 must cite the supplied interface sections.
+- Do not put grounding fields inside individual ports or parameters.
+- Use empty lists or strings for unsupported metadata; never guess it.
+
+Interface contract schema:
+- module
+- ports: list of name, direction, width, role, active, meaning
+- params: list of name, value, meaning
+- clock, reset, reset_polarity
+- handshakes, parameter_constraints, bus_roles
+- text_grounding, image_grounding
+
+Expected explicit ports:
+{expected_ports_json}
+
+Authoritative top-level interface sections:
+{port_sections_markdown}
+
+Current contracts context:
+{current_contracts_json}
+
+Additional stage context:
+{stage_context or "None"}
 """.strip()

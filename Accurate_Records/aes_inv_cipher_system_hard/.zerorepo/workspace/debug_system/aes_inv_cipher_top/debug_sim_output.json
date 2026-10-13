@@ -1,4 +1,0 @@
-{
-    "stdout": "ZEROREPO_VCD_COPIED: /run/user/1000/tmph_lrq00v/wave.vcd -> /home/mokita/RPG-ZeroRepo/rtl_outputs/aes_inv_cipher_system_hard/.zerorepo/workspace/debug_system/aes_inv_cipher_top/wave.vcd\nPassed\nSummary:\n  system_verify: PASS\n",
-    "stderr": ""
-}

@@ -7,84 +7,130 @@ from typing import Any, Iterable, List
 
 from pydantic import BaseModel
 
+from zerorepo.rtl_impl.port_contracts import extract_markdown_port_sections
+
 from .prompts import module_spec_context_select
-from .schemas import ModuleSpecContextBlock, ModuleSpecContextRetrievalResult
-from .utils import repair_json_payload
+from .schemas import ModuleSpecContextBlock, ModuleSpecContextRetrievalResult, ModuleSpecSelectionResult
+from .source_context import POLICY_VERSION, atomic_json, digest, source_ranges, strict_payload
 
 
 class ModuleSpecContextRetriever:
     """Retrieve source spec passages for a planned module from unified specs."""
 
-    def __init__(self, llm_client: Any, logger: Any | None = None, max_chunks: int = 24):
+    def __init__(self, llm_client: Any, logger: Any | None = None, max_chunks: int = 24,
+                 cache_root: str | Path | None = None, limits: dict | None = None):
         self.llm_client = llm_client
         self.logger = logger
-        self.max_chunks = max(4, max_chunks)
+        limits = limits or {}
+        self.max_chunks = max(1, int(limits.get("max_chunks", max_chunks)))
+        self.chunk_chars = int(limits.get("chunk_chars", 6000))
+        self.candidate_chars = int(limits.get("candidate_chars", 48000))
+        self.fact_chars = int(limits.get("fact_chars", 8000))
+        self.prompt_chars = int(limits.get("prompt_chars", 64000))
+        if min(self.chunk_chars, self.candidate_chars, self.fact_chars, self.prompt_chars) < 1:
+            raise ValueError("Retrieval character budgets must be positive")
+        self.cache_root = Path(cache_root) if cache_root is not None else None
+        self.cache_enabled = True
+        self.stage_name = "stage3_spec_retrieval"
+        self.last_input_summary = {}
 
     def select_module_spec_context(
-        self,
-        *,
-        module_name: str,
-        spec_md_files: Iterable[str],
-        repo_module: Any | None = None,
-        fact_ledger: Any | None = None,
-        skeleton_context: str = "",
+        self, *, module_name: str, spec_md_files: Iterable[str], repo_module: Any | None = None,
+        fact_ledger: Any | None = None, skeleton_context: str = "", is_top_module: bool = False,
+        primary_spec_file: str = "",
     ) -> ModuleSpecContextRetrievalResult:
         sources = self._read_sources(spec_md_files)
         chunks = self._build_source_chunks(sources)
-        ranked_chunks = self._rank_chunks(module_name, chunks, repo_module=repo_module, fact_ledger=fact_ledger)
-        prompt_chunks = self._sort_chunks_by_source_order(ranked_chunks[: self.max_chunks] or chunks[: self.max_chunks])
-        if not prompt_chunks:
-            return self._empty_fallback(module_name)
-
-        prompt = module_spec_context_select.build_prompt(
-            module_name=module_name,
-            repo_module_json=self._to_pretty_json(repo_module),
-            fact_context_json=self._to_pretty_json(self._fact_context(module_name, fact_ledger)),
-            source_chunks_json=self._to_pretty_json(self._format_chunks(prompt_chunks)),
-            skeleton_context=skeleton_context,
-        )
-        self._print_console(
-            title=f"MODULE SPEC CONTEXT RETRIEVAL PROMPT [{module_name}]",
-            body=(
-                f"System Role:\n{module_spec_context_select.SYSTEM_ROLE}\n\n"
-                f"User Prompt:\n{prompt}"
-            ),
-        )
+        ranked = self._rank_chunks(module_name, chunks, repo_module=repo_module, fact_ledger=fact_ledger)
+        mandatory = self._mandatory_port_chunks(chunks, is_top_module=is_top_module, primary_spec_file=primary_spec_file)
+        pool = []
+        used = set()
+        for chunk in [*mandatory, *(ranked or chunks)]:
+            if chunk["chunk_id"] in used:
+                continue
+            if len(pool) >= self.max_chunks or sum(len(c["text"]) for c in pool) + len(chunk["text"]) > self.candidate_chars:
+                continue
+            used.add(chunk["chunk_id"])
+            pool.append(chunk)
+        facts = self._fact_context(module_name, fact_ledger)
+        repo_context = self._json_ready(repo_module) if repo_module is not None else {}
+        if isinstance(repo_context, dict):
+            repo_context = {k: v for k, v in repo_context.items() if k in {
+                "module", "role", "parents", "children", "instance_hints", "rationale", "module_decision"}}
+        hint = skeleton_context if len(skeleton_context) <= 4000 else ""
+        def build():
+            return module_spec_context_select.build_prompt(
+                module_name=module_name, repo_module_json=self._to_pretty_json(repo_context),
+                fact_context_json=self._to_pretty_json(facts),
+                source_chunks_json=self._to_pretty_json(self._format_chunks(self._sort_chunks_by_source_order(pool))),
+                skeleton_context=hint)
+        prompt = build()
+        # Drop lowest-priority optional inputs; never cut source text mid-prompt.
+        while len(prompt) + len(module_spec_context_select.SYSTEM_ROLE) > self.prompt_chars and pool:
+            pool.pop()
+            prompt = build()
+        prompt_chunks = self._sort_chunks_by_source_order(pool)
+        self.last_input_summary = {
+            "policy": POLICY_VERSION, "prompt_chars": len(prompt) + len(module_spec_context_select.SYSTEM_ROLE),
+            "candidate_count": len(pool), "candidate_chars": sum(len(c["text"]) for c in pool),
+            "fact_chars": len(self._to_pretty_json(facts)),
+            "omitted_fact_ids": list(self.omitted_fact_ids),
+            "omitted_chunk_ids": [c["chunk_id"] for c in chunks if c not in pool],
+            "mandatory_local_ids": [c["chunk_id"] for c in mandatory if c not in pool],
+        }
+        config = getattr(self.llm_client, "config", None)
+        model = {name: getattr(config, name, None) for name in ("model", "provider", "base_url", "temperature", "top_p", "max_tokens")}
+        model["reasoning_effort"] = getattr(config, "extra", {}).get("reasoning_effort") if config else None
+        key = digest({"policy": POLICY_VERSION, "sources": sources, "module": module_name,
+                      "repo": repo_context, "facts": self._related_facts, "candidates": pool,
+                      "mandatory": mandatory, "prompt": prompt, "model": model,
+                      "request_policy": getattr(self.llm_client, "request_policy", {})})
+        safe_module = re.sub(r"[^A-Za-z0-9_.-]", "_", module_name)
+        path = self.cache_root / f"{safe_module}.json" if self.cache_root else None
+        if path and self.cache_enabled and path.exists():
+            try:
+                cached = strict_payload(path.read_text())
+                if cached["input_fingerprint"] != key or cached["result_digest"] != digest(cached["result"]):
+                    raise ValueError("Retrieval cache fingerprint/digest mismatch")
+                result = ModuleSpecContextRetrievalResult.model_validate(cached["result"])
+                self._validate_result(result, module_name=module_name, all_chunks=chunks, allow_fallback=True)
+                if not {c["chunk_id"] for c in mandatory} <= {i for b in result.blocks for i in b.source_chunk_ids}:
+                    raise ValueError("Cached mandatory port sections missing")
+                if self.logger:
+                    self.logger.info("[module_spec_context_retrieval] Reusing cache for %s (degraded=%s)", module_name, result.fallback_used)
+                return result
+            except (ValueError, KeyError, TypeError) as exc:
+                if self.logger:
+                    self.logger.info("[module_spec_context_retrieval] Ignoring cache for %s: %s", module_name, exc)
+        if self.logger:
+            self.logger.info("[module_spec_context_retrieval] Input budget for %s: %s", module_name, self.last_input_summary)
         try:
-            raw = self.llm_client.complete(
-                system_prompt=module_spec_context_select.SYSTEM_ROLE,
-                user_prompt=prompt,
-                images=None,
-            )
-            self._print_console(
-                title=f"MODULE SPEC CONTEXT RETRIEVAL RAW OUTPUT [{module_name}]",
-                body=raw if isinstance(raw, str) else self._to_pretty_json(raw),
-            )
+            if not prompt_chunks or len(prompt) + len(module_spec_context_select.SYSTEM_ROLE) > self.prompt_chars:
+                raise ValueError("No source candidates fit the retrieval input budget")
+            self._print_console(title=f"MODULE SPEC CONTEXT RETRIEVAL PROMPT [{module_name}]",
+                                body=f"System Role:\n{module_spec_context_select.SYSTEM_ROLE}\n\nUser Prompt:\n{prompt}")
+            arguments = dict(system_prompt=module_spec_context_select.SYSTEM_ROLE, user_prompt=prompt, images=None)
+            options = getattr(self.llm_client, "request_options", None)
+            if options:
+                arguments["request_options"] = options(stage=self.stage_name, module=module_name,
+                    output_root=self.cache_root.parent.parent if self.cache_root else None, retrieval=True)
+            raw = self.llm_client.complete(**arguments)
+            self._print_console(title=f"MODULE SPEC CONTEXT RETRIEVAL RAW OUTPUT [{module_name}]",
+                                body=raw if isinstance(raw, str) else self._to_pretty_json(raw))
             result = self._coerce_result(raw, module_name=module_name, chunks=prompt_chunks)
+            result = self._ensure_mandatory_chunks(result, mandatory_chunks=mandatory)
             self._validate_result(result, module_name=module_name, all_chunks=chunks)
-            self._print_console(
-                title=f"MODULE SPEC CONTEXT RETRIEVAL VALIDATED OUTPUT [{module_name}]",
-                body=self._to_pretty_json(result),
-            )
-            return result
-        except Exception as exc:  # noqa: BLE001 - retrieval fallback should keep planning moving.
-            if self.logger is not None:
-                self.logger.warning(
-                    "[module_spec_context_retrieval] Falling back for %s: %s",
-                    module_name,
-                    exc,
-                )
-            fallback = self.fallback_result(
-                module_name=module_name,
-                chunks=chunks,
-                ranked_chunks=ranked_chunks,
-                reason=str(exc),
-            )
-            self._print_console(
-                title=f"MODULE SPEC CONTEXT RETRIEVAL FALLBACK OUTPUT [{module_name}]",
-                body=self._to_pretty_json(fallback),
-            )
-            return fallback
+        except Exception as exc:
+            if self.logger:
+                self.logger.warning("[module_spec_context_retrieval] DEGRADE %s: %s", module_name, exc)
+            result = self.fallback_result(module_name=module_name, chunks=chunks,
+                ranked_chunks=prompt_chunks, mandatory_chunks=mandatory, reason=str(exc))
+        if path:
+            atomic_json(path, {"input_fingerprint": key, "result_digest": digest(result.model_dump()),
+                              "result": result.model_dump(), "input_summary": self.last_input_summary})
+        self._print_console(title=f"MODULE SPEC CONTEXT RETRIEVAL {'FALLBACK' if result.fallback_used else 'VALIDATED'} OUTPUT [{module_name}]",
+                            body=self._to_pretty_json(result))
+        return result
 
     def fallback_result(
         self,
@@ -92,9 +138,21 @@ class ModuleSpecContextRetriever:
         module_name: str,
         chunks: List[dict[str, str]],
         ranked_chunks: List[dict[str, str]] | None = None,
+        mandatory_chunks: List[dict[str, str]] | None = None,
         reason: str = "",
     ) -> ModuleSpecContextRetrievalResult:
-        selected = self._sort_chunks_by_source_order(list(ranked_chunks or [])[:6])
+        mandatory = list(mandatory_chunks or [])
+        mandatory_ids = {chunk["chunk_id"] for chunk in mandatory}
+        selected = self._sort_chunks_by_source_order(
+            [
+                *mandatory,
+                *[
+                    chunk
+                    for chunk in list(ranked_chunks or [])
+                    if chunk["chunk_id"] not in mandatory_ids
+                ],
+            ]
+        )
         fallback_reason = f"Module context retrieval failed; using heuristic source chunks. {reason}".strip()
         if not selected and chunks:
             selected = chunks[:1]
@@ -109,6 +167,7 @@ class ModuleSpecContextRetriever:
                     text=chunk["text"],
                     source_file=chunk["source_file"],
                     source_chunk_ids=[chunk["chunk_id"]],
+                    source_ranges=self._ranges([chunk]),
                     relevance_reason=["Heuristic fallback selected this source passage."],
                     confidence="low" if reason else "medium",
                 )
@@ -119,66 +178,153 @@ class ModuleSpecContextRetriever:
             fallback_reason=fallback_reason,
         )
 
-    def _coerce_result(
+    def _mandatory_port_chunks(
         self,
-        raw: Any,
-        *,
-        module_name: str,
         chunks: List[dict[str, str]],
-    ) -> ModuleSpecContextRetrievalResult:
-        if isinstance(raw, ModuleSpecContextRetrievalResult):
-            payload = raw.model_dump()
-        elif isinstance(raw, BaseModel):
-            payload = raw.model_dump()
-        else:
-            payload = repair_json_payload(raw)
-        payload.setdefault("module", module_name)
-        chunk_by_id = {chunk["chunk_id"]: chunk for chunk in chunks}
-        normalized_blocks: list[dict[str, Any]] = []
-        for index, block in enumerate(payload.get("blocks") or [], start=1):
-            item = dict(block)
-            item["block_id"] = f"S{index:03d}"
-            chunk_ids = [str(value) for value in item.get("source_chunk_ids") or [] if str(value).strip()]
-            if chunk_ids and (not str(item.get("text") or "").strip()):
-                item["text"] = "\n\n".join(
-                    chunk_by_id[chunk_id]["text"] for chunk_id in chunk_ids if chunk_id in chunk_by_id
-                ).strip()
-            if not item.get("source_file") and chunk_ids:
-                item["source_file"] = next(
-                    (chunk_by_id[chunk_id]["source_file"] for chunk_id in chunk_ids if chunk_id in chunk_by_id),
-                    "",
-                )
-            normalized_blocks.append(item)
-        payload["blocks"] = normalized_blocks
-        return ModuleSpecContextRetrievalResult.model_validate(payload)
+        *,
+        is_top_module: bool,
+        primary_spec_file: str,
+    ) -> List[dict[str, str]]:
+        if not is_top_module or not str(primary_spec_file or "").strip():
+            return []
+        primary = str(Path(primary_spec_file).resolve())
+        return [
+            chunk
+            for chunk in chunks
+            if str(Path(chunk["source_file"]).resolve()) == primary
+            and (chunk.get("port_section") or bool(extract_markdown_port_sections(chunk["text"])))
+        ]
 
-    def _validate_result(
+    def _ensure_mandatory_chunks(
         self,
         result: ModuleSpecContextRetrievalResult,
         *,
-        module_name: str,
-        all_chunks: List[dict[str, str]],
-    ) -> None:
-        if result.schema_version != "module_spec_context_retrieval_v1":
-            raise ValueError("schema_version must remain module_spec_context_retrieval_v1")
-        if result.module != module_name:
-            raise ValueError(f"module must equal {module_name}, got {result.module}")
-        if result.fallback_used:
+        mandatory_chunks: List[dict[str, str]],
+    ) -> ModuleSpecContextRetrievalResult:
+        selected_ids = {
+            chunk_id
+            for block in result.blocks
+            for chunk_id in block.source_chunk_ids
+        }
+        blocks = [block.model_dump() for block in result.blocks]
+        for chunk in mandatory_chunks:
+            if chunk["chunk_id"] in selected_ids:
+                continue
+            blocks.append(
+                {
+                    "block_id": "",
+                    "text": chunk["text"],
+                    "source_file": chunk["source_file"],
+                    "source_chunk_ids": [chunk["chunk_id"]],
+                    "source_ranges": self._ranges([chunk]),
+                    "relevance_reason": ["Mandatory top-level port-table section."],
+                    "confidence": "high",
+                }
+            )
+        blocks.sort(
+            key=lambda block: min(
+                (self._chunk_sort_key(chunk_id) for chunk_id in block.get("source_chunk_ids") or []),
+                default=(10**9, ""),
+            )
+        )
+        for index, block in enumerate(blocks, start=1):
+            block["block_id"] = f"S{index:03d}"
+        payload = result.model_dump()
+        payload["blocks"] = blocks
+        return ModuleSpecContextRetrievalResult.model_validate(payload)
+
+    def _coerce_result(self, raw: Any, *, module_name: str, chunks: List[dict[str, str]]) -> ModuleSpecContextRetrievalResult:
+        payload = strict_payload(raw)
+        if payload.get("module") != module_name:
+            raise ValueError(f"module must equal {module_name}")
+        chunk_by_id = {chunk["chunk_id"]: chunk for chunk in chunks}
+        if "selections" in payload:
+            selection = ModuleSpecSelectionResult.model_validate(payload)
+            selected = {}
+            for item in selection.selections:
+                if item.source_chunk_id not in chunk_by_id:
+                    raise ValueError(f"Unknown source_chunk_id: {item.source_chunk_id}")
+                selected.setdefault(item.source_chunk_id, item)
+            blocks = []
+            for chunk in chunks:
+                item = selected.get(chunk["chunk_id"])
+                if item is not None:
+                    blocks.append(ModuleSpecContextBlock(block_id=f"S{len(blocks)+1:03d}",
+                        text=chunk["text"], source_file=chunk["source_file"], source_chunk_ids=[chunk["chunk_id"]],
+                        source_ranges=self._ranges([chunk]),
+                        relevance_reason=item.relevance_reason, confidence=item.confidence))
+            return ModuleSpecContextRetrievalResult(module=module_name, blocks=blocks, open_issues=selection.open_issues)
+        # Legacy full responses still require verifiable source attribution.
+        if payload.get("fallback_used"):
             raise ValueError("LLM result must not set fallback_used=true")
-        source_text_by_file: dict[str, str] = {}
-        for chunk in all_chunks:
-            source_text_by_file.setdefault(chunk["source_file"], "")
-            source_text_by_file[chunk["source_file"]] += "\n" + chunk["text"]
-        valid_chunk_ids = {chunk["chunk_id"] for chunk in all_chunks}
-        for index, block in enumerate(result.blocks, start=1):
-            expected_id = f"S{index:03d}"
-            if block.block_id != expected_id:
-                raise ValueError(f"expected block_id {expected_id}, got {block.block_id}")
-            unknown_chunk_ids = [chunk_id for chunk_id in block.source_chunk_ids if chunk_id not in valid_chunk_ids]
-            if unknown_chunk_ids:
-                raise ValueError(f"{block.block_id}: unknown source_chunk_ids {unknown_chunk_ids}")
-            if not self._text_appears_in_sources(block.text, source_text_by_file):
-                raise ValueError(f"{block.block_id}: text must be copied from source specs")
+        normalized = []
+        for block in payload.get("blocks") or []:
+            item = dict(block)
+            ids = item.get("source_chunk_ids") or []
+            if any(i not in chunk_by_id for i in ids):
+                raise ValueError("Unknown legacy source_chunk_ids")
+            if ids:
+                source_files = {chunk_by_id[i]["source_file"] for i in ids}
+                if len(source_files) != 1:
+                    raise ValueError("A source block cannot combine different files")
+                file = next(iter(source_files))
+                if item.get("source_file") and item["source_file"] != file:
+                    raise ValueError("Legacy source_file does not match cited chunks")
+                expected = "\n\n".join(chunk_by_id[i]["text"] for i in ids)
+                text = str(item.get("text") or "")
+                if text and text.strip() != expected.strip() and not any(text.strip() in chunk_by_id[i]["text"] for i in ids):
+                    raise ValueError("Legacy text must be copied from its cited source specs")
+                item["text"] = text or expected
+                item["source_file"] = file
+            else:
+                # Older backends supplied exact passages without chunk IDs.
+                text = str(item.get("text") or "").strip()
+                file = item.get("source_file") or ""
+                by_file = {}
+                for c in chunks:
+                    by_file.setdefault(c["source_file"], []).append(c)
+                matches = [(f, cs) for f, cs in by_file.items()
+                           if (not file or f == file) and text and text in "".join(c["text"] for c in cs)]
+                if len(matches) != 1:
+                    raise ValueError("Legacy text must be copied from source specs")
+                file, cs = matches[0]
+                combined = "".join(c["text"] for c in cs)
+                first = combined.index(text)
+                last = first + len(text)
+                position = 0
+                ids = []
+                for c in cs:
+                    if position < last and position + len(c["text"]) > first:
+                        ids.append(c["chunk_id"])
+                    position += len(c["text"])
+                item.update(text=text, source_file=file, source_chunk_ids=ids)
+            item["block_id"] = f"S{len(normalized)+1:03d}"
+            item["source_ranges"] = self._ranges([chunk_by_id[i] for i in ids])
+            normalized.append(item)
+        payload["blocks"] = normalized
+        return ModuleSpecContextRetrievalResult.model_validate(payload)
+
+    def _validate_result(self, result, *, module_name, all_chunks, allow_fallback=False):
+        if result.schema_version != "module_spec_context_retrieval_v1" or result.module != module_name:
+            raise ValueError("Retrieval schema/module mismatch")
+        if result.fallback_used and not allow_fallback:
+            raise ValueError("LLM result must not set fallback_used=true")
+        by_id = {c["chunk_id"]: c for c in all_chunks}
+        for index, block in enumerate(result.blocks, 1):
+            if not block.text.strip():
+                raise ValueError("Source block text must be nonempty")
+            if block.block_id != f"S{index:03d}" or not block.source_chunk_ids:
+                raise ValueError("Invalid source block identity")
+            cited = [by_id[i] for i in block.source_chunk_ids if i in by_id]
+            if len(cited) != len(block.source_chunk_ids) or any(c["source_file"] != block.source_file for c in cited):
+                raise ValueError("Unknown or mismatched source references")
+            if block.source_ranges and block.source_ranges != self._ranges(cited):
+                raise ValueError("Source ranges do not match cited chunks")
+            # Exact substring checks support legacy selected excerpts, without accepting altered wording.
+            contiguous = "".join(c["text"] for c in cited)
+            joined = "\n\n".join(c["text"] for c in cited)
+            if block.text.strip() not in contiguous and block.text.strip() != joined.strip():
+                raise ValueError(f"{block.block_id}: text must be copied from its cited source specs")
 
     def _read_sources(self, spec_md_files: Iterable[str]) -> List[dict[str, str]]:
         sources: list[dict[str, str]] = []
@@ -199,45 +345,31 @@ class ModuleSpecContextRetriever:
                 sources.append(
                     {
                         "source_file": str(candidate),
-                        "text": candidate.read_text(encoding="utf-8").replace("\r\n", "\n").strip(),
+                        "text": candidate.read_text(encoding="utf-8").replace("\r\n", "\n"),
                     }
                 )
         return sources
 
-    def _build_source_chunks(self, sources: List[dict[str, str]]) -> List[dict[str, str]]:
-        chunks: list[dict[str, str]] = []
+    def _build_source_chunks(self, sources):
+        chunks = []
         for source in sources:
-            for text in self._split_markdown_chunks(source["text"]):
-                chunks.append(
-                    {
-                        "chunk_id": f"C{len(chunks) + 1:03d}",
-                        "source_file": source["source_file"],
-                        "text": text,
-                    }
-                )
+            text = source["text"]
+            mandatory_spans = []
+            for section in extract_markdown_port_sections(text):
+                first = text.find(section.text)
+                if first >= 0:
+                    mandatory_spans.append((first, first + len(section.text)))
+            for span in source_ranges(text, self.chunk_chars):
+                chunk = {"chunk_id": f"C{len(chunks)+1:03d}", "source_file": source["source_file"],
+                         "text": text[span["start"]:span["end"]], **span,
+                         "port_section": any(span["start"] < last and span["end"] > first for first, last in mandatory_spans)}
+                if chunk["text"].strip():
+                    chunks.append(chunk)
         return chunks
 
-    def _split_markdown_chunks(self, text: str) -> List[str]:
+    def _split_markdown_chunks(self, text):
         normalized = text.replace("\r\n", "\n").strip()
-        if not normalized:
-            return []
-        lines = normalized.splitlines()
-        heading_indexes = [
-            index
-            for index, line in enumerate(lines)
-            if re.match(r"^\s{0,3}#{1,4}\s+\S", line) or re.match(r"^\s*\*\*\s*\d+(?:\.\d+)*\.?\s+\S.*\*\*\s*$", line)
-        ]
-        if not heading_indexes:
-            return [normalized]
-        chunks: list[str] = []
-        for heading_index, start in enumerate(heading_indexes):
-            if heading_index == 0:
-                start = 0
-            end = heading_indexes[heading_index + 1] if heading_index + 1 < len(heading_indexes) else len(lines)
-            chunk = "\n".join(lines[start:end]).strip()
-            if chunk:
-                chunks.append(chunk)
-        return chunks or [normalized]
+        return [normalized[s["start"]:s["end"]].strip() for s in source_ranges(normalized, self.chunk_chars)]
 
     def _rank_chunks(
         self,
@@ -311,27 +443,35 @@ class ModuleSpecContextRetriever:
         text = str(value or "").lower()
         return [word for word in re.findall(r"[a-zA-Z_][\w-]{2,}", text) if word not in {"the", "and", "for", "with"}]
 
-    def _fact_context(self, module_name: str, fact_ledger: Any | None) -> List[dict[str, Any]]:
+    def _fact_context(self, module_name, fact_ledger):
         facts = self._get_list(fact_ledger, "facts")
-        module_terms = set(self._module_name_terms(module_name))
-        related: list[dict[str, Any]] = []
-        for fact in facts:
+        terms = set(self._module_name_terms(module_name)) - {"sdc", "aes", "controller", "system"}
+        related = []
+        for index, fact in enumerate(facts):
             payload = self._json_ready(fact)
             haystack = json.dumps(payload, ensure_ascii=False).lower()
-            fact_module = str(payload.get("module") or "").strip()
-            if fact_module == module_name or any(term and term in haystack for term in module_terms):
-                related.append(payload)
-        return related[:24]
+            direct = str(payload.get("module") or "").strip() == module_name
+            if direct or any(term and term in haystack for term in terms):
+                compact = {k: v for k, v in payload.items() if k not in {"text_grounding", "image_grounding", "notes"}}
+                related.append((not direct, index, compact))
+        result = []
+        self._related_facts = [fact for _, _, fact in sorted(related)]
+        self.omitted_fact_ids = []
+        for _, _, fact in sorted(related):
+            if len(result) < 24 and len(self._to_pretty_json([*result, fact])) <= self.fact_chars:
+                result.append(fact)
+            else:
+                self.omitted_fact_ids.append(fact.get("fact_id", ""))
+        return result
 
-    def _format_chunks(self, chunks: List[dict[str, str]]) -> List[dict[str, str]]:
-        return [
-            {
-                "chunk_id": chunk["chunk_id"],
-                "source_file": chunk["source_file"],
-                "text": chunk["text"],
-            }
-            for chunk in chunks
-        ]
+    def _format_chunks(self, chunks):
+        return [{k: c[k] for k in ("chunk_id", "source_file", "text", "start", "end", "heading_path") if k in c}
+                for c in chunks]
+
+    @staticmethod
+    def _ranges(chunks):
+        return [{"source_chunk_id": c["chunk_id"], **{k: c[k] for k in ("start", "end", "heading_path") if k in c}}
+                for c in chunks]
 
     def _text_appears_in_sources(self, text: str, source_text_by_file: dict[str, str]) -> bool:
         needle = self._normalize_text(text)

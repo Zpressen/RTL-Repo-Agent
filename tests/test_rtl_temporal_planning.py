@@ -38,6 +38,12 @@ class QueueBackend:
         self.responses = list(responses)
         self.calls = []
 
+    def complete(self, *, system_prompt, user_prompt, images=None):
+        self.calls.append({"system_prompt": system_prompt, "user_prompt": user_prompt, "images": list(images or [])})
+        if not self.responses:
+            raise AssertionError("No more queued responses.")
+        return self.responses.pop(0)
+
     def complete_with_memory(self, *, memory, images=None):
         user_prompt = next((item.content for item in reversed(memory.history) if item.role == "user"), "")
         self.calls.append({"user_prompt": user_prompt, "images": list(images or [])})
@@ -52,6 +58,12 @@ def _task(tmp_path: Path) -> tuple[PlannerTaskInput, Path]:
         "\n".join(
             [
                 "# Toy",
+                "Top module: toy",
+                "Ports:",
+                "- clk: input, width 1",
+                "- rst_n: input, width 1",
+                "- ld: input, width 1",
+                "- done: output, width 1",
                 "On rise(ld), load State0.",
                 "One cycle later, produce State1 and pulse done.",
             ]
@@ -59,6 +71,51 @@ def _task(tmp_path: Path) -> tuple[PlannerTaskInput, Path]:
         encoding="utf-8",
     )
     return PlannerTaskInput(task_id="toy", spec_md_files=[str(spec)]), spec.resolve()
+
+
+def _stage1_facts_payload(spec_path: Path) -> dict:
+    grounding = [
+        {
+            "source_md_file": str(spec_path),
+            "section_path": "Toy",
+            "start_line_anchor": "Top module: toy",
+            "end_line_anchor": "- done: output, width 1",
+        }
+    ]
+    return {
+        "fact_ledger": {
+            "source_files": [str(spec_path)],
+            "facts": [
+                {
+                    "module": "toy",
+                    "category": "module_identity",
+                    "subject": "toy",
+                    "predicate": "is_top_module",
+                    "object": {"module": "toy", "modules": ["toy"]},
+                    "source_kind": "explicit_text",
+                    "text_grounding": grounding,
+                },
+                *[
+                    {
+                        "module": "toy",
+                        "category": "interface",
+                        "subject": name,
+                        "predicate": "is_port",
+                        "object": {"name": name, "direction": direction, "width": "1"},
+                        "source_kind": "table_row",
+                        "text_grounding": grounding,
+                    }
+                    for name, direction in [
+                        ("clk", "input"),
+                        ("rst_n", "input"),
+                        ("ld", "input"),
+                        ("done", "output"),
+                    ]
+                ],
+            ],
+            "ambiguous_items": [],
+        }
+    }
 
 
 def _temporal_payload(spec_path: Path) -> dict:
@@ -178,6 +235,65 @@ def _repo_payload() -> dict:
     }
 
 
+def _stage2_responsibilities() -> dict:
+    return {
+        "responsibilities": [
+            {
+                "responsibility_id": "RU_TOY_UPDATE",
+                "description": "Own the toy state update and completion behavior.",
+                "ownership_required": True,
+                "evidence_sections": ["Toy Spec > Timing"],
+                "inputs": ["ld", "state"],
+                "outputs": ["done", "state"],
+                "owned_state": ["state"],
+                "clock_domain": "clk",
+                "reset_behavior": "rst_n active low",
+                "protocol": "load_to_done",
+                "timing_class": "single_cycle_registered",
+                "dependencies": [],
+                "explicit_module_hint": "toy",
+            }
+        ],
+        "global_clocking_notes": ["clk with active-low rst_n"],
+        "global_data_conventions": [],
+    }
+
+
+def _stage2_candidate(style: str, *, grounded: bool) -> dict:
+    return {
+        "candidate_id": f"stage2_{style}",
+        "plan_style": style,
+        "top_module": "toy",
+        "summary": "single-cycle toy state update",
+        "modules": [
+            {
+                "module": "toy",
+                "role": "state update controller",
+                "responsibility_ids": ["RU_TOY_UPDATE"],
+                "source_kind": "inferred_from_spec",
+                "supporting_sections": ["Toy Spec > Timing"] if grounded else [],
+                "rationale": "The complete toy behavior is one module.",
+                "confidence": "high",
+                "reused": False,
+            }
+        ],
+        "hierarchy": [],
+        "boundary_contracts": [],
+        "global_clocking_notes": ["clk with active-low rst_n"],
+        "global_data_conventions": [],
+        "open_issues": [],
+    }
+
+
+def _stage2_decomposition_responses() -> list[dict]:
+    return [
+        _stage2_responsibilities(),
+        _stage2_candidate("conservative", grounded=False),
+        _stage2_candidate("balanced", grounded=True),
+        _stage2_candidate("modular", grounded=False),
+    ]
+
+
 def _architecture_payload() -> dict:
     return {
         "schema_version": "architecture_timing_contract_v1",
@@ -212,18 +328,17 @@ def _architecture_payload() -> dict:
     }
 
 
-def test_planner_runner_temporal_planning_is_enabled_by_default(tmp_path):
+def test_planner_runner_temporal_planning_is_disabled_by_default(tmp_path):
     task, spec_path = _task(tmp_path)
-    backend = QueueBackend([_temporal_payload(spec_path)])
+    backend = QueueBackend([_stage1_facts_payload(spec_path)])
     output_root = tmp_path / "outputs"
     runner = PlannerRunner(output_root=output_root, llm_backend=backend)
 
     artifact = runner.run(task, end_stage="stage1")
 
-    assert runner.temporal_planning_enabled is True
-    assert isinstance(artifact, GlobalTemporalFactsArtifact)
-    assert artifact.events[0].id == "EV_LD"
-    assert (output_root / "global_temporal_facts.json").exists()
+    assert runner.temporal_planning_enabled is False
+    assert artifact.schema_version == "stage1_contracts_v1"
+    assert not (output_root / "global_temporal_facts.json").exists()
     assert (output_root / "contracts.json").exists()
     assert len(backend.calls) == 1
 
@@ -365,19 +480,22 @@ def test_stage2_temporal_normalizes_legacy_fields_and_accepts_declared_objects(t
     assert agent.validate_quality(artifact, task, {"temporal_facts": temporal, "stage2": repo}) == []
 
 
-def test_stage1_temporal_failure_degrades_and_resume_reuses_artifact(tmp_path):
+def test_legacy_temporal_artifact_is_ignored_and_preserved_on_resume(tmp_path):
     task, _ = _task(tmp_path)
     output_root = tmp_path / "outputs"
+    output_root.mkdir()
+    legacy_path = output_root / "global_temporal_facts.json"
+    legacy_text = '{"legacy":true}\n'
+    legacy_path.write_text(legacy_text, encoding="utf-8")
     runner = PlannerRunner(
         output_root=output_root,
-        llm_backend=QueueBackend(["not json", "still not json"]),
+        llm_backend=QueueBackend([_stage1_facts_payload(task.spec_md_files[0])]),
     )
 
     artifact = runner.run(task, end_stage="stage1")
 
-    assert artifact.planning_status == "degraded"
-    assert artifact.events == []
-    assert artifact.degradation_reasons
+    assert artifact.schema_version == "stage1_contracts_v1"
+    assert legacy_path.read_text(encoding="utf-8") == legacy_text
 
     resume_backend = QueueBackend([])
     resumed = PlannerRunner(output_root=output_root, llm_backend=resume_backend).run(
@@ -385,20 +503,26 @@ def test_stage1_temporal_failure_degrades_and_resume_reuses_artifact(tmp_path):
         resume=True,
         end_stage="stage1",
     )
-    assert resumed.planning_status == "degraded"
+    assert resumed.schema_version == "stage1_contracts_v1"
     assert resume_backend.calls == []
+    assert legacy_path.read_text(encoding="utf-8") == legacy_text
 
 
-def test_stage1_temporal_failure_remains_fatal_in_strict_mode(tmp_path):
+def test_temporal_compatibility_options_are_ignored_even_in_strict_mode(tmp_path):
     task, _ = _task(tmp_path)
+    backend = QueueBackend([_stage1_facts_payload(task.spec_md_files[0])])
     runner = PlannerRunner(
         output_root=tmp_path / "outputs",
-        llm_backend=QueueBackend(["not json", "still not json"]),
+        llm_backend=backend,
+        temporal_planning_enabled=True,
         temporal_failure_policy="strict",
     )
 
-    with pytest.raises(ValueError, match="failed parse"):
-        runner.run(task, end_stage="stage1")
+    artifact = runner.run(task, end_stage="stage1")
+
+    assert runner.temporal_planning_enabled is False
+    assert artifact.schema_version == "stage1_contracts_v1"
+    assert len(backend.calls) == 1
 
 
 def test_stage3_timing_binding_prompt_lists_all_fields_enums_and_valid_example():
@@ -427,18 +551,21 @@ def test_stage3_timing_binding_prompt_lists_all_fields_enums_and_valid_example()
     ModuleTimingBindingArtifact.model_validate(example)
 
 
-def test_stage2_completion_writes_architecture_timing_sidecar(tmp_path):
+def test_stage2_completion_does_not_run_or_write_temporal_sidecars(tmp_path):
     task, spec_path = _task(tmp_path)
-    backend = QueueBackend([_temporal_payload(spec_path), _repo_payload(), _architecture_payload()])
+    backend = QueueBackend([_stage1_facts_payload(spec_path), *_stage2_decomposition_responses()])
     output_root = tmp_path / "outputs"
     runner = PlannerRunner(output_root=output_root, llm_backend=backend)
 
     artifact = runner.run(task, end_stage="stage2")
 
     assert isinstance(artifact, Stage2RepoSkeletonArtifact)
-    assert (output_root / "architecture_timing_contract.json").exists()
-    assert len(backend.calls) == 3
-    assert "do not create one module per phase" in backend.calls[1]["user_prompt"].lower()
+    assert not (output_root / "global_temporal_facts.json").exists()
+    assert not (output_root / "architecture_timing_contract.json").exists()
+    assert not (output_root / "module_timing_bindings.json").exists()
+    assert not (output_root / "timing_binding_check.json").exists()
+    assert len(backend.calls) == 5
+    assert "not modules" in backend.calls[1]["user_prompt"].lower()
 
     resume_backend = QueueBackend([])
     resumed = PlannerRunner(output_root=output_root, llm_backend=resume_backend).run(
@@ -450,45 +577,29 @@ def test_stage2_completion_writes_architecture_timing_sidecar(tmp_path):
     assert resume_backend.calls == []
 
     spec_path.write_text(spec_path.read_text(encoding="utf-8") + "\nAdditional timing clarification.", encoding="utf-8")
-    changed_backend = QueueBackend(
-        [_temporal_payload(spec_path), _repo_payload(), _architecture_payload()]
-    )
+    changed_backend = QueueBackend([_stage1_facts_payload(spec_path), *_stage2_decomposition_responses()])
     PlannerRunner(output_root=output_root, llm_backend=changed_backend).run(
         task,
         resume=True,
         end_stage="stage2",
     )
-    assert len(changed_backend.calls) == 3
+    assert len(changed_backend.calls) == 5
 
 
-def test_stage2_temporal_quality_failure_writes_safe_degraded_contract(tmp_path):
+def test_stage2_ignores_existing_architecture_timing_sidecar(tmp_path):
     task, spec_path = _task(tmp_path)
-    invalid_architecture = _architecture_payload()
-    invalid_architecture["module_obligations"][0]["reads"] = [
-        {"logical_object": "undeclared_payload", "logical_value_tag": "", "at": "PRE_EDGE"}
-    ]
-    backend = QueueBackend(
-        [
-            _temporal_payload(spec_path),
-            _repo_payload(),
-            json.loads(json.dumps(invalid_architecture)),
-            json.loads(json.dumps(invalid_architecture)),
-        ]
-    )
     output_root = tmp_path / "outputs"
+    output_root.mkdir()
+    sidecar = output_root / "architecture_timing_contract.json"
+    original = '{"legacy":"do-not-touch"}\n'
+    sidecar.write_text(original, encoding="utf-8")
+    backend = QueueBackend([_stage1_facts_payload(spec_path), *_stage2_decomposition_responses()])
     runner = PlannerRunner(output_root=output_root, llm_backend=backend)
 
     runner.run(task, end_stage="stage2")
 
-    saved = ArchitectureTimingContractArtifact.model_validate(
-        json.loads((output_root / "architecture_timing_contract.json").read_text(encoding="utf-8"))
-    )
-    assert saved.planning_status == "degraded"
-    assert saved.module_set == ["toy"]
-    assert [item.module for item in saved.module_assignments] == ["toy"]
-    assert saved.cross_module_transfers == []
-    assert saved.module_obligations == []
-    assert len(backend.calls) == 4
+    assert sidecar.read_text(encoding="utf-8") == original
+    assert len(backend.calls) == 5
 
 
 def test_degraded_architecture_skips_stage3_timing_llm(tmp_path):
@@ -559,7 +670,7 @@ def test_temporal_planning_can_be_explicitly_disabled_for_baseline(tmp_path):
     task, _ = _task(tmp_path)
     runner = PlannerRunner(
         output_root=tmp_path / "outputs",
-        llm_backend=QueueBackend([]),
+        llm_backend=QueueBackend([_stage1_facts_payload(task.spec_md_files[0])]),
         temporal_planning_enabled=False,
     )
 
@@ -947,12 +1058,11 @@ def test_runner_does_not_block_after_failed_timing_check(tmp_path):
     assert "continuing to Stage4" in logger.warning.call_args.args[0]
 
 
-def test_stage4_and_stage5_propagate_timing_obligation_ids(tmp_path):
+def test_stage4_and_stage5_ignore_legacy_timing_bindings_and_emit_empty_compat_fields(tmp_path):
     task, _ = _task(tmp_path)
     output_root = tmp_path / "outputs"
     (output_root / "module_skeleton_docs").mkdir(parents=True)
     (output_root / "module_skeleton_json").mkdir(parents=True)
-    (output_root / "module_timing_binding_json").mkdir(parents=True)
     skeleton_doc = "\n".join(
         [
             "# MODULE_SKELETON_DOC v1",
@@ -970,45 +1080,6 @@ def test_stage4_and_stage5_propagate_timing_obligation_ids(tmp_path):
     (output_root / "module_skeleton_docs" / "toy.md").write_text(skeleton_doc, encoding="utf-8")
     (output_root / "module_skeleton_json" / "toy.json").write_text(
         json.dumps(_skeleton("toy").model_dump()),
-        encoding="utf-8",
-    )
-    binding = {
-        "task_id": "toy",
-        "module": "toy",
-        "signal_bindings": [
-            {
-                "logical_object": "state",
-                "physical_signal": "state_reg",
-                "kind": "register",
-                "owner_block_id": "B1",
-                "logical_value_tags": ["State0", "State1"],
-            }
-        ],
-        "block_obligations": [
-            {
-                "obligation_id": "OBL_UPDATE",
-                "block_id": "B2",
-                "reads": [
-                    {
-                        "signal": "state_reg",
-                        "at": "PRE_EDGE",
-                        "logical_object": "state",
-                        "logical_value_tag": "State0",
-                    }
-                ],
-                "writes": [
-                    {
-                        "signal": "state_reg",
-                        "at": "POST_EDGE",
-                        "logical_object": "state",
-                        "logical_value_tag": "State1",
-                    }
-                ],
-            }
-        ],
-    }
-    (output_root / "module_timing_binding_json" / "toy.json").write_text(
-        json.dumps(binding),
         encoding="utf-8",
     )
     stage3 = {
@@ -1046,16 +1117,6 @@ def test_stage4_and_stage5_propagate_timing_obligation_ids(tmp_path):
             }
         ],
     }
-    timing_manifest = {
-        "task_id": "toy",
-        "module_order": ["toy"],
-        "status": "planned",
-        "completed_modules": ["toy"],
-        "resume_cursor": 1,
-        "module_binding_files": [
-            {"module": "toy", "binding_file": "module_timing_binding_json/toy.json"}
-        ],
-    }
     retrieval = {
         "schema_version": "block_spec_retrieval_v1",
         "module": "toy",
@@ -1079,8 +1140,6 @@ def test_stage4_and_stage5_propagate_timing_obligation_ids(tmp_path):
                 "description": "Implement the registered state update.",
                 "spec_refs": ["S001"],
                 "constraints": [],
-                "timing_obligation_ids": ["OBL_UPDATE"],
-                "logical_value_tags": ["State0", "State1"],
             }
         ],
     }
@@ -1091,7 +1150,7 @@ def test_stage4_and_stage5_propagate_timing_obligation_ids(tmp_path):
     )
     stage4 = stage4_agent.run_incremental(
         task,
-        {"stage3": stage3, "spec_blocks": spec_blocks, "timing_bindings": timing_manifest},
+        {"stage3": stage3, "spec_blocks": spec_blocks, "timing_bindings": {"legacy": True}},
         persist_callback=lambda payload: (
             (output_root / payload["plan_file"]).parent.mkdir(parents=True, exist_ok=True),
             (output_root / payload["plan_file"]).write_text(json.dumps(payload["plan_payload"]), encoding="utf-8"),
@@ -1099,7 +1158,8 @@ def test_stage4_and_stage5_propagate_timing_obligation_ids(tmp_path):
         if payload.get("module")
         else None,
     )
-    assert '"timing_obligation_ids"' in stage4_backend.calls[1]["user_prompt"]
+    assert "timing_obligation_ids" not in stage4_backend.calls[1]["user_prompt"]
+    assert "logical_value_tags" not in stage4_backend.calls[1]["user_prompt"]
 
     stage5_response = {
         "task_id": "toy",
@@ -1107,7 +1167,6 @@ def test_stage4_and_stage5_propagate_timing_obligation_ids(tmp_path):
         "subtask_id": "B2_update",
         "target": "<block: update>",
         "spec_refs": ["S001"],
-        "timing_obligation_ids": ["OBL_UPDATE"],
         "code": "always @(posedge clk) begin\n  state_reg <= state_reg;\nend",
         "contract": {
             "writes": ["state_reg"],
@@ -1130,18 +1189,20 @@ def test_stage4_and_stage5_propagate_timing_obligation_ids(tmp_path):
         {
             "stage4": stage4,
             "spec_blocks": spec_blocks,
-            "timing_bindings": timing_manifest,
+            "timing_bindings": {"legacy": True},
         },
     )
 
-    assert "OBL_UPDATE" in stage5_backend.calls[0]["user_prompt"]
+    assert "TIMING_OBLIGATIONS" not in stage5_backend.calls[0]["user_prompt"]
+    assert "timing_obligation_ids" not in stage5_backend.calls[0]["user_prompt"]
+    assert "logical_value_tags" not in stage5_backend.calls[0]["user_prompt"]
     contracts = json.loads(
         (tmp_path / "workspace" / "fragments" / "toy_contracts.json").read_text(encoding="utf-8")
     )
-    assert contracts["contracts"][0]["timing_obligation_ids"] == ["OBL_UPDATE"]
+    assert contracts["contracts"][0]["timing_obligation_ids"] == []
 
 
-def test_stage5_allows_actual_signal_names_and_mixed_comb_clocked_obligation(tmp_path):
+def test_stage5_rejects_nonempty_legacy_timing_ids(tmp_path):
     task, _ = _task(tmp_path)
     subtask = ModulePlanSubtask.model_validate(
         {
@@ -1248,13 +1309,12 @@ def test_stage5_allows_actual_signal_names_and_mixed_comb_clocked_obligation(tmp
         task,
         "key_expansion",
         subtask,
-        binding.block_obligations,
     )
 
-    assert errors == []
+    assert errors == ["timing_obligation_ids compatibility field must be empty"]
 
 
-def test_stage5_keeps_pure_comb_registered_clocking_as_nonfatal_diagnostic(tmp_path):
+def test_stage5_no_longer_runs_temporal_clocking_diagnostics(tmp_path):
     task, _ = _task(tmp_path)
     subtask = ModulePlanSubtask.model_validate(
         {
@@ -1316,11 +1376,6 @@ def test_stage5_keeps_pure_comb_registered_clocking_as_nonfatal_diagnostic(tmp_p
         task,
         "toy",
         subtask,
-        binding.block_obligations,
     )
 
-    assert errors == ["OB_COMB: pure combinational obligation uses registered clocking"]
-    assert agent._is_nonfatal_timing_diagnostic(errors[0])
-    assert not agent._is_nonfatal_timing_diagnostic(
-        "timing_obligation_ids must equal ['OB_COMB']"
-    )
+    assert errors == ["timing_obligation_ids compatibility field must be empty"]

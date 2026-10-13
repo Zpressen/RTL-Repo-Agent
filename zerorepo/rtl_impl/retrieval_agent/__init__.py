@@ -7,6 +7,8 @@ from .schemas import (
     MergeContextRetrievalResult,
     ModuleSpecContextBlock,
     ModuleSpecContextRetrievalResult,
+    ModuleSpecSelection,
+    ModuleSpecSelectionResult,
 )
 
 __all__ = [
@@ -18,4 +20,6 @@ __all__ = [
     "ModuleSpecContextBlock",
     "ModuleSpecContextRetrievalResult",
     "ModuleSpecContextRetriever",
+    "ModuleSpecSelection",
+    "ModuleSpecSelectionResult",
 ]

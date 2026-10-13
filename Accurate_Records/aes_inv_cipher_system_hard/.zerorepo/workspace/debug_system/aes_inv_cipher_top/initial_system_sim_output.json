@@ -1,4 +1,0 @@
-{
-    "stdout": "ZEROREPO_VCD_COPIED: /run/user/1000/tmp75exwv81/wave.vcd -> /home/mokita/RPG-ZeroRepo/rtl_outputs/aes_inv_cipher_system_hard/.zerorepo/workspace/debug_system/aes_inv_cipher_top/wave.vcd\nFunctional mismatches:\nHint: Output text_out has 86 mismatches. First at time 245\nHint: Output done signal has 3 mismatches. First at time 665\nSummary:\n  system_verify: FAIL\n",
-    "stderr": ""
-}

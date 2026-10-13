@@ -29,31 +29,41 @@ def check_syntax(
     rtl_path: str,
     top_module: str | None = None,
     include_dirs: list[str] | None = None,
+    support_files: list[str] | None = None,
 ) -> Tuple[bool, str]:
     _require_executable("verilator")
-    rtl_dir = os.path.dirname(os.path.abspath(rtl_path))
-    # Collect all .sv and .v files in the directory so Verilator can resolve
-    # sub-module instantiations (e.g. from support.sv in debug workdirs).
-    src_files = sorted(glob.glob(os.path.join(rtl_dir, "*.sv")) + glob.glob(os.path.join(rtl_dir, "*.v")))
+    rtl_path = os.path.abspath(rtl_path)
+    rtl_dir = os.path.dirname(rtl_path)
+    if support_files is None:
+        # Legacy/debug workdirs are self-contained and intentionally compile
+        # rtl.sv together with sibling support/testbench sources.
+        src_files = sorted(glob.glob(os.path.join(rtl_dir, "*.sv")) + glob.glob(os.path.join(rtl_dir, "*.v")))
+    else:
+        # Merge workdirs contain unrelated module drafts.  An explicit support
+        # list keeps target lint isolated from broken sibling drafts.
+        src_files = [rtl_path, *(os.path.abspath(item) for item in support_files if item)]
+        src_files = list(dict.fromkeys(src_files))
     if not src_files:
         src_files = [rtl_path]
-    srcs = " ".join(src_files)
-    top_flag = f"--top-module {top_module} " if top_module else ""
-    include_flags = ""
-    if include_dirs:
-        unique_dirs: list[str] = []
-        seen_dirs: set[str] = set()
-        for include_dir in include_dirs:
-            if not include_dir:
-                continue
-            abs_dir = os.path.abspath(include_dir)
-            if abs_dir in seen_dirs:
-                continue
-            seen_dirs.add(abs_dir)
-            unique_dirs.append(abs_dir)
-        include_flags = " ".join(f"-I{shlex.quote(item)}" for item in unique_dirs)
-        if include_flags:
-            include_flags += " "
+    srcs = " ".join(shlex.quote(item) for item in src_files)
+    top_flag = f"--top-module {shlex.quote(top_module)} " if top_module else ""
+    # Verilator does not implicitly search the current working directory for
+    # nested `include files.  Every syntax/debug workdir is self-contained, so
+    # make the RTL directory the first canonical include location and then add
+    # any caller-provided directories without duplication.
+    unique_dirs: list[str] = []
+    seen_dirs: set[str] = set()
+    for include_dir in [rtl_dir, *(include_dirs or [])]:
+        if not include_dir:
+            continue
+        abs_dir = os.path.abspath(include_dir)
+        if abs_dir in seen_dirs:
+            continue
+        seen_dirs.add(abs_dir)
+        unique_dirs.append(abs_dir)
+    include_flags = " ".join(f"-I{shlex.quote(item)}" for item in unique_dirs)
+    if include_flags:
+        include_flags += " "
     cmd = f"verilator --lint-only --sv --timing -Wall -Wno-fatal --assert {include_flags}{top_flag}{srcs}"
     is_pass, sim_output = run_bash_command(cmd, timeout=60, cwd=rtl_dir)
     sim_output_obj = CommandResult.model_validate_json(sim_output)

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Type
 
 from pydantic import BaseModel
 from zerorepo.rpg_gen.base.llm_client import AssistantMessage, Memory, SystemMessage, UserMessage
+from zerorepo.rpg_gen.base.llm_client.errors import LLMRequestError
 
 from ..interfaces import (
     NullPlanningArtifactSink,
@@ -13,6 +15,8 @@ from ..interfaces import (
     PlanningContextProvider,
 )
 from ..utils import PlannerLLMClient, get_planner_logger, repair_json_payload
+from ..utils.local_repair import ArtifactIssue, fingerprint, patch_rejection_details, repair_prompt
+from ..utils.artifact_store import atomic_write_json
 
 
 def validate_model(model_type: Type[BaseModel], payload: Any) -> BaseModel:
@@ -108,6 +112,85 @@ class BaseStageAgent:
             quality_validator=quality_validator,
         )
 
+    def _invoke_local_repair(self, *, prompt, images, adapter, max_attempts=None):
+        """Generate once, then repair explicit units using fresh, bounded contexts."""
+        limit = max(1, int(max_attempts or max(self.max_parse_attempts, self.max_quality_attempts)))
+        inspection = None
+        patch_error = None
+        patch_diagnostics = None
+        for attempt in range(1, limit + 1):
+            if inspection is None:
+                request = prompt
+                targets = None
+            else:
+                targets = adapter.targets(inspection)
+                diagnostics = list(inspection.issues)
+                if patch_error:
+                    diagnostics.append(ArtifactIssue("patches", "invalid_patch", patch_error,
+                        expected=patch_diagnostics["allowed_targets"], actual=patch_diagnostics))
+                request = repair_prompt(
+                    targets=targets, issues=diagnostics,
+                    context=adapter.context_for(inspection, targets),
+                )
+                self._log_retry_prompt(request, reason=f"local_repair_attempt_{attempt - 1}")
+            memory = self._create_stage_memory()
+            memory.add_message(SystemMessage(content=self.system_role + (
+                "\nFor repair requests, obey the JSON patch output format in the user message."
+            )))
+            memory.add_message(UserMessage(content=request))
+            # Request errors are deliberately outside parse/patch exception handling.
+            arguments = dict(memory=memory, images=images or None)
+            options = getattr(self.llm_client, "request_options", None)
+            if options and self.stage_name.startswith(("stage3", "stage4", "stage5")):
+                arguments["request_options"] = options(stage=self.stage_name, module=getattr(adapter, "module", ""),
+                    output_root=getattr(self, "output_root", None), attempt=attempt)
+            raw = self.llm_client.complete_with_memory(**arguments)
+            self._log_llm_raw_output(raw, attempt_label="initial" if attempt == 1 else f"local_repair_{attempt - 1}")
+            if inspection is None:
+                inspection = adapter.inspect(raw)
+            else:
+                try:
+                    candidate = adapter.merge(inspection, raw, targets)
+                    inspection = adapter.inspect(candidate)
+                    inspection.normalizations.extend(getattr(adapter, "merge_normalizations", []))
+                    patch_error = None
+                    patch_diagnostics = None
+                except (ValueError, TypeError, KeyError, IndexError) as exc:
+                    patch_error = str(exc)
+                    patch_diagnostics = patch_rejection_details(raw, targets, patch_error)
+                    self.logger.warning("[%s] Patch rejected: %s", self.stage_name, patch_diagnostics)
+            for issue in inspection.issues:
+                issue.stage = self.stage_name
+                issue.module = getattr(adapter, "module", "")
+            for change in inspection.normalizations:
+                self.logger.info("[%s] Safe normalization: %s", self.stage_name, change)
+            if not inspection.issues and not patch_error and inspection.artifact is not None:
+                self._last_quality_errors = []
+                return inspection
+            self.logger.warning(
+                "[%s] Validation failed on attempt %d/%d: %s%s", self.stage_name, attempt, limit,
+                [issue.to_dict() for issue in inspection.issues],
+                f"; patch rejected: {patch_error}" if patch_error else "",
+            )
+            output_root = getattr(self, "output_root", None)
+            if output_root is not None:
+                draft = Path(output_root) / ".repair_drafts" / self.stage_name / fingerprint(prompt)[:16] / f"attempt_{attempt}.json"
+                # Diagnostics are separate from successful artifacts/checkpoints.
+                payload = {
+                    "raw_output": raw.model_dump(mode="json") if isinstance(raw, BaseModel) else raw,
+                    "candidate": inspection.candidate,
+                    "issues": [issue.to_dict() for issue in inspection.issues],
+                    "patch_error": patch_error, "normalizations": inspection.normalizations,
+                    "patch_diagnostics": patch_diagnostics,
+                }
+                atomic_write_json(draft, payload)
+        self._last_quality_errors = [f"{issue.path}: {issue.message}" for issue in inspection.issues]
+        if patch_error:
+            self._last_quality_errors.append(f"patches: {patch_error}")
+        raise StageGenerationError(
+            f"{self.stage_name} failed validation after {limit} attempts: " + "; ".join(self._last_quality_errors)
+        )
+
     def _invoke_with_repair_using_memory(
         self,
         *,
@@ -161,6 +244,8 @@ class BaseStageAgent:
             )
             try:
                 raw = self.llm_client.complete_with_memory(memory=memory, images=images or None)
+            except LLMRequestError:
+                raise
             except Exception as exc:
                 parse_errors.append(f"LLM invocation failed: {exc}")
                 self.logger.warning(
@@ -227,6 +312,8 @@ class BaseStageAgent:
             )
             try:
                 raw = self.llm_client.complete_with_memory(memory=memory, images=images or None)
+            except LLMRequestError:
+                raise
             except Exception as exc:
                 current_errors = [f"LLM invocation failed during quality retry: {exc}"]
                 self.logger.warning(

@@ -12,6 +12,7 @@ Primary input:
 - the current module's standalone spec markdown
 - the current module's extracted facts from modules.json
 - the current module's repo-level slice from repo_skeleton.json
+- the selected Stage2 logical boundary contracts touching the current module
 
 Hard rules:
 - Output Markdown only. Do not output JSON.
@@ -27,8 +28,9 @@ Hard rules:
 - Do not invent new top-level ports, explicit submodules, counters, protocol names, or algorithm stages unless the spec explicitly states them or strongly and directly implies them.
 - Keep the output skeleton-first, code-shape-oriented, and retrieval-oriented.
 - Do not write concrete RTL implementation statements.
-- Inside `verilog` fenced blocks, use comment-style placeholders and block markers only.
-- Do not output executable or near-executable RTL:
+- In Module Frame, emit the exact ANSI module declaration and authoritative port declarations.
+- Outside Module Frame, use comment-style placeholders and block markers only inside `verilog` fenced blocks.
+- Apart from the Module Frame signature, do not output executable or near-executable RTL:
   no `reg`, `wire`, `logic`, `assign`, `always`, `case`, module instantiations,
   function bodies, explicit bit slicing, threshold expressions, or concrete mux logic.
 - `block_label` is free-form, but `block_kind` must be one of:
@@ -74,7 +76,9 @@ EXAMPLE_OUTPUT = """
 ## 1. Module Frame
 ```verilog
 module example_module (
-    // port list placeholder
+    input wire clk,
+    input wire data_i,
+    output wire data_o
 );
 
 // <block: decl_core_objects>
@@ -177,7 +181,7 @@ def build_prompt(
     module_spec_markdown: str,
     module_contract_json: str,
     repo_module_json: str,
-    architecture_timing_json: str = "",
+    boundary_contract_json: str = "{}",
     stage_context: str = "",
 ) -> str:
     return f"""
@@ -199,7 +203,7 @@ Formatting rules:
    - `### Structural Risk`
    - `### Behavioral Risk`
 6. `Module Frame` and every `placeholder` must use fenced `verilog` code blocks.
-7. Those fenced `verilog` blocks must contain comment-style skeleton markers only, not concrete RTL statements such as `reg`, `wire`, `assign`, `always`, module instantiations, or function bodies.
+7. The Module Frame fenced block must contain a concrete ANSI module header plus comment-style block markers. Infer child-module ports from the module responsibilities, specification context, and selected logical boundary contracts. Other fenced `verilog` blocks must not contain concrete RTL statements such as `reg`, `wire`, `assign`, `always`, module instantiations, or function bodies.
 8. `depends_on` must use inline list syntax like `[B1, B2]`.
 9. `block_kind` must be one of: decl, inst, seq, comb, helper, meta.
 10. `control_style` must be exactly one of: counter_driven, explicit_fsm, flag_driven, mixed, purely_combinational, undecided.
@@ -222,8 +226,12 @@ Planning rules:
    - final output/done block
 7. The names do not need to be fixed, but the structure should reflect that intent when justified by the spec.
 8. Treat this output as a planning artifact for later code generation. Avoid any detail that looks like directly reusable RTL code.
-9. Use the architecture timing contract to keep registered updates, combinational paths, and transfer boundaries in compatible blocks.
-10. Do not copy timing tables or physical signal bindings into this Markdown document.
+9. Preserve ordinary clock, reset, handshake, and latency behavior explicitly stated by the module spec.
+10. Never use `port list placeholder`, `// ports`, or TODO in Module Frame.
+11. When explicit interface facts are available, preserve their port names, directions, and widths. Otherwise derive a concrete child interface from grounded module boundaries.
+12. Treat selected logical boundary contracts as binding module-to-module obligations. Convert their
+    logical objects into concrete ports only when grounded by the module spec or extracted interface facts;
+    do not use responsibility IDs or boundary IDs as RTL port names.
 
 Internal self-check before finalizing:
 
@@ -246,8 +254,8 @@ Current module extracted facts:
 Current module repo skeleton slice:
 {repo_module_json}
 
-Current module architecture timing slice:
-{architecture_timing_json or "None"}
+Selected logical boundary contracts for this module:
+{boundary_contract_json}
 
 Additional stage context:
 {stage_context or "None"}

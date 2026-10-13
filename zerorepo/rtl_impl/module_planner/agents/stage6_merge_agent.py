@@ -27,7 +27,15 @@ from ..schemas import (
     Stage6MergeArtifact,
 )
 from .base import BaseStageAgent, model_dump, validate_model
-from .global_defines import copy_official_define_file, is_define_only_module, read_global_defines_manifest
+from ..utils.artifact_store import atomic_write_json
+from ..utils.local_repair import fingerprint
+from .global_defines import (
+    build_global_defines_context,
+    copy_e203_canonical_define_files,
+    copy_official_define_file,
+    is_define_only_module,
+    read_global_defines_manifest,
+)
 from .stage6_semantic_merge import (
     MergeJournal,
     SemanticMergeState,
@@ -56,6 +64,7 @@ class Stage6MergeAgent(BaseStageAgent):
         workspace_root: str | Path | None = None,
         kg_service: Any | None = None,
         planning_context_retriever: Any | None = None,
+        oracle_root: str | Path = "/home/mokita/RealBench",
     ):
         super().__init__(llm_client, context_provider, artifact_sink, logger)
         self.output_root = Path(output_root) if output_root is not None else None
@@ -63,6 +72,7 @@ class Stage6MergeAgent(BaseStageAgent):
         self.merge_context_retriever = MergeContextRetriever(llm_client=self.llm_client, logger=self.logger)
         self.kg_service = kg_service
         self.planning_context_retriever = planning_context_retriever
+        self.oracle_root = Path(oracle_root).expanduser()
         self.kg_retriever = (
             KGRetriever(kg_service)
             if kg_service is not None and getattr(kg_service, "is_enabled", lambda: False)()
@@ -156,10 +166,15 @@ class Stage6MergeAgent(BaseStageAgent):
             raise FileNotFoundError(f"Stage6 fragment file does not exist: {fragment_file}")
         generated_fragments = fragment_file.read_text(encoding="utf-8").replace("\r\n", "\n")
         dependency_context = self._build_dependency_context(module_name, partial_artifacts)
+        module_plan = self._read_module_plan_context(module_name, partial_artifacts)
+        retrieval_key = fingerprint({"version": "stage6_retrieval_sources_v1", "module": module_name,
+            "spec": spec_by_module[module_name], "skeleton": module_skeleton,
+            "fragments": generated_fragments, "plan": module_plan, "dependencies": dependency_context})
         retrieval_result = self._read_merge_retrieval_if_valid(
             module_name=module_name,
             module_spec=spec_by_module[module_name],
             fragment_file=fragment_file,
+            expected_key=retrieval_key,
         )
         if retrieval_result is None:
             retrieval_result = self.merge_context_retriever.select_spec_refs(
@@ -167,10 +182,11 @@ class Stage6MergeAgent(BaseStageAgent):
                 module_spec=spec_by_module[module_name],
                 module_skeleton=module_skeleton,
                 generated_fragments=generated_fragments,
-                module_plan=self._read_module_plan_context(module_name, partial_artifacts),
+                module_plan=module_plan,
                 dependency_context=dependency_context,
             )
             self._write_json(self._merge_retrieval_file(module_name), model_dump(retrieval_result))
+            self._write_merge_cache_stamp(module_name, "spec", retrieval_key, model_dump(retrieval_result))
         else:
             self.logger.info(
                 "[%s] Resume reused merge retrieval for %s from %s",
@@ -179,9 +195,11 @@ class Stage6MergeAgent(BaseStageAgent):
                 self._merge_retrieval_file(module_name),
             )
 
+        child_key = fingerprint({"retrieval": retrieval_result, "dependencies": dependency_context})
         kg_child_context = self._read_merge_child_context_if_valid(
             module_name=module_name,
             retrieval_file=self._merge_retrieval_file(module_name),
+            expected_key=child_key,
         )
         if kg_child_context is None:
             kg_child_context = self._build_kg_child_context_from_retrieval_decision(
@@ -190,6 +208,7 @@ class Stage6MergeAgent(BaseStageAgent):
                 retrieval_result,
             )
             self._write_json(self._merge_child_context_file(module_name), kg_child_context)
+            self._write_merge_cache_stamp(module_name, "children", child_key, kg_child_context)
         else:
             self.logger.info(
                 "[%s] Resume reused merge child context for %s from %s",
@@ -332,6 +351,7 @@ class Stage6MergeAgent(BaseStageAgent):
             contracts_file=contracts_file if contracts_file.exists() else None,
             global_defines_manifest=manifest,
             required_includes=required_includes,
+            lint_support_files=self._lint_support_files(module_name, partial_artifacts),
             module_spec=module_spec,
             module_skeleton=module_skeleton,
             module_plan=module_plan_str,
@@ -436,6 +456,9 @@ class Stage6MergeAgent(BaseStageAgent):
         if [item.module for item in artifact.module_files] != artifact.module_order:
             errors.append("module_files[].module must exactly match module_order")
         for record in artifact.module_files:
+            if record.status != "completed":
+                errors.append(f"{record.module}: {record.status}: {record.error or 'Missing failure/blocking reason'}")
+                continue
             fragment_path = Path(record.fragment_file)
             merged_path = Path(record.merged_file)
             if fragment_path.name != f"{record.module}_fragments.v":
@@ -467,30 +490,38 @@ class Stage6MergeAgent(BaseStageAgent):
         controlled patches instead of asking Stage6 to regenerate the whole
         module.
         """
-        del task, partial_artifacts
+        del task
         self._ensure_toolchain_path()
-        raw = raw_override if raw_override is not None else self.llm_client.complete(system_prompt=self.system_role, user_prompt=prompt, images=None)
+        raw = (
+            raw_override
+            if raw_override is not None
+            else self.llm_client.complete(
+                system_prompt=self.system_role,
+                user_prompt=prompt,
+                images=None,
+            )
+        )
         self._log_llm_raw_output(raw, attempt_label="initial")
-        code = self._extract_verilog_code(raw if isinstance(raw, str) else str(raw))
+        if not isinstance(raw, str):
+            raise ValueError(
+                f"Stage6 raw merge failed for {module_name}: LLM response must be a string, "
+                f"got {type(raw).__name__}. Existing merged RTL was preserved."
+            )
+        code = self._extract_verilog_code(raw)
         stripped = code.strip()
-        if not stripped:
-            self.logger.warning(
-                "[%s] LLM output empty for %s; returning empty best-effort output for debug syntax repair",
-                self.stage_name,
-                module_name,
+        structural_errors = self._validate_raw_merge_envelope(stripped, module_name)
+        if structural_errors:
+            raise ValueError(
+                f"Stage6 raw merge failed for {module_name}: "
+                f"{'; '.join(structural_errors)}. Existing merged RTL was preserved."
             )
-            self._write_text(rtl_path, "\n")
-            self._write_stage6_syntax_diagnostic(
-                module_name=module_name,
-                rtl_path=rtl_path,
-                status="empty_output_delegated_to_debug",
-                syntax_passed=False,
-                syntax_output="LLM returned empty output.",
-            )
-            return ""
 
         self._write_text(rtl_path, stripped.rstrip() + "\n")
-        syntax_correct, syntax_output = check_syntax(str(rtl_path), top_module=module_name)
+        syntax_correct, syntax_output = check_syntax(
+            str(rtl_path),
+            top_module=module_name,
+            support_files=self._lint_support_files(module_name, partial_artifacts),
+        )
         if syntax_correct:
             self._write_stage6_syntax_diagnostic(
                 module_name=module_name,
@@ -519,15 +550,32 @@ class Stage6MergeAgent(BaseStageAgent):
 
     def _validate_raw_module(self, code: str, module_name: str) -> List[str]:
         """Reject structural forms that the Stage6 contract explicitly forbids."""
-        errors: List[str] = []
-        if not code.strip():
-            errors.append("merged module code must not be empty")
+        errors = self._validate_raw_merge_envelope(code, module_name)
+        if errors:
             return errors
         declarations = re.findall(r"(?m)^\s*(?:wire|reg|logic)\b[^;]*;", code)
         if any(re.search(r"\]\s*[A-Za-z_]\w*\s*\[", item) for item in declarations):
             errors.append("merged module must not contain an unpacked array declaration")
         if re.search(r"\b(?:generate|endgenerate|genvar)\b", code):
             errors.append("merged module must not contain generate/genvar constructs")
+        return errors
+
+    def _validate_raw_merge_envelope(self, code: str, module_name: str) -> List[str]:
+        """Fail closed before a raw fallback response can replace persisted RTL."""
+        errors: List[str] = []
+        stripped = code.strip()
+        if not stripped or stripped.lower() in {"none", "null"}:
+            errors.append("merged module code must not be empty")
+            return errors
+        without_comments = re.sub(r"/\*.*?\*/|//[^\n]*", " ", stripped, flags=re.DOTALL)
+        module_decl = re.search(
+            rf"\bmodule\s+(?:(?:automatic|static)\s+)?{re.escape(module_name)}\b",
+            without_comments,
+        )
+        if module_decl is None:
+            errors.append(f"merged module must declare target module {module_name}")
+        elif re.search(r"\bendmodule\b", without_comments[module_decl.end() :]) is None:
+            errors.append("merged module must contain endmodule")
         return errors
 
     def _summarize_syntax_output(self, syntax_output: str) -> str:
@@ -662,20 +710,15 @@ class Stage6MergeAgent(BaseStageAgent):
         module_name: str,
         module_spec: ModuleSpecBlocks,
         fragment_file: Path,
+        expected_key: str | None = None,
     ) -> MergeContextRetrievalResult | None:
         path = self._merge_retrieval_file(module_name)
         if not path.exists():
             return None
-        if fragment_file.exists() and path.stat().st_mtime < fragment_file.stat().st_mtime:
-            self.logger.info(
-                "[%s] Existing merge retrieval for %s is older than fragments; regenerating",
-                self.stage_name,
-                module_name,
-            )
-            return None
         try:
             with open(path, "r", encoding="utf-8") as f:
                 payload = json.load(f)
+            self._validate_merge_cache_stamp(module_name, "spec", expected_key, payload)
             result = validate_model(MergeContextRetrievalResult, payload)
             self._validate_cached_merge_retrieval(result, module_name=module_name, module_spec=module_spec)
             return result
@@ -714,20 +757,15 @@ class Stage6MergeAgent(BaseStageAgent):
         *,
         module_name: str,
         retrieval_file: Path,
+        expected_key: str | None = None,
     ) -> Dict[str, Any] | None:
         path = self._merge_child_context_file(module_name)
         if not path.exists():
             return None
-        if retrieval_file.exists() and path.stat().st_mtime < retrieval_file.stat().st_mtime:
-            self.logger.info(
-                "[%s] Existing merge child context for %s is older than retrieval; regenerating",
-                self.stage_name,
-                module_name,
-            )
-            return None
         try:
             with open(path, "r", encoding="utf-8") as f:
                 payload = json.load(f)
+            self._validate_merge_cache_stamp(module_name, "children", expected_key, payload)
             if payload.get("schema_version") != "merge_child_context_v1":
                 raise ValueError("schema_version must remain merge_child_context_v1")
             if payload.get("module") != module_name:
@@ -741,6 +779,18 @@ class Stage6MergeAgent(BaseStageAgent):
                 exc,
             )
             return None
+
+    def _merge_cache_stamp(self, module, kind):
+        return (self.output_root or Path(".")) / ".repair_cache" / "stage6_retrieval" / f"{module}_{kind}.json"
+
+    def _write_merge_cache_stamp(self, module, kind, key, payload):
+        atomic_write_json(self._merge_cache_stamp(module, kind), {
+            "source_fingerprint": key, "result_fingerprint": fingerprint(payload)})
+
+    def _validate_merge_cache_stamp(self, module, kind, key, payload):
+        stamp = json.loads(self._merge_cache_stamp(module, kind).read_text())
+        if not key or stamp["source_fingerprint"] != key or stamp["result_fingerprint"] != fingerprint(payload):
+            raise ValueError("Merge cache source/content fingerprint mismatch")
 
     def _read_module_plan_context(
         self,
@@ -775,7 +825,7 @@ class Stage6MergeAgent(BaseStageAgent):
             return {}
         child_modules = list(module_record.children)
         global_defines = self._detect_global_defines_modules(repo_skeleton, module_by_name)
-        global_defines_context = self._build_global_defines_context(global_defines, module_name)
+        global_defines_context = build_global_defines_context(self.workspace_root)
         return {
             "module": module_name,
             "children": child_modules,
@@ -796,10 +846,48 @@ class Stage6MergeAgent(BaseStageAgent):
             "global_defines_context": global_defines_context,
         }
 
+    def _lint_support_files(
+        self,
+        module_name: str,
+        partial_artifacts: Dict[str, Any],
+    ) -> list[str]:
+        repo_skeleton = self._get_repo_skeleton_artifact(partial_artifacts)
+        if repo_skeleton is None:
+            return []
+        module_by_name = {item.module: item for item in repo_skeleton.modules}
+        pending = list(getattr(module_by_name.get(module_name), "children", []) or [])
+        visited: set[str] = set()
+        support_files: list[str] = []
+        while pending:
+            child = pending.pop(0)
+            if child in visited or child == module_name:
+                continue
+            visited.add(child)
+            child_record = module_by_name.get(child)
+            if child_record is not None:
+                pending.extend(list(child_record.children or []))
+            merged_child = self._merged_file(child)
+            if merged_child.is_file():
+                support_files.append(str(merged_child.resolve()))
+        return support_files
+
     def _ensure_global_defines_copied(self, task: PlannerTaskInput, partial_artifacts: Dict[str, Any]) -> None:
         repo_skeleton = self._get_repo_skeleton_artifact(partial_artifacts)
         if repo_skeleton is None:
             return
+        canonical_entries = copy_e203_canonical_define_files(
+            top_module=str(getattr(repo_skeleton, "top_module", "") or ""),
+            oracle_root=self.oracle_root,
+            workspace_root=self.workspace_root,
+            output_root=self.output_root,
+        )
+        for entry in canonical_entries:
+            self.logger.info(
+                "[%s] Copied canonical E203 defines %s -> %s",
+                self.stage_name,
+                entry.get("source"),
+                entry.get("workspace_path"),
+            )
         module_by_name = {item.module: item for item in repo_skeleton.modules}
         for module_name in self._detect_global_defines_modules(repo_skeleton, module_by_name):
             copied = copy_official_define_file(
@@ -838,51 +926,6 @@ class Stage6MergeAgent(BaseStageAgent):
         # 3. Exclude the current module itself (it doesn't depend on its own defines)
         # and modules that are already children (they get separate KG context)
         return sorted(candidates)
-
-    def _build_global_defines_context(
-        self, global_defines: List[str], current_module: str
-    ) -> str:
-        """Read the generated Verilog for global defines modules and return
-        their content as prompt context.  Extracts numeric define values into
-        an explicit table so the model cannot overlook them."""
-        chunks: list[str] = []
-        for mod_name in global_defines:
-            if mod_name == current_module:
-                continue
-            merged_path = self._merged_file(mod_name)
-            if not merged_path.exists():
-                continue
-            try:
-                content = merged_path.read_text(encoding="utf-8")
-            except OSError:
-                continue
-
-            # Extract active (non-commented) `define lines, parsed line-by-line
-            active_defines: list[tuple[str, str]] = []
-            define_re = re.compile(r"^\s*`define\s+(\w+)(?:\s+(.+?))?\s*$")
-            for line in content.splitlines():
-                line_stripped = line.strip()
-                if line_stripped.startswith("//"):
-                    continue
-                m = define_re.match(line_stripped)
-                if m:
-                    value = (m.group(2) or "").strip()
-                    if value and not value.startswith("//"):
-                        active_defines.append((m.group(1), value))
-
-            summary_lines = [f"  {n} = {v}" for n, v in active_defines]
-            summary = (
-                f"// --- Global defines from {mod_name}.v ---\n"
-                f"// KEY VALUES (authoritative — override any conflicting\n"
-                f"// parameter/localparam values in the generated fragments):\n"
-                + ("\n".join(summary_lines) if summary_lines else "  (no active numeric defines)")
-                + f"\n\n"
-                f"// Full {mod_name}.v content for reference:\n"
-                f"{content.strip()}\n"
-                f"// --- End {mod_name}.v ---"
-            )
-            chunks.append(summary)
-        return "\n\n".join(chunks)
 
     def _build_kg_child_context(self, module_name: str, dependency_context: Dict[str, Any]) -> Dict[str, Any]:
         child_modules = self._child_modules_from_dependency_context(module_name, dependency_context)

@@ -1,0 +1,8 @@
+
+  wire audit_raw_nice_valid;
+  // Intentional defect: an ordinary ADD also issues an accelerator command.
+  assign nice_req_valid = audit_raw_nice_valid |
+    (i_valid && !(i_ilegl || i_buserr || i_misalgn) &&
+     (i_info[`E203_DECINFO_GRP] == `E203_DECINFO_GRP_ALU) &&
+     i_info[`E203_DECINFO_ALU_ADD]);
+

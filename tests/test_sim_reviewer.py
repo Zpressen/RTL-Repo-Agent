@@ -90,4 +90,57 @@ def test_check_syntax_passes_include_dirs_to_verilator(tmp_path, monkeypatch) ->
     is_pass, _output = check_syntax(str(rtl_path), top_module="m", include_dirs=[str(include_dir)])
 
     assert is_pass is True
+    assert f"-I{rtl_dir}" in captured["cmd"]
     assert f"-I{include_dir}" in captured["cmd"]
+
+
+def test_check_syntax_always_searches_current_rtl_directory(tmp_path, monkeypatch) -> None:
+    rtl_path = tmp_path / "rtl.sv"
+    rtl_path.write_text('`include "local.v"\nmodule m; endmodule\n', encoding="utf-8")
+    (tmp_path / "local.v").write_text("`define LOCAL_MACRO 1\n", encoding="utf-8")
+    command_result = CommandResult(is_pass=True, stdout="", stderr="").model_dump_json()
+    captured: dict[str, str] = {}
+
+    def fake_run_bash_command(cmd: str, *args, **kwargs):
+        del args, kwargs
+        captured["cmd"] = cmd
+        return True, command_result
+
+    monkeypatch.setattr(sim_reviewer_mod, "_require_executable", lambda _name: None)
+    monkeypatch.setattr(sim_reviewer_mod, "run_bash_command", fake_run_bash_command)
+
+    passed, _output = check_syntax(str(rtl_path), top_module="m")
+
+    assert passed is True
+    assert f"-I{tmp_path}" in captured["cmd"]
+    assert captured["cmd"].count(f"-I{tmp_path}") == 1
+
+
+def test_check_syntax_explicit_support_files_ignore_unrelated_siblings(tmp_path, monkeypatch) -> None:
+    rtl_path = tmp_path / "target.v"
+    support_path = tmp_path / "child.v"
+    unrelated_path = tmp_path / "broken_sibling.v"
+    rtl_path.write_text("module target; child u_child(); endmodule\n", encoding="utf-8")
+    support_path.write_text("module child; endmodule\n", encoding="utf-8")
+    unrelated_path.write_text("this is not verilog\n", encoding="utf-8")
+    command_result = CommandResult(is_pass=True, stdout="", stderr="").model_dump_json()
+    captured: dict[str, str] = {}
+
+    def fake_run_bash_command(cmd: str, *args, **kwargs):
+        del args, kwargs
+        captured["cmd"] = cmd
+        return True, command_result
+
+    monkeypatch.setattr(sim_reviewer_mod, "_require_executable", lambda _name: None)
+    monkeypatch.setattr(sim_reviewer_mod, "run_bash_command", fake_run_bash_command)
+
+    passed, _output = check_syntax(
+        str(rtl_path),
+        top_module="target",
+        support_files=[str(support_path)],
+    )
+
+    assert passed is True
+    assert str(rtl_path) in captured["cmd"]
+    assert str(support_path) in captured["cmd"]
+    assert str(unrelated_path) not in captured["cmd"]

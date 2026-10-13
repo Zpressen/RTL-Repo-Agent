@@ -191,6 +191,107 @@ def test_plan_bound_to_stale_skeleton_is_rejected(tmp_path):
         retriever.get_module_context("top", require_spec=True, require_skeleton=True, require_plan=True)
 
 
+def test_stage5_planning_context_keeps_only_selected_links_and_unique_metadata(tmp_path):
+    context = {
+        "module": {
+            "name": "top",
+            "role": "controller",
+            "module_kind": "top_controller",
+            "planned_children": ["leaf"],
+            "stage2_fingerprint": "s2",
+            "uid": "large-internal-uid",
+            "attrs": "duplicated internal metadata",
+        },
+        "specs": [
+            {
+                "fragment": {
+                    "content_hash": "h1",
+                    "source_file": "spec.md",
+                    "text": "SELECTED_SPEC_BODY_MUST_NOT_BE_DUPLICATED",
+                },
+                "relation": {
+                    "local_ref": "S001",
+                    "confidence": "high",
+                    "relevance_reason": "current behavior",
+                    "input_fingerprint": "spec-fp",
+                },
+            },
+            {
+                "fragment": {"content_hash": "h2", "text": "UNRELATED_SPEC_BODY"},
+                "relation": {"local_ref": "S999"},
+            },
+        ],
+        "skeleton": {
+            "artifact_path": "module_skeleton_json/top.json",
+            "content_hash": "sk-hash",
+            "input_fingerprint": "s3",
+        },
+        "plan": {
+            "artifact_path": "module_plan_json/top.json",
+            "content_hash": "plan-hash",
+            "input_fingerprint": "s4",
+            "skeleton_content_hash": "sk-hash",
+        },
+        "skeleton_artifact": {"large": "x" * 20000},
+        "plan_artifact": {"large": "y" * 20000},
+        "code_interface": [
+            {"name": "clk", "direction": "input", "width": "1", "path": "top.clk"}
+        ],
+        "child_code_interfaces": [
+            {
+                "module": "leaf",
+                "actual_path": "rtl/leaf.v",
+                "implementation_status": "planned",
+                "ports": [{"name": "a", "direction": "input", "width": "8"}],
+            },
+            {"module": "unplanned", "ports": [{"name": "ignored"}]},
+        ],
+    }
+
+    text = PlanningContextRetriever.to_stage5_prompt_json(context, ["S001"], max_chars=12000)
+    payload = json.loads(text)
+
+    assert len(text) <= 12000
+    assert [item["local_ref"] for item in payload["selected_spec_links"]] == ["S001"]
+    assert payload["code_interface"][0]["name"] == "clk"
+    assert [item["module"] for item in payload["child_code_interfaces"]] == ["leaf"]
+    assert "SELECTED_SPEC_BODY_MUST_NOT_BE_DUPLICATED" not in text
+    assert "UNRELATED_SPEC_BODY" not in text
+    assert "skeleton_artifact" not in text
+    assert "plan_artifact" not in text
+    assert "large-internal-uid" not in text
+
+
+def test_stage5_planning_context_budget_always_returns_valid_json():
+    context = {
+        "module": {"name": "wide", "planned_children": ["leaf"]},
+        "specs": [],
+        "skeleton": {"content_hash": "sk"},
+        "plan": {"content_hash": "plan"},
+        "code_interface": [
+            {"name": f"port_{index:03d}", "direction": "input", "width": "32", "path": "p" * 80}
+            for index in range(100)
+        ],
+        "child_code_interfaces": [
+            {
+                "module": "leaf",
+                "ports": [
+                    {"name": f"child_port_{index:03d}", "direction": "output", "width": "64"}
+                    for index in range(100)
+                ],
+            }
+        ],
+    }
+
+    text = PlanningContextRetriever.to_stage5_prompt_json(context, [], max_chars=600)
+    payload = json.loads(text)
+
+    assert len(text) <= 600
+    assert payload["module"]["name"] == "wide"
+    assert payload["truncated"] is True
+    assert payload["omitted_count"]
+
+
 def test_code_snapshot_merges_into_planned_module_uid(tmp_path):
     checkpoint = CheckpointManager(tmp_path)
     service = RTLKgService(

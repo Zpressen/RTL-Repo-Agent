@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "snapshot_date": "2026-09-15",
+  "timezone": "Asia/Shanghai",
+  "scope": "local RealBench system_task/e203_ifu_hard only",
+  "toolchain": {
+    "verilator": "Verilator 5.044 2026-01-01 rev conda-forge build 0"
+  },
+  "candidates": {
+    "codex": {
+      "root": "/home/mokita/RealBench/system_expriment/e203_ifu_hard",
+      "files": {
+        "e203_ifu.v": "e6d80d9a1e69679a1cadf79bf6296e0146e5b77d1f9f762b79c97d3266795792",
+        "e203_ifu_decode.v": "c1c5940bb952925c10a131a3118d84110bc0de861a13c2b02e4e1ea5d1601cec",
+        "e203_ifu_mem.v": "e85e4202bbdc60d885dfd0a17fd30e3386f8515a6163800d7b5ec6809a2436f7"
+      },
+      "iteration_log_sha256": "3918f430930062a75d15c4b6437cf342e07ac962cc3a7f4538cc99bc124c4544"
+    },
+    "repo_agent": {
+      "root": "rtl_outputs/e203_ifu_system/.zerorepo/workspace/merged",
+      "files": {
+        "e203_ifu.v": "2271c062365767bc923981a3241dcbc76b1adf08054a62b99df85d5e1de58b7d",
+        "e203_ifu_align.v": "d3c78e35ef31285a205e008cce5f895151b49e3a9d692456817ec0c02135a326",
+        "e203_ifu_ctrl.v": "222f4e5acdbac8bc9a1a5e89fcdbaa369683c087b43c95e4b91f38f9df415f2f",
+        "e203_ifu_decode.v": "b46c6d3425007a01187d78ea03901e10b168ae591033f4665956c13d0b5465f0",
+        "e203_ifu_fetch_path.v": "fa857fce427836cd3e10e72d917192eedb4762ce3f7c65f25cd89a1add93d399",
+        "e203_ifu_issue.v": "4097f2b8c39396759cbe76b6c0558037c93cd7fdb6876cb8008977eb996ed2df"
+      },
+      "debug_events_sha256": "b73c9625760229688ec755cabf141c193b4d5104bc65aa4e58637e6dbebfdb1e",
+      "initial_sim_sha256": "b07ce581df284e96a63f3d6a4bee67cb3579b5f45313b2ef4c48f5db38e60514",
+      "final_sim_sha256": "2ddd83ba9146d2344d7a7266fabd021f6102992dd8ea4755841815b5c48d800d"
+    }
+  },
+  "verification_inputs": {
+    "public_verify.py": "9f3f54b5d8891bdbe9dbac6713534ca02ad5f3e6d4f8e76408f9f3a8109bee1d",
+    "public_stimulus.sv": "6aa7249c40bac24dcec885b79963fbea33bba53df8976f214f88796f879f1e10",
+    "hidden_seed_verify.py": "3d305c5165a8a5961269f0863448381d126156e436bde1e93487e6680f16989d",
+    "targeted_verify.py": "4003d39a0256312e66e15652afc74904c953a8697688203381f2b0dae023531c",
+    "targeted_stimulus.sv": "10cf1ec26445e67f411f149b3d41f9e5862b90c8f8e6ebe68d25edc722250768",
+    "feature_scorer.sv": "cf2c831f1bc8c54060194cd5283bc1c6f0f18767f9b80993f648998762446c21"
+  },
+  "notes": [
+    "SHA-256 values identify the exact local files used for the audit.",
+    "No RTL candidate, Golden source, public testbench, or verification script was modified."
+  ]
+}

@@ -9,44 +9,24 @@ Return JSON only.
 
 
 SCHEMA_AND_RULES = """
-Return JSON only with this schema:
-
+Return JSON only:
 {
-  "schema_version": "module_spec_context_retrieval_v1",
-  "module": "<module name>",
-  "blocks": [
-    {
-      "block_id": "S001",
-      "text": "<exact copied text from one SOURCE_CHUNK>",
-      "source_file": "<source file path>",
-      "source_chunk_ids": ["C001"],
-      "relevance_reason": ["why this source passage matters for the module"],
-      "confidence": "high | medium | low"
-    }
+  "schema_version": "module_spec_selection_v2",
+  "module": "<MODULE_NAME>",
+  "selections": [
+    {"source_chunk_id": "C001", "relevance_reason": ["brief reason"], "confidence": "high"}
   ],
-  "open_issues": [],
-  "fallback_used": false,
-  "fallback_reason": ""
+  "open_issues": []
 }
-
-Core task:
-1. Select every source chunk that is relevant to describing, implementing, wiring, or validating MODULE_NAME.
-2. Use module role, parent/child relationships, instance hints, facts, and skeleton hints to judge relevance.
-3. Prefer exact module/interface/behavior descriptions, but keep parent usage context and shared algorithm context when they constrain the module.
-4. Include parent usage context when a leaf module has no standalone section.
-5. Do not drop relevant chunks just because another selected chunk is more specific.
-6. Treat this as the first-pass retrieval for both Stage3 skeleton planning and Stage4 spec-block generation. Stage4 will split and re-select from your returned passages, so include a bounded superset of passages that may constrain implementation.
-7. Keep the superset relevant: include parent/shared algorithm context only when it defines this module's interface, timing, data semantics, instantiation usage, or correctness constraints.
-8. Exclude chunks that merely mention the same project, algorithm, parent module, sibling module, examples, background, or verification intent without constraining MODULE_NAME.
-9. If unsure, prefer a small number of medium-confidence directly related chunks over many low-confidence surrounding chunks.
-
-Hard constraints:
-- module must exactly match MODULE_NAME.
-- block_id values must be contiguous S001, S002, ...
-- text must be copied exactly from SOURCE_CHUNKS. Do not paraphrase or synthesize text.
-- source_chunk_ids must refer only to ids in SOURCE_CHUNKS.
-- fallback_used must be false.
-- Do not output Markdown or prose outside JSON.
+Select relevant interface, timing, behavior, shared algorithm and parent usage constraints.
+Keep a relevant bounded superset for Stage3 planning and Stage4 implementation.
+Exclude incidental project/sibling mentions and unrelated background.
+Use only source_chunk_id values supplied in SOURCE_CHUNKS. Module must match MODULE_NAME.
+Use one entry per selected chunk; reasons should be short and confidence high, medium or low.
+DO NOT return source text, file paths, block_id, or Sxxx identifiers. The program restores
+exact original text and source paths locally. Mandatory top-level port sections are
+included by the program even when not shown in the candidate budget.
+Do not output prose outside JSON.
 """.strip()
 
 

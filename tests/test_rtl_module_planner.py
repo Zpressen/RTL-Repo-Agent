@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -23,7 +24,7 @@ from zerorepo.rtl_impl.module_planner.agents import (
     Stage6MergeAgent,
 )
 import zerorepo.rtl_impl.module_planner.agents.global_defines as global_defines_mod
-from zerorepo.rtl_impl.module_planner.agents.base import BaseStageAgent, validate_model
+from zerorepo.rtl_impl.module_planner.agents.base import BaseStageAgent, StageGenerationError, validate_model
 from zerorepo.rtl_impl.module_planner.module_organizer import (
     build_module_organized_artifact,
     build_module_organized_artifact_from_repo_skeleton,
@@ -32,13 +33,22 @@ from zerorepo.rtl_impl.module_planner.module_organizer import (
     build_stage2_planning_input_from_task,
 )
 from zerorepo.rtl_impl.module_planner.planner_runner import PlannerRunner
-from zerorepo.rtl_impl.module_planner.prompts import stage1_ingest_extract
+from zerorepo.rtl_impl.module_planner.prompts import stage1_ingest_extract, stage2_decomposition
 from zerorepo.rtl_impl.module_planner.schemas import (
+    CandidateDimensionScores,
     ExtractedFact,
+    LockedTopModule,
     ModuleOrganizationArtifact,
     PlannerTaskInput,
     Stage1FactLedger,
     Stage2PlanningInput,
+    Stage2DecompositionArtifact,
+    Stage2CandidateEvaluation,
+    Stage2DecompositionCandidate,
+    ResponsibilityLedgerOutput,
+    Stage2AdjudicationPass,
+    Stage2SelectionPass,
+    Stage2SelectionResult,
     Stage3ModuleSkeletonArtifact,
     Stage1ContractsArtifact,
     Stage2RepoSkeletonArtifact,
@@ -49,7 +59,9 @@ from zerorepo.rtl_impl.module_planner.schemas import (
 )
 from zerorepo.rtl_impl.module_planner.utils import (
     PlannerLLMClient,
+    ansi_module_ports,
     expand_markdown_inputs,
+    extract_markdown_port_sections,
     extract_module_section,
     parse_module_skeleton_doc,
     split_spec_blocks,
@@ -768,6 +780,200 @@ def make_repo_skeleton_payload() -> dict:
     }
 
 
+def make_stage2_responsibility_payload() -> dict:
+    return {
+        "responsibilities": [
+            {
+                "responsibility_id": "RU_KEY_EXPANSION",
+                "description": "Generate iterative AES round keys.",
+                "ownership_required": True,
+                "evidence_sections": ["AES Demo Repository > Key Expansion"],
+                "inputs": ["cipher_key"],
+                "outputs": ["round_key"],
+                "owned_state": ["round_key_state"],
+                "clock_domain": "clk",
+                "reset_behavior": "rst active high",
+                "protocol": "round_key_stream",
+                "timing_class": "iterative_registered",
+                "dependencies": [
+                    {
+                        "target_responsibility_id": "RU_TOP_CONTROL",
+                        "coupling_strength": "medium",
+                        "transferred_objects": ["round_key"],
+                        "rationale": "Round control consumes generated keys.",
+                    }
+                ],
+                "explicit_module_hint": "aes_key_expand_128",
+                "iterative": True,
+            },
+            {
+                "responsibility_id": "RU_TOP_CONTROL",
+                "description": "Own top-level AES loading, round orchestration, and completion.",
+                "ownership_required": True,
+                "evidence_sections": ["AES Demo Repository > Timing"],
+                "inputs": ["round_key", "ld"],
+                "outputs": ["done"],
+                "owned_state": ["round_counter"],
+                "clock_domain": "clk",
+                "reset_behavior": "rst active high",
+                "protocol": "load_to_done",
+                "timing_class": "registered_control",
+                "dependencies": [],
+                "explicit_module_hint": "aes_cipher_top",
+            },
+        ],
+        "global_clocking_notes": ["All modules use clk and active-high rst."],
+        "global_data_conventions": ["Round keys feed the top round datapath."],
+    }
+
+
+def make_stage2_candidate_payload(style: str, *, complete: bool) -> dict:
+    protocol = "round_key_stream" if complete else ""
+    width_status = "derived" if complete else "unresolved"
+    width_evidence = ["AES-128 round key is 128 bits"] if complete else []
+    return {
+        "candidate_id": f"stage2_{style}",
+        "plan_style": style,
+        "top_module": "aes_cipher_top",
+        "summary": f"{style} AES decomposition with explicit key expansion.",
+        "modules": [
+            {
+                "module": "aes_key_expand_128",
+                "role": "iterative round-key provider",
+                "responsibility_ids": ["RU_KEY_EXPANSION"],
+                "source_kind": "explicit",
+                "supporting_sections": ["AES Demo Repository > Key Expansion"],
+                "rationale": "The source explicitly names the key expansion module.",
+                "confidence": "high",
+                "reused": False,
+            },
+            {
+                "module": "aes_cipher_top",
+                "role": "top-level AES encryption controller",
+                "responsibility_ids": ["RU_TOP_CONTROL"],
+                "source_kind": "explicit",
+                "supporting_sections": ["AES Demo Repository > Interface"],
+                "rationale": "The source explicitly identifies the top module.",
+                "confidence": "high",
+                "reused": False,
+            },
+        ],
+        "hierarchy": [
+            {
+                "parent": "aes_cipher_top",
+                "child": "aes_key_expand_128",
+                "source_kind": "explicit",
+                "rationale": "Explicit repository hierarchy.",
+                "confidence": "high",
+            }
+        ],
+        "boundary_contracts": [
+            {
+                "boundary_id": f"BC_KEY_TOP_{style.upper()}",
+                "producer_module": "aes_key_expand_128",
+                "consumer_module": "aes_cipher_top",
+                "producer_responsibility_ids": ["RU_KEY_EXPANSION"],
+                "consumer_responsibility_ids": ["RU_TOP_CONTROL"],
+                "transferred_objects": ["round_key"],
+                "direction": "producer_to_consumer",
+                "protocol": protocol,
+                "timing_class": "registered",
+                "clock_domain": "clk",
+                "reset_behavior": "rst active high",
+                "width_status": width_status,
+                "width_evidence": width_evidence,
+                "evidence_sections": ["AES Demo Repository > Key Expansion"],
+                "rationale": "Round key transfer from key expansion to top control.",
+            }
+        ],
+        "global_clocking_notes": ["Shared clk and rst."],
+        "global_data_conventions": ["Round keys are consumed by the top."],
+        "open_issues": [],
+    }
+
+
+def make_stage2_decomposition_responses() -> list[dict]:
+    return [
+        make_stage2_responsibility_payload(),
+        make_stage2_candidate_payload("conservative", complete=False),
+        make_stage2_candidate_payload("balanced", complete=True),
+        make_stage2_candidate_payload("modular", complete=False),
+    ]
+
+
+def make_distinct_stage2_selection_candidates() -> list[Stage2DecompositionCandidate]:
+    conservative_payload = make_stage2_candidate_payload("conservative", complete=True)
+    conservative_payload["modules"] = [
+        {
+            "module": "aes_cipher_top",
+            "role": "monolithic AES implementation",
+            "responsibility_ids": ["RU_KEY_EXPANSION", "RU_TOP_CONTROL"],
+            "source_kind": "explicit",
+            "supporting_sections": ["AES Demo Repository"],
+            "rationale": "Keep all responsibilities in the top.",
+            "confidence": "medium",
+            "reused": False,
+        }
+    ]
+    conservative_payload["hierarchy"] = []
+    conservative_payload["boundary_contracts"] = []
+
+    balanced_payload = make_stage2_candidate_payload("balanced", complete=True)
+
+    modular_payload = make_stage2_candidate_payload("modular", complete=True)
+    modular_payload["modules"][0]["module"] = "aes_round_key_pipeline"
+    modular_payload["hierarchy"][0]["child"] = "aes_round_key_pipeline"
+    modular_payload["boundary_contracts"][0]["producer_module"] = "aes_round_key_pipeline"
+
+    return [
+        validate_model(Stage2DecompositionCandidate, payload)
+        for payload in (conservative_payload, balanced_payload, modular_payload)
+    ]
+
+
+def make_stage2_selection_evaluations(
+    candidates: list[Stage2DecompositionCandidate],
+    *,
+    fatal_by_id: dict[str, list[str]] | None = None,
+    risks_by_id: dict[str, list[str]] | None = None,
+) -> list[Stage2CandidateEvaluation]:
+    fatal_by_id = fatal_by_id or {}
+    risks_by_id = risks_by_id or {}
+    return [
+        Stage2CandidateEvaluation(
+            candidate_id=item.candidate_id,
+            plan_style=item.plan_style,
+            fatal_violations=fatal_by_id.get(item.candidate_id, []),
+            hard_violations=risks_by_id.get(item.candidate_id, []),
+            metrics={
+                "module_count": len(item.modules),
+                "required_responsibility_count": 2,
+                "stateful_responsibility_count": 2,
+                "dependency_count": 1,
+                "cross_module_dependency_count": len(item.boundary_contracts),
+                "boundary_contract_count": len(item.boundary_contracts),
+                "strong_coupling_cut_count": 0,
+                "convenience_module_count": 0,
+            },
+        )
+        for item in candidates
+    ]
+
+
+def make_stage2_ranking_response(
+    ranked_candidate_ids: list[str],
+) -> dict:
+    return {
+        "ranked_candidate_ids": ranked_candidate_ids,
+        "winner_candidate_id": ranked_candidate_ids[0],
+        "candidate_assessments": {
+            candidate_id: [f"Assessment for {candidate_id}"]
+            for candidate_id in ranked_candidate_ids
+        },
+        "rationale": ["Repository-level architecture judgment."],
+    }
+
+
 def make_module_spec_files(tmp_path: Path) -> tuple[Path, Path]:
     top_spec = tmp_path / "aes_cipher_top.md"
     key_spec = tmp_path / "aes_key_expand_128.md"
@@ -777,6 +983,13 @@ def make_module_spec_files(tmp_path: Path) -> tuple[Path, Path]:
                 "# aes_cipher_top",
                 "TOP UNIQUE SPEC MARKER",
                 "Controls AES round sequencing and completion behavior.",
+                "",
+                "## Interface",
+                "Ports:",
+                "- clk: input, width 1",
+                "- rst: input, width 1",
+                "- ld: input, width 1",
+                "- done: output, width 1",
             ]
         ),
         encoding="utf-8",
@@ -852,6 +1065,18 @@ def make_stage3_module_skeleton_doc(module_name: str, spec_path: Path) -> str:
         if module_name == "aes_cipher_top"
         else ""
     )
+    module_frame = (
+        [f"module {module_name};"]
+        if module_name == "sd_defines"
+        else [
+            f"module {module_name} (",
+            "    input wire clk,",
+            "    input wire rst,",
+            "    input wire ld,",
+            "    output wire done",
+            ");",
+        ]
+    )
     return "\n".join(
         [
             "# MODULE_SKELETON_DOC v1",
@@ -867,9 +1092,7 @@ def make_stage3_module_skeleton_doc(module_name: str, spec_path: Path) -> str:
             "",
             "## 1. Module Frame",
             "```verilog",
-            f"module {module_name} (",
-            "    // ports",
-            ");",
+            *module_frame,
             "",
             *frame_block_markers,
             "",
@@ -1099,13 +1322,19 @@ def make_block_spec_retrieval_payload(module_name: str, top_module: bool = False
 
 
 def make_stage5_code_payload(task_id: str, module_name: str, subtask: dict, code: str | None = None) -> dict:
+    fragment = code or f"// generated fragment for {module_name} {subtask['id']}"
     return {
         "task_id": task_id,
         "module": module_name,
         "subtask_id": subtask["id"],
         "target": subtask["target"],
         "spec_refs": list(subtask["spec_refs"]),
-        "code": code or f"// generated fragment for {module_name} {subtask['id']}",
+        "code": fragment,
+        "contract": {
+            "writes": sorted(set(re.findall(r"\b([A-Za-z_]\w*)\s*(?:\[[^]]+\])?\s*(?:<=|(?<![=!<>])=(?![=]))", fragment))),
+            "reads": [], "clocking": "unknown", "reset_behavior": "unknown",
+            "hold_behavior": "unknown", "latency": "unknown", "assumptions": [],
+        },
     }
 
 
@@ -1216,6 +1445,23 @@ def make_stage1_fact_payload(md_path: Path) -> dict:
             _fact(
                 md_path,
                 module="aes_cipher_top",
+                category="interface",
+                subject=name,
+                predicate="is_port",
+                obj={"name": name, "direction": direction, "width": "1", "role": role, **extra},
+                source_kind="table_row",
+            )
+            for name, direction, role, extra in [
+                ("clk", "input", "clock", {}),
+                ("rst", "input", "reset", {"active": "high"}),
+                ("ld", "input", "load_start", {}),
+                ("done", "output", "completion", {}),
+            ]
+        ],
+        *[
+            _fact(
+                md_path,
+                module="aes_key_expand_128",
                 category="interface",
                 subject=name,
                 predicate="is_port",
@@ -1426,7 +1672,7 @@ def test_stage1_fact_ledger_projects_legacy_contracts_without_inferred_hierarchy
 
     artifact = agent.run_incremental(task, {})
 
-    assert artifact.completed_rounds == ["facts"]
+    assert artifact.completed_rounds == ["facts", "top_interface"]
     assert artifact.fact_ledger.facts[0].fact_id == "F0001"
     assert artifact.structure_contract.top_module == "aes_cipher_top"
     assert "aes_sbox" in artifact.structure_contract.modules
@@ -1514,7 +1760,7 @@ def test_stage1_agent_runs_facts_round_without_alias_groups(tmp_path):
 
     assert isinstance(artifact, Stage1ContractsArtifact)
     assert artifact.stage1_status == "contracts_completed"
-    assert artifact.completed_rounds == ["facts"]
+    assert artifact.completed_rounds == ["facts", "top_interface"]
     assert artifact.completed_batches == ["batch_0001"]
     assert artifact.structure_contract.top_module == "aes_cipher_top"
     assert artifact.interface_contracts[0].ports[0].name == "clk"
@@ -1599,6 +1845,22 @@ def test_stage1_agent_batches_directory_specs_and_reduces_hierarchy(tmp_path):
                 "ambiguous_items": [],
             }
         },
+        {
+            "interface_contract": {
+                "module": "mod_1",
+                "ports": [
+                    {"name": "clk", "direction": "input", "width": "1", "role": "clock"}
+                ],
+                "text_grounding": [
+                    {
+                        "source_md_file": str(module_paths[0].resolve()),
+                        "section_path": "mod_1",
+                        "start_line_anchor": "Ports:",
+                        "end_line_anchor": "- clk: input, width 1, role clock",
+                    }
+                ],
+            }
+        },
     ]
     task = PlannerTaskInput(
         task_id="mod_1_demo",
@@ -1617,7 +1879,7 @@ def test_stage1_agent_batches_directory_specs_and_reduces_hierarchy(tmp_path):
     assert set(artifact.structure_contract.modules) == {f"mod_{index}" for index in range(1, 7)}
     assert [(item.parent, item.child) for item in artifact.structure_contract.hierarchy] == [("mod_1", "mod_6")]
     assert artifact.structure_contract.generation_order_candidate.index("mod_6") < artifact.structure_contract.generation_order_candidate.index("mod_1")
-    assert len(backend.calls) == 2
+    assert len(backend.calls) == 3
     assert backend.calls[0]["user_prompt"].count("[Document DOC_") == 5
     assert backend.calls[1]["user_prompt"].count("[Document DOC_") == 1
     organized = build_module_organized_artifact(artifact)
@@ -1679,6 +1941,22 @@ def test_stage1_agent_projects_timing_facts_from_fact_ledger(tmp_path):
                         _fact(
                             md_path,
                             module="aes_cipher_top",
+                            category="module_identity",
+                            subject="aes_cipher_top",
+                            predicate="is_top_module",
+                            obj={"module": "aes_cipher_top"},
+                        ),
+                        _fact(
+                            md_path,
+                            module="aes_cipher_top",
+                            category="interface",
+                            subject="clk",
+                            predicate="is_port",
+                            obj={"name": "clk", "direction": "input", "width": "1"},
+                        ),
+                        _fact(
+                            md_path,
+                            module="aes_cipher_top",
                             category="timing",
                             subject="completion",
                             predicate="states_rule",
@@ -1708,6 +1986,22 @@ def test_stage1_agent_accepts_ungrounded_fact_without_retry(tmp_path):
                 "fact_ledger": {
                     "source_files": [str(md_path.resolve())],
                     "facts": [
+                        _fact(
+                            md_path,
+                            module="aes_cipher_top",
+                            category="module_identity",
+                            subject="aes_cipher_top",
+                            predicate="is_top_module",
+                            obj={"module": "aes_cipher_top"},
+                        ),
+                        _fact(
+                            md_path,
+                            module="aes_cipher_top",
+                            category="interface",
+                            subject="clk",
+                            predicate="is_port",
+                            obj={"name": "clk", "direction": "input", "width": "1"},
+                        ),
                         {
                             "module": "aes_cipher_top",
                             "category": "timing",
@@ -1754,11 +2048,11 @@ def test_stage1_agent_ignores_spec_images_and_runs_text_facts_round_only(tmp_pat
 
     assert len(backend.calls) == 1
     assert all(call["images"] == [] for call in backend.calls)
-    assert artifact.completed_rounds == ["facts"]
+    assert artifact.completed_rounds == ["facts", "top_interface"]
     assert "image_contracts" not in artifact.model_dump()
 
 
-def test_stage1_agent_leaves_missing_information_blank(tmp_path):
+def test_stage1_agent_rejects_missing_top_interface_after_retries(tmp_path):
     md_path = tmp_path / "empty.md"
     md_path.write_text("# Blank Spec\n", encoding="utf-8")
     task = PlannerTaskInput(
@@ -1768,32 +2062,157 @@ def test_stage1_agent_leaves_missing_information_blank(tmp_path):
         project_type="light_repo_spec2rtl",
         notes="blank test",
     )
+    empty_facts = {
+        "fact_ledger": {
+            "source_files": [str(md_path.resolve())],
+            "facts": [],
+            "ambiguous_items": [],
+        }
+    }
+    backend = QueueBackend([empty_facts, empty_facts, empty_facts])
+    agent = Stage1Agent(PlannerLLMClient(backend=backend))
+    agent.max_quality_attempts = 2
+
+    with pytest.raises(StageGenerationError, match="top_module"):
+        agent.run(task, {})
+
+    assert len(backend.calls) == 3
+
+
+def test_stage1_top_interface_retries_until_all_markdown_table_ports_are_exact(tmp_path):
+    md_path = tmp_path / "table_top.md"
+    md_path.write_text(
+        "\n".join(
+            [
+                "# Table Top",
+                "Top module: table_top",
+                "",
+                "## Clock Interface",
+                "| Signal Name | Direction | Bit Width | Description |",
+                "| --- | --- | --- | --- |",
+                "| clk | Input | 1 | clock |",
+                "| rst_n | Input | 1 | reset |",
+                "",
+                "## Data Interface",
+                "| Port Name | Dir | Width | Description |",
+                "| --- | --- | --- | --- |",
+                "| data_i | Input | 8 | input data |",
+                "| data_o | Output | [7:0] | output data |",
+                "",
+                "## Behavior",
+                "BEHAVIOR TEXT MUST NOT ENTER THE TOP_INTERFACE PROMPT.",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    task = PlannerTaskInput(
+        task_id="table_top_task",
+        spec_md_files=[str(md_path)],
+        spec_images=[],
+        project_type="light_repo_spec2rtl",
+    )
+    facts = {
+        "fact_ledger": {
+            "source_files": [str(md_path.resolve())],
+            "facts": [
+                _fact(
+                    md_path,
+                    module="table_top",
+                    category="module_identity",
+                    subject="table_top",
+                    predicate="is_top_module",
+                    obj={"module": "table_top", "modules": ["table_top"]},
+                ),
+                _fact(
+                    md_path,
+                    module="table_top",
+                    category="interface",
+                    subject="clk",
+                    predicate="is_port",
+                    obj={"name": "clk", "direction": "input", "width": "1"},
+                    source_kind="table_row",
+                ),
+            ],
+            "ambiguous_items": [],
+        }
+    }
+
+    def interface_payload(names):
+        rows = {
+            "clk": ("input", "1"),
+            "rst_n": ("input", "1"),
+            "data_i": ("input", "8"),
+            "data_o": ("output", "8"),
+        }
+        return {
+            "interface_contract": {
+                "module": "table_top",
+                "ports": [
+                    {"name": name, "direction": rows[name][0], "width": rows[name][1]}
+                    for name in names
+                ],
+                "text_grounding": [
+                    {
+                        "source_md_file": str(md_path.resolve()),
+                        "section_path": "Table Top > Interfaces",
+                        "start_line_anchor": "## Clock Interface",
+                        "end_line_anchor": "| data_o | Output | [7:0] | output data |",
+                    }
+                ],
+            }
+        }
+
     backend = QueueBackend(
         [
-            {
-                "fact_ledger": {
-                    "source_files": [str(md_path.resolve())],
-                    "facts": [],
-                    "ambiguous_items": [],
-                }
-            }
+            facts,
+            interface_payload(["clk", "rst_n", "data_i"]),
+            interface_payload(["clk", "rst_n", "data_i", "data_o"]),
         ]
     )
     agent = Stage1Agent(PlannerLLMClient(backend=backend))
 
     artifact = agent.run(task, {})
 
-    assert artifact.structure_contract.top_module == ""
-    assert artifact.structure_contract.modules == []
-    assert artifact.interface_contracts == []
-    assert artifact.planning_facts == []
-    assert artifact.completed_rounds == ["facts"]
-    assert "image_contracts" not in artifact.model_dump()
+    assert [port.name for port in artifact.interface_contracts[0].ports] == [
+        "clk",
+        "rst_n",
+        "data_i",
+        "data_o",
+    ]
+    assert len(backend.calls) == 3
+    top_prompt = backend.calls[1]["user_prompt"]
+    assert "## Clock Interface" in top_prompt
+    assert "## Data Interface" in top_prompt
+    assert "BEHAVIOR TEXT MUST NOT ENTER" not in top_prompt
+    assert '"fact_ledger"' not in top_prompt
+    assert "missing ports: ['data_o']" in backend.calls[2]["user_prompt"]
+
+
+def test_markdown_port_table_parser_ignores_non_port_glossary():
+    text = "\n".join(
+        [
+            "# Demo",
+            "## Ports",
+            "| Name | Direction | Width |",
+            "| --- | --- | --- |",
+            "| req_i | Input | 1 |",
+            "",
+            "## Configuration Glossary",
+            "| Name | Meaning | Default |",
+            "| --- | --- | --- |",
+            "| Input | Direction selector | 0 |",
+        ]
+    )
+
+    sections = extract_markdown_port_sections(text)
+
+    assert len(sections) == 1
+    assert [port.name for port in sections[0].ports] == ["req_i"]
 
 def test_planner_runner_writes_contracts_json_and_resume_reuses_it(tmp_path):
     task, md_path, image_paths = make_task_input(tmp_path, image_count=1)
     output_root = tmp_path / "outputs"
-    backend = QueueBackend([])
+    backend = QueueBackend([make_stage1_fact_payload(md_path)])
     runner = PlannerRunner(output_root=output_root, llm_backend=backend, temporal_planning_enabled=False)
 
     first = runner.run(task, end_stage="stage1")
@@ -1805,14 +2224,14 @@ def test_planner_runner_writes_contracts_json_and_resume_reuses_it(tmp_path):
     assert not modules_target.exists()
     payload = json.loads(target.read_text(encoding="utf-8"))
     assert payload["stage1_status"] == "contracts_completed"
-    assert payload["completed_rounds"] == ["facts"]
+    assert payload["completed_rounds"] == ["facts", "top_interface"]
     assert "image_contracts" not in payload
     assert "entity_alias_groups" not in payload
     assert payload["fact_ledger"]["source_files"] == [str(md_path.resolve())]
-    assert payload["fact_ledger"]["facts"] == []
-    assert payload["planning_facts"] == []
+    assert payload["fact_ledger"]["facts"]
+    assert payload["planning_facts"]
     assert first.completed_rounds == second.completed_rounds
-    assert len(backend.calls) == 0
+    assert len(backend.calls) == 1
 
 
 def test_planner_runner_resume_continues_from_partial_contracts_json(tmp_path):
@@ -1828,14 +2247,14 @@ def test_planner_runner_resume_continues_from_partial_contracts_json(tmp_path):
     partial_payload = drop_text_grounding(partial_payload)
     (output_root / "contracts.json").write_text(json.dumps(partial_payload, indent=2), encoding="utf-8")
 
-    backend = QueueBackend([])
+    backend = QueueBackend([make_stage1_fact_payload(md_path)])
     runner = PlannerRunner(output_root=output_root, llm_backend=backend, temporal_planning_enabled=False)
 
     artifact = runner.run(task, resume=True, end_stage="stage1")
 
-    assert artifact.completed_rounds == ["facts"]
-    assert artifact.fact_ledger.facts == []
-    assert len(backend.calls) == 0
+    assert artifact.completed_rounds == ["facts", "top_interface"]
+    assert artifact.fact_ledger.facts
+    assert len(backend.calls) == 1
 
 
 def test_planner_runner_resume_ignores_legacy_six_round_contracts_json(tmp_path):
@@ -1866,20 +2285,20 @@ def test_planner_runner_resume_ignores_legacy_six_round_contracts_json(tmp_path)
     legacy_payload = drop_text_grounding(legacy_payload)
     (output_root / "contracts.json").write_text(json.dumps(legacy_payload, indent=2), encoding="utf-8")
 
-    backend = QueueBackend([])
+    backend = QueueBackend([make_stage1_fact_payload(md_path)])
     runner = PlannerRunner(output_root=output_root, llm_backend=backend, temporal_planning_enabled=False)
 
     artifact = runner.run(task, resume=True, end_stage="stage1")
 
-    assert artifact.timing_contracts == []
-    assert artifact.completed_rounds == ["facts"]
-    assert len(backend.calls) == 0
+    assert artifact.timing_contracts
+    assert artifact.completed_rounds == ["facts", "top_interface"]
+    assert len(backend.calls) == 1
 
 
 def test_planner_runner_writes_repo_skeleton_for_stage2(tmp_path):
     task, md_path, image_paths = make_task_input(tmp_path, image_count=1)
     output_root = tmp_path / "outputs"
-    backend = QueueBackend([make_repo_skeleton_payload()])
+    backend = QueueBackend([make_stage1_fact_payload(md_path), *make_stage2_decomposition_responses()])
     runner = PlannerRunner(output_root=output_root, llm_backend=backend, temporal_planning_enabled=False)
 
     artifact = runner.run(task, end_stage="stage2")
@@ -1892,11 +2311,18 @@ def test_planner_runner_writes_repo_skeleton_for_stage2(tmp_path):
     assert payload["top_module"] == "aes_cipher_top"
     assert "module_order" not in payload
     assert payload["planning_decisions"]["generation_order"] == ["aes_key_expand_128", "aes_cipher_top"]
-    assert len(backend.calls) == 1
-    assert not (output_root / "contracts.json").exists()
+    assert len(backend.calls) == 5
+    decomposition_path = output_root / "stage2_decomposition.json"
+    assert decomposition_path.exists()
+    decomposition = validate_model(
+        Stage2DecompositionArtifact,
+        json.loads(decomposition_path.read_text(encoding="utf-8")),
+    )
+    assert decomposition.selected_candidate_id == "stage2_balanced"
+    assert (output_root / "contracts.json").exists()
 
 
-def test_planner_runner_resume_reuses_repo_skeleton_json(tmp_path):
+def test_planner_runner_resume_invalidates_repo_skeleton_without_interface_policy_fingerprint(tmp_path):
     task, md_path, image_paths = make_task_input(tmp_path, image_count=1)
     output_root = tmp_path / "outputs"
     output_root.mkdir(parents=True, exist_ok=True)
@@ -1904,14 +2330,15 @@ def test_planner_runner_resume_reuses_repo_skeleton_json(tmp_path):
         json.dumps(make_repo_skeleton_payload(), indent=2),
         encoding="utf-8",
     )
-    backend = QueueBackend([])
+    backend = QueueBackend([make_stage1_fact_payload(md_path), *make_stage2_decomposition_responses()])
     runner = PlannerRunner(output_root=output_root, llm_backend=backend, temporal_planning_enabled=False)
 
     artifact = runner.run(task, resume=True, end_stage="stage2")
 
     assert isinstance(artifact, Stage2RepoSkeletonArtifact)
     assert artifact.stage2_status == "repo_skeleton_planned"
-    assert len(backend.calls) == 0
+    assert artifact.input_fingerprint
+    assert len(backend.calls) == 5
 
 
 def test_planner_runner_resume_reruns_facts_when_legacy_partial_rounds_exist(tmp_path):
@@ -1927,20 +2354,20 @@ def test_planner_runner_resume_reruns_facts_when_legacy_partial_rounds_exist(tmp
     partial_payload = drop_text_grounding(partial_payload)
     (output_root / "contracts.json").write_text(json.dumps(partial_payload, indent=2), encoding="utf-8")
 
-    backend = QueueBackend([])
+    backend = QueueBackend([make_stage1_fact_payload(md_path)])
     runner = PlannerRunner(output_root=output_root, llm_backend=backend, temporal_planning_enabled=False)
 
     artifact = runner.run(task, resume=True, end_stage="stage1")
 
-    assert artifact.completed_rounds == ["facts"]
-    assert artifact.planning_facts == []
-    assert len(backend.calls) == 0
+    assert artifact.completed_rounds == ["facts", "top_interface"]
+    assert artifact.planning_facts
+    assert len(backend.calls) == 1
 
 
 def test_planner_runner_writes_incremental_contract_statuses(tmp_path):
     task, md_path, image_paths = make_task_input(tmp_path, image_count=1)
     output_root = tmp_path / "outputs"
-    backend = QueueBackend([])
+    backend = QueueBackend([make_stage1_fact_payload(md_path)])
     runner = PlannerRunner(output_root=output_root, llm_backend=backend, temporal_planning_enabled=False)
 
     writes = []
@@ -1953,7 +2380,7 @@ def test_planner_runner_writes_incremental_contract_statuses(tmp_path):
     runner._write_payload = recording_write
     runner.run(task, end_stage="stage1")
 
-    assert writes == ["contracts_completed"]
+    assert writes == ["batch_0001_facts_completed", "batch_0001_completed", "contracts_completed"]
 
 
 def test_planner_runner_supports_stage3_execution(tmp_path):
@@ -1962,7 +2389,8 @@ def test_planner_runner_supports_stage3_execution(tmp_path):
     top_spec.write_text(md_path.read_text(encoding="utf-8"), encoding="utf-8")
     backend = QueueBackend(
         [
-            make_repo_skeleton_payload(),
+            make_stage1_fact_payload(md_path),
+            *make_stage2_decomposition_responses(),
             make_module_spec_context_payload("aes_key_expand_128", key_spec),
             make_stage3_module_skeleton_doc("aes_key_expand_128", key_spec),
             make_module_spec_context_payload("aes_cipher_top", top_spec),
@@ -2148,7 +2576,8 @@ def test_planner_runner_supports_stage4_spec_block_splitting(tmp_path):
     )
     backend = QueueBackend(
         [
-            make_repo_skeleton_payload(),
+            make_stage1_fact_payload(md_path),
+            *make_stage2_decomposition_responses(),
             make_module_spec_context_payload("aes_key_expand_128", key_spec),
             make_stage3_module_skeleton_doc("aes_key_expand_128", key_spec),
             make_module_spec_context_payload("aes_cipher_top", top_spec),
@@ -2185,9 +2614,14 @@ def test_planner_runner_supports_stage4_spec_block_splitting(tmp_path):
     assert "KEYEXP UNIQUE SPEC MARKER" in spec_payload["modules"][0]["blocks"][0]["text"]
     assert plan_payload["subtasks"][0]["target"] == "<block: decl_state_and_keys>"
     assert retrieval_payload["schema_version"] == "block_spec_retrieval_v1"
-    assert "MODULE_SKELETON_DOC v1" in backend.calls[5]["user_prompt"]
-    assert "KEYEXP UNIQUE SPEC MARKER" in backend.calls[5]["user_prompt"]
-    assert len(backend.calls) == 9
+    key_skeleton_prompts = [
+        call["user_prompt"]
+        for call in backend.calls
+        if "Generate exactly one `MODULE_SKELETON_DOC v1` for `aes_key_expand_128`" in call["user_prompt"]
+    ]
+    assert len(key_skeleton_prompts) == 1
+    assert "KEYEXP UNIQUE SPEC MARKER" in key_skeleton_prompts[0]
+    assert len(backend.calls) == 13
 
 
 def test_stage4_spec_blocks_reuses_stage3_spec_context_sidecar(tmp_path):
@@ -2517,37 +2951,18 @@ def test_stage4_module_plan_requires_interface_refs_for_first_decl_block(tmp_pat
         "fallback_used": False,
         "fallback_reason": "",
     }
-    fixed_plan = {
-        "schema_version": "module_plan_v1",
-        "module": "toy",
-        "subtasks": [
-            {
-                "id": "B1_decl_table",
-                "target": "<block: decl_table>",
-                "description": "Declare ports using the interface spec and declare the lookup table.",
-                "spec_refs": ["S001", "S002"],
-                "constraints": ["Port directions and widths must match the interface table."],
-            },
-            {
-                "id": "B2_comb_output",
-                "target": "<block: comb_output>",
-                "description": "Drive output y from input a using the declared interface ports.",
-                "spec_refs": ["S002"],
-                "constraints": [],
-            },
-        ],
-    }
-    backend = QueueBackend([retrieval_payload, bad_plan, fixed_plan])
+    backend = QueueBackend([retrieval_payload, bad_plan])
     agent = Stage4ModulePlanAgent(PlannerLLMClient(backend=backend), output_root=output_root)
 
     artifact = agent.run_incremental(task, {"stage3": stage3, "spec_blocks": spec_blocks})
 
     assert isinstance(artifact, Stage4ModulePlansArtifact)
-    assert len(backend.calls) == 3
+    assert len(backend.calls) == 2
     assert '"id": "B1_decl_table"' in backend.calls[1]["user_prompt"]
     assert '"S001"' in backend.calls[1]["user_prompt"]
     assert '"S002"' in backend.calls[1]["user_prompt"]
-    assert "spec_refs must exactly match block retrieval output ['S001', 'S002']" in backend.calls[2]["user_prompt"]
+    # Authoritative refs are assembled without regenerating content fields.
+    assert backend.responses == []
 
 
 def test_stage5_agent_uses_spec_blocks_module_order_and_selected_refs(tmp_path):
@@ -2851,7 +3266,27 @@ def test_stage5_prompt_includes_global_defines_when_available(tmp_path, monkeypa
     backend = QueueBackend(
         [make_stage5_code_payload(task.task_id, "mod_a", plan["subtasks"][0], "wire [`SD_BUS_W-1:0] bus;")]
     )
-    agent = Stage5Agent(PlannerLLMClient(backend=backend), output_root=output_root)
+
+    class CompactPlanningRetriever:
+        kg_service = type("KgService", (), {"mode": "required"})()
+
+        def __init__(self):
+            self.spec_refs = None
+
+        def get_module_context(self, *_args, **_kwargs):
+            return {"full_artifact": "FULL_KG_CONTEXT_MUST_NOT_BE_SERIALIZED"}
+
+        def to_stage5_prompt_json(self, _context, spec_refs, max_chars=12000):
+            self.spec_refs = list(spec_refs)
+            assert max_chars == 12000
+            return '{"marker":"COMPACT_STAGE5_KG"}'
+
+    planning_retriever = CompactPlanningRetriever()
+    agent = Stage5Agent(
+        PlannerLLMClient(backend=backend),
+        output_root=output_root,
+        planning_context_retriever=planning_retriever,
+    )
 
     agent.run_incremental(task, {"stage4": stage4, "spec_blocks": spec_blocks, "repo_skeleton": repo_skeleton})
 
@@ -2860,6 +3295,10 @@ def test_stage5_prompt_includes_global_defines_when_available(tmp_path, monkeypa
     assert "[GLOBAL_DEFINES_CONTEXT]" in prompt
     assert "`define BIT_BLOCK 1044" in prompt
     assert "`define SD_BUS_W 4" in prompt
+    assert "COMPACT_STAGE5_KG" in prompt
+    assert "FULL_KG_CONTEXT_MUST_NOT_BE_SERIALIZED" not in prompt
+    assert planning_retriever.spec_refs == ["S001"]
+    assert '"planning_kg_context_chars": 30' in prompt
     assert '"global_define_files": [\n    "sd_defines.v"\n  ]' in prompt
     assert (workspace_root / "global_defines_manifest.json").exists()
     assert not (workspace_root / "merged" / "global_defines_manifest.json").exists()
@@ -3080,7 +3519,7 @@ def test_stage6_merge_agent_writes_raw_merged_module_and_prompt_context(tmp_path
     assert "STAGE5_SUBTASK_BEGIN B1_logic" in prompt
 
 
-def test_stage6_merge_agent_delegates_invalid_raw_verilog_to_debug(tmp_path):
+def test_stage6_merge_agent_rejects_wrong_module_without_overwriting_merged(tmp_path):
     task, _, _ = make_task_input(tmp_path, image_count=0)
     output_root = tmp_path / ".zerorepo" / "module_planner" / "outputs"
     fragment_dir = tmp_path / ".zerorepo" / "workspace" / "fragments"
@@ -3106,20 +3545,22 @@ def test_stage6_merge_agent_delegates_invalid_raw_verilog_to_debug(tmp_path):
         ]
     )
     agent = Stage6MergeAgent(PlannerLLMClient(backend=backend), output_root=output_root)
+    existing = agent.workspace_root / "merged" / "mod_a.v"
+    existing.parent.mkdir(parents=True, exist_ok=True)
+    original = "module mod_a(input a, output y); assign y = a; endmodule\n"
+    existing.write_text(original, encoding="utf-8")
 
-    record = agent.run_module(
-        task,
-        {"spec_blocks": spec_blocks},
-        "mod_a",
-        {"module": "mod_a", "workspace_file": str(fragment_file), "completed_subtasks": ["B1_logic"]},
-    )
+    with pytest.raises(ValueError, match="must declare target module mod_a"):
+        agent.run_module(
+            task,
+            {"spec_blocks": spec_blocks},
+            "mod_a",
+            {"module": "mod_a", "workspace_file": str(fragment_file), "completed_subtasks": ["B1_logic"]},
+        )
 
     assert len(backend.calls) == 2
-    assert "module wrong_name" in Path(record.merged_file).read_text(encoding="utf-8")
-    syntax_log = json.loads((output_root / "stage6_syntax_repair" / "mod_a.json").read_text(encoding="utf-8"))
-    assert syntax_log["status"] == "delegated_to_debug_syntax_repair"
-    assert syntax_log["syntax_passed"] is False
-    assert syntax_log["delegated_to"] == "ModuleDebugRunner.repo_react_syntax"
+    assert existing.read_text(encoding="utf-8") == original
+    assert not (output_root / "stage6_syntax_repair" / "mod_a.json").exists()
 
 
 def test_planner_runner_supports_stage5_subtask_codegen_workspace(tmp_path):
@@ -3151,7 +3592,8 @@ def test_planner_runner_supports_stage5_subtask_codegen_workspace(tmp_path):
     ]
     backend = QueueBackend(
         [
-            make_repo_skeleton_payload(),
+            make_stage1_fact_payload(md_path),
+            *make_stage2_decomposition_responses(),
             make_module_spec_context_payload("aes_key_expand_128", key_spec),
             make_stage3_module_skeleton_doc("aes_key_expand_128", key_spec),
             make_module_spec_context_payload("aes_cipher_top", top_spec),
@@ -3210,7 +3652,8 @@ def test_planner_runner_supports_stage6_per_module_merge(tmp_path):
     ]
     backend = QueueBackend(
         [
-            make_repo_skeleton_payload(),
+            make_stage1_fact_payload(md_path),
+            *make_stage2_decomposition_responses(),
             make_module_spec_context_payload("aes_key_expand_128", key_spec),
             make_stage3_module_skeleton_doc("aes_key_expand_128", key_spec),
             make_module_spec_context_payload("aes_cipher_top", top_spec),
@@ -3268,19 +3711,661 @@ def test_stage2_agent_builds_repo_skeleton_from_modules_artifact(tmp_path):
     task, md_path, image_paths = make_task_input(tmp_path, image_count=1)
     stage1_artifact = make_stage1_contract_artifact(md_path, image_paths)
     modules_artifact = build_module_organized_artifact(stage1_artifact)
-    backend = QueueBackend([make_repo_skeleton_payload()])
+    stage2_input = build_stage2_planning_input(
+        stage1_artifact=stage1_artifact,
+        task_input=task,
+        compat_modules=modules_artifact,
+    )
+    backend = QueueBackend(make_stage2_decomposition_responses())
     agent = Stage2Agent(PlannerLLMClient(backend=backend))
 
-    artifact = agent.run(task, {"modules": modules_artifact})
+    artifact = agent.run(task, {"modules": modules_artifact, "stage2_input": stage2_input})
 
     assert isinstance(artifact, Stage2RepoSkeletonArtifact)
     assert artifact.stage2_status == "repo_skeleton_planned"
     assert artifact.top_module == "aes_cipher_top"
     assert artifact.planning_decisions.generation_order == ["aes_key_expand_128", "aes_cipher_top"]
-    assert '"schema_version": "stage2_planning_input_v1"' in backend.calls[0]["user_prompt"]
-    assert '"legacy_contract_projection"' in backend.calls[0]["user_prompt"]
-    assert '"compat_module_candidates"' in backend.calls[0]["user_prompt"]
-    assert '"fact_ledger"' in backend.calls[0]["user_prompt"]
+    responsibility_prompt = backend.calls[0]["user_prompt"]
+    assert '"schema_version": "stage2_prompt_context_v1"' in responsibility_prompt
+    assert len(backend.calls) == 4
+    assert agent._last_decomposition.selected_candidate_id == "stage2_balanced"
+    assert '"legacy_contract_projection"' not in responsibility_prompt
+    assert '"interface_contracts"' not in responsibility_prompt
+    assert '"timing_contracts"' not in responsibility_prompt
+    assert '"control_contracts"' not in responsibility_prompt
+    assert '"datapath_contracts"' not in responsibility_prompt
+    assert '"fact_ledger"' not in responsibility_prompt
+
+    source_markdown = md_path.read_text(encoding="utf-8")
+    assert '"markdown":' in responsibility_prompt
+    assert "Input sampling: ld is sampled on the rising clock edge." in responsibility_prompt
+    for candidate_call in backend.calls[1:4]:
+        candidate_prompt = candidate_call["user_prompt"]
+        assert source_markdown not in candidate_prompt
+        assert '"markdown"' not in candidate_prompt
+        assert '"path":' in candidate_prompt
+        assert f'"stem":"{md_path.stem}"' in candidate_prompt
+        assert '"architecture_facts":' in candidate_prompt
+        assert '"explicit_hierarchy":' in candidate_prompt
+        assert '"module":"aes_cipher_top"' in candidate_prompt
+        for responsibility_id in ("RU_KEY_EXPANSION", "RU_TOP_CONTROL"):
+            assert responsibility_id in candidate_prompt
+
+
+def test_stage2_candidate_prompt_length_is_independent_of_source_markdown():
+    agent = Stage2Agent(PlannerLLMClient(backend=QueueBackend([])))
+    ledger = validate_model(ResponsibilityLedgerOutput, make_stage2_responsibility_payload())
+    locked_top = LockedTopModule(
+        module="aes_cipher_top",
+        resolution_mode="deterministic",
+        evidence_sections=["AES Demo Repository"],
+    )
+    base_context = {
+        "schema_version": "stage2_prompt_context_v1",
+        "task_id": "candidate-size-test",
+        "primary_source_spec": {
+            "path": "/specs/aes_cipher_top.md",
+            "stem": "aes_cipher_top",
+            "markdown": "SHORT_SOURCE_MARKER",
+        },
+        "supplemental_source_specs": [],
+        "top_module_hint": "aes_cipher_top",
+        "known_module_candidates": ["aes_cipher_top", "aes_key_expand_128"],
+        "architecture_facts": [{"fact_id": "F_TOP", "predicate": "is_top_module"}],
+        "architecture_facts_omitted_count": 0,
+        "explicit_hierarchy": [{"parent": "aes_cipher_top", "child": "aes_key_expand_128"}],
+    }
+
+    def candidate_prompt(markdown: str) -> str:
+        context = json.loads(json.dumps(base_context))
+        context["primary_source_spec"]["markdown"] = markdown
+        compact_context = agent._build_candidate_prompt_context(context)
+        return stage2_decomposition.build_candidate_prompt(
+            plan_style="balanced",
+            prompt_context_json=agent._to_compact_json(compact_context),
+            locked_top_json=agent._to_compact_json(locked_top),
+            responsibility_ledger_json=agent._to_compact_json(ledger),
+        )
+
+    short_prompt = candidate_prompt("SHORT_SOURCE_MARKER")
+    long_prompt = candidate_prompt("LONG_SOURCE_MARKER" * 10_000)
+
+    assert len(short_prompt) == len(long_prompt)
+    assert "SHORT_SOURCE_MARKER" not in short_prompt
+    assert "LONG_SOURCE_MARKER" not in long_prompt
+    assert '"path":"/specs/aes_cipher_top.md"' in short_prompt
+    assert '"stem":"aes_cipher_top"' in short_prompt
+    assert '"architecture_facts":' in short_prompt
+    assert '"explicit_hierarchy":' in short_prompt
+
+
+def test_stage2_llm_selection_policy_invalidates_v2_cache():
+    assert PlannerRunner.PIPELINE_POLICY_VERSION == "stage2_multi_candidate_decomposition_v3"
+
+
+def test_stage2_evaluator_marks_missing_cross_module_boundary_as_fatal(tmp_path):
+    task, md_path, _ = make_task_input(tmp_path, image_count=0)
+    stage1 = make_stage1_contract_artifact(md_path, [])
+    stage2_input = build_stage2_planning_input(stage1_artifact=stage1, task_input=task)
+    ledger = validate_model(ResponsibilityLedgerOutput, make_stage2_responsibility_payload())
+    candidate_payload = make_stage2_candidate_payload("balanced", complete=True)
+    candidate_payload["boundary_contracts"] = []
+    candidate = validate_model(Stage2DecompositionCandidate, candidate_payload)
+    agent = Stage2Agent(PlannerLLMClient(backend=QueueBackend([])))
+
+    evaluation = agent._evaluate_candidate(
+        candidate=candidate,
+        locked_top=LockedTopModule(
+            module="aes_cipher_top",
+            resolution_mode="deterministic",
+            evidence_sections=["AES Demo Repository"],
+        ),
+        responsibilities=ledger.responsibilities,
+        stage2_input=stage2_input,
+    )
+
+    assert any("missing boundary contract" in item for item in evaluation.fatal_violations)
+
+
+def test_stage2_single_module_skeleton_allows_internal_dependency_facts(tmp_path):
+    task, _, _ = make_task_input(tmp_path, image_count=0)
+    ledger = validate_model(ResponsibilityLedgerOutput, make_stage2_responsibility_payload())
+    candidate = make_distinct_stage2_selection_candidates()[0]
+    stage2_input = Stage2PlanningInput.model_validate(
+        {
+            "task_id": task.task_id,
+            "fact_ledger": {
+                "facts": [
+                    {
+                        "fact_id": "F_TOP",
+                        "module": "aes_cipher_top",
+                        "category": "module_identity",
+                        "subject": "aes_cipher_top",
+                        "predicate": "is_top_module",
+                        "object": {"module": "aes_cipher_top"},
+                    },
+                    {
+                        "fact_id": "F_DEP",
+                        "module": "aes_cipher_top",
+                        "category": "data_dependency",
+                        "subject": "round_key",
+                        "predicate": "feeds",
+                        "object": {"producer": "key expansion", "consumer": "top control"},
+                    },
+                ]
+            },
+        }
+    )
+    evaluation = make_stage2_selection_evaluations([candidate])[0]
+    selection_result = Stage2SelectionResult(
+        eligible_candidate_ids=[candidate.candidate_id],
+        final_winner_candidate_id=candidate.candidate_id,
+        final_reason="Only fatal-free architecture.",
+    )
+    agent = Stage2Agent(PlannerLLMClient(backend=QueueBackend([])))
+    artifact = agent._candidate_to_repo_skeleton(
+        task=task,
+        stage2_input=stage2_input,
+        locked_top=LockedTopModule(
+            module="aes_cipher_top",
+            resolution_mode="deterministic",
+            evidence_fact_ids=["F_TOP"],
+            evidence_sections=["AES Demo Repository"],
+        ),
+        responsibilities=ledger.responsibilities,
+        candidate=candidate,
+        evaluation=evaluation,
+        selection_result=selection_result,
+        degraded=False,
+    )
+
+    errors = agent.validate_quality(
+        artifact,
+        task,
+        {"stage2_input": stage2_input},
+    )
+
+    assert artifact.global_invariants.hierarchy == []
+    assert errors == []
+
+
+def test_stage2_top_resolver_requires_grounded_unique_result(tmp_path):
+    task, md_path, _ = make_task_input(tmp_path, image_count=0)
+    stage2_input = build_stage2_planning_input_from_task(task_input=task)
+    prompt_context = Stage2Agent(
+        PlannerLLMClient(backend=QueueBackend([]))
+    )._build_stage2_prompt_context(stage2_input)
+    response = {
+        "module": "aes_cipher_top",
+        "evidence_fact_ids": [],
+        "evidence_sections": ["AES Demo Repository > Interface"],
+        "rationale": "The external port contract belongs to aes_cipher_top.",
+    }
+    backend = QueueBackend([response])
+    agent = Stage2Agent(PlannerLLMClient(backend=backend))
+
+    locked = agent._resolve_top_with_llm(
+        task=task,
+        partial_artifacts={"stage2_input": stage2_input},
+        prompt_context=prompt_context,
+        top_evidence={
+            "aes_cipher_top": {"fact_ids": [], "sections": ["Interface"]},
+            "aes_key_expand_128": {"fact_ids": [], "sections": ["Submodules"]},
+        },
+    )
+
+    assert locked.module == "aes_cipher_top"
+    assert locked.resolution_mode == "llm_resolved"
+    assert len(backend.calls) == 1
+
+
+def test_stage2_top_resolver_rejects_ungrounded_result(tmp_path):
+    task, _, _ = make_task_input(tmp_path, image_count=0)
+    stage2_input = build_stage2_planning_input_from_task(task_input=task)
+    prompt_context = Stage2Agent(
+        PlannerLLMClient(backend=QueueBackend([]))
+    )._build_stage2_prompt_context(stage2_input)
+    invalid = {
+        "module": "invented_top",
+        "evidence_fact_ids": [],
+        "evidence_sections": ["Invented Section"],
+        "rationale": "Unsupported guess.",
+    }
+    agent = Stage2Agent(PlannerLLMClient(backend=QueueBackend([invalid] * 5)))
+
+    with pytest.raises(StageGenerationError, match="quality checks"):
+        agent._resolve_top_with_llm(
+            task=task,
+            partial_artifacts={"stage2_input": stage2_input},
+            prompt_context=prompt_context,
+            top_evidence={},
+        )
+
+
+def test_stage2_pairwise_requires_order_swapped_agreement(tmp_path):
+    task, _, _ = make_task_input(tmp_path, image_count=0)
+    ledger = validate_model(ResponsibilityLedgerOutput, make_stage2_responsibility_payload())
+    first = validate_model(
+        Stage2DecompositionCandidate,
+        make_stage2_candidate_payload("conservative", complete=True),
+    )
+    second_payload = make_stage2_candidate_payload("balanced", complete=True)
+    second_payload["modules"][0]["module"] = "aes_round_key_engine"
+    second_payload["hierarchy"][0]["child"] = "aes_round_key_engine"
+    second_payload["boundary_contracts"][0]["producer_module"] = "aes_round_key_engine"
+    second = validate_model(Stage2DecompositionCandidate, second_payload)
+    dimensions = CandidateDimensionScores(
+        responsibility_evidence_coverage=1.0,
+        coupling_preservation=0.8,
+        interface_completeness_naturalness=1.0,
+        codegen_feasibility=1.0,
+        granularity_economy=1.0,
+    )
+    evaluations = [
+        Stage2CandidateEvaluation(
+            candidate_id=item.candidate_id,
+            plan_style=item.plan_style,
+            dimension_scores=dimensions,
+            total_score=0.96,
+        )
+        for item in (first, second)
+    ]
+    backend = QueueBackend(
+        [
+            {"winner_candidate_id": first.candidate_id, "rationale": ["first pass"]},
+            {"winner_candidate_id": second.candidate_id, "rationale": ["second pass"]},
+        ]
+    )
+    agent = Stage2Agent(PlannerLLMClient(backend=backend))
+
+    result = agent._run_pairwise_tiebreak(
+        task=task,
+        partial_artifacts={},
+        responsibilities=ledger.responsibilities,
+        first=first,
+        second=second,
+        evaluations=evaluations,
+        score_delta=0.0,
+    )
+
+    assert result.unstable_judgment is True
+    assert result.applied is False
+    assert [item.presentation_order for item in (result.first_pass, result.second_pass)] == [
+        [first.candidate_id, second.candidate_id],
+        [second.candidate_id, first.candidate_id],
+    ]
+
+
+def test_stage2_llm_selection_ranks_all_fatal_free_candidates_in_reverse_orders(tmp_path):
+    task, _, _ = make_task_input(tmp_path, image_count=0)
+    ledger = validate_model(ResponsibilityLedgerOutput, make_stage2_responsibility_payload())
+    candidates = make_distinct_stage2_selection_candidates()
+    candidate_ids = [item.candidate_id for item in candidates]
+    evaluations = make_stage2_selection_evaluations(
+        candidates,
+        risks_by_id={
+            "stage2_balanced": ["risk"] * 5,
+            "stage2_modular": ["risk"],
+        },
+    )
+    ranked = ["stage2_balanced", "stage2_modular", "stage2_conservative"]
+    backend = QueueBackend(
+        [make_stage2_ranking_response(ranked), make_stage2_ranking_response(ranked)]
+    )
+    agent = Stage2Agent(PlannerLLMClient(backend=backend))
+
+    selected, result, trace, degraded = agent._select_candidate(
+        task=task,
+        partial_artifacts={},
+        responsibilities=ledger.responsibilities,
+        candidates=candidates,
+        evaluations=evaluations,
+    )
+
+    assert selected.candidate_id == "stage2_balanced"
+    assert result.first_pass.presentation_order == candidate_ids
+    assert result.second_pass.presentation_order == list(reversed(candidate_ids))
+    assert result.fallback_used is False
+    assert degraded is True
+    assert len(backend.calls) == 2
+    assert all("risk_findings" in call["user_prompt"] for call in backend.calls)
+    assert all("total_score" not in call["user_prompt"] for call in backend.calls)
+    assert all("total_score" not in item.model_dump() for item in evaluations)
+    assert all("dimension_scores" not in item.model_dump() for item in evaluations)
+    assert any("risk findings were retained as advisory" in item for item in trace)
+
+
+def test_stage2_llm_selection_uses_third_adjudication_for_conflicting_winners(tmp_path):
+    task, _, _ = make_task_input(tmp_path, image_count=0)
+    ledger = validate_model(ResponsibilityLedgerOutput, make_stage2_responsibility_payload())
+    candidates = make_distinct_stage2_selection_candidates()
+    evaluations = make_stage2_selection_evaluations(candidates)
+    first_rank = ["stage2_balanced", "stage2_conservative", "stage2_modular"]
+    second_rank = ["stage2_modular", "stage2_balanced", "stage2_conservative"]
+    backend = QueueBackend(
+        [
+            make_stage2_ranking_response(first_rank),
+            make_stage2_ranking_response(second_rank),
+            {
+                "winner_candidate_id": "stage2_modular",
+                "rationale": ["The modular boundaries are better justified."],
+            },
+        ]
+    )
+    agent = Stage2Agent(PlannerLLMClient(backend=backend))
+
+    selected, result, _, degraded = agent._select_candidate(
+        task=task,
+        partial_artifacts={},
+        responsibilities=ledger.responsibilities,
+        candidates=candidates,
+        evaluations=evaluations,
+    )
+
+    assert selected.candidate_id == "stage2_modular"
+    assert result.adjudication.winner_candidate_id == "stage2_modular"
+    assert result.fallback_used is False
+    assert degraded is False
+    assert len(backend.calls) == 3
+
+
+def test_stage2_llm_selection_uses_successful_pass_when_other_pass_fails(tmp_path, monkeypatch):
+    task, _, _ = make_task_input(tmp_path, image_count=0)
+    ledger = validate_model(ResponsibilityLedgerOutput, make_stage2_responsibility_payload())
+    candidates = make_distinct_stage2_selection_candidates()
+    evaluations = make_stage2_selection_evaluations(candidates)
+    passes = iter(
+        [
+            Stage2SelectionPass(
+                presentation_order=[item.candidate_id for item in candidates],
+                error="first ranking unavailable",
+            ),
+            Stage2SelectionPass(
+                presentation_order=[item.candidate_id for item in reversed(candidates)],
+                ranked_candidate_ids=[
+                    "stage2_modular",
+                    "stage2_balanced",
+                    "stage2_conservative",
+                ],
+                winner_candidate_id="stage2_modular",
+            ),
+        ]
+    )
+    agent = Stage2Agent(PlannerLLMClient(backend=QueueBackend([])))
+    monkeypatch.setattr(agent, "_run_selection_pass_safe", lambda **_: next(passes))
+
+    selected, result, _, degraded = agent._select_candidate(
+        task=task,
+        partial_artifacts={},
+        responsibilities=ledger.responsibilities,
+        candidates=candidates,
+        evaluations=evaluations,
+    )
+
+    assert selected.candidate_id == "stage2_modular"
+    assert result.fallback_used is True
+    assert "successful ranking" in result.fallback_reason
+    assert degraded is True
+
+
+def test_stage2_llm_selection_aggregates_ranks_when_adjudication_fails(tmp_path, monkeypatch):
+    task, _, _ = make_task_input(tmp_path, image_count=0)
+    ledger = validate_model(ResponsibilityLedgerOutput, make_stage2_responsibility_payload())
+    candidates = make_distinct_stage2_selection_candidates()
+    evaluations = make_stage2_selection_evaluations(candidates)
+    passes = iter(
+        [
+            Stage2SelectionPass(
+                presentation_order=[item.candidate_id for item in candidates],
+                ranked_candidate_ids=[
+                    "stage2_balanced",
+                    "stage2_conservative",
+                    "stage2_modular",
+                ],
+                winner_candidate_id="stage2_balanced",
+            ),
+            Stage2SelectionPass(
+                presentation_order=[item.candidate_id for item in reversed(candidates)],
+                ranked_candidate_ids=[
+                    "stage2_modular",
+                    "stage2_balanced",
+                    "stage2_conservative",
+                ],
+                winner_candidate_id="stage2_modular",
+            ),
+        ]
+    )
+    agent = Stage2Agent(PlannerLLMClient(backend=QueueBackend([])))
+    monkeypatch.setattr(agent, "_run_selection_pass_safe", lambda **_: next(passes))
+    monkeypatch.setattr(
+        agent,
+        "_run_adjudication_safe",
+        lambda **_: Stage2AdjudicationPass(
+            candidate_ids=["stage2_balanced", "stage2_modular"],
+            error="adjudicator unavailable",
+        ),
+    )
+
+    selected, result, _, degraded = agent._select_candidate(
+        task=task,
+        partial_artifacts={},
+        responsibilities=ledger.responsibilities,
+        candidates=candidates,
+        evaluations=evaluations,
+    )
+
+    assert selected.candidate_id == "stage2_balanced"
+    assert result.fallback_used is True
+    assert "lower aggregate rank" in result.fallback_reason
+    assert degraded is True
+
+
+def test_stage2_llm_selection_style_fallback_when_both_rankings_fail(tmp_path, monkeypatch):
+    task, _, _ = make_task_input(tmp_path, image_count=0)
+    ledger = validate_model(ResponsibilityLedgerOutput, make_stage2_responsibility_payload())
+    candidates = make_distinct_stage2_selection_candidates()
+    evaluations = make_stage2_selection_evaluations(candidates)
+    agent = Stage2Agent(PlannerLLMClient(backend=QueueBackend([])))
+    monkeypatch.setattr(
+        agent,
+        "_run_selection_pass_safe",
+        lambda **kwargs: Stage2SelectionPass(
+            presentation_order=kwargs["presentation_order"],
+            error="ranking unavailable",
+        ),
+    )
+
+    selected, result, _, degraded = agent._select_candidate(
+        task=task,
+        partial_artifacts={},
+        responsibilities=ledger.responsibilities,
+        candidates=candidates,
+        evaluations=evaluations,
+    )
+
+    assert selected.candidate_id == "stage2_balanced"
+    assert result.fallback_used is True
+    assert "balanced, then modular, then conservative" in result.fallback_reason
+    assert degraded is True
+
+
+def test_stage2_selection_fallback_and_risks_are_audited_in_final_artifacts(tmp_path):
+    task, _, _ = make_task_input(tmp_path, image_count=0)
+    ledger = validate_model(ResponsibilityLedgerOutput, make_stage2_responsibility_payload())
+    candidate = make_distinct_stage2_selection_candidates()[1]
+    evaluation = make_stage2_selection_evaluations(
+        [candidate],
+        risks_by_id={candidate.candidate_id: ["strong coupling risk"]},
+    )[0]
+    selection_result = Stage2SelectionResult(
+        eligible_candidate_ids=[candidate.candidate_id],
+        fallback_used=True,
+        fallback_reason="Both architecture rankings were unavailable.",
+        final_winner_candidate_id=candidate.candidate_id,
+        final_reason="Operational fallback.",
+    )
+    stage2_input = Stage2PlanningInput.model_validate(
+        {"task_id": task.task_id, "fact_ledger": {"facts": []}}
+    )
+    agent = Stage2Agent(PlannerLLMClient(backend=QueueBackend([])))
+    artifact = agent._candidate_to_repo_skeleton(
+        task=task,
+        stage2_input=stage2_input,
+        locked_top=LockedTopModule(
+            module="aes_cipher_top",
+            resolution_mode="deterministic",
+            evidence_sections=["AES Demo Repository"],
+        ),
+        responsibilities=ledger.responsibilities,
+        candidate=candidate,
+        evaluation=evaluation,
+        selection_result=selection_result,
+        degraded=True,
+    )
+    decomposition = Stage2DecompositionArtifact(
+        task_id=task.task_id,
+        status="selected_with_degradation",
+        locked_top=LockedTopModule(
+            module="aes_cipher_top",
+            resolution_mode="deterministic",
+            evidence_sections=["AES Demo Repository"],
+        ),
+        candidates=[candidate],
+        evaluations=[evaluation],
+        selected_candidate_id=candidate.candidate_id,
+        selection_result=selection_result,
+    )
+
+    assert any("strong coupling risk" in item for item in artifact.open_issues)
+    assert any("architecture-judge fallback" in item for item in artifact.open_issues)
+    assert decomposition.model_dump()["selection_result"]["fallback_used"] is True
+
+
+def test_stage2_llm_selection_skips_judge_for_single_or_identical_architecture(tmp_path):
+    task, _, _ = make_task_input(tmp_path, image_count=0)
+    ledger = validate_model(ResponsibilityLedgerOutput, make_stage2_responsibility_payload())
+    candidates = [
+        validate_model(
+            Stage2DecompositionCandidate,
+            make_stage2_candidate_payload(style, complete=True),
+        )
+        for style in ("conservative", "balanced", "modular")
+    ]
+    evaluations = make_stage2_selection_evaluations(candidates)
+    backend = QueueBackend([])
+    agent = Stage2Agent(PlannerLLMClient(backend=backend))
+
+    identical_selected, identical_result, _, _ = agent._select_candidate(
+        task=task,
+        partial_artifacts={},
+        responsibilities=ledger.responsibilities,
+        candidates=candidates,
+        evaluations=evaluations,
+    )
+    fatal_by_id = {
+        "stage2_balanced": ["fatal"],
+        "stage2_modular": ["fatal"],
+    }
+    single_selected, single_result, _, _ = agent._select_candidate(
+        task=task,
+        partial_artifacts={},
+        responsibilities=ledger.responsibilities,
+        candidates=candidates,
+        evaluations=make_stage2_selection_evaluations(candidates, fatal_by_id=fatal_by_id),
+    )
+
+    assert identical_selected.candidate_id == "stage2_balanced"
+    assert identical_result.eligible_candidate_ids == ["stage2_balanced"]
+    assert single_selected.candidate_id == "stage2_conservative"
+    assert single_result.eligible_candidate_ids == ["stage2_conservative"]
+    assert backend.calls == []
+
+
+def test_stage2_llm_selection_rejects_all_fatal_candidates(tmp_path):
+    task, _, _ = make_task_input(tmp_path, image_count=0)
+    ledger = validate_model(ResponsibilityLedgerOutput, make_stage2_responsibility_payload())
+    candidates = make_distinct_stage2_selection_candidates()
+    evaluations = make_stage2_selection_evaluations(
+        candidates,
+        fatal_by_id={item.candidate_id: ["fatal"] for item in candidates},
+    )
+    agent = Stage2Agent(PlannerLLMClient(backend=QueueBackend([])))
+
+    with pytest.raises(ValueError, match="all Stage2 decomposition candidates have fatal violations"):
+        agent._select_candidate(
+            task=task,
+            partial_artifacts={},
+            responsibilities=ledger.responsibilities,
+            candidates=candidates,
+            evaluations=evaluations,
+        )
+
+
+def test_stage2_resumes_responsibilities_and_partial_candidate_set(tmp_path):
+    task, md_path, image_paths = make_task_input(tmp_path, image_count=1)
+    stage1 = make_stage1_contract_artifact(md_path, image_paths)
+    modules = build_module_organized_artifact(stage1)
+    ledger = validate_model(ResponsibilityLedgerOutput, make_stage2_responsibility_payload())
+    partial = Stage2DecompositionArtifact(
+        task_id=task.task_id,
+        input_fingerprint="fp-stage2",
+        status="responsibilities_extracted",
+        locked_top=LockedTopModule(
+            module="aes_cipher_top",
+            resolution_mode="deterministic",
+            evidence_sections=["AES Demo Repository"],
+        ),
+        responsibilities=ledger.responsibilities,
+        global_clocking_notes=ledger.global_clocking_notes,
+        global_data_conventions=ledger.global_data_conventions,
+        candidates=[
+            validate_model(
+                Stage2DecompositionCandidate,
+                make_stage2_candidate_payload("conservative", complete=False),
+            )
+        ],
+    )
+    backend = QueueBackend(
+        [
+            make_stage2_candidate_payload("balanced", complete=True),
+            make_stage2_candidate_payload("modular", complete=False),
+        ]
+    )
+    agent = Stage2Agent(PlannerLLMClient(backend=backend))
+
+    artifact = agent.run(
+        task,
+        {
+            "modules": modules,
+            "stage2_input_fingerprint": "fp-stage2",
+            "stage2_decomposition": partial,
+        },
+    )
+
+    assert artifact.top_module == "aes_cipher_top"
+    assert len(backend.calls) == 2
+    assert agent._last_decomposition.selected_candidate_id == "stage2_balanced"
+    assert any("Resumed Stage2" in item for item in agent._last_decomposition.selection_trace)
+
+
+def test_stage3_receives_only_module_local_selected_boundaries():
+    decomposition = {
+        "selected_boundary_contracts": [
+            make_stage2_candidate_payload("balanced", complete=True)["boundary_contracts"][0],
+            {
+                **make_stage2_candidate_payload("modular", complete=True)["boundary_contracts"][0],
+                "producer_module": "unrelated_a",
+                "consumer_module": "unrelated_b",
+            },
+        ]
+    }
+    agent = Stage3Agent(PlannerLLMClient(backend=QueueBackend([])))
+
+    result = agent._boundary_contract_slice(decomposition, module_name="aes_cipher_top")
+
+    assert len(result["incoming"]) == 1
+    assert result["incoming"][0]["producer_module"] == "aes_key_expand_128"
+    assert result["outgoing"] == []
 
 
 def test_build_stage2_planning_input_from_task_includes_specs_without_legacy_stage1(tmp_path):
@@ -3330,12 +4415,103 @@ def test_stage2_prompt_uses_planning_input_not_modules_primary_source(tmp_path):
 
     prompt, _ = agent.build_prompt(task, {"stage2_input": stage2_input}, {})
 
-    assert "stage2_planning_input_v1" in prompt
+    assert '"schema_version":"stage2_prompt_context_v1"' in prompt
     assert "Use modules.json as the primary source of truth" not in prompt
     assert "source spec markdown" in prompt
-    assert "compatibility module candidates" in prompt
+    assert '"known_module_candidates"' in prompt
     assert "aes_unified_functional_spec" in prompt
     assert "not treated as RTL modules" in prompt
+    assert '"legacy_contract_projection"' not in prompt
+    assert '"interface_contracts"' not in prompt
+    assert '"text_grounding"' not in prompt
+
+
+@pytest.mark.parametrize(
+    "project,spec_name",
+    [
+        ("e203_ifu_hard", "e203_ifu_system.md"),
+        ("e203_exu_alu_hard", "e203_exu_alu_system.md"),
+    ],
+)
+def test_stage2_e203_prompt_is_compact_and_contains_primary_spec_once(project, spec_name):
+    spec_path = (Path("rtl_dataset") / project / spec_name).resolve()
+    task = PlannerTaskInput(task_id=project, spec_md_files=[str(spec_path)])
+    stage2_input = build_stage2_planning_input_from_task(task_input=task)
+    agent = Stage2Agent(PlannerLLMClient(backend=QueueBackend([])))
+
+    prompt, _ = agent.build_prompt(task, {"stage2_input": stage2_input}, {})
+    markdown = spec_path.read_text(encoding="utf-8")
+    context = agent._build_stage2_prompt_context(stage2_input)
+
+    assert len(prompt) < 90_000
+    assert context["primary_source_spec"]["markdown"] == markdown
+    assert prompt.count(markdown.splitlines()[0]) == 1
+    for forbidden in (
+        '"legacy_contract_projection"',
+        '"interface_contracts"',
+        '"timing_contracts"',
+        '"control_contracts"',
+        '"datapath_contracts"',
+        '"text_grounding"',
+    ):
+        assert forbidden not in prompt
+
+
+def test_stage2_retry_prompt_is_incremental():
+    agent = Stage2Agent(PlannerLLMClient(backend=QueueBackend([])))
+    original = "FULL SOURCE SPEC MARKER\n" + ("x" * 50_000)
+
+    retry = agent._build_retry_prompt(original, ["top_module must not be empty"])
+
+    assert "FULL SOURCE SPEC MARKER" not in retry
+    assert len(retry) < 500
+    assert "complete corrected JSON" in retry
+
+
+def test_stage2_architecture_facts_are_filtered_and_bounded():
+    facts = [
+        {
+            "fact_id": "F_TOP",
+            "module": "top",
+            "category": "module_identity",
+            "subject": "top",
+            "predicate": "is_top_module",
+            "object": {"module": "top"},
+            "text_grounding": [{"source_md_file": "top.md", "section_path": "Top"}],
+        },
+        {
+            "fact_id": "F_PORT",
+            "module": "top",
+            "category": "interface",
+            "subject": "wide_port_table",
+            "predicate": "has_ports",
+            "object": {"ports": ["p" + str(index) for index in range(100)]},
+        },
+    ]
+    facts.extend(
+        {
+            "fact_id": f"F_RES_{index:03d}",
+            "module": "top",
+            "category": "resource_requirement",
+            "subject": f"resource_{index}",
+            "predicate": "requires",
+            "object": {"resource": "x" * 300},
+        }
+        for index in range(100)
+    )
+    stage2_input = Stage2PlanningInput.model_validate(
+        {"task_id": "bounded", "fact_ledger": {"facts": facts}}
+    )
+    agent = Stage2Agent(PlannerLLMClient(backend=QueueBackend([])))
+
+    selected, omitted = agent._bounded_architecture_facts(stage2_input)
+    encoded = json.dumps(selected, ensure_ascii=False, separators=(",", ":"))
+
+    assert len(encoded) <= 20_000
+    assert omitted > 0
+    assert selected[0]["fact_id"] == "F_TOP"
+    assert "F_PORT" not in {item["fact_id"] for item in selected}
+    assert "text_grounding" not in encoded
 
 
 def test_stage2_validation_allows_planned_modules_not_in_compat_candidates(tmp_path):
@@ -3492,7 +4668,7 @@ def test_stage2_validation_accepts_inferred_from_spec_with_empty_fact_ledger(tmp
     assert errors == []
 
 
-def test_stage2_validation_rejects_single_module_when_partitioning_guidance_exists(tmp_path):
+def test_stage2_validation_allows_single_module_when_partitioning_guidance_is_not_explicit_structure(tmp_path):
     md_path = tmp_path / "hard_system.md"
     md_path.write_text(
         "\n".join(
@@ -3549,7 +4725,7 @@ def test_stage2_validation_rejects_single_module_when_partitioning_guidance_exis
 
     errors = agent.validate_quality(artifact, task, {"stage2_input": stage2_input})
 
-    assert any("partitioning guidance" in error for error in errors)
+    assert errors == []
 
 
 def test_stage2_repo_skeleton_normalizes_object_open_issues():
@@ -3750,6 +4926,14 @@ def test_stage2_accepts_fact_ledger_inferred_hierarchy_with_supporting_facts(tmp
         _fact(
             md_path,
             module="aes_cipher_top",
+            category="interface",
+            subject="clk",
+            predicate="is_port",
+            obj={"name": "clk", "direction": "input", "width": "1"},
+        ),
+        _fact(
+            md_path,
+            module="aes_cipher_top",
             category="resource_requirement",
             subject="SubBytes",
             predicate="uses_parallel_units",
@@ -3825,15 +5009,16 @@ def test_stage2_accepts_fact_ledger_inferred_hierarchy_with_supporting_facts(tmp
         },
         "open_issues": [],
     }
-    agent = Stage2Agent(PlannerLLMClient(backend=QueueBackend([repo_payload])))
+    agent = Stage2Agent(PlannerLLMClient(backend=QueueBackend([])))
+    artifact = validate_model(Stage2RepoSkeletonArtifact, repo_payload)
+    errors = agent.validate_quality(artifact, task, {"modules": modules_artifact})
 
-    artifact = agent.run(task, {"modules": modules_artifact})
-
+    assert errors == []
     assert artifact.global_invariants.hierarchy[0].source_kind == "inferred_from_fact_ledger"
     assert artifact.modules[1].instance_hints[0].supporting_fact_ids == [support_id]
 
 
-def test_stage2_rejects_fact_ledger_inferred_hierarchy_without_supporting_facts(tmp_path):
+def test_stage2_allows_inferred_hierarchy_without_supporting_fact_ids(tmp_path):
     task, md_path, _ = make_task_input(tmp_path)
     facts = [
         _fact(
@@ -3843,6 +5028,14 @@ def test_stage2_rejects_fact_ledger_inferred_hierarchy_without_supporting_facts(
             subject="aes_cipher_top",
             predicate="is_top_module",
             obj={"module": "aes_cipher_top", "modules": ["aes_cipher_top", "aes_sbox"]},
+        ),
+        _fact(
+            md_path,
+            module="aes_cipher_top",
+            category="interface",
+            subject="clk",
+            predicate="is_port",
+            obj={"name": "clk", "direction": "input", "width": "1"},
         ),
         _fact(
             md_path,
@@ -3910,7 +5103,24 @@ def test_stage2_rejects_fact_ledger_inferred_hierarchy_without_supporting_facts(
 
     errors = agent.validate_quality(artifact, task, {"modules": modules_artifact})
 
-    assert any("supporting_fact_ids" in error for error in errors)
+    assert errors == []
+
+
+def test_stage2_normalizes_empty_fact_ledger_provenance_to_spec():
+    assert (
+        Stage2Agent._normalized_evidence_source_kind(
+            "inferred_from_fact_ledger",
+            [],
+        )
+        == "inferred_from_spec"
+    )
+    assert (
+        Stage2Agent._normalized_evidence_source_kind(
+            "inferred_from_fact_ledger",
+            ["F0001"],
+        )
+        == "inferred_from_fact_ledger"
+    )
 
 
 def test_stage3_agent_builds_module_skeletons_incrementally(tmp_path):
@@ -3963,6 +5173,48 @@ def test_stage3_agent_builds_module_skeletons_incrementally(tmp_path):
     assert "MODULE_SKELETON_DOC v1" in backend.calls[1]["user_prompt"]
     assert "block_kind" in backend.calls[1]["user_prompt"]
     assert '"module_skeleton"' not in backend.calls[1]["user_prompt"]
+
+
+def test_stage3_agent_retries_portless_synthesizable_module_skeleton(tmp_path):
+    task, md_path, image_paths = make_task_input(tmp_path, image_count=1)
+    top_spec, key_spec = make_module_spec_files(tmp_path)
+    top_spec.write_text(md_path.read_text(encoding="utf-8"), encoding="utf-8")
+    stage1_artifact = make_stage1_contract_artifact(md_path, image_paths)
+    modules_artifact = build_module_organized_artifact(stage1_artifact)
+    stage2_artifact = validate_model(Stage2RepoSkeletonArtifact, make_repo_skeleton_payload())
+
+    valid_child = make_stage3_module_skeleton_doc("aes_key_expand_128", key_spec)
+    child_header = "\n".join(
+        [
+            "module aes_key_expand_128 (",
+            "    input wire clk,",
+            "    input wire rst,",
+            "    input wire ld,",
+            "    output wire done",
+            ");",
+        ]
+    )
+    portless_child = valid_child.replace(child_header, "module aes_key_expand_128;", 1)
+    backend = QueueBackend(
+        [
+            make_module_spec_context_payload("aes_key_expand_128", key_spec),
+            portless_child,
+            valid_child,
+            make_module_spec_context_payload("aes_cipher_top", top_spec),
+            make_stage3_module_skeleton_doc("aes_cipher_top", top_spec),
+        ]
+    )
+    agent = Stage3Agent(PlannerLLMClient(backend=backend))
+
+    artifact = agent.run_incremental(
+        task,
+        {"modules": modules_artifact, "stage2": stage2_artifact},
+    )
+
+    assert artifact.stage3_status == "module_skeletons_planned"
+    assert len(backend.calls) == 5
+    assert "Repair ONLY the explicitly listed targets" in backend.calls[2]["user_prompt"]
+    assert "Module Frame must declare at least one concrete ANSI port" in backend.calls[2]["user_prompt"]
 
 
 def test_stage3_agent_resolves_specs_from_directory_input(tmp_path):
@@ -4156,7 +5408,7 @@ def test_stage3_agent_resume_uses_cursor_and_skips_completed_sidecar(tmp_path):
     }
     backend = QueueBackend(
         [
-            make_module_spec_context_payload("aes_cipher_top", top_spec),
+            make_module_spec_context_payload("aes_cipher_top", top_spec, text=top_spec.read_text().split("## Interface")[0]),
             make_stage3_module_skeleton_doc("aes_cipher_top", top_spec),
         ]
     )
@@ -4232,7 +5484,7 @@ def test_stage3_parser_builds_export_from_doc(tmp_path):
     assert any(item.block_kind == "helper" for item in export.structural_blocks)
 
 
-def test_stage3_parser_defaults_partial_state_model_entries(tmp_path):
+def test_stage3_parser_rejects_missing_state_representation(tmp_path):
     spec_path = tmp_path / "sdc_controller.md"
     spec_path.write_text("# sdc_controller\n", encoding="utf-8")
     doc = make_stage3_module_skeleton_doc("sdc_controller", spec_path).replace(
@@ -4240,22 +5492,20 @@ def test_stage3_parser_defaults_partial_state_model_entries(tmp_path):
         "  - object: no top-level registered state objects; state held inside sub-modules",
     )
 
-    export = parse_module_skeleton_doc(
-        doc,
-        expected_module="sdc_controller",
-        expected_file_path="rtl/sdc_controller.v",
-        source_refs={
-            "module_contract_ref": "module_contracts_v1::sdc_controller",
-            "repo_skeleton_ref": "repo_skeleton_v1::sdc_controller",
-            "module_spec_file": str(spec_path.resolve()),
-        },
-    )
+    with pytest.raises(ValueError) as error:
+        parse_module_skeleton_doc(
+            doc,
+            expected_module="sdc_controller",
+            expected_file_path="rtl/sdc_controller.v",
+            source_refs={
+                "module_contract_ref": "module_contracts_v1::sdc_controller",
+                "repo_skeleton_ref": "repo_skeleton_v1::sdc_controller",
+                "module_spec_file": str(spec_path.resolve()),
+            },
+        )
 
-    state_entry = export.module_behavior.state_model[0]
-    assert state_entry.object == "no top-level registered state objects; state held inside sub-modules"
-    assert state_entry.storage_kind == "unspecified"
-    assert state_entry.representation == "implementation-open"
-
+    assert "state_model[0].storage_kind" in str(error.value)
+    assert "state_model[0].representation" in str(error.value)
 
 def test_spec_block_splitter_handles_bold_numbered_headings():
     blocks = split_spec_blocks(
@@ -4415,6 +5665,129 @@ def test_module_spec_context_prompt_preserves_source_chunk_order_after_ranking(t
     prompt = backend.calls[0]["user_prompt"]
     assert result.fallback_used is False
     assert prompt.index('"chunk_id": "C002"') < prompt.index('"chunk_id": "C004"')
+
+
+def test_top_module_spec_context_forces_all_primary_port_table_sections(tmp_path):
+    spec_path = tmp_path / "table_top.md"
+    spec_path.write_text(
+        "\n".join(
+            [
+                "# Table Top",
+                "Top module: table_top",
+                "",
+                "## Request Ports",
+                "| Name | Direction | Width |",
+                "| --- | --- | --- |",
+                "| req_i | Input | 1 |",
+                "",
+                "## Configuration Glossary",
+                "| Name | Meaning | Default |",
+                "| --- | --- | --- |",
+                "| Input | Direction selector | 0 |",
+                "",
+                "## Response Ports",
+                "| Signal | Dir | Bit Width |",
+                "| --- | --- | --- |",
+                "| rsp_o | Output | 8 |",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    backend = QueueBackend(
+        [
+            {
+                "schema_version": "module_spec_context_retrieval_v1",
+                "module": "table_top",
+                "blocks": [
+                    {
+                        "block_id": "S001",
+                        "text": (
+                            "## Configuration Glossary\n"
+                            "| Name | Meaning | Default |\n"
+                            "| --- | --- | --- |\n"
+                            "| Input | Direction selector | 0 |"
+                        ),
+                        "source_file": str(spec_path.resolve()),
+                        "source_chunk_ids": ["C003"],
+                        "relevance_reason": ["LLM selected only a supplemental section."],
+                        "confidence": "low",
+                    }
+                ],
+                "fallback_used": False,
+            }
+        ]
+    )
+    retriever = ModuleSpecContextRetriever(PlannerLLMClient(backend=backend), max_chunks=4)
+
+    result = retriever.select_module_spec_context(
+        module_name="table_top",
+        spec_md_files=[str(spec_path)],
+        repo_module={"module": "table_top", "role": "top configuration glossary"},
+        is_top_module=True,
+        primary_spec_file=str(spec_path),
+    )
+
+    prompt = backend.calls[0]["user_prompt"]
+    combined = "\n\n".join(block.text for block in result.blocks)
+    assert "req_i" in prompt and "rsp_o" in prompt
+    assert "req_i" in combined and "rsp_o" in combined
+    assert [block.block_id for block in result.blocks] == ["S001", "S002", "S003"]
+    assert result.blocks[0].source_chunk_ids == ["C002"]
+    assert result.blocks[-1].source_chunk_ids == ["C004"]
+
+
+def test_stage3_module_frame_validation_does_not_require_interface_contract():
+    agent = Stage3Agent(PlannerLLMClient(backend=QueueBackend([])))
+    valid_frame = "\n".join(
+        [
+            "module toy (",
+            "  input wire clk,",
+            "`ifdef FEATURE_DATA_O",
+            "  output wire [7:0] data_o,",
+            "`endif",
+            "  input wire [`WIDTH-1:0] data_i",
+            ");",
+            "endmodule",
+        ]
+    )
+
+    assert ansi_module_ports(valid_frame)[-1].width == "WIDTH"
+    assert agent._validate_module_frame_interface(
+        valid_frame,
+        expected_module="toy",
+    ) == []
+
+    wrong_frame = "\n".join(
+        [
+            "module toy (",
+            "  input wire clk,",
+            "  input wire [7:0] data_o,",
+            "  input wire [3:0] extra_i",
+            ");",
+            "endmodule",
+        ]
+    )
+    assert agent._validate_module_frame_interface(
+        wrong_frame,
+        expected_module="toy",
+    ) == []
+
+    placeholder_errors = agent._validate_module_frame_interface(
+        "module toy (/* port list placeholder */);\nendmodule",
+        expected_module="toy",
+    )
+    assert any("port placeholder" in error for error in placeholder_errors)
+
+    assert agent._validate_module_frame_interface(
+        "module child;\nendmodule",
+        expected_module="child",
+    ) == []
+    empty_port_errors = agent._validate_module_frame_interface(
+        "module child;\nendmodule",
+        expected_module="child",
+        require_ports=True,
+    )
+    assert any("at least one concrete ANSI port" in error for error in empty_port_errors)
 
 
 def test_stage4_spec_blocks_uses_module_context_retrieval_for_unified_spec_without_section(tmp_path):
@@ -4761,6 +6134,33 @@ def test_stage3_parser_accepts_asterisk_field_bullets_and_combined_overlay_secti
     assert [item.block_id for item in export.block_behavior_overlays] == ["B1", "B3"]
 
 
+def test_stage3_parser_accepts_indented_decision_mapping_fields(tmp_path):
+    spec_path = tmp_path / "aes_cipher_top.md"
+    spec_path.write_text("# aes_cipher_top\n", encoding="utf-8")
+    doc = make_stage3_module_skeleton_doc("aes_cipher_top", spec_path).replace(
+        "- topic: control style\n"
+        "- decision: Keep semantic modes separate from the low-level code realization style.\n"
+        "- reason: This avoids forcing an explicit FSM when counter- or flag-driven control is sufficient.",
+        "- topic: control style\n"
+        "  decision: Keep semantic modes separate from the low-level code realization style.\n"
+        "  reason: This avoids forcing an explicit FSM when counter- or flag-driven control is sufficient.",
+    )
+
+    export = parse_module_skeleton_doc(
+        doc,
+        expected_module="aes_cipher_top",
+        expected_file_path="rtl/aes_cipher_top.v",
+        source_refs={
+            "module_contract_ref": "module_contracts_v1::aes_cipher_top",
+            "repo_skeleton_ref": "repo_skeleton_v1::aes_cipher_top",
+            "module_spec_file": str(spec_path.resolve()),
+        },
+    )
+
+    assert export.decision_ledger.chosen_decisions[0].topic == "control style"
+    assert export.decision_ledger.chosen_decisions[0].decision.startswith("Keep semantic modes")
+
+
 def test_stage3_parser_rejects_unknown_overlay_block(tmp_path):
     spec_path = tmp_path / "aes_cipher_top.md"
     spec_path.write_text("# aes_cipher_top\n", encoding="utf-8")
@@ -4795,9 +6195,12 @@ def test_default_planner_backend_sends_images_as_multimodal_content(tmp_path, mo
 
             class Message:
                 content = '{"ok": true}'
+                refusal = None
+                tool_calls = None
 
             class Choice:
                 message = Message()
+                finish_reason = "stop"
 
             class Response:
                 choices = [Choice()]

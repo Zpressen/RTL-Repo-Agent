@@ -1,0 +1,651 @@
+[
+  {
+    "file": "aes/aes_cipher_top/verification/aes_cipher_top_stimulus_gen.sv",
+    "urandom": 0,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 108
+  },
+  {
+    "file": "aes/aes_inv_cipher_top/verification/aes_inv_cipher_top_stimulus_gen.sv",
+    "urandom": 0,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 159
+  },
+  {
+    "file": "aes/aes_inv_sbox/verification/aes_inv_sbox_stimulus_gen.sv",
+    "urandom": 0,
+    "inputs": [
+      "input clk",
+      "input"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 30
+  },
+  {
+    "file": "aes/aes_key_expand_128/verification/aes_key_expand_128_stimulus_gen.sv",
+    "urandom": 0,
+    "inputs": [
+      "input clk",
+      "input key"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 65
+  },
+  {
+    "file": "aes/aes_rcon/verification/aes_rcon_stimulus_gen.sv",
+    "urandom": 0,
+    "inputs": [
+      "input clk"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 47
+  },
+  {
+    "file": "aes/aes_sbox/verification/aes_sbox_stimulus_gen.sv",
+    "urandom": 0,
+    "inputs": [
+      "input clk",
+      "input"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 32
+  },
+  {
+    "file": "e203_hbirdv2/e203_biu/verification/e203_biu_stimulus_gen.sv",
+    "urandom": 56,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": true,
+    "line_count": 313
+  },
+  {
+    "file": "e203_hbirdv2/e203_clk_ctrl/verification/e203_clk_ctrl_stimulus_gen.sv",
+    "urandom": 8,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": true,
+    "line_count": 130
+  },
+  {
+    "file": "e203_hbirdv2/e203_clkgate/verification/e203_clkgate_stimulus_gen.sv",
+    "urandom": 2,
+    "inputs": [
+      "input clk"
+    ],
+    "hundred_two_cycle_template": true,
+    "line_count": 70
+  },
+  {
+    "file": "e203_hbirdv2/e203_core/verification/e203_core_stimulus_gen.sv",
+    "urandom": 84,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": true,
+    "line_count": 425
+  },
+  {
+    "file": "e203_hbirdv2/e203_cpu/verification/e203_cpu_stimulus_gen.sv",
+    "urandom": 63,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": true,
+    "line_count": 341
+  },
+  {
+    "file": "e203_hbirdv2/e203_cpu_top/verification/e203_cpu_top_stimulus_gen.sv",
+    "urandom": 49,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": true,
+    "line_count": 285
+  },
+  {
+    "file": "e203_hbirdv2/e203_dtcm_ctrl/verification/e203_dtcm_ctrl_stimulus_gen.sv",
+    "urandom": 15,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": true,
+    "line_count": 149
+  },
+  {
+    "file": "e203_hbirdv2/e203_dtcm_ram/verification/e203_dtcm_ram_stimulus_gen.sv",
+    "urandom": 8,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": true,
+    "line_count": 121
+  },
+  {
+    "file": "e203_hbirdv2/e203_extend_csr/verification/e203_extend_csr_stimulus_gen.sv",
+    "urandom": 4,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": true,
+    "line_count": 105
+  },
+  {
+    "file": "e203_hbirdv2/e203_exu/verification/e203_exu_stimulus_gen.sv",
+    "urandom": 46,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": true,
+    "line_count": 273
+  },
+  {
+    "file": "e203_hbirdv2/e203_exu_alu/verification/e203_exu_alu_stimulus_gen.sv",
+    "urandom": 33,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": true,
+    "line_count": 221
+  },
+  {
+    "file": "e203_hbirdv2/e203_exu_alu_bjp/verification/e203_exu_alu_bjp_stimulus_gen.sv",
+    "urandom": 13,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 233
+  },
+  {
+    "file": "e203_hbirdv2/e203_exu_alu_csrctrl/verification/e203_exu_alu_csrctrl_stimulus_gen.sv",
+    "urandom": 7,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 390
+  },
+  {
+    "file": "e203_hbirdv2/e203_exu_alu_dpath/verification/e203_exu_alu_dpath_stimulus_gen.sv",
+    "urandom": 51,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 555
+  },
+  {
+    "file": "e203_hbirdv2/e203_exu_alu_lsuagu/verification/e203_exu_alu_lsuagu_stimulus_gen.sv",
+    "urandom": 18,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": true,
+    "line_count": 161
+  },
+  {
+    "file": "e203_hbirdv2/e203_exu_alu_muldiv/verification/e203_exu_alu_muldiv_stimulus_gen.sv",
+    "urandom": 0,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 268
+  },
+  {
+    "file": "e203_hbirdv2/e203_exu_alu_rglr/verification/e203_exu_alu_rglr_stimulus_gen.sv",
+    "urandom": 20,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 227
+  },
+  {
+    "file": "e203_hbirdv2/e203_exu_branchslv/verification/e203_exu_branchslv_stimulus_gen.sv",
+    "urandom": 14,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 474
+  },
+  {
+    "file": "e203_hbirdv2/e203_exu_commit/verification/e203_exu_commit_stimulus_gen.sv",
+    "urandom": 0,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 404
+  },
+  {
+    "file": "e203_hbirdv2/e203_exu_csr/verification/e203_exu_csr_stimulus_gen.sv",
+    "urandom": 24,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 594
+  },
+  {
+    "file": "e203_hbirdv2/e203_exu_decode/verification/e203_exu_decode_stimulus_gen.sv",
+    "urandom": 11,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 1045
+  },
+  {
+    "file": "e203_hbirdv2/e203_exu_disp/verification/e203_exu_disp_stimulus_gen.sv",
+    "urandom": 45,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 554
+  },
+  {
+    "file": "e203_hbirdv2/e203_exu_excp/verification/e203_exu_excp_stimulus_gen.sv",
+    "urandom": 47,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 320
+  },
+  {
+    "file": "e203_hbirdv2/e203_exu_longpwbck/verification/e203_exu_longpwbck_stimulus_gen.sv",
+    "urandom": 0,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 239
+  },
+  {
+    "file": "e203_hbirdv2/e203_exu_nice/verification/e203_exu_nice_stimulus_gen.sv",
+    "urandom": 18,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 341
+  },
+  {
+    "file": "e203_hbirdv2/e203_exu_oitf/verification/e203_exu_oitf_stimulus_gen.sv",
+    "urandom": 16,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 220
+  },
+  {
+    "file": "e203_hbirdv2/e203_exu_regfile/verification/e203_exu_regfile_stimulus_gen.sv",
+    "urandom": 0,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 162
+  },
+  {
+    "file": "e203_hbirdv2/e203_exu_wbck/verification/e203_exu_wbck_stimulus_gen.sv",
+    "urandom": 0,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 148
+  },
+  {
+    "file": "e203_hbirdv2/e203_ifu/verification/e203_ifu_stimulus_gen.sv",
+    "urandom": 29,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": true,
+    "line_count": 205
+  },
+  {
+    "file": "e203_hbirdv2/e203_ifu_ifetch/verification/e203_ifu_ifetch_stimulus_gen.sv",
+    "urandom": 22,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": true,
+    "line_count": 177
+  },
+  {
+    "file": "e203_hbirdv2/e203_ifu_ift2icb/verification/e203_ifu_ift2icb_stimulus_gen.sv",
+    "urandom": 17,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": true,
+    "line_count": 157
+  },
+  {
+    "file": "e203_hbirdv2/e203_ifu_litebpu/verification/e203_ifu_litebpu_stimulus_gen.sv",
+    "urandom": 14,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": true,
+    "line_count": 145
+  },
+  {
+    "file": "e203_hbirdv2/e203_ifu_minidec/verification/e203_ifu_minidec_stimulus_gen.sv",
+    "urandom": 1,
+    "inputs": [
+      "input clk"
+    ],
+    "hundred_two_cycle_template": true,
+    "line_count": 62
+  },
+  {
+    "file": "e203_hbirdv2/e203_irq_sync/verification/e203_irq_sync_stimulus_gen.sv",
+    "urandom": 4,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": true,
+    "line_count": 105
+  },
+  {
+    "file": "e203_hbirdv2/e203_itcm_ctrl/verification/e203_itcm_ctrl_stimulus_gen.sv",
+    "urandom": 21,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": true,
+    "line_count": 173
+  },
+  {
+    "file": "e203_hbirdv2/e203_itcm_ram/verification/e203_itcm_ram_stimulus_gen.sv",
+    "urandom": 8,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": true,
+    "line_count": 121
+  },
+  {
+    "file": "e203_hbirdv2/e203_lsu/verification/e203_lsu_stimulus_gen.sv",
+    "urandom": 43,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": true,
+    "line_count": 261
+  },
+  {
+    "file": "e203_hbirdv2/e203_lsu_ctrl/verification/e203_lsu_ctrl_stimulus_gen.sv",
+    "urandom": 42,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": true,
+    "line_count": 257
+  },
+  {
+    "file": "e203_hbirdv2/e203_reset_ctrl/verification/e203_reset_ctrl_stimulus_gen.sv",
+    "urandom": 1,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": true,
+    "line_count": 93
+  },
+  {
+    "file": "e203_hbirdv2/e203_srams/verification/e203_srams_stimulus_gen.sv",
+    "urandom": 19,
+    "inputs": [
+      "input clk"
+    ],
+    "hundred_two_cycle_template": true,
+    "line_count": 142
+  },
+  {
+    "file": "sdc/sd_bd/verification/sd_bd_stimulus_gen.sv",
+    "urandom": 0,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 176
+  },
+  {
+    "file": "sdc/sd_clock_divider/verification/sd_clock_divider_stimulus_gen.sv",
+    "urandom": 4,
+    "inputs": [
+      "input wire clk"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 47
+  },
+  {
+    "file": "sdc/sd_cmd_master/verification/sd_cmd_master_stimulus_gen.sv",
+    "urandom": 0,
+    "inputs": [
+      "input CLK_PAD_IO"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 115
+  },
+  {
+    "file": "sdc/sd_cmd_serial_host/verification/sd_cmd_serial_host_stimulus_gen.sv",
+    "urandom": 0,
+    "inputs": [
+      "input SD_CLK_IN",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 178
+  },
+  {
+    "file": "sdc/sd_controller_wb/verification/sd_controller_wb_stimulus_gen.sv",
+    "urandom": 26,
+    "inputs": [
+      "input wire clk",
+      "input",
+      "input",
+      "input",
+      "input",
+      "input",
+      "input"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 280
+  },
+  {
+    "file": "sdc/sd_crc_16/verification/sd_crc_16_stimulus_gen.sv",
+    "urandom": 0,
+    "inputs": [
+      "input CLK",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 70
+  },
+  {
+    "file": "sdc/sd_crc_7/verification/sd_crc_7_stimulus_gen.sv",
+    "urandom": 0,
+    "inputs": [
+      "input CLK",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 71
+  },
+  {
+    "file": "sdc/sd_data_master/verification/sd_data_master_stimulus_gen.sv",
+    "urandom": 0,
+    "inputs": [
+      "input clk"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 196
+  },
+  {
+    "file": "sdc/sd_data_serial_host/verification/sd_data_serial_host_stimulus_gen.sv",
+    "urandom": 0,
+    "inputs": [
+      "input sd_clk"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 126
+  },
+  {
+    "file": "sdc/sd_fifo_rx_filler/verification/sd_fifo_rx_filler_stimulus_gen.sv",
+    "urandom": 0,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 155
+  },
+  {
+    "file": "sdc/sd_fifo_tx_filler/verification/sd_fifo_tx_filler_stimulus_gen.sv",
+    "urandom": 0,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 155
+  },
+  {
+    "file": "sdc/sd_rx_fifo/verification/sd_rx_fifo_stimulus_gen.sv",
+    "urandom": 0,
+    "inputs": [
+      "input wclk",
+      "input rclk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 199
+  },
+  {
+    "file": "sdc/sd_tx_fifo/verification/sd_tx_fifo_stimulus_gen.sv",
+    "urandom": 0,
+    "inputs": [
+      "input wclk",
+      "input rclk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 221
+  },
+  {
+    "file": "sdc/sdc_controller/verification/sdc_controller_stimulus_gen.sv",
+    "urandom": 0,
+    "inputs": [
+      "input wire clk",
+      "input",
+      "input",
+      "input",
+      "input",
+      "input",
+      "input"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 141
+  },
+  {
+    "file": "system/aes_cipher_top/aes_cipher_top_stimulus_gen.sv",
+    "urandom": 0,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 108
+  },
+  {
+    "file": "system/aes_inv_cipher_top/aes_inv_cipher_top_stimulus_gen.sv",
+    "urandom": 0,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 159
+  },
+  {
+    "file": "system/e203_cpu_top/e203_cpu_top_stimulus_gen.sv",
+    "urandom": 49,
+    "inputs": [
+      "input clk",
+      "input tb_match"
+    ],
+    "hundred_two_cycle_template": true,
+    "line_count": 285
+  },
+  {
+    "file": "system/sdc_controller/sdc_controller_stimulus_gen.sv",
+    "urandom": 0,
+    "inputs": [
+      "input wire clk",
+      "input",
+      "input",
+      "input",
+      "input",
+      "input",
+      "input"
+    ],
+    "hundred_two_cycle_template": false,
+    "line_count": 141
+  }
+]
