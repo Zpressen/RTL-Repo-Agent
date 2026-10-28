@@ -29,6 +29,10 @@ class CodexDebugRunDescriptor(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     run_id: str = Field(..., min_length=1)
+    outer_run_id: str = ''
+    case_id: str = ''
+    memory_snapshot_path: Path | None = None
+    memory_snapshot_sha256: str = ''
     task_root: Path
     spec_root: Path
     merged_root: Path
@@ -78,6 +82,7 @@ class CodexDebugRunDescriptor(BaseModel):
             if not _is_under(path, spec_root):
                 raise ValueError(f"spec path is outside spec_root: {path}")
         for hidden_path, label in (
+            (self.memory_snapshot_path, 'memory_snapshot_path'),
             (self.verify_script, "verify_script"),
             (self.planning_output_root, "planning_output_root"),
             (self.initial_sim_output_path, "initial_sim_output_path"),
@@ -85,6 +90,11 @@ class CodexDebugRunDescriptor(BaseModel):
         ):
             if hidden_path is not None and _is_under(hidden_path.resolve(), task_root):
                 raise ValueError(f"{label} must be outside the Codex-visible task_root")
+        if self.memory_snapshot_path:
+            import json, hashlib
+            from zerorepo.rtl_impl.rtl_memory.ledger import digest
+            if self.memory_snapshot_path.is_symlink() or digest(json.loads(self.memory_snapshot_path.read_text())) != self.memory_snapshot_sha256:
+                raise ValueError('Memory snapshot changed')
         return self
 
     def read_initial_sim_output(self) -> str:

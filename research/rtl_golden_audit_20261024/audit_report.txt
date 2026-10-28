@@ -1,0 +1,196 @@
+RTL 与 golden 审查（2026-10-24）
+
+审查范围
+========
+生成代码：rtl_outputs/<project>/.zerorepo/workspace/merged/*.v。
+参考代码：/home/mokita/RealBench/system 下的 ref 模块及其子模块。
+四个项目的 merged/*.v 与 debug_system/*/generated/ 对应文件均逐字一致。
+没有修改生成 RTL、golden 或原始测试文件。新增内容只有本审查目录。
+这是静态审查、定向差分仿真及有限综合前端检查，不是完整形式等价证明或 PPA 签核。
+
+结论
+====
+未发现按绝对时间/测试序号回放输出、把固定明密文答案填入输出、读取外部波形文件等直接证据。
+AES S-box 的 256 项常量、Rcon 和 CRC 多项式属于算法常量，不能据此认定作弊。
+但有确切的功能差异，也有明显依赖测试激励时序/特定配置的实现。
+不能据现有证据判断 agent 的主观意图；“通过已知测试”不能替代完整实现正确性。
+
+1. aes_cipher_top
+=================
+架构：与 golden 接近，16 个状态 S-box、每拍一轮、在线 128 位密钥扩展，
+数据通路空闲时也继续演进，text_out 每拍更新。它确实在计算 AES，不是密文查表。
+
+实测：100 组完整 128 位随机 key/text_in，1900 个采样点，done 和有效结果均无差异。
+反例：load 后等待 10 拍，在完成边界拉低 rst；golden done=1，生成 done=0。
+原因：golden 只用 rst 清 dcnt，done 仍按旧 dcnt 独立计算；生成版本把 done 和 ld_r
+也放在复位分支。作为另一种 reset 规格可能合理，但不与该 golden 等价。
+
+证据：
+  generated aes_cipher_top.v:287-307
+  golden aes_cipher_top_ref.sv:50-62
+  aes_cipher_top.log
+
+额外差异：源码增加 initial 零值，以及始终赋 IDLE 的 state 和许多未用 next 信号。
+这些是启动语义/冗余骨架问题，不能据此推断核心加密算法错误。
+#1 延迟在 golden 中本来就存在，不能单独作为 agent 过拟合证据。
+
+2. aes_inv_cipher_top
+=====================
+架构：golden 为同步轮计数器 + 11 项轮密钥缓存 + 寄存后的缓存读口。
+生成版本拆成 6 个模块，引入异步 pending 标志、密钥保留/备份、组合轮密钥选择，
+另有不直接控制实际轮变换的状态机。轮算法存在，但控制与读口时序已经重写。
+
+已复现的高优先级问题：
+  a. ld/kld 被当作异步事件。
+     always @(posedge clk or posedge ld/kld or negedge rst)
+     与 golden 的仅 posedge clk 采样不同。一个跨越一个上升沿的完整同步脉冲，
+     会先在信号上升沿置 pending，再在时钟沿保持 pending，造成额外一拍装载。
+     这会同时改变轮计数、初始轮以及轮密钥的配合。
+
+  b. 使用下降沿置输入、下一下降沿撤输入的无竞态同步激励：
+     等待密钥扩展 14 拍，随后解密，每次留足 16 拍。
+     100 组随机事务：100 次 golden done 时数据不一致，done 共 200 个采样点不一致。
+     进一步在 DUT 自己 done 时与保存的 golden 完成结果比较，仍是 100/100 错误；
+     因此不能解释成只有输出晚一拍而数据本身正确。
+     Icarus 12.0、Verilator 5.044、Verilator 5.050 均复现。
+
+  c. 完全落在两个时钟上升沿之间的 ld 窄脉冲，golden 不接受，生成代码会产生 done。
+     这是接口采样语义差异，独立于随机数和 AES 计算。
+
+  d. 原验证脚本/原激励在 Verilator 5.044 下确实 PASS，已经重新执行确认。
+     同一原验证脚本只改使用 Verilator 5.050，出现 text_out 96 个 mismatch、done 6 个。
+     这证明原有 PASS 可以复现，同时暴露了仿真调度/工具版本敏感性。
+     原 stimulus 在时钟上升沿修改控制输入，且编译时压制 INITIALDLY 等警告；
+     不应把这些激励当作对任意同步驱动方式的充分检验。
+
+静态风险：
+  - aes_key_expansion.v:277-290 的轮密钥选择，只在 dcnt=8 时使用 preserved_kb_7，
+    其他大部分轮次直接使用当前缓存；还存在 dcnt=12 的 preserved_kb_0 特例。
+    与 golden 的统一缓存读规则不同，是特定时序补丁的强烈迹象；
+    未单独形式证明每一个特例的失败范围，不将“代码不对称”本身当作作弊定论。
+  - top 的 16 个逆 S-box 接在 text_in 上，其拼接结果传入 datapath 后没有被使用；
+    datapath 内另有真正工作的 16 个逆 S-box。综合可能优化掉无用实例，不能直接
+    据源级实例数宣称面积翻倍。
+  - Yosys proc 能处理源码，但报告多次 Complex async reset，生成复杂异步置位/复位
+    单元，包括 pending_key。属于后续综合映射/时序需要检查的结构，不是“必然不可综合”。
+
+证据：
+  generated aes_inv_cipher_top.v:207,216,294
+  generated aes_key_expansion.v:88,277
+  generated aes_inv_cipher_datapath.v:133
+  golden aes_inv_cipher_top_ref.sv:107-127,306-307
+  aes_inv_cipher_top.log
+  verilator_5044/aes_inv_cipher_top.log
+  verilator/aes_inv_cipher_top.log
+  aes_inv_original_exact.json              原脚本 5.044：PASS
+  aes_inv_original_exact_5050.json         原脚本 5.050：FAIL
+  aes_inv_yosys.log                        综合前端警告
+
+3. sdc_controller
+=================
+架构：golden 分开实现 Wishbone 寄存器、命令主控/串行主控、数据主控/串行主控、
+描述符缓存、FIFO filler、CRC 和分频。生成版本合并成 5 个较大模块，重新设计了
+模块接口、请求握手和跨时钟域缓存，不能按“只是文件分拆不同”来理解。
+
+已复现问题：
+  a. 数据状态机硬复位后卡在 DAT_RESET=6。
+     reset 时 dat_state_sd <= wb_rst_i ? DAT_RESET : DAT_IDLE；
+     但启动请求只在 dat_state_sd==DAT_IDLE 时被接受。
+     无外部额外 data-only reset 时，即使请求已跨域同步，也无法进入接收状态。
+     实测：POST_HW_RESET state=6 read_wait_expected=4 req=1 ack=0。
+
+  b. 正常 TX 缓存读取握手缺失。
+     另加 data-only reset 释放上述卡死后，tx_word_valid_i=1 且上游持续有数据，
+     状态机已发送 96 个 nibble，却产生 0 次 tx_word_acquire_o。
+     顶层将 acquire 连到 TX FIFO 的 tx_read，因此这条通路不会正常推进 FIFO。
+     源码只在没有 valid 且当前缓冲无数据时置 acquire，同时置 underflow；
+     与正常消费上游 FIFO 的需求不符。
+     Icarus 与 Verilator 5.050 均复现 a/b。
+
+静态明确缺陷/风险：
+  - dat_crc_reset_sd 只赋值，从未参与 CRC 寄存器的复位选择；CRC 只在 dat_reset_i
+    清零。连续多块传输缺少每块起始清零，不能保证 CRC 正确。
+    本次未完成端到端多块 SD 卡模型验证，该项是数据流静态结论。
+  - TX 读指针以二进制多位总线直接两级同步到 WB 域；7->8 等跳变同时改变多位，
+    两级同步不能保证一致取样。Gray 码仅用于其他方向，不能覆盖此问题。
+    普通 RTL 仿真不会模拟真实亚稳态；需做 CDC 检查。
+  - 使用 SD_CLK_* 条件宏，但官方配置定义的是 SDC_CLK_*。
+    默认 bus clock + dynamic 分频恰好走 fallback，切换 separate/static 不会按官方配置生效。
+  - sd_dat_oe_o 被改成 4 位，官方 top 是 1 位；原 TB 只接 1 位并压制宽度警告，
+    不能证明外部接口完全一致。
+
+原测试盲区：WB 访问阶段 wb_we_i 一直为 1，后面所谓 output 阶段也没有切回读。
+golden 仍会在写访问时输出寄存器数据，所以不是“完全没检查 wb_dat_o”；
+但缺乏规范写后读回、真实 SD 卡响应和带背压的完整块传输。
+本次补做的基础寄存器读回和描述符 ack 检查均匹配，不能把整个 SDC 一概说成空壳。
+
+证据：
+  generated sdc_serial_engine.v:639,705-707,783-795,865-895
+  generated sdc_controller.v:318-320,388-430
+  generated sdc_stream_buffers.v:101-102
+  golden ref_sd_defines.v:52-60
+  golden sdc_controller_stimulus_gen.sv:67-117
+  sdc.log / sdc_serial.log / verilator/sdc_serial.log
+
+4. e203_exu_alu
+===============
+架构：golden 共享 ALU 数据通路，AGU 内处理原子操作，并提供迭代乘除和 NICE。
+生成版本拆成 9 个模块，将 AGU/AMO 拆开，NICE 控制直接放在 top，
+共享数据通路之外又有独立地址加法、普通加法和 35 位迭代加法表达式。
+不能据命名判断资源共享/PPA 等同；本次未做映射后面积/频率比较。
+
+已复现差异（使用官方 canonical 头文件，与真实 golden 对比）：
+  a. 有效 FENCE.I：双方 cmt_o_valid=1、cmt_o_fencei=1，
+     golden cmt_o_bjp=0，生成 cmt_o_bjp=1。
+     top 把整个 BJP 指令组都标为 bjp；golden 仅 bxx|jump。
+     这是有效提交时的控制元数据错误，不能按无效周期 don't-care 排除。
+  b. NICE 背压协议改变：发出一个合法请求后，将 longp_wbck_ready=0 并给出响应。
+     golden rsp_ready=0、longp_wbck_valid=1；生成 rsp_ready=1、longp_wbck_valid=0。
+     下一拍撤响应，生成 longp_wbck_valid 变 1，golden 变 0。
+     生成版本自行缓存“已完成数量”，引入响应接受时机和完成延迟变化。
+     可能是在做另一种缓冲架构，但不与 golden 接口逐周期等价。
+  c. i_valid=0 时 BJP prdt/rslv 被额外清零，与 golden 不同。
+     这是无效周期差异；应与 a/b 的有效事务问题分开评估。
+
+被验证脚本掩盖的交付问题：
+  - 生成目录自带 e203_defines.v 与官方有 18 个解码宏不一致。
+    示例：BJP_JUMP 生成=11，官方=4；BJP_BPRDT 15/5；
+    AGU_AMO 6/10；AGU_SIZE 8:7/7:6；CSR_ZIMMM 13:9/12:8。
+  - verify 脚本排除生成的 config.v/e203_defines.v，注入 canonical 版本，
+    并为 e203_exu_alu_system 做仿真模块别名。因此 PASS 不等于直接拿该目录就能集成。
+  - E203_HAS_CSR_NICE 分支把 nice_csr_valid/addr/wr/wdata 全绑零。
+    当前默认配置不启用这个分支；启用扩展后功能缺失，属于条件配置缺陷。
+
+原测试主要是全零、全一和 100 次随机控制，每组只保持 2 拍，独立随机异常标志
+又经常使请求进入异常分支；不是覆盖完整乘除、AMO 和 NICE 事务的约束随机验证。
+本次普通 ADD 和有效 BEQ 定向检查通过，不据此宣称完整整数/乘除功能已证明正确。
+
+实际历史 verifier 使用 e203_hbirdv2/e203_exu_alu/verification 的 golden；已对比 top、
+BJP、LSUAGU、MULDIV、NICE 和两份 header，去注释/模块 ref_ 前缀/空白后与
+用户指定 system/e203_cpu_top 的相应文件一致，以上关键发现不来自混用了另一份逻辑。
+
+证据：
+  generated e203_exu_alu_system.v:402-466,516,545-550
+  generated e203_defines.v:48-83
+  golden e203_exu_alu_bjp.v:105
+  golden e203_exu_nice.v:90-109
+  system_task/e203_exu_alu_hard/verify_test/e203_exu_alu_system_verify.py:37,201,291
+  e203.log / verilator/e203.log / e203_header_differences.json
+
+建议顺序
+========
+先统一编译/集成契约（canonical headers、top 名称、SD 配置宏、端口宽度）。
+随后修 AES 解密同步采样及轮密钥读时序、SD 状态机和 FIFO 消费握手、E203 提交元数据。
+测试必须使用独立隐藏 seed，AES 随机数拼满 128 位，输入避开 DUT 采样沿改变；
+对中断/复位扫所有轮次，对乘除/AMO/SD/NICE 生成完整合法事务并注入背压。
+分别检查 valid 时结果和已定义的控制输出；不要用无效数据波形相似替代功能正确性。
+必要时做顺序等价、综合检查和 CDC；现有两个输出序列相同不能覆盖这些性质。
+
+复现
+====
+python research/rtl_golden_audit_20261024/run_audit.py
+默认使用 Icarus；会生成 SV probe、编译日志及 results.json。仿真执行成功不代表差分为零，
+请查看日志中的 *_DIFF、*_errors、wrong_results 及定向打印结果。
+构建产物放 /tmp/rtl_golden_audit_*，保留用户 RTL 原样。
+使用 Verilator 可设 AUDIT_SIMULATOR=verilator，AUDIT_VERILATOR 指定 binary，
+并把所选 conda env 的 bin 加到 PATH 以供 C++ 编译器使用。

@@ -114,7 +114,7 @@ class RTLMemoryStore:
     """
 
     def __init__(self, root: str | Path) -> None:
-        self.root = Path(root)
+        self.root = Path(root).resolve()
 
     @classmethod
     def from_workspace(cls, workspace_root: str | Path) -> "RTLMemoryStore":
@@ -190,7 +190,17 @@ class RTLMemoryStore:
         header = header.model_copy(update={"path": normalize_memory_path(rel_path)})
         path = self.root / rel_path
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(_render_frontmatter(header) + body.rstrip() + "\n", encoding="utf-8")
+        # Legacy callers keep their latest Markdown view; preserve each content
+        # version separately without inventing an approved/reused memory event.
+        from .ledger import atomic, digest
+        previous = path.read_text() if path.exists() else None
+        rendered = _render_frontmatter(header) + body.rstrip() + "\n"
+        for content in [previous, rendered]:
+            if content is not None:
+                snapshot = {'memory_id': header.memory_id, 'content': content}
+                revision = self.root/'legacy_revisions'/(digest(snapshot)+'.json')
+                if not revision.exists(): atomic(revision, snapshot)
+        path.write_text(rendered, encoding="utf-8")
         self.rebuild_index()
         return path
 

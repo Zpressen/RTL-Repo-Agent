@@ -1,0 +1,6 @@
+# /etc/systemd/system/caddy.service.d/rtl-demo.conf
+[Service]
+EnvironmentFile=/etc/caddy/rtl-demo.env
+# Validation and the reload command must both receive this same environment.
+ExecReload=
+ExecReload=/usr/bin/caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile --force

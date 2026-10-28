@@ -1,0 +1,19 @@
+# Current Planner/Debug/LLMClient/KG path, without optional ML/provider extras.
+openai==1.109.1
+httpx==0.28.1
+pydantic==2.12.4
+PyYAML==6.0.3
+agentscope==1.0.19.post1
+neo4j==6.1.0
+tree-sitter==0.25.2
+networkx==3.6.1
+tiktoken==0.12.0
+tenacity==9.1.4
+vcdvcd==2.6.0
+python-dotenv==1.1.0
+
+# AgentScope imports this legacy MCP transport symbol.
+mcp==1.27.0
+json-repair==0.59.5
+numpy==2.4.4
+sqlalchemy[asyncio]==2.1.4

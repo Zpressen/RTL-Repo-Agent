@@ -1,0 +1,24 @@
+# Merge this design site into the existing complete Caddyfile; preserve main/www.
+design.deepvalleychip.cn {
+    basic_auth {
+        demo {$RTL_DEMO_PASSWORD_HASH}
+    }
+    handle /api/* {
+        request_body {
+            max_size 20000
+        }
+        reverse_proxy {$RTL_DEMO_UPSTREAM} {
+            header_up X-Demo-Gateway-Key {$RTL_DEMO_GATEWAY_KEY}
+            header_up -Authorization
+            flush_interval -1
+        }
+    }
+    handle {
+        root * /srv/deepvalleychip/design
+        file_server
+    }
+    header {
+        X-Content-Type-Options nosniff
+        Referrer-Policy same-origin
+    }
+}

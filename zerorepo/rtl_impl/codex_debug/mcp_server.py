@@ -41,6 +41,9 @@ def configure_session(session: CodexDebugSession) -> None:
 
 
 async def _call(method: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
+    if os.environ.get('ZEROREPO_TOOL_BRIDGE'):
+        from zerorepo.rtl_web.tool_bridge import bridge_call
+        return await asyncio.to_thread(bridge_call,method,args,kwargs)
     if _SESSION is None:
         return {"status": "server_uninitialized", "tool": method}
     try:
@@ -58,6 +61,18 @@ async def _call(method: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
 READ_ONLY = ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False)
 OBSERVATION = ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=False, openWorldHint=False)
 TRANSACTION = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False)
+
+@mcp.tool(description='Query only the frozen, authorized RTL experience snapshot. A hit is not adoption.', annotations=OBSERVATION, structured_output=True)
+async def query_rtl_memories(module_name: str | None = None, signals: list[str] | None = None, failure_type: str | None = None, limit: int = 5) -> dict[str, Any]:
+    return await _call('query_rtl_memories', module_name, signals, failure_type, limit)
+
+@mcp.tool(description='Read one authorized immutable experience revision and its limitations.', annotations=OBSERVATION, structured_output=True)
+async def read_rtl_memory(revision_id: str, max_chars: int = 8000) -> dict[str, Any]:
+    return await _call('read_rtl_memory', revision_id, max_chars)
+
+@mcp.tool(description='Declare apply/reject/not_applicable for a provided memory. This declaration is not proof of adoption or PASS.', annotations=TRANSACTION, structured_output=True)
+async def record_memory_application(revision_id: str, decision: Literal['apply','reject','not_applicable'], reason: str, target_files: list[str] | None = None, target_signals: list[str] | None = None) -> dict[str, Any]:
+    return await _call('record_memory_application',revision_id,decision,reason,target_files,target_signals)
 
 
 @mcp.tool(
@@ -184,6 +199,7 @@ async def get_debug_status() -> dict[str, Any]:
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the ZeroRepo RTL Debug MCP server over stdio.")
+    parser.add_argument('--bridge',action='store_true')
     parser.add_argument(
         "--run-descriptor",
         default=os.environ.get("ZEROREPO_CODEX_DEBUG_RUN_DESCRIPTOR", ""),
@@ -243,13 +259,18 @@ async def _run_stdio() -> None:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    if not args.run_descriptor:
+    if not args.run_descriptor and not args.bridge:
         print("Missing --run-descriptor or ZEROREPO_CODEX_DEBUG_RUN_DESCRIPTOR.", file=sys.stderr)
         return 2
     logging.basicConfig(level=logging.WARNING, stream=sys.stderr)
     descriptor_path = Path(args.run_descriptor).resolve()
     session: CodexDebugSession | None = None
     try:
+        if args.bridge:
+            if not os.environ.get('ZEROREPO_TOOL_BRIDGE'):
+                raise ValueError('Missing private tool bridge')
+            asyncio.run(_run_stdio())
+            return 0
         session = CodexDebugSession.from_descriptor_path(descriptor_path)
         configure_session(session)
         asyncio.run(_run_stdio())

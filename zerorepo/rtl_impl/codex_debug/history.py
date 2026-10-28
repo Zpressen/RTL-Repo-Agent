@@ -26,15 +26,19 @@ def tree_manifest(root):
     return result
 
 
-def debug_binding(*, top_module, spec_text, spec_paths, contract_json, verify_script):
+def debug_binding(*, top_module, spec_text, spec_paths, contract_json, verify_script, memory_snapshot_sha256='', memory_profile_sha256=''):
     verify_script = Path(verify_script)
     support = {p.relative_to(verify_script.parent).as_posix(): file_digest(p)
                for p in sorted(verify_script.parent.rglob("*"))
                if p.is_file() and not p.is_symlink() and p.suffix in {".py", ".v", ".sv", ".vh", ".mem", ".hex"}}
-    return {"schema_version": 1, "top_module": top_module,
+    result = {"schema_version": 1, "top_module": top_module,
             "spec": hashlib.sha256(spec_text.encode()).hexdigest(),
             "sources": {str(index) + ":" + Path(p).name: file_digest(p) for index, p in enumerate(spec_paths)},
             "contract": hashlib.sha256(contract_json.encode()).hexdigest(), "verifier": support}
+    if memory_snapshot_sha256:
+        result['memory_snapshot_sha256'] = memory_snapshot_sha256
+        result['memory_profile_sha256'] = memory_profile_sha256
+    return result
 
 
 class DebugHistory:

@@ -20,6 +20,7 @@ from .schemas import CodexDebugRunDescriptor
 
 
 TOOL_NAMES = [
+    'query_rtl_memories', 'read_rtl_memory', 'record_memory_application',
     "read_module_semantics",
     "query_rtl_kg",
     "trace_signal_cause",
@@ -32,6 +33,12 @@ TOOL_NAMES = [
 
 
 DEFAULT_PROMPT = """
+Before editing, query_rtl_memories for relevant prior experience. Read a relevant
+revision, check its applicability against this task's specification, then use
+record_memory_application to explain apply/reject/not_applicable and actual RTL
+targets. Empty memory is valid; do not force adoption. Experience cannot change
+the spec, oracle or verification rules. After changes, still evaluate and
+accept/rollback normally. A remembered rule or accepted candidate is not PASS.
 Debug the RTL implementation in this task and leave the accepted baseline passing.
 
 Scope and workflow:
@@ -122,6 +129,11 @@ class CodexDebugRunner:
             )
             self._write_descriptor(descriptor_path, episode_descriptor)
             last_message_path = descriptor.private_root / f"codex_last_message_episode_{episode:03d}.txt"
+            isolated_web_job=os.environ.get('ZEROREPO_WEB_JOB')=='1'
+            if isolated_web_job:
+                model_output=descriptor.private_root/'model_output'
+                model_output.mkdir(exist_ok=True)
+                last_message_path=model_output/last_message_path.name
             if not session_id:
                 command = self.build_command(
                     episode_descriptor, descriptor_path, last_message_path, prompt
@@ -135,13 +147,24 @@ class CodexDebugRunner:
                     CONTINUE_PROMPT,
                 )
             tee_path = descriptor.private_root / f"codex_trace_episode_{episode:03d}.jsonl"
-            exit_code, episode_timed_out, stdout, stderr = self._run_process(
-                command,
-                cwd=descriptor.task_root,
-                tee_path=tee_path,
-                process_env=process_env,
-                timeout=max(1.0, remaining),
-            )
+            bridge=None
+            try:
+                episode_env=process_env
+                if isolated_web_job:
+                    from zerorepo.rtl_web.tool_bridge import ToolBridge
+                    from zerorepo.rtl_web.sandbox import model_command
+                    self._write_descriptor(descriptor_path,episode_descriptor)
+                    bridge=ToolBridge(descriptor_path,episode_descriptor.run_id)
+                    command,episode_env=model_command(episode_descriptor,command,process_env,bridge)
+                exit_code, episode_timed_out, stdout, stderr = self._run_process(
+                    command,
+                    cwd=descriptor.task_root,
+                    tee_path=tee_path,
+                    process_env=episode_env,
+                    timeout=max(1.0, remaining),
+                )
+            finally:
+                if bridge:bridge.close()
             all_stdout.append(stdout)
             all_stderr.append(stderr)
             timed_out = timed_out or episode_timed_out
@@ -370,6 +393,8 @@ class CodexDebugRunner:
             "--run-descriptor",
             str(descriptor_path),
         ]
+        if os.environ.get('ZEROREPO_WEB_JOB')=='1':
+            server_args=['-m','zerorepo.rtl_impl.codex_debug.mcp_server','--bridge']
         package_root = Path(__file__).resolve().parents[3]
         values = [
             f"mcp_servers.zerorepo_rtl_debug.command={json.dumps(sys.executable)}",
@@ -386,9 +411,8 @@ class CodexDebugRunner:
             arguments.extend(["--config", value])
         return arguments
 
-    def _prepare_private_codex_home(self, private_root: Path) -> Path:
-        """Copy only config layers needed by the selected profile into this run."""
-
+    def profile_layers(self):
+        """Read exactly the layers used by the runner, without creating state."""
         if not self.profile or Path(self.profile).name != self.profile:
             raise ValueError("Codex profile must be a plain profile name")
 
@@ -406,6 +430,13 @@ class CodexDebugRunner:
         profile_config = self._read_toml(source_profile)
         self._require_provider_environment(base_config, profile_config)
 
+        return source_home, source_profile, base_config, profile_config
+
+    def _prepare_private_codex_home(self, private_root: Path) -> Path:
+        """Copy only config layers needed by the selected profile into this run."""
+
+        source_home, source_profile, base_config, profile_config = self.profile_layers()
+
         target_home = (private_root / "codex_home").resolve()
         if target_home == source_home or source_home.is_relative_to(target_home):
             raise ValueError("Private CODEX_HOME overlaps the source CODEX_HOME")
@@ -414,6 +445,13 @@ class CodexDebugRunner:
         # exec resume does not accept --profile. Its default config must still
         # resolve to the selected profile/provider, without credentials in argv.
         effective = self._merge_config(base_config, profile_config)
+        if os.environ.get('ZEROREPO_WEB_JOB')=='1':
+            # Do not expose unrelated MCP credentials/providers to the model view.
+            effective.pop('mcp_servers',None)
+            provider=effective.get('model_provider','openai')
+            effective['model_providers']={provider:effective.get('model_providers',{}).get(provider,{})}
+            if 'profiles' in effective:
+                effective['profiles']={self.profile:effective['profiles'].get(self.profile,{})}
         target_base = target_home / "config.toml"
         binding_path = target_home / "provider_binding.json"
         binding = self._provider_binding(effective)

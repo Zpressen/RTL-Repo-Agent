@@ -1,0 +1,1 @@
+{"mount":"/var/lib/rtl-demo/jobs","image":"/var/lib/rtl-demo-jobs.ext4","capacity_mib":8192,"single_job_bytes":1073741824,"min_free_bytes":5368709120}

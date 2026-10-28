@@ -51,6 +51,19 @@ class RTLMemoryDistiller:
         self.store = RTLMemoryStore.from_workspace(self.workspace_root)
         self.logger = logger
 
+    def distill_codex_result(self, *, module: str, result: dict, binding: dict) -> Path:
+        """Preserve an objective draft, not a fabricated legacy patch entry."""
+        from .ledger import atomic, digest
+        draft = dict(schema_version='rtl-memory-codex-draft-v1', status='draft', module=module,
+                     candidate_id=result['candidate_id'], reason=result.get('reason',''),
+                     changed_files=result.get('diff',{}), lint_pass=result.get('lint_pass'),
+                     simulation_completed=bool(result.get('sim_completed')),
+                     verdict='pass' if result.get('sim_completed') and result.get('is_pass') else 'fail' if result.get('sim_completed') or result.get('lint_pass') is False else 'unverified',
+                     evidence_binding=binding, limitations=['待维护者核对适用条件与来源，不能自动公开或认定收益'])
+        path=self.workspace_root/'memory_drafts'/(digest(draft)+'.json')
+        if not path.exists(): atomic(path,draft)
+        return path
+
     def distill_patch_entry(
         self,
         *,
@@ -95,7 +108,9 @@ class RTLMemoryDistiller:
             alignment=alignment,
             outcome=outcome,
             confidence=0.9 if effect == "passed" else 0.72 if effect == "improved" else 0.68,
-            verified_by=["lint", "module_sim", "trace"],
+            verified_by=(["lint"] if evidence.get('lint_pass') is True else [])
+                        + (["module_sim"] if evidence.get('module_sim_pass') is True else [])
+                        + (["trace"] if trace or divergence else []),
             source_artifacts=[
                 _artifact_rel(Path(debug_workdir) / "trace_report.json", self.workspace_root),
                 _artifact_rel(Path(repo_react_root) / "patch_journal.jsonl", self.workspace_root),

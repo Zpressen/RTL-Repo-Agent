@@ -245,3 +245,14 @@ def test_each_system_invocation_grants_30_more_with_cumulative_history(tmp_path,
     assert status['budgets']['remaining_validation_trials']==0
     assert len(list((private/'launches').glob('*.json')))==3
     assert (private/'codex_home/sessions/rollout-same-session.jsonl').read_text().count('episode')==3
+
+
+def test_memory_snapshot_binding_changes_archive_previous_session(run_descriptor,tmp_path):
+    history=create_saved_history(run_descriptor)
+    generated=tmp_path/'generated'
+    shutil.copytree(run_descriptor.private_root/'accepted_baseline/merged',generated)
+    path=run_descriptor.private_root/'run_record.json'
+    value=json.loads(path.read_text());value['binding']['memory_snapshot_sha256']='1'*64
+    path.write_text(json.dumps(value))
+    assert history.select({'source':'unchanged','memory_snapshot_sha256':'2'*64},generated) is None
+    assert next((history.workdir/'history').iterdir()).is_dir()

@@ -73,8 +73,7 @@ class VerilogTreeSitter:
             return cls._parser
 
         here = Path(__file__).resolve().parent
-        build_dir = here / "build"
-        build_dir.mkdir(parents=True, exist_ok=True)
+        build_dir = Path(os.environ.get('RTL_TS_CACHE_DIR', str(here / 'build')))
 
         so_path = Path(os.environ.get("RTL_TS_LANG_SO", str(build_dir / "rtl_langs.so")))
         grammar_dir = Path(
@@ -83,6 +82,7 @@ class VerilogTreeSitter:
         lang_name = os.environ.get("RTL_TS_LANG_NAME", "verilog")
 
         if not so_path.exists():
+            so_path.parent.mkdir(parents=True,exist_ok=True)
             if not grammar_dir.exists():
                 raise RuntimeError(
                     f"Missing grammar repo at {grammar_dir}\n"
@@ -90,7 +90,23 @@ class VerilogTreeSitter:
                     f"  git clone https://github.com/tree-sitter/tree-sitter-verilog.git {grammar_dir}\n"
                     f"Or set RTL_TS_GRAMMAR_DIR / RTL_TS_LANG_SO."
                 )
-            Language.build_library(str(so_path), [str(grammar_dir)])
+            if hasattr(Language,'build_library'):
+                Language.build_library(str(so_path), [str(grammar_dir)])
+            else:
+                # New bindings no longer ship a compiler helper. Build the
+                # pinned grammar with the target compiler, never copy host .so.
+                import tempfile
+                sources=[grammar_dir/'src/parser.c']
+                scanner=grammar_dir/'src/scanner.c'
+                if scanner.is_file():sources.append(scanner)
+                fd,tmp=tempfile.mkstemp(prefix='.rtl-lang-',suffix='.so',dir=so_path.parent)
+                os.close(fd)
+                try:
+                    subprocess.run([os.environ.get('CC','cc'),'-shared','-fPIC','-O2',
+                                    '-I',str(grammar_dir/'src'),*map(str,sources),'-o',tmp],check=True)
+                    os.replace(tmp,so_path)
+                finally:
+                    if os.path.exists(tmp):os.unlink(tmp)
 
         try:
             language = Language(str(so_path), lang_name)

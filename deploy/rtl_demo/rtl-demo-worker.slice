@@ -1,0 +1,9 @@
+[Unit]
+Description=RTL demo execution resource boundary
+[Slice]
+MemoryAccounting=true
+MemoryHigh=640M
+MemoryMax=768M
+CPUAccounting=true
+CPUQuota=100%
+TasksMax=128

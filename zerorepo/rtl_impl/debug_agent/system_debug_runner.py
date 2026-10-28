@@ -92,6 +92,9 @@ class SystemSimReviewer:
                 from __future__ import annotations
 
                 import importlib.util
+                import hashlib
+                import json
+                import os
                 import pathlib
                 import re
                 import shutil
@@ -197,6 +200,35 @@ class SystemSimReviewer:
                             raise RuntimeError(f"Could not import verifier: {verify_script}")
                         module = importlib.util.module_from_spec(spec)
                         spec.loader.exec_module(module)
+                        # Deployment-only adaptation: paths and build concurrency.
+                        # Preserve the original verifier/TB/stimulus/comparison bytes.
+                        deployed_root = os.environ.get("ZEROREPO_DEPLOY_ORACLE_ROOT")
+                        if deployed_root:
+                            old_root = str(getattr(module, "REALBENCH_ROOT", ""))
+                            old_flags = list(getattr(module, "VERILATOR_FLAGS", []))
+                            changed = {}
+                            for name, value in list(vars(module).items()):
+                                if old_root and isinstance(value, str) and (value == old_root or value.startswith(old_root + os.sep)):
+                                    new_value = deployed_root + value[len(old_root):]
+                                    setattr(module, name, new_value)
+                                    changed[name] = {"before": value, "after": new_value}
+                            tool_bin = os.environ.get("ZEROREPO_DEPLOY_TOOLCHAIN_BIN")
+                            if tool_bin and hasattr(module, "CONDA_REALBENCH_BIN"):
+                                module.CONDA_REALBENCH_BIN = tool_bin
+                            flags = list(old_flags)
+                            jobs = int(os.environ.get("ZEROREPO_DEPLOY_COMPILE_JOBS", "1"))
+                            if jobs != 1:
+                                raise ValueError("Deployment compilation is limited to one job")
+                            for i, flag in enumerate(flags[:-1]):
+                                if flag == "-j":
+                                    flags[i + 1] = str(jobs)
+                            module.VERILATOR_FLAGS = flags
+                            (output_dir / "deployment_adaptation.json").write_text(json.dumps({
+                                "schema_version": "rtl-verifier-adaptation-v1",
+                                "original_script_sha256": hashlib.sha256(verify_script.read_bytes()).hexdigest(),
+                                "paths": changed, "toolchain_bin": tool_bin,
+                                "original_flags": old_flags, "effective_flags": flags,
+                            }, sort_keys=True), encoding="utf-8")
                         install_system_suffix_testbench_compat(
                             module,
                             generated_dir,
@@ -780,7 +812,9 @@ class SystemDebugRunner:
         private_root = workdir / "codex_private"
         raw_spec_paths = [str(p) for p in (getattr(task, "spec_md_files", []) or []) if Path(p).is_file()]
         binding = debug_binding(top_module=runtime_top_module, spec_text=spec_text, spec_paths=raw_spec_paths,
-                                contract_json=contract_json, verify_script=verify_script)
+                                contract_json=contract_json, verify_script=verify_script,
+                                memory_snapshot_sha256=self.config.memory_snapshot_sha256,
+                                memory_profile_sha256=self.config.memory_profile_sha256)
         history = DebugHistory(workdir, self.logger)
         restored = history.select(binding, generated_dir)
         spec_root.mkdir(parents=True, exist_ok=True)
@@ -825,6 +859,10 @@ class SystemDebugRunner:
         )
         descriptor = CodexDebugRunDescriptor(
             run_id=f"{runtime_top_module}-{uuid.uuid4().hex[:12]}",
+            outer_run_id=self.config.outer_run_id,
+            case_id=self.config.case_id,
+            memory_snapshot_path=Path(self.config.memory_snapshot_path) if self.config.memory_snapshot_path else None,
+            memory_snapshot_sha256=self.config.memory_snapshot_sha256,
             task_root=task_root,
             spec_root=spec_root,
             merged_root=merged_root,

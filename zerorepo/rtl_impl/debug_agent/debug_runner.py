@@ -33,6 +33,11 @@ class RtlDebugConfig:
     codex_model: str = ""
     codex_timeout: int = 10800
     codex_multi_agent: bool = False
+    memory_snapshot_path: str = ''
+    memory_snapshot_sha256: str = ''
+    outer_run_id: str = ''
+    case_id: str = ''
+    memory_profile_sha256: str = ''
     openai_config: OpenAIConfig | None = None
 
     @classmethod
@@ -84,6 +89,11 @@ class RtlDebugConfig:
                 )
             ),
             openai_config=openai_config or load_openai_config(),
+            memory_snapshot_path=str(data.get('memory_snapshot_path','')),
+            memory_snapshot_sha256=str(data.get('memory_snapshot_sha256','')),
+            outer_run_id=str(data.get('outer_run_id','')),
+            case_id=str(data.get('case_id','')),
+            memory_profile_sha256=str(data.get('memory_profile_sha256','')),
         )
 
     @classmethod

@@ -1,0 +1,25 @@
+[Unit]
+Description=RTL demo private knowledge graph
+After=network-online.target
+[Service]
+Type=simple
+User=rtl-demo-kg
+Group=rtl-demo-kg
+Environment=JAVA_HOME=/opt/rtl-agent/toolchain/jre
+Environment=NEO4J_CONF=/etc/rtl-demo/neo4j
+ExecStart=/opt/rtl-agent/toolchain/neo4j/bin/neo4j console
+Restart=on-failure
+RestartSec=5
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/rtl-demo-kg
+MemoryAccounting=true
+MemoryHigh=448M
+MemoryMax=512M
+TasksMax=128
+[Install]
+WantedBy=multi-user.target

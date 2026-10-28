@@ -7,9 +7,6 @@ import re
 from dataclasses import replace
 from typing import Any
 
-from agentscope.memory import InMemoryMemory
-from agentscope.message import Msg
-
 from .schemas import RTLMemoryHeader, SelectedMemory
 from .store import RTLMemoryStore
 
@@ -88,6 +85,8 @@ class RTLMemorySelector:
         cfg = self.model_cfg
         if cfg is None or not getattr(cfg, "api_key", ""):
             return []
+        from agentscope.memory import InMemoryMemory
+        from agentscope.message import Msg
         try:
             from zerorepo.rtl_impl.debug_agent.agents import SafeReActAgent, clear_memory_safely, close_model_safely
             from zerorepo.rtl_impl.debug_agent.model import make_formatter, make_openai_model

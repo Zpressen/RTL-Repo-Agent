@@ -1,0 +1,30 @@
+[Unit]
+Description=Deep Valley Chip RTL demo api
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rtl-demo
+Group=rtl-demo
+WorkingDirectory=/opt/rtl-agent/current
+EnvironmentFile=/etc/rtl-demo/environment
+ExecStart=/opt/rtl-agent/current/.venv-web/bin/python -m zerorepo.rtl_web.cli serve --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=3
+KillMode=control-group
+TimeoutStopSec=15
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/rtl-demo
+MemoryAccounting=true
+MemoryMax=256M
+TasksMax=128
+CPUAccounting=true
+CPUQuota=100%
+
+[Install]
+WantedBy=multi-user.target

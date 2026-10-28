@@ -1,0 +1,27 @@
+{
+  "aes_cipher_top": {
+    "returncode": 0,
+    "stdout": "NORMAL samples=1900 data_errors=0 done_errors=0\nDONE_DIFF phase=1 t=20160000 ref=1 dut=0\nRESET_AT_COMPLETION ref_done=1 dut_done=0\n/home/mokita/RPG-ZeroRepo/research/rtl_golden_audit_20261024/aes_cipher_top.sv:44: $finish called at 20160000 (1ps)\n",
+    "stderr": ""
+  },
+  "aes_inv_cipher_top": {
+    "returncode": 0,
+    "stdout": "DONE_DIFF phase=0 t=310000 ref=1 dut=0\nDATA_DIFF phase=0 t=310000 ref=f0e929770ae5675c8c90cfc6d1814981 dut=7b8df3dda05e288bd903c71c8a09a9db\nDONE_DIFF phase=0 t=320000 ref=0 dut=1\nDONE_DIFF phase=0 t=640000 ref=1 dut=0\nDATA_DIFF phase=0 t=640000 ref=0f670fcc320229351721acb018bed79b dut=846944d8c921f1163087312a625b9dc6\nDONE_DIFF phase=0 t=650000 ref=0 dut=1\nDONE_DIFF phase=0 t=970000 ref=1 dut=0\nDATA_DIFF phase=0 t=970000 ref=7c681755f61fe31797d97a3171db52dd dut=fc15d492ffacb68a68940b85a84e8a42\nDONE_DIFF phase=0 t=980000 ref=0 dut=1\nDONE_DIFF phase=0 t=1300000 ref=1 dut=0\nDATA_DIFF phase=0 t=1300000 ref=fb257c57c05487ebfd89c30f3e2b6e3d dut=488a31fe852f412a294e053369262340\nDATA_DIFF phase=0 t=1630000 ref=a6fd06ba7f04f6c182822629372284eb dut=1c31ab6413aecd6f984c9c4f54ea95c1\nDATA_DIFF phase=0 t=1960000 ref=af0a4fc6a3020814c69815eff314c754 dut=3e34e0947e1a206cec8612d74b72a817\nDATA_DIFF phase=0 t=2290000 ref=5bc8fedfc78657133f51bc9463af7997 dut=0f2b48146d6f9846f80aae041d1bbf5e\nNORMAL samples=3100 data_errors=100 done_errors=200\nNORMAL_COMPLETIONS count=100 wrong_results=100\nDONE_DIFF phase=1 t=33150000 ref=1 dut=0\nDATA_DIFF phase=1 t=33150000 ref=31acc0c8e39b3f05d41f6e22225328ed dut=a326ff38245930ac67139075e8fdd29b\nDONE_DIFF phase=1 t=33160000 ref=0 dut=1\nDONE_DIFF phase=1 t=33320000 ref=1 dut=0\nDATA_DIFF phase=1 t=33320000 ref=5913c4e380f9a5e8072c970eca719fc4 dut=7fd6714eb312e8328e1822ba796b7a54\nDONE_DIFF phase=1 t=33330000 ref=0 dut=1\nDONE_DIFF phase=1 t=33490000 ref=1 dut=0\nDATA_DIFF phase=1 t=33490000 ref=6854b8a0ce3a696dd14801d7bfc3545a dut=8e6c82d7472d7044d2a0fb3b21743e99\nDONE_DIFF phase=1 t=33500000 ref=0 dut=1\nDONE_DIFF phase=1 t=33660000 ref=1 dut=0\nDATA_DIFF phase=1 t=33660000 ref=82652ae5e88d29c186f2feeee3768570 dut=b9095732e21f015596353020277059ca\nDATA_DIFF phase=1 t=33830000 ref=ccb5f5436982c7ff22c3420f7b69f69c dut=9ee358cfc5690262cbcec83115bde037\nDATA_DIFF phase=1 t=34000000 ref=d40454e421cf07d267df1ca9216af863 dut=f83cc03269cc0216f8a87a12f073ade2\nDATA_DIFF phase=1 t=34170000 ref=55d8f92247f041ab2563cfcc2a035869 dut=493482ce9cd0091daa9e1a1d906ce57e\nREUSE samples=340 data_errors=20 done_errors=40\nDONE_DIFF phase=2 t=36730000 ref=1 dut=0\nDATA_DIFF phase=2 t=36730000 ref=bbee71205e5686ab63dd71eccaa53693 dut=a7398e377edb969d5f48477341527952\nDONE_DIFF phase=2 t=36740000 ref=0 dut=1\nDONE_DIFF phase=2 t=37110000 ref=1 dut=0\nDATA_DIFF phase=2 t=37110000 ref=b1693014478485610fd62f4677f0f75c dut=ce8c3cc51b82cd4f75708b00aa3740ed\nDONE_DIFF phase=2 t=37120000 ref=0 dut=1\nDONE_DIFF phase=2 t=37500000 ref=1 dut=0\nDATA_DIFF phase=2 t=37500000 ref=a7bb4deadce818587bcebafb17c7f729 dut=e640d8ecd76c3c838689ceeebecb0404\nDONE_DIFF phase=2 t=37510000 ref=0 dut=1\nDONE_DIFF phase=2 t=37900000 ref=1 dut=0\nDATA_DIFF phase=2 t=37900000 ref=cce16390231e7b81563dbaa3932df7f3 dut=d710fca49fdf0064349567eba2b5cfce\nDATA_DIFF phase=2 t=38310000 ref=1188e5a0fd8e9300f48209b91383b1bf dut=0678391abefcb32841b6621424691c05\nDATA_DIFF phase=2 t=38730000 ref=fac27c28c0994d94a6d2b3aa06fd44ba dut=442633c76f0b9652aa7dd8485f3d12bc\nDATA_DIFF phase=2 t=39160000 ref=3a2bc00df3ae5b9095766a10f1bf8652 dut=8711c509b41e0472b6a8a946ebaf44df\nRESTART samples=405 data_errors=10 done_errors=21\nDONE_DIFF phase=3 t=40710000 ref=0 dut=1\nOFFEDGE samples=20 data_errors=0 done_errors=1\n/home/mokita/RPG-ZeroRepo/research/rtl_golden_audit_20261024/aes_inv_cipher_top.sv:65: $finish called at 40790000 (1ps)\n",
+    "stderr": ""
+  },
+  "sdc": {
+    "returncode": 0,
+    "stdout": "READ addr=1c ref=00000002 dut=00000002 ref_ack=0 dut_ack=0\nREAD addr=20 ref=00000200 dut=00000200 ref_ack=0 dut_ack=0\nREAD addr=24 ref=0000000f dut=0000000f ref_ack=0 dut_ack=0\nREAD addr=48 ref=00000000 dut=00000000 ref_ack=0 dut_ack=0\nREAD addr=50 ref=00000808 dut=00000808 ref_ack=0 dut_ack=0\nREAD addr=38 ref=00005678 dut=00005678 ref_ack=0 dut_ack=0\nBD_ACK ref=0 dut=0\nBD_ACK ref=0 dut=0\nBD_ACK ref=0 dut=0\nBD_ACK ref=1 dut=1\nBD_ACK ref=0 dut=0\n/home/mokita/RPG-ZeroRepo/research/rtl_golden_audit_20261024/sdc.sv:39: $finish called at 610000 (1ps)\n",
+    "stderr": ""
+  },
+  "e203": {
+    "returncode": 0,
+    "stdout": "ADD ref=0000000c dut=0000000c ref_valid=1 dut_valid=1\nIDLE_BRANCH ref_prdt=0 dut_prdt=0 ref_rslv=0 dut_rslv=0\nBJP_INVALID ref_prdt=1 dut_prdt=0 ref_rslv=1 dut_rslv=0\nBJP_VALID ref_prdt=1 dut_prdt=1 ref_rslv=1 dut_rslv=1\nFENCEI ref_cmt=1 dut_cmt=1 ref_bjp=0 dut_bjp=1 ref_fencei=1 dut_fencei=1\nNICE_BACKPRESSURE ref_ready=0 dut_ready=1 ref_wbvalid=1 dut_wbvalid=0\nNICE_RESPONSE_DROPPED ref_wbvalid=0 dut_wbvalid=1\n/home/mokita/RPG-ZeroRepo/research/rtl_golden_audit_20261024/e203.sv:210: $finish called at 101000 (1ps)\n",
+    "stderr": ""
+  },
+  "sdc_serial": {
+    "returncode": 0,
+    "stdout": "POST_HW_RESET state=6 read_wait_expected=4 req=1 ack=0\nTX_PROGRESS state=1 nibbles=96 acquisitions=0\n/home/mokita/RPG-ZeroRepo/research/rtl_golden_audit_20261024/sdc_serial.sv:26: $finish called at 1862000 (1ps)\n",
+    "stderr": ""
+  }
+}

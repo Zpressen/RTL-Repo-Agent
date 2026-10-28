@@ -1,0 +1,107 @@
+{
+  "schema_version": "rtl-demo-toolchain-v1",
+  "target": {
+    "os": "alibaba-cloud-linux-3",
+    "arch": "x86_64",
+    "glibc": "2.32",
+    "systemd": "239"
+  },
+  "python": {
+    "version": "3.13.11",
+    "resolver": "uv 0.10.8 bundled verified download manifest"
+  },
+  "artifacts": [
+    {
+      "name": "uv",
+      "version": "0.10.8",
+      "url": "https://github.com/astral-sh/uv/releases/download/0.10.8/uv-x86_64-unknown-linux-gnu.tar.gz",
+      "sha256": "f0c566b55683395a62fefb9261a060fa09824914b5682c3b9629fa154762ae2f",
+      "size_bytes": 22612378
+    },
+    {
+      "name": "python",
+      "version": "3.13.11",
+      "url": "https://releases.astral.sh/github/python-build-standalone/releases/download/20260127/cpython-3.13.11%2B20260127-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+      "sha256": "ec6aef3fec3183593445c2a57378d7f140e3a1fe637e7fec1dbfba10c5076549",
+      "size_bytes": 34963257
+    },
+    {
+      "name": "verilator",
+      "version": "5.044",
+      "url": "https://codeload.github.com/verilator/verilator/tar.gz/refs/tags/v5.044",
+      "sha256": "ded2a4a96e3b836ddc9fd5d01127999d981adee4d19133ff819b7129897d801a",
+      "size_bytes": 5474674
+    },
+    {
+      "name": "neo4j",
+      "version": "5.26.32",
+      "url": "https://dist.neo4j.org/neo4j-community-5.26.32-unix.tar.gz",
+      "sha256": "d279ae6a9b38034280681a558b0cd222dce89f87cc3d9867f1f7bd28ef5ebc30",
+      "size_bytes": 152610441
+    },
+    {
+      "name": "jre",
+      "version": "21.0.12_101.0.LTS",
+      "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jre_x64_linux_hotspot_21.0.12.1_1.tar.gz",
+      "sha256": "2413149700df0f7d440500a84a8f764c535f21e5a5e87d38328b64eec2c5b500",
+      "size_bytes": 52059408
+    },
+    {
+      "name": "codex",
+      "version": "0.154.0",
+      "url": "https://github.com/openai/codex/releases/download/rust-v0.154.0/codex-x86_64-unknown-linux-musl.tar.gz",
+      "sha256": "d7e18b2597ae8f242f5f31ee9e90deef48dbc9edd634d9868fb6435d08c07f02",
+      "size_bytes": 98981886
+    }
+  ],
+  "system_packages": {
+    "gcc": "10.2.1-3.9.al8",
+    "make": "4.2.1-11.0.1.al8",
+    "bubblewrap": "0.4.0-2.2.al8",
+    "gcc-c++": "10.2.1-3.9.al8",
+    "git": "2.43.7-1.0.1.al8",
+    "autoconf": "2.69-29.0.1.1.al8.1",
+    "bison": "3.7.4-5.al8",
+    "flex": "2.6.4-9.al8",
+    "perl": "4:5.26.3-423.0.1.al8",
+    "perl-Data-Dumper": "2.167-399.2.al8",
+    "zlib-devel": "1.2.11-20.9.al8.alnx"
+  },
+  "grammar_files": [
+    {
+      "path": "zerorepo/rtl_impl/rtl_kg/third_party/tree-sitter-verilog/src/grammar.json",
+      "sha256": "d6651a19d973281d90981eb8f3fa6b750070e8c671be390c4861fcdccced1227"
+    },
+    {
+      "path": "zerorepo/rtl_impl/rtl_kg/third_party/tree-sitter-verilog/src/node-types.json",
+      "sha256": "f5acae243f60946abf4dffc8674c66ce5608ef3bef530c7e0d5053399424216a"
+    },
+    {
+      "path": "zerorepo/rtl_impl/rtl_kg/third_party/tree-sitter-verilog/src/parser.c",
+      "sha256": "fe014cd25643bea9e380cc358c126359574387f420d9a6e71c1699fc83bfb822"
+    },
+    {
+      "path": "zerorepo/rtl_impl/rtl_kg/third_party/tree-sitter-verilog/src/tree_sitter/alloc.h",
+      "sha256": "b29c1c9fb7cc82f58c84b376df1297d6e2737a1d655fd356db0859e3c29c2fea"
+    },
+    {
+      "path": "zerorepo/rtl_impl/rtl_kg/third_party/tree-sitter-verilog/src/tree_sitter/array.h",
+      "sha256": "4ff743903dc46f5db6aa54f31c6b4d160a8a9779e5b2ab1ee59ae7ebcd850ea1"
+    },
+    {
+      "path": "zerorepo/rtl_impl/rtl_kg/third_party/tree-sitter-verilog/src/tree_sitter/parser.h",
+      "sha256": "a1f6ef161fbaf48a0e10fca90ef5290a062462b307b3898aa562993853b9f80a"
+    }
+  ],
+  "recipes": {
+    "verilator": [
+      "autoconf",
+      "./configure --prefix=/opt/rtl-agent/toolchain",
+      "make -j1",
+      "make install"
+    ],
+    "parser": [
+      "cc -shared -fPIC -O2 -I src src/parser.c -o rtl_langs.so"
+    ]
+  }
+}

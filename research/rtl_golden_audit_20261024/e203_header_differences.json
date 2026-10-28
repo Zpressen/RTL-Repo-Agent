@@ -1,0 +1,92 @@
+[
+  {
+    "macro": "E203_DECINFO_AGU_AMO",
+    "generated": "6",
+    "official": "10"
+  },
+  {
+    "macro": "E203_DECINFO_AGU_EXCL",
+    "generated": "10",
+    "official": "9"
+  },
+  {
+    "macro": "E203_DECINFO_AGU_SIZE",
+    "generated": "8:7",
+    "official": "7:6"
+  },
+  {
+    "macro": "E203_DECINFO_AGU_USIGN",
+    "generated": "9",
+    "official": "8"
+  },
+  {
+    "macro": "E203_DECINFO_BJP_BEQ",
+    "generated": "4",
+    "official": "6"
+  },
+  {
+    "macro": "E203_DECINFO_BJP_BGT",
+    "generated": "7",
+    "official": "9"
+  },
+  {
+    "macro": "E203_DECINFO_BJP_BGTU",
+    "generated": "9",
+    "official": "11"
+  },
+  {
+    "macro": "E203_DECINFO_BJP_BLT",
+    "generated": "6",
+    "official": "8"
+  },
+  {
+    "macro": "E203_DECINFO_BJP_BLTU",
+    "generated": "8",
+    "official": "10"
+  },
+  {
+    "macro": "E203_DECINFO_BJP_BNE",
+    "generated": "5",
+    "official": "7"
+  },
+  {
+    "macro": "E203_DECINFO_BJP_BPRDT",
+    "generated": "15",
+    "official": "5"
+  },
+  {
+    "macro": "E203_DECINFO_BJP_BXX",
+    "generated": "10",
+    "official": "12"
+  },
+  {
+    "macro": "E203_DECINFO_BJP_DRET",
+    "generated": "13",
+    "official": "14"
+  },
+  {
+    "macro": "E203_DECINFO_BJP_FENCEI",
+    "generated": "14",
+    "official": "16"
+  },
+  {
+    "macro": "E203_DECINFO_BJP_JUMP",
+    "generated": "11",
+    "official": "4"
+  },
+  {
+    "macro": "E203_DECINFO_BJP_MRET",
+    "generated": "12",
+    "official": "13"
+  },
+  {
+    "macro": "E203_DECINFO_CSR_RS1IS0",
+    "generated": "8",
+    "official": "13"
+  },
+  {
+    "macro": "E203_DECINFO_CSR_ZIMMM",
+    "generated": "13:9",
+    "official": "12:8"
+  }
+]

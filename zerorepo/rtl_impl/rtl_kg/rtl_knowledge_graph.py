@@ -48,6 +48,11 @@ def _sha1_file(p: Path) -> str:
 def compute_repo_uid(repo_root: Path) -> str:
     """Prefer git commit hash if available; fallback to absolute path hash."""
     repo_root = repo_root.resolve()
+    partition=os.environ.get('ZEROREPO_RTL_KG_PARTITION')
+    if partition:
+        if not re.fullmatch(r'[A-Za-z0-9_-]{1,180}',partition):
+            raise ValueError('Invalid trusted KG partition')
+        return f'{partition}@{hashlib.sha1(str(repo_root).encode()).hexdigest()[:12]}'
     git_dir = repo_root / ".git"
     if git_dir.exists():
         try:

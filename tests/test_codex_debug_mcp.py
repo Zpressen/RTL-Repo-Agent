@@ -117,12 +117,13 @@ def debug_session(
     session.close()
 
 
-def test_mcp_exposes_only_the_eight_codex_debug_tools() -> None:
+def test_mcp_exposes_only_the_task_scoped_codex_debug_tools() -> None:
     async def collect() -> list[Any]:
         return await mcp.list_tools()
 
     tools = asyncio.run(collect())
     assert [tool.name for tool in tools] == [
+        "query_rtl_memories", "read_rtl_memory", "record_memory_application",
         "read_module_semantics",
         "query_rtl_kg",
         "trace_signal_cause",
@@ -761,6 +762,7 @@ def test_stdio_server_lists_tools(run_descriptor: CodexDebugRunDescriptor, tmp_p
 
     names = asyncio.run(exercise())
     assert names == [
+        "query_rtl_memories", "read_rtl_memory", "record_memory_application",
         "read_module_semantics",
         "query_rtl_kg",
         "trace_signal_cause",

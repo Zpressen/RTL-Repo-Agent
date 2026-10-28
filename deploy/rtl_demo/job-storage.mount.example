@@ -1,0 +1,10 @@
+[Unit]
+Description=Bounded RTL job filesystem
+Before=rtl-demo-worker.service
+[Mount]
+What=/var/lib/rtl-demo-jobs.ext4
+Where=/var/lib/rtl-demo/jobs
+Type=ext4
+Options=loop,nosuid,nodev
+[Install]
+WantedBy=multi-user.target

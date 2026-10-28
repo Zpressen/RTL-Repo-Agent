@@ -1,0 +1,49 @@
+schema_version: rtl-demo-package-input-v1
+target_origin: https://agent.deepvalleychip.cn
+runtime_config: ../../configs/rtl_demo.local.yaml
+dist: ../../web/rtl-demo/dist
+oracle_root: /path/to/RealBench
+target_platform: {os: linux, arch: x86_64, glibc: "2.32", python: "3.13.11"}
+include:
+  runtime:
+    - zerorepo
+    - configs/rtl_demo_e203.evidence.json
+    - configs/rtl_demo_cases.evidence.json
+    - LICENSE
+  ops:
+    - scripts/rtl_demo
+    - deploy/rtl_demo
+    - configs/rtl_demo.production.example.yaml
+production_locks:
+  - requirements-web-prod.txt
+  - requirements-agent-demo.txt
+toolchain_lock: deploy/rtl_demo/toolchain.lock.json
+exclude:
+  - .git
+  - .agents
+  - .specify
+  - specs
+  - tests
+  - node_modules
+  - __pycache__
+  - codex_private
+  - obj_dir
+  - build
+  - .rtl-demo
+  - .venv
+  - .venv-web
+  - .venv-agent
+  - README_neo4j_ingest.md
+  - neo4j知识图谱设计.md
+  - RTL_IMPL_LEVEL_PLAN.md
+  - ARCHITECTURE.md
+  - Debug_agent.md
+  - run-local.sh
+  - stage-release.sh
+  - install-as-root.sh
+  - README.md
+  - docker-compose.dev.yml
+  - Dockerfile
+  - Dockerfile.sim
+# Four registered task Markdown inputs and runtime grammar/query/prompt assets
+# are included by purpose, never dropped by a blanket *.md rule.

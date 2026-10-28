@@ -80,6 +80,11 @@ class CodexDebugSession:
         self.descriptor = descriptor
         self.logger = logger or logging.getLogger(__name__)
         self._lock = threading.RLock()
+        self.memory_adapter = None
+        if descriptor.memory_snapshot_path:
+            from zerorepo.rtl_impl.rtl_memory.adapter import MemoryAdapter
+            self.memory_adapter = MemoryAdapter(descriptor.memory_snapshot_path, descriptor.memory_snapshot_sha256,
+                                                descriptor.private_root/'memory', descriptor.outer_run_id or descriptor.run_id, descriptor.run_id)
         self._closed = False
         self.readonly_calls = 0
         self.validation_trials = 0
@@ -649,6 +654,24 @@ class CodexDebugSession:
     # Transactional validation
     # ------------------------------------------------------------------
 
+    def query_rtl_memories(self, module_name=None, signals=None, failure_type=None, limit=5):
+        with self._lock:
+            if not self.memory_adapter: return {'memories': [], 'state': 'no_snapshot'}
+            return self.memory_adapter.query(module_name, signals, failure_type, limit)
+
+    def read_rtl_memory(self, revision_id, max_chars=8000):
+        with self._lock:
+            if not self.memory_adapter: raise ValueError('No memory snapshot')
+            return self.memory_adapter.read(revision_id,max_chars)
+
+    def record_memory_application(self, revision_id, decision, reason, target_files=None, target_signals=None):
+        with self._lock:
+            if not self.memory_adapter: raise ValueError('No memory snapshot')
+            files = target_files or []
+            allowed = set(self._current_manifest())
+            if not set(files) <= allowed: raise ValueError('Memory application target outside task RTL')
+            return self.memory_adapter.declare(revision_id,decision,reason,files,target_signals or [])
+
     def validate_rtl_changes(
         self,
         action: ValidationAction,
@@ -680,6 +703,8 @@ class CodexDebugSession:
             }
         if current_manifest == self.accepted_manifest:
             self.candidate = None
+            if self.memory_adapter:
+                self.memory_adapter.observe('no_changes', {}, '', 'unverified')
             return {"status": "no_changes", "baseline_revision": self.baseline_revision}
         if self.validation_trials >= self.descriptor.max_validation_trials:
             return {
@@ -795,6 +820,17 @@ class CodexDebugSession:
         self.candidate.artifact_root = candidate_artifact_root
         self.candidate.result = dict(result)
         self.last_validation = dict(result)
+        if self.memory_adapter:
+            from zerorepo.rtl_web.artifacts import tree_manifest
+            tree_hash, _ = tree_manifest(candidate_rtl_root)
+            verdict = 'pass' if result.get('is_pass') and result.get('sim_completed') else 'fail' if result.get('sim_completed') or result.get('lint_pass') is False else 'unverified'
+            self.memory_adapter.observe(candidate_id + ':' + str(revision), result['diff'], tree_hash, verdict,
+                                        validation_level='final_system' if isinstance(self.reviewer, SystemSimReviewer) and result.get('sim_completed') else 'syntax',
+                                        report_sha256=hashlib.sha256(self.state.last_sim_output.encode()).hexdigest() if result.get('sim_completed') else None)
+            from zerorepo.rtl_impl.rtl_memory.distiller import RTLMemoryDistiller
+            RTLMemoryDistiller(self.private_root).distill_codex_result(module=self.descriptor.top_module, result=result,
+                binding={'outer_run_id':self.descriptor.outer_run_id or self.descriptor.run_id, 'internal_run_id':self.descriptor.run_id,
+                         'tree_sha256':tree_hash,'snapshot_sha256':self.descriptor.memory_snapshot_sha256})
         self.journal.append_jsonl(
             "codex_validation_journal.jsonl",
             {
@@ -829,6 +865,7 @@ class CodexDebugSession:
         self.accepted_actions += 1
         accepted_id = self.candidate.candidate_id
         accepted_revision = self.candidate.revision
+        if self.memory_adapter: self.memory_adapter.disposition(accepted_id + ':' + str(accepted_revision),'accepted')
         self.journal.append_jsonl(
             "codex_validation_journal.jsonl",
             {
@@ -881,6 +918,8 @@ class CodexDebugSession:
                 "baseline_revision": self.baseline_revision,
             },
         )
+        if self.memory_adapter and rolled_back_id:
+            self.memory_adapter.disposition(rolled_back_id + ':' + str(rolled_back_revision), 'rolled_back')
         result = {
             "status": "rolled_back",
             "candidate_id": rolled_back_id,

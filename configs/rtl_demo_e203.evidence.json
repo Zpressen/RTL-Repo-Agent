@@ -1,0 +1,240 @@
+{
+  "schema_version": 1,
+  "testbench_sha256": "9b0ed0a069b71bdfc4b1a3132b355b36a8bd87210ac969e1b4b327e0a9f25a2e",
+  "stats_fields": [
+    "errors",
+    "errortime",
+    "errors_i_ready",
+    "errortime_i_ready",
+    "errors_i_longpipe",
+    "errortime_i_longpipe",
+    "errors_amo_wait",
+    "errortime_amo_wait",
+    "errors_cmt_o_valid",
+    "errortime_cmt_o_valid",
+    "errors_cmt_o_pc_vld",
+    "errortime_cmt_o_pc_vld",
+    "errors_cmt_o_pc",
+    "errortime_cmt_o_pc",
+    "errors_cmt_o_instr",
+    "errortime_cmt_o_instr",
+    "errors_cmt_o_imm",
+    "errortime_cmt_o_imm",
+    "errors_cmt_o_rv32",
+    "errortime_cmt_o_rv32",
+    "errors_cmt_o_bjp",
+    "errortime_cmt_o_bjp",
+    "errors_cmt_o_mret",
+    "errortime_cmt_o_mret",
+    "errors_cmt_o_dret",
+    "errortime_cmt_o_dret",
+    "errors_cmt_o_ecall",
+    "errortime_cmt_o_ecall",
+    "errors_cmt_o_ebreak",
+    "errortime_cmt_o_ebreak",
+    "errors_cmt_o_fencei",
+    "errortime_cmt_o_fencei",
+    "errors_cmt_o_wfi",
+    "errortime_cmt_o_wfi",
+    "errors_cmt_o_ifu_misalgn",
+    "errortime_cmt_o_ifu_misalgn",
+    "errors_cmt_o_ifu_buserr",
+    "errortime_cmt_o_ifu_buserr",
+    "errors_cmt_o_ifu_ilegl",
+    "errortime_cmt_o_ifu_ilegl",
+    "errors_cmt_o_bjp_prdt",
+    "errortime_cmt_o_bjp_prdt",
+    "errors_cmt_o_bjp_rslv",
+    "errortime_cmt_o_bjp_rslv",
+    "errors_cmt_o_misalgn",
+    "errortime_cmt_o_misalgn",
+    "errors_cmt_o_ld",
+    "errortime_cmt_o_ld",
+    "errors_cmt_o_stamo",
+    "errortime_cmt_o_stamo",
+    "errors_cmt_o_buserr",
+    "errortime_cmt_o_buserr",
+    "errors_cmt_o_badaddr",
+    "errortime_cmt_o_badaddr",
+    "errors_wbck_o_valid",
+    "errortime_wbck_o_valid",
+    "errors_wbck_o_wdat",
+    "errortime_wbck_o_wdat",
+    "errors_wbck_o_rdidx",
+    "errortime_wbck_o_rdidx",
+    "errors_csr_ena",
+    "errortime_csr_ena",
+    "errors_csr_wr_en",
+    "errortime_csr_wr_en",
+    "errors_csr_rd_en",
+    "errortime_csr_rd_en",
+    "errors_csr_idx",
+    "errortime_csr_idx",
+    "errors_wbck_csr_dat",
+    "errortime_wbck_csr_dat",
+    "errors_agu_icb_cmd_valid",
+    "errortime_agu_icb_cmd_valid",
+    "errors_agu_icb_cmd_addr",
+    "errortime_agu_icb_cmd_addr",
+    "errors_agu_icb_cmd_read",
+    "errortime_agu_icb_cmd_read",
+    "errors_agu_icb_cmd_wdata",
+    "errortime_agu_icb_cmd_wdata",
+    "errors_agu_icb_cmd_wmask",
+    "errortime_agu_icb_cmd_wmask",
+    "errors_agu_icb_cmd_lock",
+    "errortime_agu_icb_cmd_lock",
+    "errors_agu_icb_cmd_excl",
+    "errortime_agu_icb_cmd_excl",
+    "errors_agu_icb_cmd_size",
+    "errortime_agu_icb_cmd_size",
+    "errors_agu_icb_cmd_back2agu",
+    "errortime_agu_icb_cmd_back2agu",
+    "errors_agu_icb_cmd_usign",
+    "errortime_agu_icb_cmd_usign",
+    "errors_agu_icb_cmd_itag",
+    "errortime_agu_icb_cmd_itag",
+    "errors_agu_icb_rsp_ready",
+    "errortime_agu_icb_rsp_ready",
+    "errors_nice_req_valid",
+    "errortime_nice_req_valid",
+    "errors_nice_req_instr",
+    "errortime_nice_req_instr",
+    "errors_nice_req_rs1",
+    "errortime_nice_req_rs1",
+    "errors_nice_req_rs2",
+    "errortime_nice_req_rs2",
+    "errors_nice_rsp_multicyc_ready",
+    "errortime_nice_rsp_multicyc_ready",
+    "errors_nice_longp_wbck_valid",
+    "errortime_nice_longp_wbck_valid",
+    "errors_nice_o_itag",
+    "errortime_nice_o_itag",
+    "clocks"
+  ],
+  "candidates": {
+    "before": {
+      "candidate_id": "candidate_ea234d9c8dd7",
+      "revision": 1,
+      "trial": 5,
+      "tree_sha256": "8038533f629ab7132ee1acfb75836ccdfa0020ef04721e07b799810f4d2cbcb9",
+      "files": [
+        {
+          "path": "e203_defines.v",
+          "sha256": "722d35003d83b8117c63b17fabcfa8c70c6eb410fe14c722f3b61faeb43741d0",
+          "size_bytes": 2492
+        },
+        {
+          "path": "e203_exu_alu_system.v",
+          "sha256": "73e97ee2c1caf43e98df41b0501b7f9843e777a50bb6bc075da88b10fda05d39",
+          "size_bytes": 28890
+        },
+        {
+          "path": "e203_exu_amo_sequence.v",
+          "sha256": "f5c0937d0b01b1843a9c99c51bb14a02a9b7abea4c8ab6e36c670fd477d4cce0",
+          "size_bytes": 7966
+        },
+        {
+          "path": "e203_exu_branch_jump.v",
+          "sha256": "67ebf22e392942be2276a2768795f7beb1961bcfbb76aa40ef6ced58efdd8a98",
+          "size_bytes": 3563
+        },
+        {
+          "path": "e203_exu_csr.v",
+          "sha256": "d1c54c33b814fcbc38223ba7e1ae998799a056f05c11a0cc23515c053a3e633f",
+          "size_bytes": 1416
+        },
+        {
+          "path": "e203_exu_memory_transaction.v",
+          "sha256": "63cdb4de66425e0a8179da430accbc2092c37459d3444608cadc696ca3b2b623",
+          "size_bytes": 6424
+        },
+        {
+          "path": "e203_exu_muldiv.v",
+          "sha256": "09b3b34d19388d699f41ed1c6b86d86f9f4262a30806a9b8fa427e270ba67556",
+          "size_bytes": 10210
+        },
+        {
+          "path": "e203_exu_nice_forwarding.v",
+          "sha256": "f63b443e06b6b2ac4f230847f873fb72cfbfea6cfa828b28b0d4a762194dd0a9",
+          "size_bytes": 4112
+        },
+        {
+          "path": "e203_exu_regular_integer.v",
+          "sha256": "4e788b776874076fba125ab5de5adca9a9f83904767c33d194b8276bfa110fe6",
+          "size_bytes": 3747
+        },
+        {
+          "path": "e203_exu_shared_arithmetic_datapath.v",
+          "sha256": "22bb5dfa554f39c031714c081d1d27d2de231d6a21147abd6f49e7ffe0e536c0",
+          "size_bytes": 5895
+        }
+      ],
+      "waveform_sha256": "7b1f0334e90e737a7d007a3fa7fc1ecbc5fa5200276d4c473654e9d1d8050389",
+      "report_sha256": "9558d273a5898cbfa0bc902f549fd356d71faade74d688197e59ac7161b21fd6"
+    },
+    "after": {
+      "candidate_id": "candidate_e0e2441d4dfd",
+      "revision": 1,
+      "trial": 9,
+      "tree_sha256": "c1b96536ca58900a26ec5d31d3ef9b494ba1cd8f78380a78fd2d348466f8812b",
+      "files": [
+        {
+          "path": "e203_defines.v",
+          "sha256": "722d35003d83b8117c63b17fabcfa8c70c6eb410fe14c722f3b61faeb43741d0",
+          "size_bytes": 2492
+        },
+        {
+          "path": "e203_exu_alu_system.v",
+          "sha256": "73e97ee2c1caf43e98df41b0501b7f9843e777a50bb6bc075da88b10fda05d39",
+          "size_bytes": 28890
+        },
+        {
+          "path": "e203_exu_amo_sequence.v",
+          "sha256": "f5c0937d0b01b1843a9c99c51bb14a02a9b7abea4c8ab6e36c670fd477d4cce0",
+          "size_bytes": 7966
+        },
+        {
+          "path": "e203_exu_branch_jump.v",
+          "sha256": "67ebf22e392942be2276a2768795f7beb1961bcfbb76aa40ef6ced58efdd8a98",
+          "size_bytes": 3563
+        },
+        {
+          "path": "e203_exu_csr.v",
+          "sha256": "d1c54c33b814fcbc38223ba7e1ae998799a056f05c11a0cc23515c053a3e633f",
+          "size_bytes": 1416
+        },
+        {
+          "path": "e203_exu_memory_transaction.v",
+          "sha256": "63cdb4de66425e0a8179da430accbc2092c37459d3444608cadc696ca3b2b623",
+          "size_bytes": 6424
+        },
+        {
+          "path": "e203_exu_muldiv.v",
+          "sha256": "1f9f0fad3cf27a727813060fbdd0be7799d2b93bfc99bb9b2440c548a5ca480e",
+          "size_bytes": 10899
+        },
+        {
+          "path": "e203_exu_nice_forwarding.v",
+          "sha256": "f63b443e06b6b2ac4f230847f873fb72cfbfea6cfa828b28b0d4a762194dd0a9",
+          "size_bytes": 4112
+        },
+        {
+          "path": "e203_exu_regular_integer.v",
+          "sha256": "4e788b776874076fba125ab5de5adca9a9f83904767c33d194b8276bfa110fe6",
+          "size_bytes": 3747
+        },
+        {
+          "path": "e203_exu_shared_arithmetic_datapath.v",
+          "sha256": "22bb5dfa554f39c031714c081d1d27d2de231d6a21147abd6f49e7ffe0e536c0",
+          "size_bytes": 5895
+        }
+      ],
+      "waveform_sha256": "798397b37c1c87dc1b5aa2d8d9797fbccc8e7f3e31089da21635cbf96e1a6a8a",
+      "report_sha256": "3f47a7e3b26f073c16dc5f99a230dd5262b0c3091cef321ef59911f24bb06ba9"
+    }
+  },
+  "planner_sha256": "1ed026bbb3be6beb05d252da96c7309c111221ae3b0dbf4eb61e81d82eca8fae",
+  "spec_sha256": "6703f349cba39e1c8b0b15fd6b0946c5f61c3b4952aa86a3375f86897fb48605",
+  "contracts_sha256": "bf198b59f123aaf911aa41d1123d4ac8174a9f43f7eab72094ff2d41c6dcf4e4"
+}

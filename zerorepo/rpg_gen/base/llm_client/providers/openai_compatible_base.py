@@ -105,6 +105,15 @@ class OpenAICompatibleClient(BaseLLMClient):
         if self.config.stop:
             kwargs["stop"] = self.config.stop
 
+        if self.config.extra.get("response_format"):
+            kwargs["response_format"] = self.config.extra["response_format"]
+
+        if self.config.extra.get("reasoning_effort"):
+            kwargs["reasoning_effort"] = self.config.extra["reasoning_effort"]
+
+        if isinstance(self.config.extra.get("extra_body"), dict):
+            kwargs["extra_body"] = self.config.extra["extra_body"]
+
         return create_chat_completion(
             self.client, kwargs, stream=self.config.stream,
             include_usage=self.config.stream_include_usage, log=self.config.log,

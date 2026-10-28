@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "case_id": "aes_cipher_system_hard",
+  "journal": {
+    "path": "repo_react/aes_cipher_top/patch_journal.jsonl",
+    "sha256": "35505afeb07c5387cdbf1e4c11b4d6a5a26890c01f03c12b827569136f999dc8"
+  },
+  "trace": {
+    "path": "repo_react/aes_cipher_top/react_trace.jsonl",
+    "sha256": "df780bbccc85a4557ecb759f609dbf0959ca0e8b3fa41b883eef8a2cfa176447"
+  },
+  "initial_report": {
+    "path": "debug_system/aes_cipher_top/initial_system_sim_output.json",
+    "sha256": "50775682e98e16e695f806791091073b47f27fbedd82521fbd299edd8467968c"
+  },
+  "final": {
+    "rtl": {
+      "path": "debug_system/aes_cipher_top/generated",
+      "sha256": "28c7a1c71c2ecdae9b4321bfd77ab06f718ec27e8d754cc31141a888dd04a70e"
+    },
+    "report": {
+      "path": "debug_system/aes_cipher_top/debug_sim_output.json",
+      "sha256": "041d383a354227763ecc435a8942a6e878f3f0207c7ec57b461484a49a6c6013"
+    },
+    "wave": {
+      "path": "debug_system/aes_cipher_top/wave.vcd",
+      "sha256": "995f70de59b73a7277b37cc222a632cfa63571ff1148927207eb589c3ad68b28"
+    }
+  },
+  "candidates": [
+    {
+      "step": 1,
+      "before": {
+        "path": "repo_react/aes_cipher_top/snapshots/step_001_before",
+        "sha256": "0be880a57e4e5f58bef7413acbc1b0b676e3ef6797bb644a01b7435539d1c7a0"
+      },
+      "after": {
+        "path": "repo_react/aes_cipher_top/snapshots/step_001_after",
+        "sha256": "e38f7edb76d4b6378cb3150db670897c5ccd3e1f09181a472c3b2d11550e998f"
+      }
+    },
+    {
+      "step": 2,
+      "before": {
+        "path": "repo_react/aes_cipher_top/snapshots/step_002_before",
+        "sha256": "e38f7edb76d4b6378cb3150db670897c5ccd3e1f09181a472c3b2d11550e998f"
+      },
+      "after": {
+        "path": "repo_react/aes_cipher_top/snapshots/step_002_after",
+        "sha256": "9429e012fa8f81b6fcca20918ed156f3f72c6767ee1cb44e9db7c9d298b3ca8c"
+      }
+    },
+    {
+      "step": 3,
+      "before": {
+        "path": "repo_react/aes_cipher_top/snapshots/step_003_before",
+        "sha256": "d0ccb30cf6e356cfe4f0e3b83e7af1d4f2688bce21ef59e66a02541822b88aa3"
+      },
+      "after": {
+        "path": "repo_react/aes_cipher_top/snapshots/step_003_after",
+        "sha256": "a18d83cf2c9b23fd3579824efd41f34ad63a3d8e25e485b0cc40c2df01459380"
+      }
+    },
+    {
+      "step": 4,
+      "before": {
+        "path": "repo_react/aes_cipher_top/snapshots/step_004_before",
+        "sha256": "15f980d46bb7fecac20bb9ba4b8366a21a3d97d8eae006348d71707afea0fee9"
+      },
+      "after": {
+        "path": "repo_react/aes_cipher_top/snapshots/step_004_after",
+        "sha256": "4ba15119a2a46ead00086def2e0bd5e085ee32e0bae95128ec931b612f1d6775"
+      }
+    },
+    {
+      "step": 5,
+      "before": {
+        "path": "repo_react/aes_cipher_top/snapshots/step_005_before",
+        "sha256": "15f980d46bb7fecac20bb9ba4b8366a21a3d97d8eae006348d71707afea0fee9"
+      },
+      "after": {
+        "path": "repo_react/aes_cipher_top/snapshots/step_005_after",
+        "sha256": "8653f0d69df0745ffba2e33cde0c937dbeb42013d6f7124905a065d516ea0316"
+      }
+    },
+    {
+      "step": 6,
+      "before": {
+        "path": "repo_react/aes_cipher_top/snapshots/step_006_before",
+        "sha256": "a18d83cf2c9b23fd3579824efd41f34ad63a3d8e25e485b0cc40c2df01459380"
+      },
+      "after": {
+        "path": "repo_react/aes_cipher_top/snapshots/step_006_after",
+        "sha256": "7b866a67d9ded733c654115c9f1f11cc091423c8cfae0577bdee3bb110a71126"
+      }
+    },
+    {
+      "step": 7,
+      "before": {
+        "path": "repo_react/aes_cipher_top/snapshots/step_007_before",
+        "sha256": "7b866a67d9ded733c654115c9f1f11cc091423c8cfae0577bdee3bb110a71126"
+      },
+      "after": {
+        "path": "repo_react/aes_cipher_top/snapshots/step_007_after",
+        "sha256": "d85a1fa3dee6a9daec56a61a3d805649a55750cb6dba92e261b2414021edd38b"
+      }
+    },
+    {
+      "step": 8,
+      "before": {
+        "path": "repo_react/aes_cipher_top/snapshots/step_008_before",
+        "sha256": "7b866a67d9ded733c654115c9f1f11cc091423c8cfae0577bdee3bb110a71126"
+      },
+      "after": {
+        "path": "repo_react/aes_cipher_top/snapshots/step_008_after",
+        "sha256": "337b94daf4c022f128409b616ba523835813bc69997cb90e6094e1643fe8994c"
+      }
+    }
+  ]
+}
