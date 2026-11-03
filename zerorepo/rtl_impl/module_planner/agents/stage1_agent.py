@@ -73,6 +73,12 @@ class Stage1Agent(BaseStageAgent):
         self._last_quality_errors = []
         task = task_input if isinstance(task_input, PlannerTaskInput) else validate_model(PlannerTaskInput, task_input)
         stage_context = self.context_provider.get_stage_context(self.stage_name, task, partial_artifacts)
+        if task.required_top_module:
+            stage_context = {**stage_context, 'confirmed_task_constraints': {
+                'required_top_module': task.required_top_module,
+                'top_spec_file': task.top_spec_file,
+                'source': 'confirmed_task_input',
+            }}
         self._prepare_inputs(task)
 
         artifact = self._bootstrap_artifact(task, partial_artifacts.get("stage1"))
@@ -139,6 +145,7 @@ class Stage1Agent(BaseStageAgent):
         if persist_callback is not None:
             persist_callback(model_dump(artifact))
 
+        self._publish_output(artifact)
         self._log_stage_output(artifact)
         self.artifact_sink.record_stage_output(self.stage_name, artifact, task)
         return artifact
@@ -162,6 +169,8 @@ class Stage1Agent(BaseStageAgent):
             errors.append(f"task_id must remain {task_input.task_id}")
         if artifact.schema_version != "stage1_contracts_v1":
             errors.append("schema_version must remain stage1_contracts_v1")
+        if task_input.required_top_module and artifact.structure_contract.top_module != task_input.required_top_module:
+            errors.append(f"structure_contract.top_module must remain confirmed target {task_input.required_top_module}")
         expected_prefix = self._ROUND_SEQUENCE[: len(artifact.completed_rounds)]
         if artifact.completed_rounds != expected_prefix:
             errors.append(f"completed_rounds must preserve round order: expected prefix {expected_prefix}, got {artifact.completed_rounds}")
@@ -178,7 +187,17 @@ class Stage1Agent(BaseStageAgent):
         return errors
 
     def _prepare_inputs(self, task_input: PlannerTaskInput) -> None:
+        from zerorepo.rtl_impl.process_observer import emit_public
+        from ..utils.md_loader import extract_markdown_outline
+        from uuid import uuid4
+        action='action-'+uuid4().hex
+        emit_public('tool.started', tool='read_spec', purpose_summary='读取本轮规格文档',
+                    action_id=action,result_summary='、'.join(Path(p).name for p in task_input.spec_md_files))
         self._documents = load_markdown_files(task_input.spec_md_files)
+        for document in self._documents:
+            headings=extract_markdown_outline(document['content'])
+            emit_public('tool.completed', tool='read_spec',action_id=action,purpose_summary='读取规格 · '+Path(document['path']).name,
+                        result_summary=f'读取{len(document["content"])}字，识别{len(headings)}个章节。'+('章节：'+'；'.join(headings[:4]) if headings else ''))
         self._document_batches = self._make_document_batches(self._documents)
         self._formatted_documents = format_documents_for_prompt(self._documents)
 
@@ -496,6 +515,12 @@ class Stage1Agent(BaseStageAgent):
         documents = load_markdown_files(task_input.spec_md_files)
         if not documents:
             return {"path": "", "content": ""}
+        if task_input.top_spec_file:
+            bound = str(Path(task_input.top_spec_file).resolve())
+            document = next((item for item in documents if str(Path(item['path']).resolve()) == bound), None)
+            if document is None:
+                raise ValueError('Confirmed top specification must belong to the task input documents')
+            return document
         top_module = str(artifact.structure_contract.top_module or "").strip()
         grounded_paths = [
             grounding.source_md_file
@@ -546,6 +571,8 @@ class Stage1Agent(BaseStageAgent):
         artifact: Stage1ContractsArtifact,
         task: PlannerTaskInput,
     ) -> Stage1ContractsArtifact:
+        if task.required_top_module and task.top_spec_file:
+            artifact.spec_index[task.required_top_module] = str(Path(task.top_spec_file).resolve())
         artifact.fact_ledger = self._normalize_fact_ledger(artifact.fact_ledger, artifact.spec_index)
         if artifact.fact_ledger.facts:
             artifact = self._project_fact_ledger_to_legacy_contracts(artifact)
@@ -553,6 +580,7 @@ class Stage1Agent(BaseStageAgent):
         structure = artifact.structure_contract
         module_order = _ordered_unique(
             [
+                *([task.required_top_module] if task.required_top_module else []),
                 *structure.modules,
                 *(item.module for item in artifact.interface_contracts),
                 *(item.module for item in artifact.timing_contracts),
@@ -672,9 +700,13 @@ class Stage1Agent(BaseStageAgent):
             if category == "module_identity":
                 if value := self._string_value(obj, "system"):
                     structure_payload["system"] = structure_payload.get("system") or value
-                if predicate in {"is_top_module", "top_module"}:
-                    top = self._string_value(obj, "module") or module_name or fact.subject
+                if predicate in {"is_top_module", "top_module", "is_explicit_generation_target"}:
+                    top = ((self._string_value(obj, "target_module") or fact.subject)
+                           if predicate == 'is_explicit_generation_target'
+                           else self._string_value(obj, "module") or module_name or fact.subject)
                     structure_payload["top_module"] = structure_payload.get("top_module") or top
+                    if top:
+                        structure_payload['modules'] = _ordered_unique([*structure_payload.get('modules', []), top])
                 for module in self._list_or_single(obj.get("modules")):
                     structure_payload["modules"] = _ordered_unique([*structure_payload.get("modules", []), module])
                 if module_name:
@@ -1019,6 +1051,8 @@ class Stage1Agent(BaseStageAgent):
         relations: List[StructureRelation],
     ) -> str:
         module_set = set(module_order)
+        if task.required_top_module:
+            return task.required_top_module
         candidates = [item for item in artifact.top_module_candidates if item in module_set]
         if len(set(candidates)) == 1:
             return candidates[0]

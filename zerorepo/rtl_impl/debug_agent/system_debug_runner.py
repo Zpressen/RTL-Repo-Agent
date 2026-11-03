@@ -37,6 +37,16 @@ class SystemDebugResult:
     reason: str = ""
 
 
+def bind_reviewer(reviewer, candidate_root, output_dir):
+    """Rebind by protocol, including custom reviewers across candidate trials."""
+    factory = getattr(reviewer,'for_candidate',None)
+    if callable(factory):
+        return factory(candidate_root,output_dir)
+    # Existing stateless legacy test adapters remain compatible. Custom HDL
+    # descriptors require a reconstructible reviewer implementing this method.
+    return reviewer
+
+
 class SystemSimReviewer:
     def __init__(
         self,
@@ -50,6 +60,10 @@ class SystemSimReviewer:
         self.verify_script = Path(verify_script)
         self.output_dir = Path(output_dir)
         self.timeout = int(timeout)
+
+    def for_candidate(self,candidate_root,output_dir):
+        return type(self)(generated_dir=candidate_root,verify_script=self.verify_script,
+                          output_dir=output_dir,timeout=self.timeout)
 
     def review(self) -> tuple[bool, int, str]:
         wrapper = self._write_wrapper()

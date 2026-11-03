@@ -196,6 +196,9 @@ def bounded(tmp_path, handler, **overrides):
     def factory():
         client = openai.AsyncOpenAI(api_key='test-secret', max_retries=0,
             http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+        # Keep this transport/cancellation fixture independent of the SDK's
+        # first-use OS detection (a background subprocess can exceed 0.5s).
+        client._platform = 'Linux'
         clients.append(client)
         return client
     def run():
@@ -217,7 +220,7 @@ def test_request_deadline_cancels_socket_wait_and_preserves_partial_draft(tmp_pa
     if condition in {'headers', 'empty_content'}:
         overrides['first_content_timeout_seconds'] = 0.07
     if condition == 'headers':
-        # Include SDK's first-use platform-header initialization before reaching the transport.
+        # Leave enough time to enter the mock's suspended response headers.
         overrides.update(total_timeout_seconds=1, first_content_timeout_seconds=0.5)
     if condition == 'idle':
         overrides['idle_timeout_seconds'] = 0.07

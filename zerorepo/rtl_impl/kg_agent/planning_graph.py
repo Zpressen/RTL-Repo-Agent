@@ -5,6 +5,7 @@ import json
 import logging
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, Optional
+from zerorepo.rtl_impl.process_observer import observed
 
 
 PLANNING_SCHEMA_VERSION = "planning_kg_projection_v1"
@@ -392,6 +393,8 @@ class PlanningContextRetriever:
         self.output_root = Path(output_root) if output_root is not None else None
         self.logger = logger or logging.getLogger(__name__)
 
+    @observed('tool', '查询模块规划图谱及材料绑定', tool='query_rtl_kg',
+              summarize=lambda r: f'返回{len(r.get("specs") or [])}个规格片段、{int(bool(r.get("skeleton")))}份骨架、{int(bool(r.get("plan")))}份计划；已检查请求的材料绑定。')
     def get_module_context(
         self,
         module_name: str,

@@ -48,8 +48,8 @@ DEEP_TOOL_CHARS = 160_000
 DEEP_REMAINING_BUDGET_RATIO = 0.2
 
 READONLY_TRACE_INTENT_FIELDS: dict[str, Any] = {
-    "purpose": {"type": "string", "description": "Optional reason for this observation; used only for decision trace."},
-    "question": {"type": "string", "description": "Optional question this observation should answer; used only for decision trace."},
+    "purpose": {"type": "string", "description": "Concise public objective of this observation. Name the current signal/module and evidence to check; no private reasoning or scratch work."},
+    "question": {"type": "string", "description": "Concise public question this observation should answer; no private reasoning or scratch work."},
     "expected_evidence": {"type": "string", "description": "Optional expected evidence; used only for decision trace."},
 }
 
@@ -700,6 +700,15 @@ class RepoReActRunner:
         self._state.journal.append_jsonl("decision_trace.jsonl", row)
 
     def _tool_response(self, name: str, payload: dict[str, Any], trace_meta: dict[str, Any] | None = None) -> ToolResponse:
+        from zerorepo.rtl_impl.process_observer import emit_public
+        intent=(trace_meta or {}).get('intent',{})
+        if isinstance(intent,dict):
+            report={}
+            purpose=intent.get('purpose')
+            question=intent.get('question')
+            if isinstance(purpose,str) and purpose.strip():report['summary']=purpose[:600]
+            if isinstance(question,str) and question.strip():report['plan']=[question[:300]]
+            if report:emit_public('progress.reported',purpose_summary=name,public_progress=report,source_kind='agent_public_summary')
         if self._state is not None:
             self._state.journal.append_jsonl(
                 "react_trace.jsonl",

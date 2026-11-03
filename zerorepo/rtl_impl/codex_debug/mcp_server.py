@@ -42,8 +42,8 @@ def configure_session(session: CodexDebugSession) -> None:
 
 async def _call(method: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
     if os.environ.get('ZEROREPO_TOOL_BRIDGE'):
-        from zerorepo.rtl_web.tool_bridge import bridge_call
-        return await asyncio.to_thread(bridge_call,method,args,kwargs)
+        from zerorepo.rtl_impl.runtime_integration import workbench_integration
+        return await asyncio.to_thread(workbench_integration().bridge_call,method,args,kwargs)
     if _SESSION is None:
         return {"status": "server_uninitialized", "tool": method}
     try:

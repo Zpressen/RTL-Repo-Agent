@@ -85,6 +85,8 @@ class PlannerTaskInput(BaseModel):
     spec_images: List[str] = Field(default_factory=list)
     project_type: str = Field(default="light_repo_spec2rtl")
     notes: str = Field(default="")
+    required_top_module: str = Field(default="", pattern=r"^(?:[A-Za-z_][A-Za-z0-9_$]*)?$")
+    top_spec_file: str = Field(default="")
 
     @model_validator(mode="after")
     def validate_inputs(self) -> "PlannerTaskInput":

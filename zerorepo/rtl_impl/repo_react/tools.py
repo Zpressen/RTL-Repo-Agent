@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import difflib
 import json
+from contextlib import nullcontext
 import re
 import shutil
 import hashlib
@@ -28,6 +29,8 @@ from zerorepo.rtl_impl.debug_agent.trace_report import (
 from zerorepo.rtl_impl.debug_agent.trace_slicer import parse_rtl_assignments, parse_rtl_blocks
 from zerorepo.rtl_impl.kg_agent import PlanningContextRetriever
 from zerorepo.rtl_impl.kg_agent import kg_query_templates as kg_templates
+
+from zerorepo.rtl_impl.process_observer import observed
 
 from .journal import RepoReActJournal
 from .schemas import Patch, RepoReActInput, SimSnapshot
@@ -190,7 +193,7 @@ def _extract_first_fail_time(sim_log_json: str) -> int | None:
         obj = json.loads(sim_log_json)
     except Exception:  # noqa: BLE001
         return None
-    stdout = str(obj.get("stdout") or "")
+    stdout = str(obj.get("stdout") or obj.get("diagnostic_excerpt") or "")
     times = [int(m.group("t")) for m in _FAIL_TIME_HINT_RE.finditer(stdout)]
     if times:
         return min(times)
@@ -207,7 +210,7 @@ def _parse_sim_metrics(sim_log_json: str | None) -> dict[str, Any]:
         obj = json.loads(sim_log_json)
     except Exception:  # noqa: BLE001
         obj = {}
-    stdout = str(obj.get("stdout") or sim_log_json)
+    stdout = str(obj.get("stdout") or obj.get("diagnostic_excerpt") or sim_log_json)
     per_signal: dict[str, dict[str, int]] = {}
     for match in _SIM_HINT_RE.finditer(stdout):
         sig = (match.group("quoted_sig") or match.group("bare_sig") or "").strip()
@@ -531,6 +534,16 @@ class RepoReActToolState:
 
 
 class RepoReActTools:
+    def _scoped_syntax(self,*args,**kwargs):
+        factory=getattr(self.state.sim_reviewer,'verification_context',None)
+        with factory() if callable(factory) else nullcontext():
+            return check_syntax(*args,**kwargs)
+
+    def _review_current(self):
+        from zerorepo.rtl_impl.debug_agent.system_debug_runner import bind_reviewer
+        reviewer=bind_reviewer(self.state.sim_reviewer,self.state.input.rtl_root or self.state.input.rtl_path.parent,self.state.input.debug_workdir)
+        return reviewer.review()
+
     def __init__(self, state: RepoReActToolState) -> None:
         self.state = state
 
@@ -1445,6 +1458,7 @@ class RepoReActTools:
     # Read/search/KG tools
     # ------------------------------------------------------------------
 
+    @observed("tool", "读取本轮局部上下文", stage="diagnose")
     def read_context(
         self,
         kind: Literal[
@@ -1593,6 +1607,7 @@ class RepoReActTools:
             return {"status": "ok", "kind": kind, "path": str(target), "start": s, "end": e, "content": _clip(selected, max_chars=max_chars)}
         return {"status": "ok", "kind": kind, "path": str(target), "content": _clip(text, max_chars=max_chars)}
 
+    @observed("tool", "检索本轮材料", stage="diagnose")
     def search_context(
         self,
         pattern: str,
@@ -1657,6 +1672,7 @@ class RepoReActTools:
         self.state.observed_spec_or_stage = self.state.observed_spec_or_stage or scope in {"spec", "all"}
         return {"status": "ok", "pattern": pattern, "scope": scope, "results": results, "truncated": False}
 
+    @observed("tool", "读取需求规格", stage="diagnose")
     def read_spec(
         self,
         module_name: str | None = None,
@@ -1686,6 +1702,7 @@ class RepoReActTools:
         self.state.observed_spec_or_stage = True
         return {"status": "ok", "source": source, "content": _clip(text, max_chars=max_chars)}
 
+    @observed("tool", "读取规格片段", stage="diagnose")
     def retrieve_spec_block(
         self,
         module_name: str,
@@ -1863,6 +1880,7 @@ class RepoReActTools:
                 )
         return rows, warnings
 
+    @observed("tool", "读取模块与规划关系", stage="diagnose")
     def read_module_semantics(
         self,
         module_name: str,
@@ -2214,6 +2232,7 @@ class RepoReActTools:
                 dut = None
         return {"dut": dut, "ref": _resolve_ref_instance_static(vcd)}
 
+    @observed("tool", "列出本轮波形信号", stage="diagnose")
     def list_vcd_signals(self, pattern: str = "", scope: str = "", limit: int = 100) -> dict[str, Any]:
         vcd = self._load_vcd()
         if vcd is None:
@@ -2221,6 +2240,7 @@ class RepoReActTools:
         self.state.observed_trace_or_sim = True
         return list_vcd_signals_query(vcd, pattern=pattern, scope=scope, limit=limit)
 
+    @observed("tool", "查看本轮波形采样", stage="diagnose")
     def probe_vcd(
         self,
         signals: list[str],
@@ -2540,6 +2560,7 @@ class RepoReActTools:
                 mappings.append(item)
         return mappings, []
 
+    @observed("tool", "沿信号关系检查失败线索", stage="diagnose")
     def trace_signal_cause(
         self,
         module_name: str,
@@ -2891,6 +2912,7 @@ class RepoReActTools:
         self.state.last_signal_trace_action_calls = int(self.state.action_calls)
         return payload
 
+    @observed("tool", "查询本轮知识图谱", stage="diagnose")
     def query_rtl_kg(
         self,
         query_type: Literal[
@@ -3023,6 +3045,7 @@ class RepoReActTools:
             "vcd_available": report.get("vcd_available"),
         }
 
+    @observed("tool", "检查当前设计候选", stage="repair")
     def run_check(
         self,
         mode: Literal["lint", "module_sim", "top_sim", "trace_summary", "wave_window", "first_divergence"],
@@ -3034,7 +3057,7 @@ class RepoReActTools:
         if mode == "wave_window":
             return {"status": "unsupported_in_v1", "mode": mode}
         if mode == "lint":
-            ok, output = check_syntax(
+            ok, output = self._scoped_syntax(
                 str(self.state.input.rtl_path),
                 top_module=self.state.input.top_module or self.state.input.module_name,
             )
@@ -3048,7 +3071,7 @@ class RepoReActTools:
         if mode in {"module_sim", "top_sim"}:
             if mode == "module_sim" and self.state.input.repair_scope == "repo":
                 mode = "top_sim"
-            is_pass, mismatch_count, sim_output = self.state.sim_reviewer.review()
+            is_pass, mismatch_count, sim_output = self._review_current()
             sim_path = self.state.input.debug_workdir / "debug_sim_output.json"
             sim_path.write_text(sim_output, encoding="utf-8")
             first_fail = _extract_first_fail_time(sim_output)
@@ -3125,6 +3148,7 @@ class RepoReActTools:
         self.state.last_trace_summary = summary
         return {"status": "ok", "mode": mode, "trace_summary": summary}
 
+    @observed("tool", "尝试修改当前设计", stage="repair")
     def apply_patch(
         self,
         patches: list[dict[str, Any]],
@@ -3338,6 +3362,11 @@ class RepoReActTools:
             block_id=block_id,
         )
 
+        consume=getattr(self.state.sim_reviewer,'consume_candidate',None)
+        if callable(consume):
+            try:consume()
+            except ValueError:return reject('Candidate budget exhausted; no further HDL edit is allowed.')
+            verify=True
         self.state.patch_attempt_id += 1
         patch_attempt_id = int(self.state.patch_attempt_id)
         candidate_id = str(syntax_retry_of or f"syntax_candidate_{patch_attempt_id:04d}")
@@ -3443,7 +3472,7 @@ class RepoReActTools:
             persist_patch_result(result)
             return result
 
-        lint_ok, lint_output = check_syntax(
+        lint_ok, lint_output = self._scoped_syntax(
             str(self.state.input.rtl_path),
             top_module=self.state.input.top_module or self.state.input.module_name,
         )
@@ -3500,7 +3529,7 @@ class RepoReActTools:
             persist_patch_result(result)
             return result
 
-        is_pass, mismatch_count, sim_output = self.state.sim_reviewer.review()
+        is_pass, mismatch_count, sim_output = self._review_current()
         after_metrics_holder["metrics"] = _parse_sim_metrics(sim_output)
         sim_path = self.state.input.debug_workdir / "debug_sim_output.json"
         sim_path.write_text(sim_output, encoding="utf-8")
@@ -3783,6 +3812,7 @@ class RepoReActTools:
             for block in ranked[: max(1, int(limit))]
         ]
 
+    @observed("tool", "替换选定代码块", stage="repair")
     def replace_block(
         self,
         block_id: str | None,

@@ -492,15 +492,13 @@ class Stage6MergeAgent(BaseStageAgent):
         """
         del task
         self._ensure_toolchain_path()
-        raw = (
-            raw_override
-            if raw_override is not None
-            else self.llm_client.complete(
+        from zerorepo.rtl_impl.public_progress import public_step
+        with public_step(self.stage_name, module=module_name, json_output=False):
+            raw = raw_override if raw_override is not None else self.llm_client.complete(
                 system_prompt=self.system_role,
                 user_prompt=prompt,
                 images=None,
             )
-        )
         self._log_llm_raw_output(raw, attempt_label="initial")
         if not isinstance(raw, str):
             raise ValueError(
@@ -675,6 +673,8 @@ class Stage6MergeAgent(BaseStageAgent):
         tmp_path = path.with_name(f"{path.name}.tmp")
         tmp_path.write_text(text, encoding="utf-8")
         tmp_path.replace(path)
+        from zerorepo.rtl_impl.material_observer import code_saved
+        code_saved(path,'module')
 
     def _write_json(self, path: Path, payload: Dict[str, Any]) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)

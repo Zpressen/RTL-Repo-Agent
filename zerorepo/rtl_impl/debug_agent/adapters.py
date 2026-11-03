@@ -43,9 +43,15 @@ def debug_openai_config_from_planner_config(llm_config: Any) -> OpenAIConfig:
         if top_p is not None:
             generate_kwargs["top_p"] = top_p
         if max_tokens is not None:
-            generate_kwargs["max_completion_tokens"] = max_tokens
+            token_parameter = "max_tokens" if _config_get(cfg, "provider") == "deepseek" else "max_completion_tokens"
+            generate_kwargs[token_parameter] = max_tokens
         if extra:
-            generate_kwargs["extra_body"] = extra
+            # Planner extras may already contain an SDK extra_body. Flatten it
+            # once; nesting extra_body would silently lose DeepSeek's options.
+            body = dict(extra.get("extra_body") or {})
+            body.update({key: value for key, value in extra.items() if key not in {"extra_body", "reasoning_effort"}})
+            if body:
+                generate_kwargs["extra_body"] = body
         return OpenAIConfig(
             model=_config_get(cfg, "model", default=OpenAIConfig.model),
             api_key=_config_get(cfg, "api_key"),

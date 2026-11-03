@@ -19,7 +19,9 @@ class DeepseekProvider(ProviderConfig):
     def create_client(self, config: LLMConfig) -> openai.OpenAI:
         api_key = config.api_key or os.getenv("DEEPSEEK_API_KEY")
         base_url = config.base_url or "https://api.deepseek.com"
-        return openai.OpenAI(api_key=api_key, base_url=base_url)
+        # The shared provider wrapper owns config.max_retries; SDK retries must
+        # not multiply those attempts (including explicit single-shot requests).
+        return openai.OpenAI(api_key=api_key, base_url=base_url, max_retries=0)
 
     def get_service_name(self) -> str:
         return "Deepseek"

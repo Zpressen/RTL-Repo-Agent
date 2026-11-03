@@ -4,6 +4,7 @@ import json
 from typing import Any, List
 
 from pydantic import BaseModel
+from zerorepo.rtl_impl.process_observer import observed
 
 from .prompts import block_spec_select
 from .schemas import BlockSpecRetrievalResult, BlockSpecSelection
@@ -18,6 +19,8 @@ class BlockSpecRetriever:
         self.logger = logger
         self.output_root = output_root
 
+    @observed('tool', '检索结构块的规格引用', tool='retrieve_spec_block',
+              summarize=lambda r: f'为{len(r.selections)}个结构块整理规格引用；'+('使用降级检索。' if r.fallback_used else '已检查引用。'))
     def select_block_spec_refs(
         self,
         *,

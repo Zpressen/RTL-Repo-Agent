@@ -1,7 +1,0 @@
-# Root owned 0600; service manager reads this file.
-RTL_DEMO_CONFIG=/etc/rtl-demo/config.yaml
-RTL_DEMO_BIND=127.0.0.1
-RTL_DEMO_GATEWAY_KEY=REPLACE_WITH_INDEPENDENT_RANDOM_SECRET
-ZEROREPO_API_KEY=REPLACE_WITH_AUTHORIZED_MODEL_KEY
-CODEX_PROXY_A_API_KEY=REPLACE_WITH_AUTHORIZED_SELECTED_PROFILE_KEY
-# Supply only the actual service account profile/provider and KG variables.

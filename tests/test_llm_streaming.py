@@ -215,31 +215,6 @@ def test_non_streaming_behavior_is_preserved(sdk_factory):
     assert "response_format" not in captured[0]
 
 
-def test_web_followup_requests_json_and_keeps_assistant_history_structured(sdk_factory, monkeypatch):
-    from zerorepo.rtl_web.chat_runtime import answer
-
-    captured = []
-    decision = {"kind": "answer", "text": "由乘除法模块实现。", "evidence_refs": []}
-
-    def handler(request):
-        captured.append(json.loads(request.content))
-        return httpx.Response(200, json={
-            "id": "test", "object": "chat.completion", "created": 0, "model": "test-model",
-            "choices": [{"index": 0, "message": {"role": "assistant", "content": json.dumps(decision)}, "finish_reason": "stop"}],
-        })
-
-    sdk_factory(handler)
-    monkeypatch.setattr("zerorepo.rtl_web.runtime.load_agent", lambda _: ({}, config()))
-    result = answer(None, {"text": "哪个模块？", "evidence": {}, "history": [
-        {"text": "系统有哪些功能？", "answer": "包含乘除法。", "decision": "answer", "evidence_refs": []},
-    ]})
-    assert result == decision
-    assert captured[0]["response_format"] == {"type": "json_object"}
-    assert not captured[0].get("stream")
-    history = next(m for m in captured[0]["messages"] if m["role"] == "assistant")
-    assert json.loads(history["content"])["text"] == "包含乘除法。"
-
-
 def test_multimodal_uses_the_same_streaming_receiver(sdk_factory, monkeypatch, tmp_path):
     captured = []
 

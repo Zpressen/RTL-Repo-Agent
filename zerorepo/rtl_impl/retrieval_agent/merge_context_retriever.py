@@ -1,4 +1,5 @@
 from __future__ import annotations
+from zerorepo.rtl_impl.process_observer import observed
 
 import json
 from typing import Any
@@ -17,6 +18,8 @@ class MergeContextRetriever:
         self.llm_client = llm_client
         self.logger = logger
 
+    @observed('tool', '检索RTL合并的规格与依赖上下文', tool='retrieve_spec_block',
+              summarize=lambda r: f'选择{len(r.selected_spec_refs)}个规格引用、{len(r.kg_child_modules)}个子模块上下文；'+('使用降级结果。' if r.fallback_used else '已检查引用。'))
     def select_spec_refs(
         self,
         *,

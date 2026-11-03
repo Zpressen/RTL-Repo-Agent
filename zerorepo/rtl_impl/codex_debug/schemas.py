@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -57,6 +57,15 @@ class CodexDebugRunDescriptor(BaseModel):
     codex_episode: int = Field(default=1, ge=1)
     kg_hop_depth: int = Field(default=3, ge=1)
     kg: KgRunConfig = Field(default_factory=KgRunConfig)
+    verification_backend: Literal['trusted_case','custom_hdl']='trusted_case'
+    verification_spec: dict[str,Any]=Field(default_factory=dict)
+    verification_job_root: Path|None=None
+    verification_test_root: Path|None=None
+    verification_harness: Path|None=None
+    verification_toolchain: Path|None=None
+    verification_repository_root: Path|None=None
+    process_event_spool: Path|None=None
+    process_source_stream: str=''
 
     @model_validator(mode="after")
     def validate_roots(self) -> "CodexDebugRunDescriptor":
@@ -66,6 +75,20 @@ class CodexDebugRunDescriptor(BaseModel):
         private_root = self.private_root.resolve()
         debug_workdir = self.debug_workdir.resolve()
         top_rtl = self.top_rtl.resolve()
+        if self.verification_backend=='custom_hdl':
+            if not all([self.verification_job_root,self.verification_test_root,self.verification_harness]):
+                raise ValueError('Custom verification requires explicit job, test and harness roots')
+            job_root=self.verification_job_root.resolve()
+            for path in [task_root,private_root,self.verification_test_root,self.verification_harness]:
+                if not _is_under(path,job_root):raise ValueError('Custom verification reference is outside current job')
+            if self.process_event_spool and (not _is_under(self.process_event_spool,job_root) or _is_under(self.process_event_spool,task_root) or not self.process_source_stream):
+                raise ValueError('Custom process observer must use the protected current job spool')
+            if _is_under(self.verification_test_root,task_root) or _is_under(self.verification_harness,task_root):
+                raise ValueError('Frozen verification inputs must be outside model task root')
+            if self.verification_repository_root and (not _is_under(self.verification_repository_root,job_root) or _is_under(self.verification_repository_root,task_root)):
+                raise ValueError('Repository verifier must remain private inside current job')
+            if self.verify_script is not None:raise ValueError('Custom verification cannot select a trusted-case script')
+            if self.max_validation_trials>3 or self.validation_trial_offset>3:raise ValueError('Custom candidate budget is three')
         if not _is_under(spec_root, task_root):
             raise ValueError("spec_root must be inside task_root")
         if not _is_under(merged_root, task_root):

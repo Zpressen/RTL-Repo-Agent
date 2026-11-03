@@ -15,6 +15,7 @@ from agentscope.tool import ToolResponse, Toolkit
 from zerorepo.rtl_impl.debug_agent.agents import SafeReActAgent, clear_memory_safely
 from zerorepo.rtl_impl.debug_agent.sim_reviewer import check_syntax
 from zerorepo.rtl_impl.debug_agent.trace_slicer import parse_rtl_blocks
+from zerorepo.rtl_impl.process_observer import observed
 
 
 _PREPROCESSOR_CONTROL_DIRECTIVES = {
@@ -219,6 +220,8 @@ class Stage6MergeTools:
 
     # ---- 工具: read_merge_context ----
 
+    @observed('tool', '读取RTL合并所需材料', tool='read_context',
+              summarize=lambda r: f'已读取材料，正文{len(r.get("content") or "")}字。' if r.get('status')=='ok' else '材料读取未完成。')
     def read_merge_context(self, kind: str, max_chars: int = 12000) -> dict[str, Any]:
         ctx = self.state
         result: dict[str, Any] = {"status": "ok", "kind": kind, "module": ctx.module_name}
@@ -292,6 +295,8 @@ class Stage6MergeTools:
 
     # ---- 工具: inspect_rtl_structure ----
 
+    @observed('tool', '分析RTL声明、结构块与驱动关系', tool='inspect_rtl_structure', registered_tool=False,
+              summarize=lambda r: f'识别{r.get("module_count",0)}个模块声明、{len(r.get("blocks") or [])}个结构块、{len(r.get("outputs") or [])}个输出。' if r.get('status')=='ok' else 'RTL结构读取未完成。')
     def inspect_rtl_structure(self, target: str = "draft") -> dict[str, Any]:
         text = self._read_target(target)
         if not text.strip():
@@ -355,6 +360,8 @@ class Stage6MergeTools:
 
     # ---- 工具: run_lint ----
 
+    @observed('tool', '执行Verilator语法检查', tool='run_check',
+              summarize=lambda r: 'Verilator语法检查通过。' if r.get('status')=='ok' and r.get('is_pass') else 'Verilator语法检查未通过或未能执行，诊断保留在合并报告中。')
     def run_lint(self, target: str = "draft") -> dict[str, Any]:
         path = self._resolve_target_path(target)
         if path is None or not path.is_file():
@@ -392,6 +399,8 @@ class Stage6MergeTools:
 
     # ---- 工具: run_static_rtl_check ----
 
+    @observed('tool', '检查RTL宏、模块声明与输出驱动', tool='run_check',
+              summarize=lambda r: f'静态检查：{len(r.get("errors") or [])}项问题、{len(r.get("warnings") or [])}项提醒；'+('通过。' if r.get('status')=='pass' else '未通过。'))
     def run_static_rtl_check(self, target: str = "draft") -> dict[str, Any]:
         structure = self.inspect_rtl_structure(target)
         if structure.get("status") != "ok":
@@ -504,6 +513,8 @@ class Stage6MergeTools:
                 self.state.merged_file.parent.parent / "merge_journal" / self.state.module_name
             )
 
+    @observed('tool', '写入并预检模块合并候选', tool='write_rtl', registered_tool=False,
+              summarize=lambda r: '候选未接受，保留检查记录。' if r.get('status') in {'error','rejected'} else '已生成合并候选并记录预检结果；尚未代表正式接受。')
     def generate_merge_draft(self, code: str, reason: str = "", expected_effect: str = "") -> dict[str, Any]:
         del expected_effect
         self._ensure_journal()
@@ -552,6 +563,8 @@ class Stage6MergeTools:
 
         # 写入新草稿
         self.state.draft_file.write_text(candidate.rstrip() + "\n", encoding="utf-8")
+        from zerorepo.rtl_impl.material_observer import code_saved
+        code_saved(self.state.draft_file,'merge_draft')
         self.state.draft_generated = True
         self.state.journal.snapshot_files(step=step, label="after", files=[self.state.draft_file])
 
@@ -593,6 +606,8 @@ class Stage6MergeTools:
 
     # ---- 工具: commit_merge_draft ----
 
+    @observed('tool', '检查并接受模块合并候选', tool='write_rtl', registered_tool=False,
+              summarize=lambda r: '已写入接受版本，功能结果仍以本轮仿真为准。' if r.get('status')=='committed' else '候选未接受，已有接受版本保留。')
     def commit_merge_draft(self, reason: str = "") -> dict[str, Any]:
         self._ensure_journal()
         # 证据门控
@@ -625,6 +640,8 @@ class Stage6MergeTools:
         draft_code = self.state.draft_file.read_text(encoding="utf-8", errors="replace")
         self.state.merged_file.parent.mkdir(parents=True, exist_ok=True)
         self.state.merged_file.write_text(draft_code, encoding="utf-8")
+        from zerorepo.rtl_impl.material_observer import code_saved
+        code_saved(self.state.merged_file,'module')
         self.state.draft_committed = True
 
         result = {

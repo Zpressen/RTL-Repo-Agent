@@ -29,6 +29,8 @@ class LLMRequestOptions:
     repair_attempt: int = 1
     draft_root: str | Path | None = None
     progress_callback: Callable[[dict], None] | None = None
+    # Private incremental content consumer; public adapters must project fields.
+    content_callback: Callable[[str], None] | None = None
 
     def __post_init__(self):
         for name in ("total_timeout_seconds", "first_content_timeout_seconds", "idle_timeout_seconds",
@@ -93,6 +95,8 @@ class RequestProgress:
         self.chunks += 1
         if text:
             self.text += text
+            if self.options.content_callback is not None:
+                self.options.content_callback(self.text)
         # Preserve whitespace verbatim, but it is not evidence that generation
         # has started or is progressing. Heartbeats cannot extend a deadline.
         if text and text.strip():

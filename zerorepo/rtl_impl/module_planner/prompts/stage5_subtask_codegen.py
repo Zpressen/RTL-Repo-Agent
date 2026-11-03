@@ -60,7 +60,7 @@ Core rules:
 18. Prefer semantic correctness over perfect local syntax. The merge stage will repair integration details, declarations, and final syntax.
 19. Do not include Markdown fences.
 20. Fill contract from the code you generate. If unsure, use "unknown" but still list obvious writes and reads.
-21. contract.writes is the complete list of signals assigned by this fragment, including internal helper signals and module outputs in continuous, combinational and sequential assignments. Do not list only the outputs or only the newly added signals.
+21. contract.writes is the complete list of signals assigned by this fragment, including internal helper signals and module outputs in continuous, combinational and sequential assignments. Include function return variables and function-local assignment targets too, even in a declarations/helper fragment: for `function [7:0] xtime; ... xtime = ...; endfunction`, writes includes "xtime". Do not list only module state, outputs or newly added signals. This field is a JSON array of signal-name strings, never a JSON Schema object.
 22. In PLANNING_KG_CONTEXT, child ports use compact [name, direction, width] arrays as identified by port_fields. These are complete child boundary contracts.
 """.strip()
 

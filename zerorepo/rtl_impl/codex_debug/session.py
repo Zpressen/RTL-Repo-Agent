@@ -7,6 +7,7 @@ import re
 import shutil
 import threading
 import uuid
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
@@ -57,6 +58,7 @@ class CandidateState:
     evaluated_manifest: dict[str, str] = field(default_factory=dict)
     lint_pass: bool = False
     sim_completed: bool = False
+    check_completed: bool = False
     result: dict[str, Any] = field(default_factory=dict)
     artifact_root: Path | None = None
 
@@ -78,6 +80,10 @@ class CodexDebugSession:
         logger: logging.Logger | None = None,
     ) -> None:
         self.descriptor = descriptor
+        self.process_sink=None
+        if descriptor.process_event_spool:
+            from zerorepo.rtl_impl.process_events import JsonlProcessEventSink
+            self.process_sink=JsonlProcessEventSink(descriptor.process_event_spool,descriptor.process_source_stream)
         self.logger = logger or logging.getLogger(__name__)
         self._lock = threading.RLock()
         self.memory_adapter = None
@@ -87,7 +93,7 @@ class CodexDebugSession:
                                                 descriptor.private_root/'memory', descriptor.outer_run_id or descriptor.run_id, descriptor.run_id)
         self._closed = False
         self.readonly_calls = 0
-        self.validation_trials = 0
+        self.validation_trials = descriptor.validation_trial_offset if descriptor.verification_backend=='custom_hdl' else 0
         self.accepted_actions = 0
         self.baseline_revision = 0
         self.candidate: CandidateState | None = None
@@ -126,7 +132,13 @@ class CodexDebugSession:
             if self._manifest(self.merged_root, allow_symlinks=False) != self.accepted_manifest:
                 self._replace_tree(self.baseline_rtl_root, self.merged_root)
 
-        if reviewer is None and descriptor.verify_script is not None:
+        if descriptor.verification_backend=='custom_hdl':
+            if reviewer is None:
+                from zerorepo.rtl_impl.runtime_integration import workbench_integration
+                reviewer=workbench_integration().reviewer.from_descriptor(descriptor)
+            if not callable(getattr(reviewer,'for_candidate',None)) or not callable(getattr(reviewer,'verification_context',None)):
+                raise ValueError('Custom reviewer must bind candidate roots and scoped verification')
+        elif reviewer is None and descriptor.verify_script is not None:
             reviewer = SystemSimReviewer(
                 generated_dir=self.merged_root,
                 verify_script=descriptor.verify_script,
@@ -269,6 +281,8 @@ class CodexDebugSession:
             raise ValueError("Codex Debug persistent counters are missing")
         self.readonly_calls = max(0, int(counters.get("readonly_calls") or 0))
         self.validation_trials = max(0, int(counters.get("validation_trials") or 0))
+        if self.descriptor.verification_backend=='custom_hdl':
+            self.validation_trials=max(self.validation_trials,self.descriptor.validation_trial_offset)
         self.accepted_actions = max(0, int(counters.get("accepted_actions") or 0))
         self.baseline_revision = max(0, int(value.get("baseline_revision") or 0))
         if self.validation_trials > self.descriptor.max_validation_trials:
@@ -519,7 +533,7 @@ class CodexDebugSession:
         focus_blocks: list[str] | None = None,
         max_chars: int = 12000,
     ) -> dict[str, Any]:
-        with self._lock:
+        with self._lock, self._verification_context(), self._process_context():
             blocked = self._consume_read("read_module_semantics")
             if blocked:
                 return blocked
@@ -545,7 +559,7 @@ class CodexDebugSession:
         signal_name: str | None = None,
         instance_name: str | None = None,
     ) -> dict[str, Any]:
-        with self._lock:
+        with self._lock, self._verification_context(), self._process_context():
             blocked = self._consume_read("query_rtl_kg")
             if blocked:
                 return blocked
@@ -566,7 +580,7 @@ class CodexDebugSession:
         expected_value: str | None = None,
         max_candidates: int = 5,
     ) -> dict[str, Any]:
-        with self._lock:
+        with self._lock, self._verification_context(), self._process_context():
             blocked = self._consume_read("trace_signal_cause") or self._dynamic_evidence_guard("trace_signal_cause")
             if blocked:
                 return blocked
@@ -593,7 +607,7 @@ class CodexDebugSession:
             return self._public_result(result)
 
     def list_vcd_signals(self, pattern: str = "", scope: str = "", limit: int = 100) -> dict[str, Any]:
-        with self._lock:
+        with self._lock, self._verification_context(), self._process_context():
             blocked = self._consume_read("list_vcd_signals") or self._dynamic_evidence_guard("list_vcd_signals")
             if blocked:
                 return blocked
@@ -610,7 +624,7 @@ class CodexDebugSession:
         mode: Literal["sample", "changes"] = "sample",
         max_rows: int = 80,
     ) -> dict[str, Any]:
-        with self._lock:
+        with self._lock, self._verification_context(), self._process_context():
             blocked = self._consume_read("probe_vcd") or self._dynamic_evidence_guard("probe_vcd")
             if blocked:
                 return blocked
@@ -624,7 +638,7 @@ class CodexDebugSession:
         signals: list[str] | None = None,
         time_window: list[int] | None = None,
     ) -> dict[str, Any]:
-        with self._lock:
+        with self._lock, self._verification_context(), self._process_context():
             blocked = self._consume_read("run_check")
             if blocked:
                 return blocked
@@ -655,17 +669,17 @@ class CodexDebugSession:
     # ------------------------------------------------------------------
 
     def query_rtl_memories(self, module_name=None, signals=None, failure_type=None, limit=5):
-        with self._lock:
+        with self._lock, self._verification_context(), self._process_context():
             if not self.memory_adapter: return {'memories': [], 'state': 'no_snapshot'}
             return self.memory_adapter.query(module_name, signals, failure_type, limit)
 
     def read_rtl_memory(self, revision_id, max_chars=8000):
-        with self._lock:
+        with self._lock, self._verification_context(), self._process_context():
             if not self.memory_adapter: raise ValueError('No memory snapshot')
             return self.memory_adapter.read(revision_id,max_chars)
 
     def record_memory_application(self, revision_id, decision, reason, target_files=None, target_signals=None):
-        with self._lock:
+        with self._lock, self._verification_context(), self._process_context():
             if not self.memory_adapter: raise ValueError('No memory snapshot')
             files = target_files or []
             allowed = set(self._current_manifest())
@@ -679,7 +693,7 @@ class CodexDebugSession:
         reason: str = "",
         expected_effect: str = "",
     ) -> dict[str, Any]:
-        with self._lock:
+        with self._lock, self._verification_context(), self._process_context():
             if action == "evaluate":
                 return self._evaluate_changes(reason=reason, expected_effect=expected_effect)
             if action == "accept":
@@ -763,15 +777,17 @@ class CodexDebugSession:
                 result["sim_completed"] = False
                 self.candidate.sim_completed = False
             else:
-                validation_reviewer = self.reviewer
-                if isinstance(self.reviewer, SystemSimReviewer):
-                    validation_reviewer = SystemSimReviewer(
-                        generated_dir=candidate_rtl_root,
-                        verify_script=self.reviewer.verify_script,
-                        output_dir=self.debug_workdir,
-                        timeout=self.reviewer.timeout,
-                    )
+                from zerorepo.rtl_impl.debug_agent.system_debug_runner import bind_reviewer
+                validation_reviewer = bind_reviewer(self.reviewer,candidate_rtl_root,self.debug_workdir)
                 is_pass, mismatch_count, sim_output = validation_reviewer.review()
+                check_completed=True
+                sim_completed=True
+                check_scope='functional'
+                if self.descriptor.verification_backend=='custom_hdl':
+                    report=getattr(validation_reviewer,'last_report',None) or {}
+                    check_completed=report.get('execution_status')=='completed'
+                    check_scope=report.get('scope','unknown')
+                    sim_completed=check_scope=='functional' and report.get('simulation_completed') is True and check_completed
                 sim_path = self.debug_workdir / "debug_sim_output.json"
                 sim_path.write_text(sim_output, encoding="utf-8")
                 first_fail = _extract_first_fail_time(sim_output)
@@ -799,14 +815,17 @@ class CodexDebugSession:
                         "is_pass": bool(is_pass),
                         "mismatch_count": int(mismatch_count),
                         "first_fail_time": first_fail,
-                        "sim_completed": True,
+                        "sim_completed": sim_completed,
+                        "check_completed":check_completed,
+                        "check_scope":check_scope,
                         "sim_output_excerpt": _summarize_command_json(sim_output),
                         "metric_delta": _metric_delta(before_metrics, after_metrics),
                         "trace_summary": trace_summary,
                         "trace_error": trace_error,
                     }
                 )
-                self.candidate.sim_completed = True
+                self.candidate.sim_completed = sim_completed
+                self.candidate.check_completed = check_completed
         except Exception as exc:  # noqa: BLE001
             result.update(
                 {
@@ -821,7 +840,7 @@ class CodexDebugSession:
         self.candidate.result = dict(result)
         self.last_validation = dict(result)
         if self.memory_adapter:
-            from zerorepo.rtl_web.artifacts import tree_manifest
+            from zerorepo.rtl_impl.rtl_artifacts import tree_manifest
             tree_hash, _ = tree_manifest(candidate_rtl_root)
             verdict = 'pass' if result.get('is_pass') and result.get('sim_completed') else 'fail' if result.get('sim_completed') or result.get('lint_pass') is False else 'unverified'
             self.memory_adapter.observe(candidate_id + ':' + str(revision), result['diff'], tree_hash, verdict,
@@ -850,7 +869,8 @@ class CodexDebugSession:
         if error:
             return error
         assert self.candidate is not None
-        if not self.candidate.lint_pass or not self.candidate.sim_completed:
+        basic_checked=self.descriptor.verification_backend=='custom_hdl' and self.descriptor.verification_spec.get('backend')=='basic_only' and self.candidate.check_completed
+        if not self.candidate.lint_pass or not (self.candidate.sim_completed or basic_checked):
             return {
                 "status": "candidate_not_acceptable",
                 "candidate_id": self.candidate.candidate_id,
@@ -992,7 +1012,7 @@ class CodexDebugSession:
     # ------------------------------------------------------------------
 
     def get_debug_status(self, *, count_read: bool = True) -> dict[str, Any]:
-        with self._lock:
+        with self._lock, self._verification_context(), self._process_context():
             if count_read:
                 blocked = self._consume_read("get_debug_status")
                 if blocked:
@@ -1095,7 +1115,7 @@ class CodexDebugSession:
         return value
 
     def close(self) -> None:
-        with self._lock:
+        with self._lock, self._verification_context(), self._process_context():
             if self._closed:
                 return
             phase = self._phase()
@@ -1120,3 +1140,10 @@ class CodexDebugSession:
     def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> None:
         del exc_type, exc, traceback
         self.close()
+    def _verification_context(self):
+        factory=getattr(getattr(self,'reviewer',None),'verification_context',None)
+        return factory() if callable(factory) else nullcontext()
+
+    def _process_context(self):
+        from zerorepo.rtl_impl.process_observer import observe
+        return observe(self.process_sink,stage='repair') if self.process_sink is not None else nullcontext()

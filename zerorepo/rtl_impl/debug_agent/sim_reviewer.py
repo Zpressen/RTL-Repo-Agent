@@ -31,6 +31,10 @@ def check_syntax(
     include_dirs: list[str] | None = None,
     support_files: list[str] | None = None,
 ) -> Tuple[bool, str]:
+    from .verification_context import active_syntax_checker
+    checker=active_syntax_checker()
+    if checker is not None:
+        return checker(rtl_path,top_module=top_module,include_dirs=include_dirs,support_files=support_files)
     _require_executable("verilator")
     rtl_path = os.path.abspath(rtl_path)
     rtl_dir = os.path.dirname(rtl_path)

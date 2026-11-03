@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 from typing import Any, Optional
+from zerorepo.rtl_impl.json_output import escape_invalid_json_backslashes
 
 
 def strip_code_fences(text: str) -> str:
@@ -86,11 +87,14 @@ def repair_json_payload(raw: Any) -> Any:
         raise ValueError("Empty JSON payload.")
     text = str(raw).strip()
     candidates = [strip_code_fences(text), extract_balanced_json(text), auto_close_json(text)]
+    first_error = None
     for candidate in candidates:
         if not candidate:
             continue
         try:
-            return json.loads(candidate)
-        except Exception:
-            continue
-    raise ValueError("Unable to repair JSON payload.")
+            return json.loads(escape_invalid_json_backslashes(candidate))
+        except json.JSONDecodeError as exc:
+            if first_error is None:
+                first_error = exc
+    detail = f" {first_error.msg} (line {first_error.lineno}, column {first_error.colno})." if first_error else ""
+    raise ValueError("Unable to repair JSON payload." + detail)

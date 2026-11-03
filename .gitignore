@@ -424,6 +424,7 @@ FodyWeavers.xsd
 # Python virtual environments / package installs
 .zerorepo/lib/
 .venv/
+.venv-rtl/
 venv/
 env/
 *.egg-info/
@@ -470,29 +471,21 @@ rtl_outputs/
 
 # ZeroRepo runtime workspaces (planner outputs, debug journals, KG state)
 **/.zerorepo/
+*.egg-info/
 
 # Run records containing large simulation artifacts (waveforms, logs)
 Accurate_Records_gpt5.6/
 
-# RTL demo: local state, secrets, generated bundles and browser artifacts
-.venv-web/
-.rtl-demo/
-configs/rtl_demo.local.yaml
 *.sqlite3
 *.sqlite3-shm
 *.sqlite3-wal
 node_modules/
 .env*
 !.env.example
-web/rtl-demo/public/cases/
-web/rtl-demo/test-results/
-web/rtl-demo/playwright-report/
 coverage/
 
-# Deployment build environments and private server config
 .venv-agent/
 .venv-deploy*/
 build/
 *.so
 *.o
-configs/rtl_demo.production.yaml

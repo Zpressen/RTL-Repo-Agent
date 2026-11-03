@@ -50,11 +50,18 @@ def extract_markdown_outline(markdown_text: str) -> List[str]:
     headings: List[str] = []
     stack: List[tuple[int, str]] = []
     for raw_line in markdown_text.splitlines():
-        match = HEADER_RE.match(raw_line.strip())
-        if not match:
-            continue
-        level = len(match.group(1))
-        heading = match.group(2).strip() or "UNTITLED"
+        line = raw_line.strip()
+        match = HEADER_RE.match(line)
+        if match:
+            level = len(match.group(1))
+            heading = match.group(2).strip() or "UNTITLED"
+        else:
+            # Repository specifications also use bold numbered section titles.
+            numbered = re.fullmatch(r"\*\*((\d+(?:\.\d+)*)\.?\s+[^*]+)\*\*", line)
+            if not numbered:
+                continue
+            level = min(6, numbered.group(2).count('.') + 1)
+            heading = numbered.group(1).strip()
         while stack and stack[-1][0] >= level:
             stack.pop()
         stack.append((level, heading))

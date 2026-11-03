@@ -23,6 +23,17 @@ class PlanningArtifactSink(Protocol):
         ...
 
 
+class ProcessEventSink(Protocol):
+    """Optional action observer; legacy callers need no Web dependency."""
+    def emit(self, event_type: str, **fields: Any) -> Any:
+        ...
+
+
+class NullProcessEventSink:
+    def emit(self, event_type: str, **fields: Any) -> None:
+        return None
+
+
 class NullPlanningContextProvider:
     def get_stage_context(
         self,

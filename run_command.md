@@ -1,3 +1,12 @@
+项目介绍、环境配置和完整运行说明见 [README.md](README.md)。
+
+网页 demo 与交互工作台已迁移至 `/home/mokita/RTL-Studio`。
+
+启动：`cd /home/mokita/RTL-Studio && ./start.sh`。
+迁移说明见 [docs/rtl-studio-migration.md](docs/rtl-studio-migration.md)。
+
+## 原 Agent 命令
+
 激活uv环境：
 source .zerorepo/bin/activate
 bash scripts/run_main.sh

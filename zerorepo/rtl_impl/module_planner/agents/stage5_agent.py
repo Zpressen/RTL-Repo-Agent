@@ -27,6 +27,7 @@ from ..utils.codegen_repair import SubtaskCodeRepairAdapter
 from ..utils.stage5_sources import SOURCE_VERSION, Stage5LogEvidence, changed_components, compact_stage5_interfaces, source_snapshot, stable_planning_context, stage5_prompt_context
 from ..utils.stage5_store import Stage5Store
 from zerorepo.rtl_impl.port_contracts import ansi_module_ports
+from zerorepo.rtl_impl.process_observer import observed
 from .global_defines import (
     build_stage5_global_defines_summary,
     copy_e203_canonical_define_files,
@@ -483,6 +484,8 @@ class Stage5Agent(BaseStageAgent):
             self.logger.info("[%s] Ignoring invalid checkpoint %s: %s", self.stage_name, path, exc)
             return {}
 
+    @observed('tool', '保存RTL片段、契约与恢复检查点', tool='write_rtl', registered_tool=False,
+              summarize=lambda _: '已保存当前候选片段及契约；是否通过仿真以关联检查为准。')
     def _commit_subtasks(self, *, module_name, task_id, entries, fragments, contracts, input_fingerprint, complete, pending=None):
         contract_payload = {"schema_version": "stage5_fragment_contracts_v1", "module": module_name,
                             "input_fingerprint": input_fingerprint, "contracts": contracts}
@@ -715,6 +718,8 @@ class Stage5Agent(BaseStageAgent):
         if missing_plans:
             raise ValueError(f"Stage5 missing module plans for modules: {missing_plans}")
 
+    @observed('tool', '读取模块实现计划', tool='read_context',
+              summarize=lambda r: f'已读取{r.module}模块计划，包含{len(r.subtasks)}个局部任务。')
     def _read_module_plan(self, relative_or_absolute: str) -> ModulePlanArtifact:
         path = self._resolve_output_path(relative_or_absolute)
         with open(path, "r", encoding="utf-8") as f:
@@ -731,8 +736,13 @@ class Stage5Agent(BaseStageAgent):
         if not path.exists():
             self.logger.warning("[%s] Module skeleton doc is missing: %s", self.stage_name, path)
             return "", str(path)
-        text = path.read_text(encoding="utf-8").replace("\r\n", "\n").strip()
+        text = self._read_skeleton_file(path)
         return _extract_module_frame_section(text), str(path)
+
+    @observed('tool', '读取模块骨架文件', tool='read_context',
+              summarize=lambda r: f'已读取骨架正文{len(r)}字，按原文件提取模块框架。')
+    def _read_skeleton_file(self, path: Path) -> str:
+        return path.read_text(encoding='utf-8').replace('\r\n', '\n').strip()
 
     def _select_spec_blocks(self, module_spec: ModuleSpecBlocks, spec_refs: List[str]) -> List[Dict[str, str]]:
         block_by_id = {block.block_id: block for block in module_spec.blocks}
@@ -897,6 +907,8 @@ class Stage5Agent(BaseStageAgent):
         tmp_path = path.with_name(f"{path.name}.tmp")
         tmp_path.write_text(text, encoding="utf-8")
         tmp_path.replace(path)
+        from zerorepo.rtl_impl.material_observer import code_saved
+        code_saved(path,'fragment')
 
     def _resolve_output_path(self, relative_or_absolute: str) -> Path:
         path = Path(relative_or_absolute)

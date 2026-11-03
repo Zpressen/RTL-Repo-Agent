@@ -15,6 +15,8 @@ def atomic_write_text(path: Path, text: str) -> None:
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temporary, path)
+        from zerorepo.rtl_impl.material_observer import code_saved
+        code_saved(path)
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)

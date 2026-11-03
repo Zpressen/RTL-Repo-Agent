@@ -1,7 +1,0 @@
-# Production API only; runtime SDKs live in the Agent environment.
-fastapi==0.143.2
-uvicorn==0.54.0
-pydantic==2.14.1
-PyYAML==6.0.3
-vcdvcd==2.6.0
-httpx==0.28.1

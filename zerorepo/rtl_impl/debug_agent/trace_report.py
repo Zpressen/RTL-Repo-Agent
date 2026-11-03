@@ -1583,7 +1583,9 @@ def build_trace_report(
     runtime_top_module: str | None = None,
 ) -> tuple[dict[str, Any], list[RtlBlock]]:
     """Build a structured bug report (waveform + coarse RTL slice)."""
-    sim = CommandResult.model_validate_json(sim_log_json)
+    observation=json.loads(sim_log_json)
+    native=observation if isinstance(observation,dict) and observation.get('scope') in {'syntax','compile','functional'} and 'checks_executed' in observation else None
+    sim = CommandResult(stdout=str(native.get('diagnostic_excerpt') or ''),stderr=str(native.get('error') or '')) if native is not None else CommandResult.model_validate(observation)
     stdout = sim.stdout or ""
 
     rtl_text = rtl_path.read_text(encoding="utf-8")
@@ -1598,6 +1600,8 @@ def build_trace_report(
 
     fail_time, raw_fail_outputs = _extract_fail_signals_and_time(stdout)
     total_mismatches = _extract_total_mismatches(stdout)
+    if total_mismatches is None and native is not None and type(native.get('failures')) is int:
+        total_mismatches=native['failures']
 
     blocks = parse_rtl_blocks(rtl_text)
     if not blocks:
@@ -1978,6 +1982,7 @@ def build_trace_report(
         visible_fail_outputs = fail_details
 
     report: dict[str, Any] = {
+        'verification_ref':{key:native.get(key) for key in ('check_id','version_id','tree_sha256','verification_spec_id','testset_sha256','checks_executed','failures')} if native is not None else None,
         "fail_time": fail_time_star,
         "planner_module_name": logical_module_name,
         "runtime_top_module": module_name,

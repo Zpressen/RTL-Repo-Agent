@@ -6,10 +6,12 @@ from typing import Dict, Iterable, Literal, Set
 
 try:  # optional runtime dependency (preferred)
     from tree_sitter import Language, Parser  # type: ignore[import-not-found]
-    import tree_sitter_verilog as _ts_verilog  # type: ignore[import-not-found]
 except Exception:  # noqa: BLE001
     Language = None  # type: ignore[assignment]
     Parser = None  # type: ignore[assignment]
+try:
+    import tree_sitter_verilog as _ts_verilog  # type: ignore[import-not-found]
+except ImportError:
     _ts_verilog = None  # type: ignore[assignment]
 
 
@@ -381,7 +383,7 @@ def _extract_assignments_from_block_treesitter(block: RtlBlock) -> list[RtlAssig
 
 
 def _extract_assignments_from_block(block: RtlBlock) -> list[RtlAssignment]:
-    if Parser is not None and Language is not None and _ts_verilog is not None:
+    if Parser is not None and Language is not None:
         try:
             assignments = _extract_assignments_from_block_treesitter(block)
             if assignments:
@@ -451,7 +453,7 @@ def parse_rtl_blocks(rtl_text: str) -> list[RtlBlock]:
     block boundaries and read/write extraction. Falls back to a heuristic parser
     if tree-sitter isn't available.
     """
-    if Parser is None or Language is None or _ts_verilog is None:
+    if Parser is None or Language is None:
         return _parse_rtl_blocks_heuristic(rtl_text)
 
     try:
@@ -538,7 +540,14 @@ def _get_ts_parser() -> Parser:  # type: ignore[valid-type]
     if _TS_PARSER is not None:
         return _TS_PARSER
 
-    assert Parser is not None and Language is not None and _ts_verilog is not None
+    assert Parser is not None and Language is not None
+    if _ts_verilog is None:
+        # Deployment pins a vendored grammar instead of the optional wheel.
+        # Use that same parser for KG and traces rather than silently dropping
+        # multiline assignments through the line-oriented fallback.
+        from zerorepo.rtl_impl.rtl_kg.rtl_file_graph_builder import VerilogTreeSitter
+        _TS_PARSER=VerilogTreeSitter.get_parser()
+        return _TS_PARSER
     _TS_LANGUAGE = Language(_ts_verilog.language())
     _TS_PARSER = Parser()
     _TS_PARSER.language = _TS_LANGUAGE

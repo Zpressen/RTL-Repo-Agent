@@ -17,6 +17,8 @@ from ..interfaces import (
 from ..utils import PlannerLLMClient, get_planner_logger, repair_json_payload
 from ..utils.local_repair import ArtifactIssue, fingerprint, patch_rejection_details, repair_prompt
 from ..utils.artifact_store import atomic_write_json
+from zerorepo.rtl_impl.process_observer import is_observing, emit_public, public_emitter
+from zerorepo.rtl_impl.public_progress import public_step, current_step, live_report_callback, PUBLIC_INSTRUCTION
 
 
 def validate_model(model_type: Type[BaseModel], payload: Any) -> BaseModel:
@@ -45,6 +47,46 @@ class BaseStageAgent:
     max_quality_attempts: int = 5
     allow_best_effort_quality_fallback: bool = True
     memory_context_window: int = 8
+
+    def _complete_public(self, *, memory, images=None, output_model=None, module='', attempt=1, **kwargs):
+        if not is_observing():
+            return self.llm_client.complete_with_memory(memory=memory, images=images, **kwargs)
+        from copy import deepcopy
+        request_memory = deepcopy(memory)
+        # Memory always retains its first system message; an extra trailing
+        # system message may be ignored or trimmed by a backend.
+        first_system=next((message for message in request_memory.history if message.role=='system'),None)
+        if first_system is not None:first_system.content+='\n\n'+PUBLIC_INSTRUCTION
+        else:request_memory.add_message(SystemMessage(content=PUBLIC_INSTRUCTION))
+        latest=request_memory.last('user')
+        if latest:latest.content+='\n\nWorkbench response: write _public_start FIRST (Chinese summary and this-call plan), then the required artifact fields, then _public_progress. These public fields are removed before artifact validation. Do not emit private reasoning.'
+        model = output_model or getattr(self, 'output_model', None)
+        operation=getattr(self,'_retry_output_name','')
+        with public_step(self.stage_name, module=module, output=getattr(model, '__name__', ''), attempt=attempt):
+            step=current_step()
+            operation_names={'conservative_candidate':'保守方案','balanced_candidate':'均衡方案','modular_candidate':'模块化方案',
+                             'architecture_ranking_first_pass':'首轮比较','architecture_ranking_second_pass':'交叉复核',
+                             'architecture_ranking_adjudication':'分歧裁定'}
+            if operation in operation_names:step['label']+=' · '+operation_names[operation]
+            from dataclasses import replace
+            from zerorepo.rpg_gen.base.llm_client.request_policy import LLMRequestOptions
+            options=kwargs.get('request_options')
+            if options is None:
+                factory=getattr(self.llm_client,'request_options',None)
+                options=factory(stage=self.stage_name,module=module,output_root=getattr(self,'output_root',None),attempt=attempt) if factory else LLMRequestOptions()
+            callback=live_report_callback(public_emitter(),step)
+            prior=options.content_callback
+            def on_content(text):
+                if prior:prior(text)
+                callback(text)
+            from zerorepo.rtl_impl.public_progress import request_progress_callback
+            progress=request_progress_callback(public_emitter(),step,options)
+            prior_progress=options.progress_callback
+            def on_progress(snapshot):
+                if prior_progress:prior_progress(snapshot)
+                progress(snapshot)
+            kwargs['request_options']=replace(options,content_callback=on_content,progress_callback=on_progress)
+            return self.llm_client.complete_with_memory(memory=request_memory, images=images, **kwargs)
 
     def __init__(
         self,
@@ -144,7 +186,7 @@ class BaseStageAgent:
             if options and self.stage_name.startswith(("stage3", "stage4", "stage5")):
                 arguments["request_options"] = options(stage=self.stage_name, module=getattr(adapter, "module", ""),
                     output_root=getattr(self, "output_root", None), attempt=attempt)
-            raw = self.llm_client.complete_with_memory(**arguments)
+            raw = self._complete_public(**arguments, module=getattr(adapter, 'module', ''), attempt=attempt)
             self._log_llm_raw_output(raw, attempt_label="initial" if attempt == 1 else f"local_repair_{attempt - 1}")
             if inspection is None:
                 inspection = adapter.inspect(raw)
@@ -164,9 +206,17 @@ class BaseStageAgent:
                 issue.module = getattr(adapter, "module", "")
             for change in inspection.normalizations:
                 self.logger.info("[%s] Safe normalization: %s", self.stage_name, change)
+            if self.stage_name.startswith('stage5') and isinstance(inspection.candidate,dict) and isinstance(inspection.candidate.get('code'),str):
+                from zerorepo.rtl_impl.material_observer import current_publisher
+                publisher=current_publisher()
+                if publisher is not None:
+                    publisher.capture_fragment_text(inspection.candidate['code'],getattr(adapter,'module',''),getattr(adapter,'locked',{}).get('subtask_id','fragment'))
             if not inspection.issues and not patch_error and inspection.artifact is not None:
                 self._last_quality_errors = []
+                self._publish_output(inspection.artifact)
                 return inspection
+            emit_public('finding.created', purpose_summary='本步结果需要局部修正',
+                        result_summary=f'{self.stage_name} 第{attempt}次结果有{len(inspection.issues)}项约束问题'+('，补丁未被接受。' if patch_error else '，将针对缺项修正。'))
             self.logger.warning(
                 "[%s] Validation failed on attempt %d/%d: %s%s", self.stage_name, attempt, limit,
                 [issue.to_dict() for issue in inspection.issues],
@@ -243,7 +293,7 @@ class BaseStageAgent:
                 len(images or []),
             )
             try:
-                raw = self.llm_client.complete_with_memory(memory=memory, images=images or None)
+                raw = self._complete_public(memory=memory, images=images or None, output_model=output_model, attempt=parse_attempt, module=getattr(task_input,'task_id',''))
             except LLMRequestError:
                 raise
             except Exception as exc:
@@ -266,6 +316,16 @@ class BaseStageAgent:
                 break
             except Exception as exc:
                 parse_errors.append(str(exc))
+                if hasattr(exc, 'errors'):
+                    issues = exc.errors(include_input=False)
+                    fields = ['.'.join(map(str, issue['loc'])) for issue in issues[:3]]
+                    reason = f'结构检查发现{len(issues)}项字段问题：' + '、'.join(fields) + '。'
+                else:
+                    reason = '返回内容不是可解析的 JSON，需修正字符串转义或结构。'
+                next_action = ('将保留输入并请求修正。' if parse_attempt < parse_attempt_limit
+                               else '已达到本步重试上限，本轮停止；原始结果已保留。')
+                emit_public('finding.created', purpose_summary='模型结果格式尚未通过检查',
+                            result_summary=f'{self.stage_name} 第{parse_attempt}次结果未通过检查。{reason}{next_action}')
                 self.logger.warning(
                     "[%s] Parse failed on attempt %d/%d: %s",
                     self.stage_name,
@@ -288,9 +348,12 @@ class BaseStageAgent:
         best_quality_errors = list(quality_errors)
         if not quality_errors:
             self._last_quality_errors = []
+            self._publish_output(artifact)
             return artifact
 
         current_errors = list(quality_errors)
+        emit_public('finding.created', purpose_summary='本步结果仍有待解决的约束',
+                    result_summary=f'{self.stage_name} 检查发现{len(quality_errors)}项问题，将修正当前结果；尚未进行HDL仿真。')
         for quality_attempt in range(2, quality_attempt_limit + 1):
             self.logger.warning(
                 "[%s] Quality check failed on attempt %d/%d: %s",
@@ -311,7 +374,7 @@ class BaseStageAgent:
                 len(images or []),
             )
             try:
-                raw = self.llm_client.complete_with_memory(memory=memory, images=images or None)
+                raw = self._complete_public(memory=memory, images=images or None, output_model=output_model, attempt=quality_attempt, module=getattr(task_input,'task_id',''))
             except LLMRequestError:
                 raise
             except Exception as exc:
@@ -344,6 +407,7 @@ class BaseStageAgent:
                 best_quality_errors = list(candidate_errors)
             if not candidate_errors:
                 self._last_quality_errors = []
+                self._publish_output(candidate)
                 return candidate
             current_errors = list(candidate_errors)
 
@@ -432,6 +496,13 @@ class BaseStageAgent:
             self.stage_name,
             reason,
         )
+
+    def _publish_output(self, artifact: BaseModel) -> None:
+        from zerorepo.rtl_impl.public_artifact_report import artifact_report
+        report=artifact_report(artifact)
+        if report:
+            emit_public('output.recorded',purpose_summary='已验证的本步材料',public_progress=report,
+                        source_kind='runtime_observation')
 
     def _log_stage_output(self, artifact: BaseModel) -> None:
         self.logger.info(

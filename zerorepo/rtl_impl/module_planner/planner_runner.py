@@ -21,6 +21,7 @@ from zerorepo.rtl_impl.debug_agent.system_debug_runner import (
     system_debug_result_to_dict,
 )
 from zerorepo.rtl_impl.kg_agent import ModuleResultWriter, PlanningContextRetriever, PlanningGraphWriter
+from zerorepo.rtl_impl.process_observer import observed
 
 from .agents import (
     Stage1Agent,
@@ -74,8 +75,14 @@ from .utils.local_repair import REPAIR_POLICY_VERSION, fingerprint
 from .utils import resolve_module_spec_text
 
 
+@observed('tool', '检查已保存RTL的语法准入', tool='run_check',
+          summarize=lambda r: '仅含宏定义，未执行模块语法检查。' if r[1]=='{}' else '语法检查通过。' if r[0] else '语法检查未通过，诊断保留在本轮材料中。')
 def _check_single_file_syntax(rtl_path: str, top_module: str | None = None) -> tuple:
     """Run Verilator --lint-only on a single file, without globbing other .v files."""
+    from zerorepo.rtl_impl.debug_agent.verification_context import active_syntax_checker
+    checker=active_syntax_checker()
+    if checker is not None:
+        return checker(rtl_path,top_module=top_module,support_files=[])
     import os as _os
     from zerorepo.rtl_impl.debug_agent.bash_tools import CommandResult, run_bash_command
 
@@ -236,6 +243,9 @@ class PlannerRunner:
             planning_context_retriever=self.planning_context_retriever,
             oracle_root=debug_config.oracle_root,
         )
+        # Persist request status/partial responses for early stages as well.
+        for agent in (self.stage1, self.stage1_temporal, self.stage2, self.stage2_temporal):
+            agent.output_root = self.output_root
         self.debug_runner = ModuleDebugRunner(
             config=debug_config,
             workspace_root=self.stage6.workspace_root,
@@ -935,6 +945,8 @@ class PlannerRunner:
             )
             return None
 
+    @observed('tool', '保存已选择的架构骨架', tool='write_planning_material', registered_tool=False,
+              summarize=lambda r: '已保存 '+r.name+'，后续模块规划将读取此骨架。')
     def _write_repo_skeleton_payload(self, payload: Dict[str, Any]) -> Path:
         directory = self.output_root
         directory.mkdir(parents=True, exist_ok=True)
@@ -1196,6 +1208,8 @@ class PlannerRunner:
             )
         return path
 
+    @observed('tool', '写入模块规划材料', tool='write_planning_material', registered_tool=False,
+              summarize=lambda r: '已写入 '+r.name+'。')
     def _write_json_payload(self, payload: Dict[str, Any], path: Path) -> Path:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = path.with_name(f"{path.name}.tmp")
@@ -1204,6 +1218,8 @@ class PlannerRunner:
         tmp_path.replace(path)
         return path
 
+    @observed('tool', '写入模块骨架文档', tool='write_planning_material', registered_tool=False,
+              summarize=lambda r: '已写入 '+r.name+'。')
     def _write_text_payload(self, payload: str, path: Path) -> Path:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = path.with_name(f"{path.name}.tmp")

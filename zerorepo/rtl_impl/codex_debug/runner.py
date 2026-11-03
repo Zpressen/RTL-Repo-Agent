@@ -151,11 +151,11 @@ class CodexDebugRunner:
             try:
                 episode_env=process_env
                 if isolated_web_job:
-                    from zerorepo.rtl_web.tool_bridge import ToolBridge
-                    from zerorepo.rtl_web.sandbox import model_command
+                    from zerorepo.rtl_impl.runtime_integration import workbench_integration
+                    integration=workbench_integration()
                     self._write_descriptor(descriptor_path,episode_descriptor)
-                    bridge=ToolBridge(descriptor_path,episode_descriptor.run_id)
-                    command,episode_env=model_command(episode_descriptor,command,process_env,bridge)
+                    bridge=integration.tool_bridge(descriptor_path,episode_descriptor.run_id)
+                    command,episode_env=integration.model_command(episode_descriptor,command,process_env,bridge)
                 exit_code, episode_timed_out, stdout, stderr = self._run_process(
                     command,
                     cwd=descriptor.task_root,

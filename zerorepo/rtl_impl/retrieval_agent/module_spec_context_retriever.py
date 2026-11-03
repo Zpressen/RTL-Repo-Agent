@@ -8,6 +8,7 @@ from typing import Any, Iterable, List
 from pydantic import BaseModel
 
 from zerorepo.rtl_impl.port_contracts import extract_markdown_port_sections
+from zerorepo.rtl_impl.process_observer import observed
 
 from .prompts import module_spec_context_select
 from .schemas import ModuleSpecContextBlock, ModuleSpecContextRetrievalResult, ModuleSpecSelectionResult
@@ -34,6 +35,8 @@ class ModuleSpecContextRetriever:
         self.stage_name = "stage3_spec_retrieval"
         self.last_input_summary = {}
 
+    @observed('tool', '检索模块规格原文', tool='retrieve_spec_block',
+              summarize=lambda r: f'返回{len(r.blocks)}个规格片段；'+('使用保留原文的降级检索，相关性未确认。' if r.fallback_used else '已检查引用与原文一致。'))
     def select_module_spec_context(
         self, *, module_name: str, spec_md_files: Iterable[str], repo_module: Any | None = None,
         fact_ledger: Any | None = None, skeleton_context: str = "", is_top_module: bool = False,

@@ -138,7 +138,9 @@ Rules:
 - If a field is not explicitly supported, leave it blank or empty.
 - Do not infer module hierarchy, instantiation, timing, or control semantics from naming style, file names, or diagram layout alone.
 - Keep previously generated rounds unchanged. Use them only as context for terminology consistency.
+- If confirmed_task_constraints supplies required_top_module, it is the authoritative requested DUT name, not a name to rediscover. The bound top_spec_file provides its behavior and interface. A document's filename is not a separate Verilog module; retain original source filenames in grounding.
 - Return valid JSON only.
+- JSON-escape every literal backslash in copied specification text, including LaTeX formulas; decoded source anchors must still match the original text exactly.
 - `text_grounding` must be a list of objects, never a list of strings.
 - `image_grounding` must be a list of objects, never a list of strings.
 - No images are provided in this stage. Leave `image_grounding` empty unless a field is intentionally left as an empty list.
@@ -226,13 +228,18 @@ Hard rules:
 - Do not put grounding fields inside individual ports or parameters.
 - Use empty lists or strings for unsupported metadata; never guess it.
 
-Interface contract schema:
-- module
-- ports: list of name, direction, width, role, active, meaning
-- params: list of name, value, meaning
-- clock, reset, reset_polarity
-- handshakes, parameter_constraints, bus_roles
-- text_grounding, image_grounding
+Interface contract schema (use these exact JSON types):
+- module: string
+- ports: array of objects with string fields name, direction, width, role, active, meaning
+- params: array of objects with string fields name, value, meaning
+- clock, reset, reset_polarity: strings
+- handshakes, parameter_constraints, bus_roles: arrays of strings, NEVER arrays of objects
+- text_grounding: array of objects, NEVER strings; each object has string fields source_md_file, section_path, start_line_anchor, end_line_anchor
+- image_grounding: empty array (no images are supplied)
+- JSON-escape literal backslashes when quoting the specification.
+
+Text grounding object shape (use the actual supplied source and exact anchors):
+{TEXT_GROUNDING_EXAMPLE}
 
 Expected explicit ports:
 {expected_ports_json}

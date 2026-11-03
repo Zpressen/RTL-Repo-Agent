@@ -6,11 +6,8 @@ Dockerfile*
 .env*
 coverage/
 .venv*/
-.rtl-demo/
 rtl_outputs/
 configs/zerorepo_config.yaml
-configs/rtl_demo.local.yaml
-configs/rtl_demo.production.yaml
 __pycache__/
 
 # Development and generated outputs

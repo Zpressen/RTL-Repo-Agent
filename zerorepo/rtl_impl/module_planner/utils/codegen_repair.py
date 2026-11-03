@@ -281,5 +281,8 @@ class SubtaskCodeRepairAdapter(JsonRepairAdapter):
                 "contract.writes must cover every reliably identified assignment target in the code, "
                 "including output signals and internal signals in continuous, combinational and sequential assignments. "
                 "The diagnostics' expected list covers known assignment targets; the message lists only missing signals."
+                " Include function return variables and function-local assignments, even if the fragment only declares helpers. "
+                "For contract.writes, replacement must be a JSON array of strings such as [\"xtime\"], not a schema object. "
+                "Do not copy schema properties such as items/type/title into the replacement value."
             )
         return context

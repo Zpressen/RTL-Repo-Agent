@@ -6,6 +6,7 @@ import inspect
 import mimetypes
 from pathlib import Path
 from typing import Any, Callable, Optional, Protocol
+from zerorepo.rtl_impl.process_observer import observed
 
 from zerorepo.rpg_gen.base.llm_client import LLMClient, LLMConfig, Memory, SystemMessage, UserMessage
 from zerorepo.rpg_gen.base.llm_client.providers.completion_utils import create_chat_completion, request_with_retries
@@ -77,10 +78,13 @@ class DefaultPlannerLLMBackend:
             kwargs.update(temperature=self.config.temperature, max_tokens=options.max_tokens or self.config.max_tokens)
         if self.config.stop:
             kwargs["stop"] = self.config.stop
+        for name in ('response_format','reasoning_effort','extra_body'):
+            if name in self.config.extra:
+                kwargs[name]=self.config.extra[name]
         if provider and provider.get_extra_headers():
             kwargs["extra_headers"] = provider.get_extra_headers()
         response = create_bounded_chat_completion(self._build_async_openai_client, kwargs,
-            stream=self.config.stream, include_usage=self.config.stream_include_usage,
+            stream=self.config.stream or options.content_callback is not None, include_usage=self.config.stream_include_usage,
             options=options, log=self.config.log)
         self.client._last_response = LLMResponse(content=response.choices[0].message.content,
             model=response.model, finish_reason=response.choices[0].finish_reason,
@@ -283,6 +287,7 @@ class PlannerLLMClient:
             arguments["request_options"] = request_options
         return method(**arguments)
 
+    @observed("model", "请求当前规划步骤的模型输出")
     def complete(
         self,
         *,
@@ -291,6 +296,8 @@ class PlannerLLMClient:
         images: Optional[list[str]] = None,
         request_options: LLMRequestOptions | None = None,
     ) -> Any:
+        from zerorepo.rtl_impl.output_language import requirement
+        if requirement():system_prompt=system_prompt+'\n\n'+requirement()
         backend_complete = getattr(self.backend, "complete", None)
         if backend_complete is not None and not isinstance(self.backend, type):
             return self._call_backend(backend_complete, dict(system_prompt=system_prompt,
@@ -301,6 +308,7 @@ class PlannerLLMClient:
         return self._call_backend(self.backend.complete, dict(system_prompt=system_prompt,
             user_prompt=user_prompt, images=images), request_options)
 
+    @observed("model", "请求当前规划步骤的模型输出")
     def complete_with_memory(
         self,
         *,
@@ -308,6 +316,11 @@ class PlannerLLMClient:
         images: Optional[list[str]] = None,
         request_options: LLMRequestOptions | None = None,
     ) -> Any:
+        from zerorepo.rtl_impl.output_language import requirement
+        if requirement():
+            from copy import deepcopy
+            memory=deepcopy(memory)
+            memory.add_message(SystemMessage(content=requirement()))
         backend_complete_with_memory = getattr(self.backend, "complete_with_memory", None)
         if backend_complete_with_memory is not None:
             return self._call_backend(backend_complete_with_memory, dict(memory=memory, images=images), request_options)
