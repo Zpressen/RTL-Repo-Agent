@@ -85,9 +85,9 @@ REPO_SKELETON_EXAMPLE = """
       }
     ],
     "file_map": {
-      "packet_router_top": "rtl/packet_router_top.v",
-      "route_table": "rtl/route_table.v",
-      "output_scheduler": "rtl/output_scheduler.v"
+      "packet_router_top": "generate/rtl/packet_router_top.v",
+      "route_table": "generate/rtl/route_table.v",
+      "output_scheduler": "generate/rtl/output_scheduler.v"
     },
     "cross_module_alignment": [
       "packet_router_top, route_table, and output_scheduler share the same primary clock domain",
@@ -100,7 +100,7 @@ REPO_SKELETON_EXAMPLE = """
   "modules": [
     {
       "module": "route_table",
-      "file_path": "rtl/route_table.v",
+      "file_path": "generate/rtl/route_table.v",
       "role": "routing lookup helper",
       "kind": "leaf_stateful",
       "parents": ["packet_router_top"],
@@ -110,7 +110,7 @@ REPO_SKELETON_EXAMPLE = """
     },
     {
       "module": "output_scheduler",
-      "file_path": "rtl/output_scheduler.v",
+      "file_path": "generate/rtl/output_scheduler.v",
       "role": "output scheduling helper",
       "kind": "leaf_stateful",
       "parents": ["packet_router_top"],
@@ -120,7 +120,7 @@ REPO_SKELETON_EXAMPLE = """
     },
     {
       "module": "packet_router_top",
-      "file_path": "rtl/packet_router_top.v",
+      "file_path": "generate/rtl/packet_router_top.v",
       "role": "top-level packet routing controller",
       "kind": "top_controller",
       "parents": [],
@@ -189,7 +189,7 @@ Important constraints:
 - Do not generate module-internal skeletons.
 - Do not add detailed FSM, always blocks, or register update rules.
 - Keep cross-module alignment at a repository level.
-- File paths should be simple and consistent, e.g. rtl/<module>.v
+- File paths should be simple and consistent, e.g. generate/rtl/<module>.v
 - Do not emit a separate `module_order` field. Use `planning_decisions.generation_order` as the only execution order.
 - Keep `modules` in the same order as `planning_decisions.generation_order`.
 - If something is uncertain, put it into open_issues instead of inventing details.

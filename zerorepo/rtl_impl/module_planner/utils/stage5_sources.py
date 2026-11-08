@@ -1,6 +1,9 @@
 """Stable generation inputs and verifiable evidence for legacy checkpoints."""
 from __future__ import annotations
 
+
+from zerorepo.rtl_impl.artifact_layout import LAYOUT_VERSION, ArtifactLayout, artifact_path, artifact_dir
+
 import copy
 import json
 from pathlib import Path
@@ -13,6 +16,24 @@ from .local_repair import fingerprint
 
 
 SOURCE_VERSION = "stage5_source_v2"
+
+
+def task_prompt_context(payload):
+    """Share repeated obligation/state provenance in the model's reading view.
+
+    Canonical tasks and source fingerprints continue to contain their complete
+    SourceEvidence. All quotes remain present once under the existing EV IDs.
+    """
+    from .evidence import deduplicate_evidence
+    value = deduplicate_evidence(payload)
+    if value.get("evidence"):
+        value["source_context"] = (
+            "Resolve source_refs entries containing evidence_ref through the evidence dictionary by EV ID. "
+            "These are reading references only; every complete original quote and location is retained there. "
+            "Task effects, access roles and clock/reset/protocol/timing requirements remain mandatory.")
+    if len(json.dumps(value, ensure_ascii=False, separators=(",", ":"))) >= len(json.dumps(payload, ensure_ascii=False, separators=(",", ":"))):
+        return copy.deepcopy(payload)
+    return value
 
 
 def json_value(value):
@@ -79,7 +100,7 @@ def compact_stage5_interfaces(prompt_json, child_interfaces):
 
 
 def source_snapshot(*, legacy, responsibility, child_interfaces, skeleton_document=None):
-    return {"fingerprint_version": SOURCE_VERSION,
+    return {"fingerprint_version": SOURCE_VERSION, "layout_version": LAYOUT_VERSION,
             **{key: json_value(value) for key, value in legacy.items() if key != "planning_kg"},
             "responsibility": json_value(responsibility), "child_interfaces": json_value(child_interfaces),
             **({"skeleton_document": fingerprint(skeleton_document)} if skeleton_document is not None else {})}
@@ -141,20 +162,20 @@ class Stage5LogEvidence:
     def proves_full_skeleton(self, module):
         from ..schemas import Stage4SpecBlocksArtifact
         root = self.path.parent
-        output = root / "module_planner" / "outputs"
-        workspace = root / "workspace"
+        output = root
+        workspace = root
         try:
-            specs = Stage4SpecBlocksArtifact.model_validate_json((output / "spec_blocks.json").read_text())
+            specs = Stage4SpecBlocksArtifact.model_validate_json((artifact_path(output, "spec_blocks.json")).read_text())
             spec = next(s for s in specs.modules if s.module == module)
-            repo = json.loads((output / "repo_skeleton.json").read_text())
+            repo = json.loads((artifact_path(output, "repo_skeleton.json")).read_text())
             children = next(s for s in repo["modules"] if s["module"] == module).get("children", [])
-            stage3 = json.loads((output / "module_skeletons.json").read_text())
-            doc = next(s for s in stage3["module_records"] if s["module"] == module)["doc_file"]
-            key = fingerprint({"policy": "local_repair_v1", "module": module,
-                "fragments": (workspace / "fragments" / f"{module}_fragments.v").read_text(),
+            stage3 = json.loads((artifact_path(output, "module_skeletons.json")).read_text())
+            doc = next(s for s in stage3["module_records"] if s["module"] == module)["export_file"]
+            key = fingerprint({"layout_version": LAYOUT_VERSION, "policy": "local_repair_v1", "module": module,
+                "fragments": (artifact_dir(workspace, "fragments") / f"{module}_fragments.v").read_text(),
                 "skeleton": (output / doc).read_text(), "spec": spec,
-                "children": {child: (workspace / "merged" / f"{child}.v").read_text() for child in children}})
-            stamp = json.loads((workspace / "merged" / f"{module}.inputs.json").read_text())
+                "children": {child: (artifact_dir(workspace, "merged") / f"{child}.v").read_text() for child in children}})
+            stamp = json.loads(ArtifactLayout(workspace).merge_inputs(module).read_text())
             return key == stamp["input_fingerprint"] or self._verified_stage6_children(module) is not None
         except (OSError, ValueError, KeyError, TypeError, StopIteration):
             return False
@@ -165,26 +186,26 @@ class Stage5LogEvidence:
         self._child_evidence[module] = None
         from ..schemas import Stage4SpecBlocksArtifact
         root = self.path.parent
-        workspace = root / "workspace"
-        output = root / "module_planner" / "outputs"
+        workspace = root
+        output = root
         try:
-            specs = Stage4SpecBlocksArtifact.model_validate_json((output / "spec_blocks.json").read_text())
+            specs = Stage4SpecBlocksArtifact.model_validate_json((artifact_path(output, "spec_blocks.json")).read_text())
             spec = next(s for s in specs.modules if s.module == module)
-            repo = json.loads((output / "repo_skeleton.json").read_text())
+            repo = json.loads((artifact_path(output, "repo_skeleton.json")).read_text())
             children = next(s for s in repo["modules"] if s["module"] == module).get("children", [])
-            stage3 = json.loads((output / "module_skeletons.json").read_text())
-            doc = next(s for s in stage3["module_records"] if s["module"] == module)["doc_file"]
+            stage3 = json.loads((artifact_path(output, "module_skeletons.json")).read_text())
+            doc = next(s for s in stage3["module_records"] if s["module"] == module)["export_file"]
             skeleton = (output / doc).read_text()
-            fragments = (workspace / "fragments" / f"{module}_fragments.v").read_text()
-            stamp = json.loads((workspace / "merged" / f"{module}.inputs.json").read_text())
+            fragments = (artifact_dir(workspace, "fragments") / f"{module}_fragments.v").read_text()
+            stamp = json.loads(ArtifactLayout(workspace).merge_inputs(module).read_text())
             allowed_keys = {stamp["input_fingerprint"]}
-            for archived in (output / ".repair_cache" / "stage6_history").glob(f"{module}_*.json"):
+            for archived in (ArtifactLayout(output).cache("stage6_history")).glob(f"{module}_*.json"):
                 try:
                     allowed_keys.add(json.loads(archived.read_text())["input_fingerprint"])
                 except (OSError, ValueError, KeyError, TypeError):
                     continue
-            roots = list((workspace / "debug_system").glob("*/codex_private"))
-            roots.extend((workspace / "debug_system").glob("*/history/*/codex_private"))
+            roots = list((artifact_dir(workspace, "debug_system")).glob("*/state/codex_private"))
+            roots.extend((artifact_dir(workspace, "debug_system")).glob("*/state/history/*/codex_private"))
             for private in roots:
                 try:
                     state = json.loads((private / "session_state.json").read_text())
@@ -195,7 +216,7 @@ class Stage5LogEvidence:
                         continue
                 except (OSError, ValueError, KeyError, TypeError):
                     continue
-                key = fingerprint({"policy": "local_repair_v1", "module": module, "fragments": fragments,
+                key = fingerprint({"layout_version": LAYOUT_VERSION, "policy": "local_repair_v1", "module": module, "fragments": fragments,
                                    "skeleton": skeleton, "spec": spec, "children": texts})
                 if key not in allowed_keys:
                     continue

@@ -30,6 +30,7 @@ from ..utils import (
     load_markdown_files,
 )
 from .base import BaseStageAgent, model_dump, validate_model
+from ..utils.execution import prompt_semantic_view
 
 
 class _FactRoundPayload(BaseModel):
@@ -47,6 +48,7 @@ class Stage1Agent(BaseStageAgent):
     allow_best_effort_quality_fallback = False
 
     _MAX_FILES_PER_BATCH = 5
+    _MAX_SOURCE_CHARS_PER_BATCH = 18_000
 
     _ROUND_SEQUENCE = ["facts", "top_interface"]
     _BATCH_ROUND_SEQUENCE = ["facts"]
@@ -98,6 +100,15 @@ class Stage1Agent(BaseStageAgent):
                 "batch_modules": [self._infer_module_name_from_document(document) for document in batch],
                 "max_files_per_batch": self._MAX_FILES_PER_BATCH,
             }
+            segments = [{"source_file": document["path"], **document["_source_segment"]}
+                        for document in batch if "_source_segment" in document]
+            if segments:
+                batch_context["source_segments"] = segments
+                batch_context["extraction_scope"] = (
+                    "This batch contains contiguous original source segments, not complete files. "
+                    "Extract only facts stated in these segments. Preserve the original source_file "
+                    "and section context in grounding. Other segments are extracted separately; "
+                    "do not reproduce previously extracted facts or infer omitted sections.")
             for round_name in self._BATCH_ROUND_SEQUENCE:
                 if self._should_skip_legacy_completed_round(artifact, batch_index, round_name):
                     continue
@@ -202,9 +213,75 @@ class Stage1Agent(BaseStageAgent):
         self._formatted_documents = format_documents_for_prompt(self._documents)
 
     def _make_document_batches(self, documents: List[dict]) -> List[List[dict]]:
-        return [documents[index : index + self._MAX_FILES_PER_BATCH] for index in range(0, len(documents), self._MAX_FILES_PER_BATCH)]
+        batches, batch, size = [], [], 0
+        for document in documents:
+            for segment in self._source_segments(document):
+                length = len(segment["content"])
+                if batch and (len(batch) >= self._MAX_FILES_PER_BATCH
+                              or size + length > self._MAX_SOURCE_CHARS_PER_BATCH):
+                    batches.append(batch)
+                    batch, size = [], 0
+                batch.append(segment)
+                size += length
+        if batch:
+            batches.append(batch)
+        return batches
+
+    def _source_segments(self, document: dict) -> List[dict]:
+        """Bound fact-response size without dropping or rewriting input text."""
+        content = document["content"]
+        if len(content) <= self._MAX_SOURCE_CHARS_PER_BATCH:
+            return [document]
+        from ..utils.local_repair import fingerprint
+        from ..utils.responsibility_planning import _sections
+        lines = content.splitlines(keepends=True)
+        sections = _sections(content)
+        boundaries, fence = set(), None
+        for index, line in enumerate(lines):
+            marker = re.match(r"^\s*(`{3,}|~{3,})", line)
+            if marker:
+                if fence is None:
+                    fence = marker[1][0]
+                elif marker[1][0] == fence:
+                    fence = None
+            if fence is None:
+                if not line.strip():
+                    boundaries.add(index + 1)
+                elif re.match(r"^(#{1,6})\s|^\*\*\d", line):
+                    boundaries.add(index)
+        # load_markdown strips leading whitespace. Report positions in the
+        # actual file when available, while leaving every segment unchanged.
+        base_line = 1
+        try:
+            original = Path(document["path"]).read_text(encoding="utf-8").replace("\r\n", "\n")
+            offset = original.find(content)
+            if offset >= 0:
+                base_line += original.count("\n", 0, offset)
+        except OSError:
+            pass
+        digest = fingerprint(content)
+        segments, start = [], 0
+        while start < len(lines):
+            end, size, boundary = start, 0, None
+            while end < len(lines) and (size + len(lines[end]) <= self._MAX_SOURCE_CHARS_PER_BATCH or end == start):
+                size += len(lines[end])
+                end += 1
+                if end in boundaries and size >= self._MAX_SOURCE_CHARS_PER_BATCH // 2:
+                    boundary = end
+            if end < len(lines) and boundary is not None:
+                end = boundary
+            segments.append({**document, "content": "".join(lines[start:end]), "_source_segment": {
+                "policy": "stage1_source_segments_v1", "document_fingerprint": digest,
+                "start_line": base_line + start, "end_line": base_line + end - 1,
+                "section_path": sections[start] if start < len(sections) else "",
+            }})
+            start = end
+        return segments
 
     def _batch_id(self, index: int, batch: List[dict]) -> str:
+        if any("_source_segment" in document for document in batch):
+            from ..utils.local_repair import fingerprint
+            return f"batch_{index:04d}_" + fingerprint(batch)[:16]
         return f"batch_{index:04d}"
 
     def _infer_module_name_from_document(self, document: dict) -> str:
@@ -255,9 +332,15 @@ class Stage1Agent(BaseStageAgent):
         document_markdown: str,
     ) -> BaseModel:
         prompt, images = self._build_round_prompt(round_name, artifact, stage_context, document_markdown)
+        wire_prompt, _ = self._build_round_prompt(round_name, artifact, stage_context, document_markdown,
+                                                  compact_fact_context=True)
         original_role = self.system_role
         self.system_role = self._ROUND_SYSTEM_ROLES[round_name]
-        self._log_stage_input(prompt=prompt, images=images, stage_context={**stage_context, "round": round_name})
+        if wire_prompt != prompt:
+            self.logger.info("[%s] Prepared canonical input (%d chars); API request uses projected context (%d chars)",
+                             self.stage_name, len(prompt), len(wire_prompt))
+        else:
+            self._log_stage_input(prompt=prompt, images=images, stage_context={**stage_context, "round": round_name})
         try:
             payload = self._invoke_with_repair(
                 prompt,
@@ -266,6 +349,7 @@ class Stage1Agent(BaseStageAgent):
                 partial_artifacts,
                 output_model=self._ROUND_OUTPUT_MODELS[round_name],
                 quality_validator=lambda candidate: self._validate_round_payload(round_name, candidate),
+                prompt_view=lambda _scope: wire_prompt,
             )
         finally:
             self.system_role = original_role
@@ -278,8 +362,17 @@ class Stage1Agent(BaseStageAgent):
         artifact: Stage1ContractsArtifact,
         stage_context: Dict[str, Any],
         document_markdown: str | None = None,
+        *, compact_fact_context: bool = False,
     ) -> tuple[str, List[str]]:
-        current_contracts_json = self.to_pretty_json(model_dump(artifact))
+        current_contracts_json = self.to_pretty_json(prompt_semantic_view(model_dump(artifact)))
+        if round_name == "facts" and (stage_context.get("source_segments") or compact_fact_context):
+            # Independent source extraction does not need the growing ledger in
+            # each request. The authoritative merge preserves all prior facts.
+            current_contracts_json = self.to_pretty_json({
+                "task_id": artifact.task_id, "spec_index": artifact.spec_index,
+                "known_modules": sorted({fact.module for fact in artifact.fact_ledger.facts if fact.module}),
+                "prior_results": "Persisted separately; return only facts from the current source segments.",
+            })
         batch_markdown = document_markdown if document_markdown is not None else self._formatted_documents
         if round_name == "facts":
             return (
@@ -400,7 +493,7 @@ class Stage1Agent(BaseStageAgent):
             "system": artifact.structure_contract.system,
             "source_spec_file": document.get("path", ""),
             "current_top_interface_contract": (
-                model_dump(current_top_interface) if current_top_interface is not None else None
+                prompt_semantic_view(model_dump(current_top_interface)) if current_top_interface is not None else None
             ),
         }
         prompt = stage1_ingest_extract.build_top_interface_prompt(

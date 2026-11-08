@@ -151,6 +151,7 @@ def build_module_organized_artifact_from_repo_skeleton(
     *,
     stage1_artifact: Stage1ContractsArtifact,
     repo_skeleton: Stage2RepoSkeletonArtifact,
+    decomposition=None,
 ) -> ModuleOrganizationArtifact:
     legacy = build_module_organized_artifact(stage1_artifact)
     legacy_by_module = {item.module: item for item in legacy.modules}
@@ -185,13 +186,24 @@ def build_module_organized_artifact_from_repo_skeleton(
             for edge in repo_skeleton.global_invariants.hierarchy
             if edge.child == module_name
         ]
+        context = None
+        if decomposition is not None:
+            from .utils.responsibility_planning import module_context
+            context = module_context(decomposition, module_name)
+        related_rus = (context["responsibilities"] + context["constraints"]) if context else []
+        evidence_ids = {fid for ru in related_rus for fid in ru["evidence_fact_ids"]}
+        facts = {(f.fact_id or f.stable_key()): f for f in (legacy_bundle.facts if legacy_bundle else [])}
+        facts.update({(f.fact_id or f.stable_key()): f for f in stage1_artifact.fact_ledger.facts if f.fact_id in evidence_ids})
         bundles.append(
             validate_model(
                 ModuleContractsBundle,
                 {
                     "module": module_name,
                     "is_top_module": bool(repo_skeleton.top_module and module_name == repo_skeleton.top_module),
-                    "facts": [model_dump(item) for item in (legacy_bundle.facts if legacy_bundle is not None else [])],
+                    "facts": [model_dump(item) for item in facts.values()],
+                    "responsibility_ids": list(repo_module.responsibility_ids) if repo_module else [],
+                    "applicable_constraint_ids": list(repo_module.applicable_constraint_ids) if repo_module else [],
+                    "responsibility_source_refs": [ref for ru in related_rus for ref in ru["source_refs"]],
                     "interface_contract": model_dump(legacy_bundle.interface_contract) if legacy_bundle and legacy_bundle.interface_contract else None,
                     "timing_contract": model_dump(legacy_bundle.timing_contract) if legacy_bundle and legacy_bundle.timing_contract else None,
                     "control_contract": model_dump(legacy_bundle.control_contract) if legacy_bundle and legacy_bundle.control_contract else None,
@@ -210,7 +222,7 @@ def build_module_organized_artifact_from_repo_skeleton(
     structure_payload = model_dump(stage1_artifact.structure_contract)
     structure_payload["top_module"] = repo_skeleton.top_module
     structure_payload["modules"] = module_order
-    structure_payload["files"] = [repo_skeleton.global_invariants.file_map.get(module, f"rtl/{module}.v") for module in module_order]
+    structure_payload["files"] = [repo_skeleton.global_invariants.file_map.get(module, f"generate/rtl/{module}.v") for module in module_order]
     structure_payload["hierarchy"] = [
         {
             "parent": edge.parent,
@@ -227,6 +239,7 @@ def build_module_organized_artifact_from_repo_skeleton(
         ModuleOrganizationArtifact,
         {
             "task_id": stage1_artifact.task_id,
+            "schema_version": "module_contracts_v2" if decomposition is not None else "module_contracts_v1",
             "source_schema_version": repo_skeleton.schema_version,
             "top_module": repo_skeleton.top_module,
             "module_order": module_order,
@@ -297,7 +310,7 @@ def build_module_organized_artifact_from_repo_skeleton_only(
 
     structure_payload = {
         "top_module": repo_skeleton.top_module,
-        "files": [repo_skeleton.global_invariants.file_map.get(module, f"rtl/{module}.v") for module in module_order],
+        "files": [repo_skeleton.global_invariants.file_map.get(module, f"generate/rtl/{module}.v") for module in module_order],
         "modules": module_order,
         "file_map": {f"{module}.v": [module] for module in module_order},
         "hierarchy": [

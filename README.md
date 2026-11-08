@@ -31,6 +31,10 @@ flowchart LR
 
 规划主线包含 Stage1—Stage6。Stage1—Stage4 准备事实、架构、骨架和任务；随后按模块执行 Stage5 片段生成和 Stage6 合并。源码中的阶段完成状态、语法通过状态和功能验证结果需要分别查看。
 
+规划使用责任细化流程：Stage2 保存可核验原文、类型化依赖、状态所有权与三种架构候选；Stage3 生成 JSON 结构块和行为义务草稿，程序补齐来源及继承契约，并渲染 Markdown；Stage4 确定性组装局部任务，不调用模型。规划门控重新读取实际 JSON，核验责任、来源、状态、义务、块和任务关系，通过后才进入 Stage5/Stage6。门控检查追踪与分配完整性，功能正确性仍由 RTL 验证判断。
+
+当前规划策略为 `planning_harness_v2`，节点检查点为 `planning_node_v2`；Stage3 骨架及 Stage4 计划使用 v3 schema。首次升级需要重新执行 Stage1—Stage4，旧失败草稿不会自动导入。新版本按阶段模板、模型配置、规格内容及实际上游产物核验恢复。`skeleton.json` 是骨架权威数据，`skeleton.md` 是可重建阅读视图；手工编辑 Markdown 不改变规划。旧时序兼容字段继续为空。
+
 更详细的实现说明见 [RTL Agent 功能、架构与实现说明](docs/rtl_agent_system_description.md)。该文档包含迁移前的产品层描述，网页路径以本 README 和迁移说明为准。
 
 ## 在当前机器上运行
@@ -177,6 +181,8 @@ rtl_kg:
 
 `mode: required` 会在 KG 初始化失败时停止流程；不需要 KG 的任务可显式配置 `enabled: false`。Neo4j 密码当前按 YAML 原值读取，不使用 `llm` 的环境变量展开逻辑。
 
+规划图谱按阶段批量同步：Stage3、Stage4 的逐模块进度先原子保存到本地，阶段结束后向 Neo4j 提交一次完整投影。同一次运行中，已成功同步且内容未变的投影不再重复提交；同步失败不会标记为成功，后续可以重试。每次启动或恢复运行至少重新同步一次，避免数据库重建后遗漏数据。日志中的节点、边数量表示本次提交规模，不表示新增数量。
+
 RTL 解析器使用 `zerorepo/rtl_impl/rtl_kg/third_party/tree-sitter-verilog/` 中的语法源码。首次调用 `VerilogTreeSitter.get_parser()` 时，如果共享库不存在，会尝试编译到 `zerorepo/rtl_impl/rtl_kg/build/rtl_langs.so`，需要可用的 C 编译器。
 
 | 环境变量 | 用途 |
@@ -247,6 +253,28 @@ bash scripts/run_main.sh
 
 脚本默认选择 `RTL_PIPELINE_MODE=planner`，并附带 `--resume`。不传参数时不会递归枚举所有子目录中的案例；如果要运行某个子目录，请显式传入目录或文件路径。
 
+### 按阶段停止与继续
+
+`--plan`、`--generate` 表示累计执行到指定边界；前置阶段仍按现有规则校验和复用。两者互斥，仅适用于 `rtl_planner`，可放在规格参数之前或之后。
+
+```bash
+# Stage1—Stage4：规划门控通过后停止，不生成代码
+bash scripts/run_main.sh rtl_dataset/sdc --plan
+
+# 继续逐模块生成、合并、语法检查与有限次数修复，系统 debug 前停止
+bash scripts/run_main.sh rtl_dataset/sdc --generate
+
+# 继续未解决的语法修复及系统功能 debug
+bash scripts/run_main.sh rtl_dataset/sdc
+
+# 批量案例同样支持断点
+bash scripts/run_main.sh --plan
+```
+
+模块语法修复达到次数上限后，会记录失败并继续处理其他模块。**生成阶段结束允许存在待修复语法问题**；摘要会列出待处理模块，具体结果位于 `generate/metadata/stage6_merge.json` 的 `debug_files`。规划门控失败、代码生成或合并失败仍报告错误。语法检查被配置关闭时，结果明确标为 `disabled`，不会计为通过。
+
+后续运行原命令会重新检查模块，给未通过模块新一轮现有修复预算，然后进入系统 debug。来源及内容指纹完全匹配的已有模块可以直接进入修复，无需重新合并；修改规格、规划、合同或代码仍会触发现有缓存失效规则。`--generate` 不启动系统 debug，也不会将历史系统 debug 结果显示为本次结果。
+
 脚本固定使用 `configs/zerorepo_config.yaml`。使用其他配置或进一步控制参数时，直接运行 `main.py`。
 
 ### 直接调用 CLI
@@ -256,11 +284,10 @@ bash scripts/run_main.sh
 ```bash
 python main.py \
   --config /tmp/zerorepo-rtl-basic.yaml \
-  --checkpoint rtl_outputs/aes_cipher_system_hard/.zerorepo \
+  --checkpoint rtl_outputs/aes_cipher_system_hard/plan/state/kg \
   --repo rtl_outputs/aes_cipher_system_hard \
   --phase rtl_planner \
   --rtl-spec rtl_dataset/aes_cipher_hard/aes_cipher_system_hard.md \
-  --log-file rtl_outputs/aes_cipher_system_hard/.zerorepo/zerorepo.log \
   --resume
 ```
 
@@ -270,6 +297,8 @@ python main.py \
 
 `--resume` 会核验已有输入和工件后复用阶段结果，不表示已有文件一律跳过。需要重新构建时可使用 `--force-rebuild`，并事先保留需要的运行工件。
 
+直接调用 CLI 时，在上面的 `--phase rtl_planner` 命令末尾添加 `--plan` 或 `--generate` 即可选择停止位置；分阶段续跑时仍需带上 `--resume`。不加断点参数执行完整流程，`--force-rebuild` 优先于 `--resume`。
+
 **当前 `--dry-run` 的提前返回位于通用软件生成分支；RTL 分支会先执行，因此不能将 `--phase rtl_planner --dry-run` 当作不调用模型的预检命令。**
 
 ### 其他保留入口
@@ -278,30 +307,96 @@ python main.py \
 
 ## 输出与恢复
 
-以 `aes_cipher_system_hard` 为例，主要目录如下：
+新运行使用按阶段组织的布局。以 `aes_cipher_system_hard` 为例：
 
 ```text
 rtl_outputs/aes_cipher_system_hard/
-└── .zerorepo/
-    ├── zerorepo.log                   # 使用上述 --log-file 时的日志
-    ├── module_planner/
-    │   └── outputs/
-    │       ├── contracts.json         # 事实与顶层接口
-    │       ├── stage2_decomposition.json
-    │       ├── repo_skeleton.json     # 选中的模块架构
-    │       ├── modules.json
-    │       ├── module_skeletons.json
-    │       ├── spec_blocks.json
-    │       ├── module_plans.json
-    │       ├── stage5_codegen.json
-    │       └── stage6_merge.json
-    └── workspace/
-        ├── fragments/                # 局部 RTL 与实现契约
-        ├── merged/                   # 合并后的 RTL
-        └── debug_system/             # 系统检查、候选修改及后端调试记录
+├── run.json                         # 布局版本、任务与留存策略
+├── run.log                          # 运行进度和诊断摘要
+├── plan/
+│   ├── stage1/contracts.json        # 规格事实与顶层接口
+│   ├── stage2/                      # 责任分解、候选架构与模块切片
+│   ├── stage3/
+│   │   ├── module_skeletons.json
+│   │   └── modules/<module>/        # skeleton.md、skeleton.json、spec_context.json
+│   ├── stage4/
+│   │   ├── module_plans.json
+│   │   ├── spec_blocks.json
+│   │   ├── planning_gate_report.json
+│   │   └── modules/<module>/        # plan.json、spec_refs.json
+│   ├── state/                      # 检索缓存和规划 KG 检查点
+│   └── traces/                     # 请求与格式修复诊断
+├── generate/
+│   ├── rtl/                        # 最终 RTL 与必要的 HDL 头文件
+│   ├── fragments/                  # Stage5 HDL 片段
+│   ├── metadata/                   # Stage5/6 清单、契约、宏清单与合并报告
+│   ├── state/                      # 恢复检查点、不可变版本与合并输入指纹
+│   └── traces/                     # 合并过程诊断
+└── debug/
+    ├── modules/<module>/           # 模块语法修复与仿真
+    ├── system/<top>/               # 系统仿真、候选与调试会话
+    ├── memory/                     # RTL 修复经验
+    └── state/                      # 修复来源与接受记录
 ```
 
-具体文件随执行阶段和调试后端变化。排查问题时保留该案例的整个 `.zerorepo/`，避免只保留最终 `.v` 文件而丢失恢复和验证依据。仓库根目录的 `.zerorepo/` 是当前机器的 Python 环境，与 `rtl_outputs/<案例>/.zerorepo/` 的运行工件目录含义不同。
+Python 接口中，`PlannerRunner.output_root` 指向案例根目录；阶段文件路径统一由 `ArtifactLayout(case_root)` 提供。
+
+程序调用可用 `runner.run(task, end_stage="stage4")` 停在规划门控后，或用 `runner.run(task, end_stage="stage6", run_system_debug=False)` 停在模块语法处理后。`run_system_debug` 默认 `True`，保持完整流程；续跑仍使用 `resume=True`，停止目标不参与规划和代码内容指纹。
+
+交付代码位于 `generate/rtl/`；接受的修复也发布到这里。`rtl/` 和 `fragments/` 只保存 HDL 文件，契约、指纹与检查点分别存入 `metadata/`、`state/`。产物清单中的内部文件路径相对案例根目录保存。
+
+留存策略由配置控制：
+
+```yaml
+rtl_module_planner:
+  artifacts:
+    retention: compact   # compact | full
+```
+
+默认 `compact` 保留权威规划、规划门控、当前生成、恢复与修复回滚依据；阶段结果落盘后清理成功请求的临时响应、已完成的格式修复草稿、无引用的生成版本和合并过程。失败请求保留最近一次诊断，未完成请求继续保留。`full` 额外保留完整提示词、响应、合并过程和之前的仿真材料。合并报告与全局宏清单在两种模式下都只写一份。
+
+恢复时保留整个案例目录，并用同一命令附加 `--resume`；缓存仍核验实际内容与来源，切换留存策略不会改变生成语义。排查问题时优先查看 `run.log`、`plan/stage4/planning_gate_report.json` 和 `debug/`。CLI 默认按案例写入 `run.log`，批量运行不创建 `_temp/.zerorepo`；仍可显式传入 `--log-file` 增加指定位置的运行日志。
+
+请求大小与重复上下文排查见[上下文审计与优化记录](docs/context_efficiency_audit.md)。`plan/state/request_usage.jsonl` 的新请求记录包含提示词分项及结构化上下文分项的字符数；`scripts/audit_planning_context.py` 可对已完成的规划做不调用 API 的同输入回放比较。
+
+需要检查 Stage5 不可变版本时，可运行 `python scripts/recover_planner_stage5.py --output-root <案例根目录> --module <模块名>`；默认只检查，增加 `--apply` 才恢复片段和契约。恢复后的正常运行仍需通过 `--resume` 的当前来源校验。
+
+已有案例不会迁移或清理，旧布局不会进入新布局的恢复路径。仓库根目录的 `.zerorepo/` 仍是本机 Python 环境，不属于案例输出目录。
+
+### 规划请求监督与局部恢复
+
+Stage1、Stage2、Stage3 共用持久化 JSON 节点循环：准备上下文 → 请求 → 结构与领域校验 → 保存候选和反馈 → 修正或提交。Stage4 不再产生模型请求。三种架构候选、双轮排序和分歧裁定仍由原有选择流程执行。
+
+`RequestExecutor` 是唯一传输监督层。默认生成请求总预算 600 秒、首正文等待 240 秒；Stage3 单独使用 1200/480 秒及 900 秒推理等待。正文/推理空闲上限 120 秒；传输重试及退避共用原截止时间。鉴权、配置错误直接失败。工作台只订阅规划事件，不改变提示词、超时、重试或模型输出。
+
+```yaml
+rtl_module_planner:
+  execution_policy:
+    node_timeout_seconds: 1800
+    max_api_attempts: 10
+    max_prompt_chars: 256000
+```
+
+节点不再叠加 Stage3 固定三次内容尝试。连续两次候选及错误集合均无变化时返回 `needs_repair` 并停止当前运行；预算耗尽明确报错。`--resume` 为未完成节点分配本轮预算，保留累计消耗；先重验保存的候选和待提交响应，再请求剩余修正。非法实体替换与截断响应不能覆盖候选。`--force-rebuild` 不读取旧检查点。
+
+所有新来源引用使用 `EV_...`，目录位于 `plan/state/evidence_registry.json`。模型选择证据 ID，程序核验并展开原文、段落、行号和文件哈希。Stage3 义务仅能引用父 RU 或合法适用约束绑定的证据。缺少绑定时可显式请求一次来源补充；程序仅追加已验证关联，重验责任表和模块切片，不改变行为、所有权、划分或义务。补充后保存的新指纹仍可恢复当前候选。
+
+修复返回同一 JSON schema 的指定完整实体，例如 `{"behavioral_obligations":[{...}]}`，不使用 Markdown 围栏修复或通用字段路径补丁。Stage4 从义务映射组装责任、状态契约及任务依赖，按证据映射选择全部对应规格块；声明和实例任务分别补充接口/状态及边界证据。没有合法映射时明确失败，不将全部规格分配给每个任务作为降级。
+
+完整契约不受简短 `constraints` 三条限制；新任务的 `description` 取结构块 `purpose`，`constraints` 默认为空。Stage5、Stage6 读取骨架 JSON，Stage5 提示词和缓存来源包含任务义务与契约。
+
+`plan/state/request_usage.jsonl` 与 `plan/metrics.json` 保存实际请求、重试、修复、耗时、字符量及服务端 usage。缺失 token 用量标记为未知；缓存与推理 token 不额外重复累计到总量，不用字符数估算 token 或费用。`compact` 保留未完成节点及恢复数据，成功提交后才清理临时诊断；`full` 额外保存请求与响应过程。
+
+真实模型验收入口（使用当前配置，输出至独立目录）：
+
+```bash
+python scripts/accept_planning.py aes --root rtl_outputs/_acceptance/current
+python scripts/accept_planning.py e203 --root rtl_outputs/_acceptance/current
+# 中断后对同一目录显式续跑
+python scripts/accept_planning.py aes --root rtl_outputs/_acceptance/current --resume
+```
+
+验收通过时还会重新运行一次规划，验证有效产物无需新 API 请求。离线历史响应回放可使用 `scripts/replay_planning.py`，它不会成为正常恢复路径，也不能替代真实模型验收。执行原理见 [规划执行与恢复](docs/planner_local_repair.md)，本次状态见 [验收报告](docs/planning_json_acceptance.md)。
 
 ## 代码目录
 

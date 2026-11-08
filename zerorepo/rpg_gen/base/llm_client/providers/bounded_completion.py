@@ -6,6 +6,8 @@ from concurrent.futures import Future
 import random
 import threading
 import time
+from email.utils import parsedate_to_datetime
+from datetime import datetime, timezone
 
 import httpx
 import openai
@@ -32,6 +34,20 @@ def error_details(exc, progress):
     return details
 
 
+def _reasoning_chars(delta):
+    """Recognize compatible reasoning deltas without retaining their text."""
+    for key in ("reasoning_content", "reasoning"):
+        value = getattr(delta, key, None)
+        if isinstance(value, str) and value.strip():
+            return len(value)
+        if isinstance(value, list):
+            count = sum(len(item["text"]) for item in value if isinstance(item, dict)
+                        and isinstance(item.get("text"), str) and item["text"].strip())
+            if count:
+                return count
+    return 0
+
+
 async def _consume(factory, kwargs, *, stream, include_usage, progress):
     kwargs = dict(kwargs)
     # The client default may still be 120 seconds. Per-call supervision owns
@@ -41,7 +57,8 @@ async def _consume(factory, kwargs, *, stream, include_usage, progress):
     async with factory() as client:
         if not stream:
             response = await client.chat.completions.create(**kwargs)
-            progress.content(response.choices[0].message.content or "" if response.choices else "")
+            message = response.choices[0].message if response.choices else None
+            progress.content(message.content or "" if message else "", reasoning_chars=_reasoning_chars(message))
         else:
             stream_kwargs = dict(kwargs)
             if include_usage:
@@ -56,7 +73,11 @@ async def _consume(factory, kwargs, *, stream, include_usage, progress):
                     print(f"[LLMClient] Stream connected in {time.monotonic() - progress.started:.2f}s", flush=True)
                 async for event in events:
                     if event.type == "chunk":
-                        progress.content("".join(c.delta.content or "" for c in event.chunk.choices))
+                        had_reasoning = progress.first_reasoning is not None
+                        progress.content("".join(c.delta.content or "" for c in event.chunk.choices),
+                                         reasoning_chars=sum(_reasoning_chars(c.delta) for c in event.chunk.choices))
+                        if not had_reasoning and progress.first_reasoning is not None and progress.first_content is None:
+                            progress.publish()
                 if not progress.chunks:
                     raise IncompleteLLMResponseError("The API stream ended without completion chunks")
                 try:
@@ -72,8 +93,11 @@ async def _consume(factory, kwargs, *, stream, include_usage, progress):
 def _timeout_error(progress, reason):
     progress.diagnostics["timeout_reason"] = reason
     return LLMRequestTimeoutError(f"API request stopped: {reason}; phase={progress.phase}; "
-        f"stage={progress.options.stage}; module={progress.options.module}",
-        timeout_reason=reason, waiting_phase=progress.phase)
+        f"stage={progress.options.stage}; module={progress.options.module}; "
+        f"body_chars={len(progress.text)}; reasoning_chars={progress.reasoning_chars}; chunks={progress.chunks}",
+        timeout_reason=reason, waiting_phase=progress.phase, content_chars=len(progress.text),
+        reasoning_chars=progress.reasoning_chars, reasoning_chunks=progress.reasoning_chunks,
+        empty_chunks=progress.empty_chunks, attempt=progress.attempt)
 
 
 async def _supervise_io(coroutine, progress):
@@ -113,8 +137,10 @@ async def _attempts(factory, kwargs, *, stream, include_usage, progress):
             progress.diagnostics.update(error_details(exc, progress))
             if isinstance(exc, LLMRequestTimeoutError):
                 retryable = (progress.options.retry_first_content_timeout
-                    and exc.diagnostics.get("timeout_reason") == "first_content_timeout"
+                    and exc.diagnostics.get("timeout_reason") in {"first_content_timeout", "reasoning_timeout"}
                     and progress.first_content is None)
+                retryable = retryable or (progress.options.retry_idle_timeout
+                    and exc.diagnostics.get("timeout_reason") in {"content_idle_timeout", "reasoning_idle_timeout"})
             else:
                 retryable = _retryable_request_error(exc)
             if attempt >= progress.options.max_retries or not retryable:
@@ -123,7 +149,18 @@ async def _attempts(factory, kwargs, *, stream, include_usage, progress):
                 raise LLMRequestError("API request failed: " + str(progress.diagnostics), **progress.diagnostics) from exc
             progress.phase = "retry_delay"
             progress.publish("retrying")
-            await _supervise_io(asyncio.sleep(random.uniform(3, 10)), progress)
+            delay = random.uniform(3, 10) * (2 ** attempt)
+            response = getattr(exc, "response", None)
+            retry_after = response.headers.get("retry-after") if response is not None else None
+            if retry_after:
+                try:
+                    delay = max(delay, float(retry_after))
+                except ValueError:
+                    try:
+                        delay = max(delay, (parsedate_to_datetime(retry_after) - datetime.now(timezone.utc)).total_seconds())
+                    except (ValueError, TypeError):
+                        pass
+            await _supervise_io(asyncio.sleep(delay), progress)
     raise AssertionError("unreachable retry loop")
 
 
@@ -148,8 +185,12 @@ def create_bounded_chat_completion(factory, kwargs, *, stream, include_usage=Fal
     def coroutine():
         return _supervised(factory, kwargs, stream=stream, include_usage=include_usage, options=options, log=log)
     try:
-        asyncio.get_running_loop()
+        running_loop = asyncio.get_running_loop()
     except RuntimeError:
+        running_loop = None
+    if running_loop is None:
+        # Dispatch outside the except block so a real request failure is not
+        # chained to the expected "no running event loop" probe exception.
         return asyncio.run(coroutine())
     # A synchronous caller inside an existing event loop needs its own I/O loop.
     future = Future()

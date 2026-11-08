@@ -5,6 +5,7 @@ import importlib
 import inspect
 import mimetypes
 from pathlib import Path
+from zerorepo.rtl_impl.artifact_layout import ArtifactLayout
 from typing import Any, Callable, Optional, Protocol
 from zerorepo.rtl_impl.process_observer import observed
 
@@ -12,6 +13,7 @@ from zerorepo.rpg_gen.base.llm_client import LLMClient, LLMConfig, Memory, Syste
 from zerorepo.rpg_gen.base.llm_client.providers.completion_utils import create_chat_completion, request_with_retries
 from zerorepo.rpg_gen.base.llm_client.providers.bounded_completion import create_bounded_chat_completion
 from zerorepo.rpg_gen.base.llm_client.request_policy import LLMRequestOptions
+from zerorepo.rpg_gen.base.llm_client.errors import LLMRequestError
 from zerorepo.rpg_gen.base.llm_client.providers.llm_basics import LLMResponse, LLMUsage
 
 
@@ -86,9 +88,24 @@ class DefaultPlannerLLMBackend:
         response = create_bounded_chat_completion(self._build_async_openai_client, kwargs,
             stream=self.config.stream or options.content_callback is not None, include_usage=self.config.stream_include_usage,
             options=options, log=self.config.log)
+        self.last_request_usage = None
+        if response.usage is not None:
+            prompt_details = getattr(response.usage, "prompt_tokens_details", None)
+            completion_details = getattr(response.usage, "completion_tokens_details", None)
+            self.last_request_usage = {
+                "input_tokens": response.usage.prompt_tokens, "output_tokens": response.usage.completion_tokens,
+                "cache_read_input_tokens": (getattr(prompt_details, "cached_tokens", None)
+                    if getattr(prompt_details, "cached_tokens", None) is not None
+                    else getattr(response.usage, "prompt_cache_hit_tokens", None)),
+                "reasoning_tokens": (getattr(completion_details, "reasoning_tokens", None)
+                    if getattr(completion_details, "reasoning_tokens", None) is not None
+                    else getattr(response.usage, "reasoning_tokens", None)),
+            }
         self.client._last_response = LLMResponse(content=response.choices[0].message.content,
             model=response.model, finish_reason=response.choices[0].finish_reason,
-            usage=LLMUsage(input_tokens=response.usage.prompt_tokens, output_tokens=response.usage.completion_tokens)
+            usage=LLMUsage(input_tokens=response.usage.prompt_tokens, output_tokens=response.usage.completion_tokens,
+                cache_read_input_tokens=getattr(getattr(response.usage, "prompt_tokens_details", None), "cached_tokens", 0) or 0,
+                reasoning_tokens=getattr(getattr(response.usage, "completion_tokens_details", None), "reasoning_tokens", 0) or 0)
                   if response.usage is not None else None)
         return (response.choices[0].message.content or "").strip()
 
@@ -209,6 +226,8 @@ class DefaultPlannerLLMBackend:
         images: Optional[list[str]] = None,
         request_options: LLMRequestOptions | None = None,
     ) -> Any:
+        if request_options is not None and not self._supports_openai_vision():
+            raise LLMRequestError("The configured production backend does not support bounded planning requests", http_status=400)
         if request_options is not None and self._supports_openai_vision():
             memory = Memory(context_window=6)
             memory.add_message(SystemMessage(content=system_prompt))
@@ -241,6 +260,8 @@ class DefaultPlannerLLMBackend:
         images: Optional[list[str]] = None,
         request_options: LLMRequestOptions | None = None,
     ) -> Any:
+        if request_options is not None and not self._supports_openai_vision():
+            raise LLMRequestError("The configured production backend does not support bounded planning requests", http_status=400)
         if request_options is not None and self._supports_openai_vision():
             return self._complete_bounded(memory, images, request_options)
         if images and self._supports_openai_vision():
@@ -264,20 +285,45 @@ class PlannerLLMClient:
         if self.config is None:
             self.config = getattr(self.backend, "config", None)
         self.request_policy = request_policy or {}
+        self.executor = None
+        self.output_root = None
+
+    def configure_execution(self, output_root, policy=None):
+        from .execution import RequestExecutor
+        self.output_root = Path(output_root)
+        model = {k: getattr(self.config, k, None) for k in ("model", "provider", "temperature", "top_p", "max_tokens", "stop", "deployment_name", "api_version")}
+        model["extra"] = {k: v for k, v in (getattr(self.config, "extra", {}) or {}).items()
+                          if k in {"reasoning_effort", "response_format"}}
+        from .local_repair import fingerprint
+        model["endpoint_fingerprint"] = fingerprint({key: getattr(self.config, key, None)
+            for key in ("base_url", "endpoint_url")})
+        self.executor = RequestExecutor(output_root, policy=policy, model=model)
+
+    def _usage(self):
+        if hasattr(self.backend, "last_request_usage"):
+            return self.backend.last_request_usage
+        response = getattr(getattr(self.backend, "client", None), "_last_response", None)
+        usage = getattr(response, "usage", None)
+        return usage.to_dict() if usage is not None else None
 
     def request_options(self, *, stage, module, output_root=None, retrieval=False, attempt=1):
         values = {"total_timeout_seconds": 180 if retrieval else 600,
-                  "max_tokens": 4096 if retrieval else None}
+                  "max_tokens": 4096 if retrieval else None,
+                  "first_content_timeout_seconds": 120 if retrieval else 240,
+                  "retry_first_content_timeout": True, "retry_idle_timeout": True}
+        if stage == "stage3_module_skeletons" and not retrieval:
+            values.update(total_timeout_seconds=1200, first_content_timeout_seconds=480,
+                          reasoning_timeout_seconds=900)
         values.update(self.request_policy.get("retrieval" if retrieval else "generation", {}))
         if stage == "stage5_codegen" and not retrieval:
             values.update(first_content_timeout_seconds=240, retry_first_content_timeout=True)
         values.update(self.request_policy.get("stages", {}).get(stage, {}))
+        output_root = output_root if output_root is not None else self.output_root
         values.update(stage=stage, module=module, repair_attempt=attempt,
-                      draft_root=Path(output_root) / ".llm_drafts" if output_root is not None else None)
+                      draft_root=ArtifactLayout(output_root).traces(stage).parent if output_root is not None else None)
         return LLMRequestOptions(**values)
 
-    @staticmethod
-    def _call_backend(method, arguments, request_options):
+    def _call_backend(self, method, arguments, request_options):
         # Existing injected backends do not have to accept the new optional interface.
         try:
             supported = "request_options" in inspect.signature(method).parameters
@@ -285,6 +331,9 @@ class PlannerLLMClient:
             supported = False
         if request_options is not None and supported:
             arguments["request_options"] = request_options
+        if request_options is not None and self.executor is not None:
+            return self.executor.execute(method, arguments, request_options,
+                bounded=isinstance(self.backend, DefaultPlannerLLMBackend), usage_reader=self._usage)
         return method(**arguments)
 
     @observed("model", "请求当前规划步骤的模型输出")

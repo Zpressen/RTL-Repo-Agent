@@ -2,6 +2,7 @@ from __future__ import annotations
 from zerorepo.rtl_impl.process_observer import observed
 
 import json
+from zerorepo.rtl_impl.artifact_layout import ArtifactLayout
 from typing import Any
 
 from pydantic import BaseModel
@@ -14,9 +15,10 @@ from .utils import block_id, block_text, blocks, interface_block_refs, repair_js
 class MergeContextRetriever:
     """Select module spec blocks needed by Stage6 merge."""
 
-    def __init__(self, llm_client: Any, logger: Any | None = None):
+    def __init__(self, llm_client: Any, logger: Any | None = None, output_root=None):
         self.llm_client = llm_client
         self.logger = logger
+        self.output_root = output_root
 
     @observed('tool', '检索RTL合并的规格与依赖上下文', tool='retrieve_spec_block',
               summarize=lambda r: f'选择{len(r.selected_spec_refs)}个规格引用、{len(r.kg_child_modules)}个子模块上下文；'+('使用降级结果。' if r.fallback_used else '已检查引用。'))
@@ -143,7 +145,14 @@ class MergeContextRetriever:
         return json.dumps(self._json_ready(payload), ensure_ascii=False, indent=2)
 
     def _print_console(self, *, title: str, body: str) -> None:
-        print(f"\n========== {title} ==========\n{body}\n========== END {title} ==========\n", flush=True)
+        if self.logger:
+            self.logger.info("[%s] %s (%d chars)", type(self).__name__, title, len(body))
+        root = getattr(self, "output_root", None)
+        if root is not None and getattr(self.llm_client, "retention", "compact") == "full":
+            path = ArtifactLayout(root).traces(getattr(self, "stage_name", "stage6_retrieval"), "events") / "retrieval.jsonl"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps({"title": title, "body": body}, ensure_ascii=False) + "\n")
 
     def _json_ready(self, payload: Any) -> Any:
         if isinstance(payload, BaseModel):

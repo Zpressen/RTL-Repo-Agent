@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from zerorepo.rtl_impl.artifact_layout import ArtifactLayout, artifact_path, artifact_dir
+
 import asyncio
 import difflib
 import json
@@ -66,6 +68,8 @@ STAGE_ARTIFACTS = {
     "stage5_codegen": "stage5_codegen.json",
     "stage6_merge": "stage6_merge.json",
 }
+STAGE_ARTIFACTS = {name: str(artifact_path(Path("."), filename)) for name, filename in STAGE_ARTIFACTS.items()}
+
 
 
 def stage_artifact_help() -> dict[str, Any]:
@@ -858,7 +862,7 @@ class RepoReActTools:
             return ""
 
     def _resolve_long_term_memory_path(self, raw_path: str) -> tuple[Path | None, str]:
-        memory_root = (self.state.input.workspace_root / "rtl_memory").resolve()
+        memory_root = (artifact_dir(self.state.input.workspace_root, "rtl_memory")).resolve()
         path = Path(str(raw_path or "")).expanduser()
         if not str(path):
             return None, "Memory path is required."
@@ -879,7 +883,7 @@ class RepoReActTools:
         resolved, error = self._resolve_long_term_memory_path(path)
         if resolved is None:
             return {"status": "error", "path": path, "error": error}
-        memory_root = (self.state.input.workspace_root / "rtl_memory").resolve()
+        memory_root = (artifact_dir(self.state.input.workspace_root, "rtl_memory")).resolve()
         text = resolved.read_text(encoding="utf-8", errors="replace")
         rel = resolved.relative_to(memory_root).as_posix()
         return {
@@ -1530,8 +1534,8 @@ class RepoReActTools:
             name = artifact_name or path or ""
             if name == "global_defines_manifest":
                 candidates = [
-                    inp.workspace_root / "merged" / "global_defines_manifest.json",
-                    (inp.output_root / "global_defines_manifest.json") if inp.output_root else None,
+                    artifact_path(inp.workspace_root, "global_defines_manifest.json"),
+                    (artifact_path(inp.output_root, "global_defines_manifest.json")) if inp.output_root else None,
                 ]
                 target = next((candidate for candidate in candidates if candidate is not None and candidate.is_file()), None)
                 if target is None:
@@ -1542,8 +1546,8 @@ class RepoReActTools:
                 return {"status": "ok", "kind": kind, "artifact_name": name, "path": str(target), "content": _clip(text, max_chars=max_chars)}
             if name in {"merge_report", "stage6_merge_report"}:
                 candidates = [
-                    inp.workspace_root / "merge_reports" / f"{inp.module_name}_merge_report.json",
-                    (inp.output_root / "merge_reports" / f"{inp.module_name}_merge_report.json") if inp.output_root else None,
+                    artifact_dir(inp.workspace_root, "merge_reports") / f"{inp.module_name}_merge_report.json",
+                    (artifact_dir(inp.output_root, "merge_reports") / f"{inp.module_name}_merge_report.json") if inp.output_root else None,
                 ]
                 target = next((candidate for candidate in candidates if candidate is not None and candidate.is_file()), None)
                 if target is None:
@@ -1629,7 +1633,7 @@ class RepoReActTools:
             files.append(inp.rtl_path)
             if inp.rtl_root and inp.rtl_root.exists():
                 files.extend(p for p in inp.rtl_root.rglob("*") if p.suffix.lower() in {".v", ".sv"})
-            merged_root = inp.workspace_root / "merged"
+            merged_root = artifact_dir(inp.workspace_root, "merged")
             if merged_root.exists():
                 files.extend(p for p in merged_root.rglob("*") if p.suffix.lower() in {".v", ".sv"})
         if scope in {"tb", "all"}:
@@ -1787,9 +1791,9 @@ class RepoReActTools:
             return result
 
         paths = {
-            "spec": root / "module_spec_context_json" / f"{module_name}.json",
-            "skeleton": root / "module_skeleton_json" / f"{module_name}.json",
-            "plan": root / "module_plan_json" / f"{module_name}.json",
+            "spec": ArtifactLayout(root).module(3, module_name, "spec_context.json"),
+            "skeleton": ArtifactLayout(root).module(3, module_name, "skeleton.json"),
+            "plan": ArtifactLayout(root).module(4, module_name, "plan.json"),
         }
         if "spec" in sections:
             artifact = self._read_json_file(paths["spec"])
@@ -4014,8 +4018,8 @@ class RepoReActTools:
                 "status": "rejected",
                 "reason": "record_correction blocked: read the relevant stage_artifact first.",
             }
-        output_root = self.state.input.output_root or (self.state.input.workspace_root.parent / "outputs")
-        root = output_root / "planning_corrections"
+        output_root = self.state.input.output_root or self.state.input.workspace_root
+        root = artifact_dir(output_root, "planning_corrections")
         root.mkdir(parents=True, exist_ok=True)
         payload = {
             "step": self.state.action_calls,
@@ -4053,7 +4057,7 @@ class RepoReActTools:
         output_root = self.state.input.output_root
         if output_root is None:
             return []
-        path = output_root / "planning_corrections" / "correction_journal.jsonl"
+        path = artifact_dir(output_root, "planning_corrections") / "correction_journal.jsonl"
         if not path.exists():
             return []
         rows: list[dict[str, Any]] = []

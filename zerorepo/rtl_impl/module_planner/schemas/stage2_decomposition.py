@@ -4,6 +4,8 @@ from typing import Dict, List, Literal
 
 from pydantic import BaseModel, Field
 
+from .planning import SourceEvidence, StateAccess, StateObject
+
 
 CouplingStrength = Literal["strong", "medium", "weak"]
 Stage2PlanStyle = Literal["conservative", "balanced", "modular"]
@@ -34,6 +36,10 @@ class TopResolutionOutput(BaseModel):
 
 
 class ResponsibilityDependency(BaseModel):
+    dependency_id: str = ""
+    dependency_kind: Literal["data", "control", "state", "temporal"] = "data"
+    partition_constraint: Literal["must_colocate", "prefer_colocate", "interface_allowed"] = "interface_allowed"
+    timing_relation: str = "unspecified"
     target_responsibility_id: str = Field(..., min_length=1)
     coupling_strength: CouplingStrength = Field(default="medium")
     transferred_objects: List[str] = Field(default_factory=list)
@@ -41,6 +47,9 @@ class ResponsibilityDependency(BaseModel):
 
 
 class ResponsibilityUnit(BaseModel):
+    source_refs: List[SourceEvidence] = Field(default_factory=list)
+    state_accesses: List[StateAccess] = Field(default_factory=list)
+    applies_to_responsibility_ids: List[str] = Field(default_factory=list)
     responsibility_id: str = Field(..., min_length=1)
     description: str = Field(..., min_length=1)
     ownership_required: bool = Field(default=True)
@@ -60,6 +69,7 @@ class ResponsibilityUnit(BaseModel):
 
 
 class ResponsibilityLedgerOutput(BaseModel):
+    state_objects: List[StateObject] = Field(default_factory=list)
     responsibilities: List[ResponsibilityUnit] = Field(..., min_length=1)
     global_clocking_notes: List[str] = Field(default_factory=list)
     global_data_conventions: List[str] = Field(default_factory=list)
@@ -211,6 +221,7 @@ class Stage2PairwiseResult(BaseModel):
 
 
 class Stage2DecompositionArtifact(BaseModel):
+    state_objects: List[StateObject] = Field(default_factory=list)
     schema_version: str = Field(default="stage2_decomposition_v1")
     task_id: str = Field(..., min_length=1)
     input_fingerprint: str = Field(default="")

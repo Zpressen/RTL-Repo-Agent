@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from rtl_artifact_test_utils import write_artifact_text
+from zerorepo.rtl_impl.artifact_layout import artifact_dir
 from types import SimpleNamespace
 
 import pytest
@@ -16,8 +18,8 @@ from zerorepo.rtl_impl.repo_react.schemas import RepoReActResult
 def _write_system_oracle(tmp_path: Path, top_module: str, body: str) -> Path:
     verify_dir = tmp_path / "oracle" / "system_task" / top_module / "verify_test"
     verify_dir.mkdir(parents=True)
-    (verify_dir / f"{top_module}_testbench.sv").write_text("module tb; endmodule\n", encoding="utf-8")
-    (verify_dir / f"{top_module}_verify.py").write_text(body, encoding="utf-8")
+    write_artifact_text(verify_dir / f"{top_module}_testbench.sv", "module tb; endmodule\n", encoding="utf-8")
+    write_artifact_text(verify_dir / f"{top_module}_verify.py", body, encoding="utf-8")
     return verify_dir
 
 
@@ -58,10 +60,10 @@ def test_rtl_debug_environment_can_override_yaml_for_one_run(monkeypatch: object
 
 def _write_workspace(tmp_path: Path, top_module: str) -> tuple[Path, list[SimpleNamespace]]:
     workspace = tmp_path / "workspace"
-    merged = workspace / "merged"
+    merged = artifact_dir(workspace, "merged")
     merged.mkdir(parents=True)
     top_file = merged / f"{top_module}.v"
-    top_file.write_text("module top(output y);\nassign y = 1'b0;\nendmodule\n", encoding="utf-8")
+    write_artifact_text(top_file, "module top(output y);\nassign y = 1'b0;\nendmodule\n", encoding="utf-8")
     return workspace, [SimpleNamespace(module=top_module, merged_file=str(top_file))]
 
 
@@ -99,14 +101,16 @@ def test_system_workdir_reset_preserves_codex_session_and_archived_runs(tmp_path
     workspace, records = _write_workspace(tmp_path, "top")
     runner = SystemDebugRunner(config=RtlDebugConfig(oracle_root=str(tmp_path / "oracle"), openai_config=None),
         workspace_root=workspace, output_root=tmp_path / "outputs")
-    workdir = runner.debug_root / "top"
+    module_root = runner.debug_root / "top"
+    workdir = module_root / "simulation"
+    workdir.mkdir(parents=True)
     preserved = {}
-    for relative in ["codex_private/session_state.json", "codex_task/merged/top.v",
-                     "history/old-run/journal.jsonl", "latest_debug_result.json"]:
-        path = workdir / relative; path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("preserved " + relative); preserved[path] = path.read_bytes()
-    scratch = workdir / "scratch-old.txt"; scratch.write_text("stale")
-    generated = workdir / "generated"; generated.mkdir(); (generated / "obsolete.v").write_text("stale")
+    for relative in ["state/codex_private/session_state.json", "candidates/codex_task/merged/top.v",
+                     "state/history/old-run/journal.jsonl", "reports/latest_debug_result.json"]:
+        path = module_root / relative; path.parent.mkdir(parents=True, exist_ok=True)
+        write_artifact_text(path, "preserved " + relative); preserved[path] = path.read_bytes()
+    scratch = workdir / "scratch-old.txt"; write_artifact_text(scratch, "stale")
+    generated = module_root / "candidates/generated"; generated.mkdir(parents=True, exist_ok=True); write_artifact_text(generated / "obsolete.v", "stale")
     result = runner.run_system(top_module="top", task=SimpleNamespace(spec_md_files=[]), spec_text="spec",
         contract_json='{"module_name":"top"}', merged_records=records)
     assert result.status == "pass"
@@ -128,22 +132,22 @@ def test_system_debug_runner_uses_dataset_project_to_locate_verifier(
 ) -> None:
     verify_dir = tmp_path / "oracle" / "system_task" / project / "verify_test"
     verify_dir.mkdir(parents=True)
-    (verify_dir / f"{project}_testbench.sv").write_text(
+    write_artifact_text(verify_dir / f"{project}_testbench.sv",
         f"module tb; {top_module} dut(); endmodule\n",
         encoding="utf-8",
     )
-    (verify_dir / f"{project}_verify.py").write_text(
+    write_artifact_text(verify_dir / f"{project}_verify.py",
         "def verify_system(generated_dir):\n    return True, 'Passed'\n",
         encoding="utf-8",
     )
     workspace, records = _write_workspace(tmp_path, top_module)
-    (workspace / "merged" / f"{top_module}.v").write_text(
+    write_artifact_text(artifact_dir(workspace, "merged") / f"{top_module}.v",
         f"module {top_module}; endmodule\n",
         encoding="utf-8",
     )
     spec_path = tmp_path / "rtl_dataset" / project / f"{top_module}_system.md"
     spec_path.parent.mkdir(parents=True)
-    spec_path.write_text("# spec\n", encoding="utf-8")
+    write_artifact_text(spec_path, "# spec\n", encoding="utf-8")
     runner = SystemDebugRunner(
         config=RtlDebugConfig(oracle_root=str(tmp_path / "oracle"), openai_config=None),
         workspace_root=workspace,
@@ -169,11 +173,11 @@ def test_system_debug_runner_accepts_system_suffixed_planner_top(tmp_path: Path)
     project = "e203_exu_alu_hard"
     verify_dir = tmp_path / "oracle" / "system_task" / project / "verify_test"
     verify_dir.mkdir(parents=True)
-    (verify_dir / "e203_exu_alu_testbench.sv").write_text(
+    write_artifact_text(verify_dir / "e203_exu_alu_testbench.sv",
         f"module tb; {runtime_top} top_module1(); endmodule\n",
         encoding="utf-8",
     )
-    (verify_dir / "e203_exu_alu_system_verify.py").write_text(
+    write_artifact_text(verify_dir / "e203_exu_alu_system_verify.py",
         "from pathlib import Path\n"
         "SCRIPT_DIR = str(Path(__file__).parent)\n"
         "TESTBENCH_FILE = 'e203_exu_alu_testbench.sv'\n"
@@ -189,13 +193,13 @@ def test_system_debug_runner_accepts_system_suffixed_planner_top(tmp_path: Path)
         encoding="utf-8",
     )
     workspace, records = _write_workspace(tmp_path, planner_top)
-    (workspace / "merged" / f"{planner_top}.v").write_text(
+    write_artifact_text(artifact_dir(workspace, "merged") / f"{planner_top}.v",
         f"module {planner_top}(output y); assign y = 1'b0; endmodule\n",
         encoding="utf-8",
     )
     spec_path = tmp_path / "rtl_dataset" / project / f"{planner_top}.md"
     spec_path.parent.mkdir(parents=True)
-    spec_path.write_text("# spec\n", encoding="utf-8")
+    write_artifact_text(spec_path, "# spec\n", encoding="utf-8")
     runner = SystemDebugRunner(
         config=RtlDebugConfig(oracle_root=str(tmp_path / "oracle"), openai_config=None),
         workspace_root=workspace,
@@ -263,13 +267,13 @@ def test_system_debug_runner_uses_merged_simulation_top_alias(tmp_path: Path) ->
         simulation_top,
         "def verify_system(generated_dir):\n    return True, 'Passed'\n",
     )
-    (verify_dir / f"{simulation_top}_testbench.sv").write_text(
+    write_artifact_text(verify_dir / f"{simulation_top}_testbench.sv",
         f"module tb; {simulation_top} top_module1(); endmodule\n",
         encoding="utf-8",
     )
     workspace, records = _write_workspace(tmp_path, planner_top)
-    alias_file = workspace / "merged" / f"{simulation_top}.v"
-    alias_file.write_text(
+    alias_file = artifact_dir(workspace, "merged") / f"{simulation_top}.v"
+    write_artifact_text(alias_file,
         f"module {simulation_top}(output y);\nassign y = 1'b0;\nendmodule\n",
         encoding="utf-8",
     )
@@ -311,12 +315,12 @@ def test_system_debug_runner_passes_logical_and_runtime_identity_to_repo_react(
         simulation_top,
         "def verify_system(generated_dir):\n    return False, 'Mismatches: 1 in 1 samples'\n",
     )
-    (verify_dir / f"{simulation_top}_testbench.sv").write_text(
+    write_artifact_text(verify_dir / f"{simulation_top}_testbench.sv",
         f"module tb; {simulation_top} top_module1(); endmodule\n",
         encoding="utf-8",
     )
     workspace, records = _write_workspace(tmp_path, planner_top)
-    (workspace / "merged" / f"{simulation_top}.v").write_text(
+    write_artifact_text(artifact_dir(workspace, "merged") / f"{simulation_top}.v",
         f"module {simulation_top}(output y); assign y = 1'b0; endmodule\n",
         encoding="utf-8",
     )
@@ -357,7 +361,7 @@ def test_system_debug_runner_rejects_ambiguous_runtime_aliases(tmp_path: Path) -
             simulation_top,
             "def verify_system(generated_dir):\n    return True, 'Passed'\n",
         )
-        (workspace / "merged" / f"{simulation_top}.v").write_text(
+        write_artifact_text(artifact_dir(workspace, "merged") / f"{simulation_top}.v",
             f"module {simulation_top}(output y); assign y = 1'b0; endmodule\n",
             encoding="utf-8",
         )
@@ -436,7 +440,7 @@ def test_system_debug_runner_invokes_repo_react_on_failure_and_syncs_generated(t
         generated_dir = kwargs["generated_dir"]
         assert isinstance(generated_dir, Path)
         calls.append(generated_dir)
-        (generated_dir / "top.v").write_text(
+        write_artifact_text(generated_dir / "top.v",
             "module top(output y);\nassign y = 1'b1;\nendmodule\n",
             encoding="utf-8",
         )
@@ -455,7 +459,7 @@ def test_system_debug_runner_invokes_repo_react_on_failure_and_syncs_generated(t
     assert result.status == "fixed"
     assert result.debug_trials == 1
     assert calls
-    assert "assign y = 1'b1;" in (workspace / "merged" / "top.v").read_text(encoding="utf-8")
+    assert "assign y = 1'b1;" in (artifact_dir(workspace, "merged") / "top.v").read_text(encoding="utf-8")
 
 
 def test_system_debug_runner_dispatches_to_task_scoped_codex_backend(tmp_path: Path, monkeypatch: object) -> None:
@@ -467,7 +471,7 @@ def test_system_debug_runner_dispatches_to_task_scoped_codex_backend(tmp_path: P
         "    return False, 'FAIL: Functional mismatches\\nHint: Total mismatched samples is 3 out of 10 samples'\n",
     )
     source_spec = tmp_path / "source_spec.md"
-    source_spec.write_text("# Original top spec\n", encoding="utf-8")
+    write_artifact_text(source_spec, "# Original top spec\n", encoding="utf-8")
     workspace, records = _write_workspace(tmp_path, top_module)
     runner = SystemDebugRunner(
         config=RtlDebugConfig(
@@ -488,12 +492,12 @@ def test_system_debug_runner_dispatches_to_task_scoped_codex_backend(tmp_path: P
         assert Path(merged_root).is_relative_to(Path(task_root))
         assert not Path(private_root).is_relative_to(Path(task_root))
         assert (Path(spec_root) / "source_spec.md").is_file()
-        (Path(merged_root) / "top.v").write_text(
+        write_artifact_text(Path(merged_root) / "top.v",
             "module top(output y);\nassign y = 1'b1;\nendmodule\n",
             encoding="utf-8",
         )
         final_output = Path(private_root) / "final_sim_output.json"
-        final_output.write_text("PASS", encoding="utf-8")
+        write_artifact_text(final_output, "PASS", encoding="utf-8")
         return RepoReActResult(
             status="pass",
             is_pass=True,
@@ -516,4 +520,4 @@ def test_system_debug_runner_dispatches_to_task_scoped_codex_backend(tmp_path: P
 
     assert result.status == "fixed"
     assert result.debug_trials == 2
-    assert "assign y = 1'b1;" in (workspace / "merged" / "top.v").read_text(encoding="utf-8")
+    assert "assign y = 1'b1;" in (artifact_dir(workspace, "merged") / "top.v").read_text(encoding="utf-8")

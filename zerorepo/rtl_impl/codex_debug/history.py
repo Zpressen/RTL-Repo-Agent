@@ -42,10 +42,11 @@ def debug_binding(*, top_module, spec_text, spec_paths, contract_json, verify_sc
 
 
 class DebugHistory:
-    def __init__(self, workdir, logger=None):
+    def __init__(self, workdir, logger=None, *, private_root=None, task_root=None, archive_root=None):
         self.workdir = Path(workdir)
-        self.private = self.workdir / "codex_private"
-        self.task = self.workdir / "codex_task"
+        self.private = Path(private_root) if private_root is not None else self.workdir / "codex_private"
+        self.task = Path(task_root) if task_root is not None else self.workdir / "codex_task"
+        self.archive_root = Path(archive_root) if archive_root is not None else self.workdir / "history"
         self.logger = logger
 
     def select(self, binding, generated_dir):
@@ -99,7 +100,7 @@ class DebugHistory:
         except (OSError, ValueError, TypeError):
             run_id = "legacy"
         safe = re.sub(r"[^A-Za-z0-9_.-]", "_", str(run_id)).strip(".") or "legacy"
-        directory = self.workdir / "history" / f"{safe}-{uuid4().hex[:8]}"
+        directory = self.archive_root / f"{safe}-{uuid4().hex[:8]}"
         directory.mkdir(parents=True)
         for path in (self.private, self.task):
             if path.exists():

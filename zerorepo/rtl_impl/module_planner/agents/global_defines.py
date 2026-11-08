@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from zerorepo.rtl_impl.artifact_layout import ArtifactLayout, artifact_path, artifact_dir
+
 import json
 import re
 import shutil
@@ -88,7 +90,7 @@ def copy_official_define_file(
     source = find_official_define_file(task, module_name)
     if source is None:
         return None
-    merged_dir = workspace_root / "merged"
+    merged_dir = artifact_dir(workspace_root, "merged")
     merged_dir.mkdir(parents=True, exist_ok=True)
     target = (merged_dir / f"{module_name}.v").resolve()
     shutil.copyfile(source, target)
@@ -135,7 +137,7 @@ def copy_e203_canonical_define_files(
             f"Canonical E203 define file(s) missing for {top_module}: {', '.join(missing)}"
         )
 
-    merged_dir = workspace_root / "merged"
+    merged_dir = artifact_dir(workspace_root, "merged")
     merged_dir.mkdir(parents=True, exist_ok=True)
     targets = {name: (merged_dir / name).resolve() for name in sources}
     for name, source in sources.items():
@@ -175,7 +177,7 @@ def write_global_defines_manifest(
     entries: list[dict[str, Any]],
 ) -> dict[str, Any]:
     workspace_root.mkdir(parents=True, exist_ok=True)
-    manifest_path = workspace_root / "global_defines_manifest.json"
+    manifest_path = artifact_path(workspace_root, "global_defines_manifest.json")
     existing: dict[str, Any] = {"schema_version": "global_defines_manifest_v1", "global_define_files": []}
     if manifest_path.exists():
         try:
@@ -193,20 +195,13 @@ def write_global_defines_manifest(
         "schema_version": "global_defines_manifest_v1",
         "global_define_files": list(by_name.values()),
     }
-    manifest_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    if output_root is not None:
-        out_path = output_root / "global_defines_manifest.json"
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    from ..utils.artifact_store import atomic_write_json
+    atomic_write_json(manifest_path, ArtifactLayout(workspace_root).paths(payload))
     return payload
 
 
 def read_global_defines_manifest(workspace_root: Path) -> dict[str, Any]:
-    path = workspace_root / "global_defines_manifest.json"
-    if not path.exists():
-        legacy_path = workspace_root / "merged" / "global_defines_manifest.json"
-        if legacy_path.exists():
-            path = legacy_path
+    path = artifact_path(workspace_root, "global_defines_manifest.json")
     if not path.exists():
         return {"schema_version": "global_defines_manifest_v1", "global_define_files": []}
     try:
@@ -217,7 +212,7 @@ def read_global_defines_manifest(workspace_root: Path) -> dict[str, Any]:
         return {"schema_version": "global_defines_manifest_v1", "global_define_files": []}
     obj.setdefault("schema_version", "global_defines_manifest_v1")
     obj.setdefault("global_define_files", [])
-    return obj
+    return ArtifactLayout(workspace_root).paths(obj, absolute=True)
 
 
 def build_global_defines_context(workspace_root: Path, max_chars: int = 60000) -> str:

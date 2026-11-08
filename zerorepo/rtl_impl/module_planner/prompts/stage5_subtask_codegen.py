@@ -61,7 +61,13 @@ Core rules:
 19. Do not include Markdown fences.
 20. Fill contract from the code you generate. If unsure, use "unknown" but still list obvious writes and reads.
 21. contract.writes is the complete list of signals assigned by this fragment, including internal helper signals and module outputs in continuous, combinational and sequential assignments. Include function return variables and function-local assignment targets too, even in a declarations/helper fragment: for `function [7:0] xtime; ... xtime = ...; endfunction`, writes includes "xtime". Do not list only module state, outputs or newly added signals. This field is a JSON array of signal-name strings, never a JSON Schema object.
-22. In PLANNING_KG_CONTEXT, child ports use compact [name, direction, width] arrays as identified by port_fields. These are complete child boundary contracts.
+22. When CURRENT_SUBTASK contains task_contract, its structured obligations, state accesses,
+    clock/reset/protocol/timing requirements and constraint_refs are mandatory planning inputs.
+    Implement only obligation_ids assigned to this task. supporting_obligation_ids provide context:
+    a support_only task supplies declarations/helpers/wiring, not another copy of the behavior.
+    Do not create a state commit/reset/hold owner outside the task's authorized state accesses.
+    Missing facts marked unspecified do not authorize inventing new specification requirements.
+23. In PLANNING_KG_CONTEXT, child ports use compact [name, direction, width] arrays as identified by port_fields. These are complete child boundary contracts.
 """.strip()
 
 

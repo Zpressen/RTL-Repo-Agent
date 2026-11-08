@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from zerorepo.rtl_impl.artifact_layout import ArtifactLayout, artifact_path, artifact_dir
+from zerorepo.rtl_impl.artifact_retention import ArtifactRetention
+
 import json
 import os
 import re
@@ -299,12 +302,14 @@ class SystemDebugRunner:
         repo_root: str | Path | None = None,
         logger: Any | None = None,
         kg_service: Any | None = None,
+        retention: str = "compact",
     ) -> None:
         self.config = config or RtlDebugConfig.from_env()
         self.workspace_root = Path(workspace_root)
+        self.retention = ArtifactRetention(ArtifactLayout(self.workspace_root), retention)
         self.output_root = Path(output_root) if output_root is not None else None
         self.repo_root = Path(repo_root) if repo_root is not None else Path.cwd()
-        self.debug_root = self.workspace_root / "debug_system"
+        self.debug_root = artifact_dir(self.workspace_root, "debug_system")
         self.logger = logger
         self.kg_service = kg_service
         self._last_backend_reason = ""
@@ -398,8 +403,8 @@ class SystemDebugRunner:
                     planner_top_module,
                 )
 
-        workdir = (self.debug_root / runtime_top_module).resolve()
-        generated_dir = workdir / "generated"
+        workdir = (self.debug_root / runtime_top_module / "simulation").resolve()
+        generated_dir = workdir.parent / "candidates" / "generated"
         try:
             self._ensure_toolchain_path()
             dut_instance, runtime_rtl_path = self._prepare_workdir(
@@ -456,7 +461,8 @@ class SystemDebugRunner:
                 sim_reviewer=reviewer,
             )
             debug_sim_path = workdir / "debug_sim_output.json"
-            self._sync_generated_to_merged(generated_dir)
+            if final_pass:
+                self._sync_generated_to_merged(generated_dir)
             return SystemDebugResult(
                 top_module=runtime_top_module,
                 planner_top_module=planner_top_module,
@@ -534,7 +540,7 @@ class SystemDebugRunner:
 
     def _resolve_merged_top_alias(self, planner_top: str) -> tuple[str, Path, Path] | None:
         """Resolve a simulation-only top alias without changing planner artifacts."""
-        merged_dir = self.workspace_root / "merged"
+        merged_dir = artifact_dir(self.workspace_root, "merged")
         if not merged_dir.is_dir():
             return None
         matches: list[tuple[str, Path, Path]] = []
@@ -624,6 +630,7 @@ class SystemDebugRunner:
         # Verification scratch files may be recreated, but Codex state and
         # archived runs belong to the persistent debug session, not scratch.
         if workdir.exists():
+            self.retention.snapshot_debug_scratch(workdir, generated_dir)
             for entry in workdir.iterdir():
                 if entry.name in {"codex_task", "codex_private", "history", "latest_debug_result.json"}:
                     continue
@@ -631,6 +638,9 @@ class SystemDebugRunner:
                     shutil.rmtree(entry)
                 else:
                     entry.unlink()
+        workdir.mkdir(parents=True, exist_ok=True)
+        if generated_dir.exists():
+            shutil.rmtree(generated_dir)
         generated_dir.mkdir(parents=True, exist_ok=True)
         copied: list[str] = []
         for record in merged_records:
@@ -640,6 +650,26 @@ class SystemDebugRunner:
             dst = generated_dir / merged_file.name
             shutil.copyfile(merged_file, dst)
             copied.append(str(dst))
+        # Manifests also include canonical define modules that are not separate
+        # generation tasks. Headers must follow the RTL into verifier candidates.
+        from zerorepo.rtl_impl.module_planner.agents.global_defines import read_global_defines_manifest
+        support = []
+        for entry in read_global_defines_manifest(self.workspace_root).get("global_define_files", []):
+            source = Path(entry.get("workspace_path", ""))
+            if source.is_file():
+                support.append((source, source.name))
+        parents = {Path(str(record.merged_file)).parent for record in merged_records
+                   if getattr(record, "merged_file", "") and Path(str(record.merged_file)).is_file()}
+        for parent in parents:
+            for source in parent.rglob("*") if parent.is_dir() else []:
+                if source.is_file() and not source.is_symlink() and source.suffix.lower() in {".vh", ".svh"}:
+                    support.append((source, str(source.relative_to(parent))))
+        for source, relative in support:
+            destination = generated_dir / relative
+            if str(destination) not in copied:
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source, destination)
+                copied.append(str(destination))
         if extra_top_rtl is not None and extra_top_rtl.is_file():
             dst = generated_dir / extra_top_rtl.name
             if str(dst) not in copied:
@@ -752,10 +782,10 @@ class SystemDebugRunner:
         top_rtl = self._select_top_rtl(generated_dir, runtime_top_module)
         output_root = self.output_root
         if output_root is None:
-            candidate = self.workspace_root.parent / "outputs"
+            candidate = self.workspace_root
             output_root = candidate if candidate.exists() else None
         stage_artifacts = {
-            name: str(output_root / filename)
+            name: str(artifact_path(output_root, filename))
             for name, filename in {
                 "contracts": "contracts.json",
                 "modules": "modules.json",
@@ -783,7 +813,7 @@ class SystemDebugRunner:
             workspace_root=self.workspace_root,
             debug_workdir=workdir,
             rtl_path=top_rtl,
-            merged_file=(self.workspace_root / "merged" / top_rtl.name),
+            merged_file=(artifact_dir(self.workspace_root, "merged") / top_rtl.name),
             rtl_root=generated_dir,
             verify_dir=verify_dir,
             verify_script=verify_script,
@@ -820,16 +850,17 @@ class SystemDebugRunner:
         from zerorepo.rtl_impl.codex_debug.history import DebugHistory, debug_binding
         from zerorepo.rtl_impl.module_planner.utils.artifact_store import atomic_write_json
 
-        task_root = workdir / "codex_task"
+        task_root = workdir.parent / "candidates" / "codex_task"
         spec_root = task_root / "spec"
         merged_root = task_root / "merged"
-        private_root = workdir / "codex_private"
+        private_root = workdir.parent / "state" / "codex_private"
         raw_spec_paths = [str(p) for p in (getattr(task, "spec_md_files", []) or []) if Path(p).is_file()]
         binding = debug_binding(top_module=runtime_top_module, spec_text=spec_text, spec_paths=raw_spec_paths,
                                 contract_json=contract_json, verify_script=verify_script,
                                 memory_snapshot_sha256=self.config.memory_snapshot_sha256,
                                 memory_profile_sha256=self.config.memory_profile_sha256)
-        history = DebugHistory(workdir, self.logger)
+        history = DebugHistory(workdir, self.logger, private_root=private_root, task_root=task_root,
+                               archive_root=workdir.parent / "state" / "history")
         restored = history.select(binding, generated_dir)
         spec_root.mkdir(parents=True, exist_ok=True)
         merged_root.mkdir(parents=True, exist_ok=True)
@@ -926,7 +957,7 @@ class SystemDebugRunner:
         )
         result = runner.run(descriptor)
         atomic_write_json(private_root / "run_result.json", result.model_dump(mode="json"))
-        atomic_write_json(workdir / "latest_debug_result.json", {
+        atomic_write_json(workdir.parent / "reports" / "latest_debug_result.json", {
             "run_id": descriptor.run_id, "result": result.model_dump(mode="json"), "binding": binding,
         })
         self._last_backend_reason = result.reason
@@ -958,7 +989,7 @@ class SystemDebugRunner:
         for source_path in sorted(source.rglob("*")):
             if not source_path.is_file() or source_path.is_symlink():
                 continue
-            if source_path.suffix.lower() not in {".v", ".sv"}:
+            if source_path.suffix.lower() not in {".v", ".sv", ".vh", ".svh"}:
                 continue
             relative = source_path.relative_to(source)
             destination = target / relative
@@ -976,10 +1007,12 @@ class SystemDebugRunner:
         return candidates[0]
 
     def _sync_generated_to_merged(self, generated_dir: Path) -> None:
-        merged_dir = self.workspace_root / "merged"
+        merged_dir = artifact_dir(self.workspace_root, "merged")
         merged_dir.mkdir(parents=True, exist_ok=True)
-        for src in sorted([*generated_dir.glob("*.v"), *generated_dir.glob("*.sv")], key=lambda item: item.name):
-            shutil.copyfile(src, merged_dir / src.name)
+        from zerorepo.rtl_impl.module_planner.utils.artifact_store import atomic_write_text
+        for src in sorted(generated_dir.rglob("*")):
+            if src.is_file() and not src.is_symlink() and src.suffix.lower() in {".v", ".sv", ".vh", ".svh"}:
+                atomic_write_text(merged_dir / src.relative_to(generated_dir), src.read_text(encoding="utf-8"))
 
     def _run_async(self, coroutine: Any) -> Any:
         import asyncio

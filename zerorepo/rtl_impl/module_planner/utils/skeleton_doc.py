@@ -7,13 +7,14 @@ from typing import Dict, List, Tuple
 
 from ..schemas import (
     BlockBehaviorOverlay,
+    BehaviorObligation,
     DecisionEntry,
     ModuleBehaviorSummary,
     ModuleSkeletonExport,
     SourceRefs,
     StructuralBlock,
 )
-from .local_repair import ArtifactIssue, model_issues
+from .local_repair import ArtifactIssue, model_issues, strict_json
 
 
 _DOC_HEADER = "# MODULE_SKELETON_DOC v1"
@@ -149,7 +150,7 @@ def inspect_module_skeleton_doc(doc_text: str, *, expected_module: str, expected
         changes.append("Removed enclosing Markdown fence")
     regions, scan_issues = scan_doc_regions(text)
     issues.extend(scan_issues)
-    if not text.lstrip().splitlines() or text.lstrip().splitlines()[0].rstrip() != _DOC_HEADER:
+    if not text.lstrip().splitlines() or text.lstrip().splitlines()[0].rstrip() not in {_DOC_HEADER, "# MODULE_SKELETON_DOC v2"}:
         issues.append(ArtifactIssue("document", "invalid_header", f"SkeletonDoc must begin with `{_DOC_HEADER}`", line=1))
     required = ["Module Identity", "Module Frame", "Structural Skeleton", "Behavioral Overlay", "Decision Ledger"]
     region_by_name = {r.name: r for r in regions if sum(x.name == r.name for x in regions) == 1}
@@ -182,7 +183,8 @@ def inspect_module_skeleton_doc(doc_text: str, *, expected_module: str, expected
         regions, _ = scan_doc_regions(text)
         region_by_name = {r.name: r for r in regions if sum(x.name == r.name for x in regions) == 1}
 
-    payload: dict[str, Any] = {"module": expected_module, "file_path": expected_file_path, "source_refs": source_refs.model_dump() if hasattr(source_refs, "model_dump") else source_refs}
+    enhanced = text.lstrip().splitlines()[0].rstrip() == "# MODULE_SKELETON_DOC v2" if text.lstrip().splitlines() else False
+    payload: dict[str, Any] = {"schema_version": "module_skeleton_export_v2" if enhanced else "module_skeleton_export_v1", "module": expected_module, "file_path": expected_file_path, "source_refs": source_refs.model_dump() if hasattr(source_refs, "model_dump") else source_refs}
 
     def collect(content, fields, path, section, line, unit=""):
         data = {}
@@ -273,6 +275,17 @@ def inspect_module_skeleton_doc(doc_text: str, *, expected_module: str, expected
                             issues.append(ArtifactIssue(f"module_behavior.state_model[{i}].{key}", "missing_required_field", f"State entry requires explicit {key}", section=behavioral.name, line=line + 1))
                 check(ModuleBehaviorSummary, data, "module_behavior", behavioral.name, line)
                 payload["module_behavior"] = data
+            elif sub.name == "Behavioral Obligations":
+                try:
+                    raw = strict_json(_extract_first_fenced_block(content, expected_language="json"))
+                    if not isinstance(raw, list):
+                        raise ValueError("Behavioral Obligations must be a JSON array")
+                    payload["behavioral_obligations"] = raw
+                    for i, item in enumerate(raw):
+                        unit = item.get("obligation_id", "") if isinstance(item, dict) else ""
+                        check(BehaviorObligation, item, f"behavioral_obligations[{i}]", behavioral.name, line, unit)
+                except (ValueError, TypeError) as exc:
+                    issues.append(ArtifactIssue("behavioral_obligations", "invalid_obligations", str(exc), section=behavioral.name, line=line))
             elif sub.name == "Block Behavioral Overlay":
                 starts = [i for i, value in enumerate(content.splitlines()) if _match_field_line(value, "block_id")]
                 content_lines = content.splitlines()
@@ -290,6 +303,8 @@ def inspect_module_skeleton_doc(doc_text: str, *, expected_module: str, expected
                     payload["block_behavior_overlays"].append(data)
             else:
                 issues.append(ArtifactIssue("module_behavior", "unknown_subsection", f"Behavioral Overlay does not recognize `### {sub.name}`", section=behavioral.name, line=line))
+        if enhanced and not any(sub.name == "Behavioral Obligations" for sub in subs):
+            issues.append(ArtifactIssue("behavioral_obligations", "missing_obligations", "v2 requires Behavioral Obligations JSON section", section=behavioral.name, line=behavioral.line))
         if summaries != 1:
             issues.append(ArtifactIssue("module_behavior", "summary_count", "Behavioral Overlay requires exactly one module-level summary", section=behavioral.name, line=behavioral.line))
 
@@ -345,6 +360,9 @@ def inspect_module_skeleton_doc(doc_text: str, *, expected_module: str, expected
     for issue in issues:
         issue.stage = "stage3_module_skeletons"
         issue.module = expected_module
+    if artifact is not None and enhanced:
+        from .responsibility_planning import derive_overlays
+        derive_overlays(artifact)
     return SkeletonParseResult(payload, issues, text, artifact, changes, regions)
 
 

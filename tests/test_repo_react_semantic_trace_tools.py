@@ -5,6 +5,8 @@ import ast
 import hashlib
 import json
 from pathlib import Path
+from rtl_artifact_test_utils import write_artifact_text
+from zerorepo.rtl_impl.artifact_layout import ArtifactLayout, artifact_path
 from types import SimpleNamespace
 from typing import Any
 
@@ -71,7 +73,7 @@ def _make_tools(
     rtl_root = tmp_path / "rtl"
     rtl_root.mkdir(exist_ok=True)
     rtl_path = rtl_root / "top.sv"
-    rtl_path.write_text(rtl_text, encoding="utf-8")
+    write_artifact_text(rtl_path, rtl_text, encoding="utf-8")
     workdir = tmp_path / "debug"
     workdir.mkdir(exist_ok=True)
     inp = RepoReActInput(
@@ -99,7 +101,7 @@ def _write_sidecars(root: Path) -> None:
     (root / "module_spec_context_json").mkdir(parents=True)
     (root / "module_skeleton_json").mkdir()
     (root / "module_plan_json").mkdir()
-    (root / "module_spec_context_json" / "top.json").write_text(
+    write_artifact_text(ArtifactLayout(root).module(3, Path("top.json").stem, "spec_context.json"),
         json.dumps(
             {
                 "module": "top",
@@ -111,7 +113,7 @@ def _write_sidecars(root: Path) -> None:
         ),
         encoding="utf-8",
     )
-    (root / "module_skeleton_json" / "top.json").write_text(
+    write_artifact_text(ArtifactLayout(root).module(3, Path("top.json").stem, "skeleton.json"),
         json.dumps(
             {
                 "module": "top",
@@ -125,7 +127,7 @@ def _write_sidecars(root: Path) -> None:
         ),
         encoding="utf-8",
     )
-    (root / "module_plan_json" / "top.json").write_text(
+    write_artifact_text(ArtifactLayout(root).module(4, Path("top.json").stem, "plan.json"),
         json.dumps(
             {
                 "module": "top",
@@ -147,7 +149,7 @@ def _write_sidecars(root: Path) -> None:
         ),
         encoding="utf-8",
     )
-    (root / "repo_skeleton.json").write_text(
+    write_artifact_text(artifact_path(root, "repo_skeleton.json"),
         json.dumps(
             {
                 "top_module": "top",
@@ -227,17 +229,17 @@ class _PlanningKg:
                                 },
                                 "relation": {
                                     "local_ref": "S001",
-                                    "artifact_path": "module_spec_context_json/top.json",
+                                    "artifact_path": "plan/stage3/modules/top/spec_context.json",
                                 },
                             }
                         ],
                         "skeleton": {
-                            "artifact_path": "module_skeleton_json/top.json",
+                            "artifact_path": "plan/stage3/modules/top/skeleton.json",
                             "content_hash": "sk-hash",
                             "input_fingerprint": "s3",
                         },
                         "plan": {
-                            "artifact_path": "module_plan_json/top.json",
+                            "artifact_path": "plan/stage4/modules/top/plan.json",
                             "skeleton_content_hash": "sk-hash",
                             "input_fingerprint": "s4",
                         },
@@ -404,7 +406,7 @@ def test_trace_signal_cause_recommends_exact_round_key_child_port_next_hop(
     rtl_root = tmp_path / "rtl"
     rtl_root.mkdir()
     rtl_path = rtl_root / "aes_inv_cipher_top.sv"
-    rtl_path.write_text(
+    write_artifact_text(rtl_path,
         (
             "module aes_inv_cipher_top(output [127:0] round_key_wire);\n"
             "aes_key_expand u_key_expand(.round_key(round_key_wire));\n"
@@ -458,7 +460,7 @@ def test_trace_signal_cause_samples_one_hop_vcd_values(tmp_path: Path) -> None:
     if tools_module.VCDVCD is None:
         pytest.skip("vcdvcd is not installed")
     tools = _make_tools(tmp_path)
-    (tools.state.input.debug_workdir / "wave.vcd").write_text(
+    write_artifact_text(tools.state.input.debug_workdir / "wave.vcd",
         """$date today $end
 $version unit $end
 $timescale 1ns $end
@@ -582,7 +584,7 @@ def test_trace_signal_condition_blocking_prioritizes_condition_but_keeps_rhs(
             "endmodule\n"
         ),
     )
-    (tools.state.input.debug_workdir / "wave.vcd").write_text(
+    write_artifact_text(tools.state.input.debug_workdir / "wave.vcd",
         """$date today $end
 $version unit $end
 $timescale 1ns $end
@@ -620,8 +622,8 @@ $enddefinitions $end
 def test_trace_signal_cause_reverse_maps_child_input_to_parent_actual(tmp_path: Path) -> None:
     rtl_root = tmp_path / "rtl"
     rtl_root.mkdir()
-    (rtl_root / "top.sv").write_text("module top; endmodule\n", encoding="utf-8")
-    (rtl_root / "child.sv").write_text(
+    write_artifact_text(rtl_root / "top.sv", "module top; endmodule\n", encoding="utf-8")
+    write_artifact_text(rtl_root / "child.sv",
         "module child(input [7:0] in, output [7:0] out);\nassign out = in;\nendmodule\n",
         encoding="utf-8",
     )
@@ -683,7 +685,7 @@ def test_replace_block_targets_child_module_with_module_scoped_rtl_id(
     rtl_root.mkdir()
     top_path = rtl_root / "top.sv"
     child_path = rtl_root / "child.sv"
-    top_path.write_text(
+    write_artifact_text(top_path,
         (
             "module top(input a, output logic z, output logic y);\n"
             "always @(*) z = a;\n"
@@ -692,7 +694,7 @@ def test_replace_block_targets_child_module_with_module_scoped_rtl_id(
         ),
         encoding="utf-8",
     )
-    child_path.write_text(
+    write_artifact_text(child_path,
         (
             "module child(input a, output logic z, output logic y);\n"
             "always @(*) z = a;\n"
@@ -747,7 +749,7 @@ def test_replace_block_rejects_planning_id_with_editable_rtl_candidates(
 ) -> None:
     output_root = tmp_path / "outputs"
     _write_sidecars(output_root)
-    skeleton_path = output_root / "module_skeleton_json" / "top.json"
+    skeleton_path = ArtifactLayout(output_root).module(3, Path("top.json").stem, "skeleton.json")
     skeleton = json.loads(skeleton_path.read_text(encoding="utf-8"))
     skeleton["structural_blocks"].append(
         {
@@ -756,7 +758,7 @@ def test_replace_block_rejects_planning_id_with_editable_rtl_candidates(
             "purpose": "Drive output y.",
         }
     )
-    skeleton_path.write_text(json.dumps(skeleton), encoding="utf-8")
+    write_artifact_text(skeleton_path, json.dumps(skeleton), encoding="utf-8")
     tools = _make_tools(tmp_path, output_root=output_root)
     tools.state.last_signal_trace = {
         "module": "top",
@@ -847,10 +849,10 @@ def test_runner_auto_focuses_module_semantics_from_latest_signal_trace(
 ) -> None:
     output_root = tmp_path / "outputs"
     _write_sidecars(output_root)
-    spec_path = output_root / "module_spec_context_json" / "top.json"
-    skeleton_path = output_root / "module_skeleton_json" / "top.json"
-    plan_path = output_root / "module_plan_json" / "top.json"
-    spec_path.write_text(
+    spec_path = ArtifactLayout(output_root).module(3, Path("top.json").stem, "spec_context.json")
+    skeleton_path = ArtifactLayout(output_root).module(3, Path("top.json").stem, "skeleton.json")
+    plan_path = ArtifactLayout(output_root).module(4, Path("top.json").stem, "plan.json")
+    write_artifact_text(spec_path,
         json.dumps(
             {
                 "module": "top",
@@ -861,7 +863,7 @@ def test_runner_auto_focuses_module_semantics_from_latest_signal_trace(
         ),
         encoding="utf-8",
     )
-    skeleton_path.write_text(
+    write_artifact_text(skeleton_path,
         json.dumps(
             {
                 "module": "top",
@@ -877,7 +879,7 @@ def test_runner_auto_focuses_module_semantics_from_latest_signal_trace(
         ),
         encoding="utf-8",
     )
-    plan_path.write_text(
+    write_artifact_text(plan_path,
         json.dumps(
             {
                 "module": "top",

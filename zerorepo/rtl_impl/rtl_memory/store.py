@@ -118,7 +118,8 @@ class RTLMemoryStore:
 
     @classmethod
     def from_workspace(cls, workspace_root: str | Path) -> "RTLMemoryStore":
-        return cls(Path(workspace_root) / "rtl_memory")
+        from zerorepo.rtl_impl.artifact_layout import ArtifactLayout
+        return cls(ArtifactLayout(workspace_root).directory("rtl_memory"))
 
     def ensure(self) -> None:
         self.root.mkdir(parents=True, exist_ok=True)

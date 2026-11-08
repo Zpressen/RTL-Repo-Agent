@@ -83,15 +83,39 @@ def model_issues(model_type, candidate, *, prefix="", section="", unit_id=""):
         return None, issues
 
 
-def repair_prompt(*, targets: dict[str, Any], issues: list[ArtifactIssue], context: str) -> str:
-    return (
+def repair_prompt(*, targets: dict[str, Any], issues: list[ArtifactIssue], context: Any, compact: bool = False) -> str:
+    instructions = (
         "Repair ONLY the explicitly listed targets. Preserve their meaning and all untargeted content.\n"
         "Do not invent missing design facts or fill them with unspecified/empty defaults.\n"
         'Return JSON only: {"patches": [{"target": "<exact target>", "replacement": <required value>}]}.\n'
         "Return exactly one patch per target; no extra targets or overlapping edits.\n"
+        "Follow replacement_type where specified: json_array means a native JSON array, json_object a native "
+        "JSON object, and json_value the field's native JSON value. Do not wrap these values in Markdown or a named object.\n"
+        "When a target lists source_evidence_options, return selected evidence ID strings as its array replacement; "
+        "the program expands those IDs into exact source objects. Do not retype source excerpts.\n"
         "For a document target, replacement is the full Markdown document. For other Markdown targets, "
         "replacement is the target body only, without its heading.\n"
-        f"Targets and required structure:\n{json.dumps(targets, ensure_ascii=False, indent=2)}\n"
+    )
+    if compact:
+        from .prompt_context import native_target_originals, share_repair_context, encode
+        if isinstance(context, str):
+            try:
+                parsed_context = strict_json(context)
+                if isinstance(parsed_context, (dict, list)):
+                    context = parsed_context
+            except (ValueError, TypeError):
+                pass
+        inputs = {"targets": native_target_originals(targets),
+                  "diagnostics": [issue.to_dict() for issue in issues], "context": context}
+        return (instructions + "Context references are reading aids only: resolve context_ref through shared_values "
+                "and evidence_ref through inputs.evidence. Except for explicitly requested source evidence IDs, "
+                "copy complete canonical values into replacements, "
+                "never these reference wrappers. Table membership does not validate evidence: originals and "
+                "diagnostics may contain invalid sources; inherit only the parent RU's or applicable constraint's "
+                "allowed source references. All evidence and constraints are retained.\n"
+                "Targets, all diagnostics, source context, evidence and shared values:\n"
+                + encode(share_repair_context(inputs)))
+    return (instructions + f"Targets and required structure:\n{json.dumps(targets, ensure_ascii=False, indent=2)}\n"
         f"All diagnostics:\n{json.dumps([issue.to_dict() for issue in issues], ensure_ascii=False, indent=2, default=str)}\n"
         f"Source and binding constraints:\n{context}"
     )

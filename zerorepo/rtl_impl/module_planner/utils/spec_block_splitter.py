@@ -66,7 +66,12 @@ def split_spec_blocks(markdown_text: str) -> List[SpecBlock]:
         return []
 
     lines = text.splitlines()
-    heading_indexes = [index for index, line in enumerate(lines) if _is_split_heading(line)]
+    heading_indexes, fenced = [], False
+    for index, line in enumerate(lines):
+        if re.match(r"^\s*(```|~~~)", line):
+            fenced = not fenced
+        elif not fenced and _is_split_heading(line):
+            heading_indexes.append(index)
     if not heading_indexes:
         return [SpecBlock(block_id="S001", text=text)]
 
@@ -104,6 +109,8 @@ def _merge_heading_only_blocks(block_texts: List[str]) -> List[str]:
             block_text = "\n\n".join([*pending_headings, block_text])
             pending_headings = []
         merged.append(block_text)
+    if pending_headings:
+        merged.append("\n\n".join(pending_headings))
     return merged
 
 

@@ -5,6 +5,7 @@ from typing import Any, List, Literal
 from pydantic import BaseModel, Field, model_validator
 
 from .responsibility import QualityReport
+from .planning import BehaviorObligation, StateObject
 
 
 Stage3Status = Literal["module_skeletons_in_progress", "module_skeletons_planned"]
@@ -53,6 +54,9 @@ class ModuleBehaviorSummary(BaseModel):
 
 
 class BlockBehaviorOverlay(BaseModel):
+    responsibility_ids: List[str] = Field(default_factory=list)
+    obligation_ids: List[str] = Field(default_factory=list)
+    supporting_obligation_ids: List[str] = Field(default_factory=list)
     block_id: str = Field(..., min_length=1)
     responsibilities: List[str] = Field(default_factory=list)
     timing_semantics: List[str] = Field(default_factory=list)
@@ -75,6 +79,8 @@ class DecisionLedger(BaseModel):
 
 
 class ModuleSkeletonExport(BaseModel):
+    state_objects: List[StateObject] = Field(default_factory=list)
+    behavioral_obligations: List[BehaviorObligation] = Field(default_factory=list)
     schema_version: str = Field(default="module_skeleton_export_v1")
     module: str = Field(..., min_length=1)
     file_path: str = Field(..., min_length=1)

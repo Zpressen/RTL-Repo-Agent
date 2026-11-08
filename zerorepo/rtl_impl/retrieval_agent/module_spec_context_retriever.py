@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+from zerorepo.rtl_impl.artifact_layout import ArtifactLayout
 from typing import Any, Iterable, List
 
 from pydantic import BaseModel
@@ -19,7 +20,8 @@ class ModuleSpecContextRetriever:
     """Retrieve source spec passages for a planned module from unified specs."""
 
     def __init__(self, llm_client: Any, logger: Any | None = None, max_chunks: int = 24,
-                 cache_root: str | Path | None = None, limits: dict | None = None):
+                 cache_root: str | Path | None = None, limits: dict | None = None,
+                 output_root: str | Path | None = None):
         self.llm_client = llm_client
         self.logger = logger
         limits = limits or {}
@@ -31,6 +33,7 @@ class ModuleSpecContextRetriever:
         if min(self.chunk_chars, self.candidate_chars, self.fact_chars, self.prompt_chars) < 1:
             raise ValueError("Retrieval character budgets must be positive")
         self.cache_root = Path(cache_root) if cache_root is not None else None
+        self.output_root = Path(output_root) if output_root is not None else None
         self.cache_enabled = True
         self.stage_name = "stage3_spec_retrieval"
         self.last_input_summary = {}
@@ -101,6 +104,9 @@ class ModuleSpecContextRetriever:
                     raise ValueError("Cached mandatory port sections missing")
                 if self.logger:
                     self.logger.info("[module_spec_context_retrieval] Reusing cache for %s (degraded=%s)", module_name, result.fallback_used)
+                executor = getattr(self.llm_client, "executor", None)
+                if executor:
+                    executor.reuse(self.stage_name, module_name, "spec_context")
                 return result
             except (ValueError, KeyError, TypeError) as exc:
                 if self.logger:
@@ -116,7 +122,7 @@ class ModuleSpecContextRetriever:
             options = getattr(self.llm_client, "request_options", None)
             if options:
                 arguments["request_options"] = options(stage=self.stage_name, module=module_name,
-                    output_root=self.cache_root.parent.parent if self.cache_root else None, retrieval=True)
+                    output_root=self.output_root, retrieval=True)
             raw = self.llm_client.complete(**arguments)
             self._print_console(title=f"MODULE SPEC CONTEXT RETRIEVAL RAW OUTPUT [{module_name}]",
                                 body=raw if isinstance(raw, str) else self._to_pretty_json(raw))
@@ -124,6 +130,9 @@ class ModuleSpecContextRetriever:
             result = self._ensure_mandatory_chunks(result, mandatory_chunks=mandatory)
             self._validate_result(result, module_name=module_name, all_chunks=chunks)
         except Exception as exc:
+            from zerorepo.rtl_impl.module_planner.utils.execution import fatal_request_error
+            if fatal_request_error(exc):
+                raise
             if self.logger:
                 self.logger.warning("[module_spec_context_retrieval] DEGRADE %s: %s", module_name, exc)
             result = self.fallback_result(module_name=module_name, chunks=chunks,
@@ -532,4 +541,11 @@ class ModuleSpecContextRetriever:
         return re.sub(r"\s+", " ", str(text or "").strip())
 
     def _print_console(self, *, title: str, body: str) -> None:
-        print(f"\n========== {title} ==========\n{body}\n========== END {title} ==========\n", flush=True)
+        if self.logger:
+            self.logger.info("[%s] %s (%d chars)", type(self).__name__, title, len(body))
+        root = getattr(self, "output_root", None)
+        if root is not None and getattr(self.llm_client, "retention", "compact") == "full":
+            path = ArtifactLayout(root).traces(getattr(self, "stage_name", "stage6_retrieval"), "events") / "retrieval.jsonl"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps({"title": title, "body": body}, ensure_ascii=False) + "\n")

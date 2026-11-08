@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from zerorepo.rtl_impl.artifact_layout import ArtifactLayout
 from types import SimpleNamespace
 from typing import Any
 
@@ -673,11 +674,11 @@ def test_module_debug_runner_initial_result_callback() -> None:
     assert calls == [("m", "m.v", fail_result)]
 
 
-def test_module_debug_runner_persists_last_failed_repair(tmp_path: Path, monkeypatch: Any) -> None:
+def test_module_debug_runner_preserves_final_rtl_on_failed_repair(tmp_path: Path, monkeypatch: Any) -> None:
     oracle_dir = tmp_path / "oracle" / "m" / "verification"
     oracle_dir.mkdir(parents=True)
     (oracle_dir / "m_testbench.sv").write_text("module tb; endmodule\n", encoding="utf-8")
-    merged_file = tmp_path / "workspace" / "merged" / "m.v"
+    merged_file = ArtifactLayout(tmp_path / "workspace").rtl / "m.v"
     merged_file.parent.mkdir(parents=True)
     merged_file.write_text("module m; assign y = 1'b0; endmodule\n", encoding="utf-8")
 
@@ -713,7 +714,8 @@ def test_module_debug_runner_persists_last_failed_repair(tmp_path: Path, monkeyp
     )
 
     assert result.status == "fail"
-    assert "1'b1" in merged_file.read_text(encoding="utf-8")
+    assert "1'b0" in merged_file.read_text(encoding="utf-8")
+    assert "1'b1" in Path(result.final_rtl_path).read_text(encoding="utf-8")
 
 
 class _FailingSimReviewer:

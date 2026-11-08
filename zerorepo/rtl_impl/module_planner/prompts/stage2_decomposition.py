@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 
 TOP_RESOLVER_SYSTEM_ROLE = """
 You resolve an RTL repository's top-module identity from conflicting or incomplete grounded evidence.
@@ -20,7 +22,7 @@ CANDIDATE_SYSTEM_ROLE = """
 You produce one evidence-grounded RTL module-decomposition candidate.
 Return JSON only. Use the supplied locked top and responsibility IDs exactly.
 Do not invent implementation phases as modules and do not omit required responsibilities.
-Every dependency crossing a module boundary needs one logical boundary contract.
+Every data/control dependency crossing a module boundary needs one logical boundary contract. Preserve must_colocate constraints.
 """.strip()
 
 
@@ -70,8 +72,8 @@ Stage2 prompt context:
 """.strip()
 
 
-def build_responsibility_prompt(*, prompt_context_json: str, locked_top_json: str) -> str:
-    return f"""
+def build_responsibility_prompt(*, prompt_context_json: str, locked_top_json: str, evidence_ids: bool = False) -> str:
+    prompt = f"""
 Extract one shared responsibility ledger for later module-decomposition candidates.
 
 Locked top:
@@ -83,6 +85,24 @@ Rules:
 - Mark externally required behavior and implementation behavior as ownership_required=true.
 - Constraints that do not need an owner may use ownership_required=false.
 - owned_state lists only persistent state controlled by the responsibility.
+- Every responsibility MUST include source_refs: objects with source_file (one input spec path),
+  quote (an exact contiguous original-text excerpt), section_path, start_line and end_line.
+  Lines may be 0 when the quote is unique; omit content_hash (the program computes it).
+  Do not paraphrase, trim or normalize quotes except CRLF to LF. Repeated quotes require exact
+  section_path or line ranges. A section name alone is not evidence.
+- Return top-level state_objects: objects with state_id, name, owner_responsibility_id,
+  clock_domain, reset_behavior and source_refs. Names must be unambiguous logical names.
+  owned_state must exactly project state_objects names for each owner.
+- Each RU includes state_accesses: objects with state_id and role
+  (read|compute_next|commit|reset|hold). Each owned state requires a commit access.
+- Non-owned constraints MUST include applies_to_responsibility_ids listing owned RUs.
+- Every dependency MUST include globally unique dependency_id, dependency_kind
+  (data|control|state|temporal), partition_constraint
+  (must_colocate|prefer_colocate|interface_allowed), and timing_relation.
+  State dependencies transfer state IDs; temporal dependencies require a timing_relation.
+  Producer/consumer semantics and nonempty transferred_objects apply to data/control only.
+- Strong coupling does not automatically require co-location. Use must_colocate only for
+  a justified implementation ownership/atomicity constraint. Use unspecified for absent facts.
 - Each dependency means the current responsibility produces transferred_objects consumed by
   target_responsibility_id; do not reverse producer and consumer semantics.
 - coupling_strength is strong for shared state, same-cycle timing, same FSM, flush/reset atomicity,
@@ -127,6 +147,13 @@ Return exactly one JSON object with:
 Stage2 prompt context:
 {prompt_context_json}
 """.strip()
+    if evidence_ids:
+        prompt = re.sub(r"- Every responsibility MUST include source_refs:.*?(?=- Return top-level state_objects:)",
+            "- Every responsibility MUST include nonempty source_evidence_ids selected from evidence_catalog.\n"
+            "  Do not emit source_refs or retype source text; the program resolves evidence IDs.\n",
+            prompt, flags=re.S)
+        prompt = prompt.replace("clock_domain, reset_behavior and source_refs.", "clock_domain, reset_behavior and source_evidence_ids.")
+    return prompt
 
 
 def build_candidate_prompt(
@@ -167,9 +194,9 @@ Requirements:
 - Do not re-extract, reinterpret, add, or remove responsibilities from source material.
 - candidate_id must be `stage2_{plan_style}` and plan_style must be `{plan_style}`.
 - top_module must exactly equal the locked top.
-- Assign every ownership_required responsibility to exactly one module.
+- Assign every ownership_required responsibility to exactly one module. Do not assign constraint-only RUs to modules; applicable constraints are propagated by the program.
 - Preserve explicitly named modules and explicit hierarchy.
-- A boundary contract is required for every responsibility dependency whose endpoints are assigned to different modules.
+- A boundary contract is required for every data/control dependency whose endpoints are assigned to different modules. Never cut must_colocate dependencies. State and temporal edges retain their typed ownership/timing meaning.
 - transferred_objects must use logical spec objects; do not invent RTL port names.
 - width_status is explicit, derived, unresolved, or not_applicable. Uncertainty must be represented, not guessed.
 - Use the literal `not_applicable` for protocol, timing, clock, or reset fields that genuinely do not

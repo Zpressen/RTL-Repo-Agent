@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from zerorepo.rtl_impl.artifact_layout import artifact_dir
+
 import asyncio
 import json
 import os
@@ -835,7 +837,7 @@ class DebugContextRouter:
         paths = snapshot.get("paths") if isinstance(snapshot.get("paths"), dict) else {}
         spec_path = inp.spec_source_path or (inp.spec_paths[0] if inp.spec_paths else "")
         patch_journal = self.state.journal.root / "patch_journal.jsonl"
-        memory_index = inp.workspace_root / "rtl_memory" / "MEMORY.md"
+        memory_index = artifact_dir(inp.workspace_root, "rtl_memory") / "MEMORY.md"
         refs = {
             "rtl": RawArtifactRef(kind="rtl", path=str(inp.rtl_path), description="Current debug RTL."),
             "merged_file": RawArtifactRef(kind="rtl", path=str(inp.merged_file), description="Merged RTL source."),

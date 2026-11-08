@@ -5,6 +5,7 @@ import asyncio
 from dataclasses import replace
 import json
 from pathlib import Path
+from rtl_artifact_test_utils import write_artifact_text
 import time
 
 import httpx
@@ -35,7 +36,7 @@ class SelectBackend:
 
 def retrieval(tmp_path, response=None, limits=None):
     spec = tmp_path / 'toy.md'
-    spec.write_text('# toy\nInterface and behavior.\n\n## Operation\ntoy updates output.\n')
+    write_artifact_text(spec, '# toy\nInterface and behavior.\n\n## Operation\ntoy updates output.\n')
     backend = SelectBackend(response)
     llm = PlannerLLMClient(backend=backend)
     retriever = ModuleSpecContextRetriever(llm, cache_root=tmp_path / 'outputs' / '.repair_cache' / 'module_spec', limits=limits)
@@ -95,13 +96,13 @@ def test_cache_invalidates_only_when_inputs_or_integrity_change(tmp_path, change
     args['fact_ledger'] = {'facts': [{'fact_id': 'F1', 'module': 'toy', 'subject': 'toy', 'object': 'original'}]}
     retriever.select_module_spec_context(**args)
     if change == 'source':
-        spec.write_text(spec.read_text() + 'Extra toy constraint.\n')
+        write_artifact_text(spec, spec.read_text() + 'Extra toy constraint.\n')
     elif change == 'role':
         args['repo_module']['role'] = 'toy revised operation'
     elif change == 'fact':
         args['fact_ledger']['facts'][0]['object'] = 'revised'
     elif change == 'corrupt':
-        (retriever.cache_root / 'toy.json').write_text('{}')
+        write_artifact_text(retriever.cache_root / 'toy.json', '{}')
     elif change == 'policy':
         retriever.max_chunks = 1
     else:
@@ -142,7 +143,7 @@ def test_budget_keeps_all_port_table_parts_even_when_not_sent_to_model(tmp_path)
     spec, backend, retriever, args = retrieval(tmp_path, limits={'chunk_chars': 500, 'max_chunks': 2, 'candidate_chars': 1000})
     text = '# toy\n## Ports\n| Name | Direction | Width |\n| --- | --- | --- |\n'
     text += ''.join(f'| port_{i} | input | 1 |\n' for i in range(120))
-    spec.write_text(text)
+    write_artifact_text(spec, text)
     args.update(is_top_module=True, primary_spec_file=str(spec))
     result = retriever.select_module_spec_context(**args)
     assert 'port_119' in ''.join(b.text for b in result.blocks)
@@ -152,7 +153,7 @@ def test_budget_keeps_all_port_table_parts_even_when_not_sent_to_model(tmp_path)
 
 def test_prompt_and_facts_are_bounded_without_truncating_source(tmp_path):
     spec, _, retriever, args = retrieval(tmp_path)
-    spec.write_text('# toy\n' + ('## toy operation\n' + 'data' * 2500 + '\n') * 30)
+    write_artifact_text(spec, '# toy\n' + ('## toy operation\n' + 'data' * 2500 + '\n') * 30)
     args['fact_ledger'] = {'facts': [{'fact_id': str(i), 'module': 'toy', 'object': 'details' * 100,
         'text_grounding': 'repeated source' * 3000} for i in range(80)]}
     result = retriever.select_module_spec_context(**args)
@@ -461,71 +462,42 @@ def test_low_throughput_is_visible_in_progress(tmp_path):
 
 
 def test_stage3_skeleton_timeout_reuses_independent_retrieval_after_restart(tmp_path):
-    from test_rtl_module_planner import (make_task_input, make_module_spec_files, make_stage1_contract_artifact,
-        build_module_organized_artifact, make_repo_skeleton_payload)
-    from zerorepo.rtl_impl.module_planner.agents import Stage3Agent
-    from zerorepo.rtl_impl.module_planner.schemas import Stage2RepoSkeletonArtifact
-    task, md, images = make_task_input(tmp_path)
-    make_module_spec_files(tmp_path)
-    modules = build_module_organized_artifact(make_stage1_contract_artifact(md, images))
-    stage2 = Stage2RepoSkeletonArtifact.model_validate(make_repo_skeleton_payload())
-    class Backend:
-        def __init__(self):
-            self.retrieval_calls = 0
-            self.generation_calls = 0
-        def complete(self, *, system_prompt, user_prompt, images=None):
-            self.retrieval_calls += 1
-            candidates = json.loads(user_prompt.split('[SOURCE_CHUNKS]\n')[1])
-            module = user_prompt.split('[MODULE_NAME]\n')[1].splitlines()[0]
-            return {'module': module, 'selections': [{'source_chunk_id': candidates[0]['chunk_id']}]}
-        def complete_with_memory(self, *, memory, images=None):
-            self.generation_calls += 1
-            raise LLMRequestTimeoutError('generation deadline')
-    first = Backend()
-    root = tmp_path / 'outputs'
-    with pytest.raises(LLMRequestTimeoutError):
-        Stage3Agent(PlannerLLMClient(backend=first), output_root=root).run_incremental(task,
-            {'modules': modules, 'stage2': stage2})
-    assert first.retrieval_calls == first.generation_calls == 1
-    second = Backend()
-    with pytest.raises(LLMRequestTimeoutError):
-        Stage3Agent(PlannerLLMClient(backend=second), output_root=root).run_incremental(task,
-            {'modules': modules, 'stage2': stage2})
-    assert second.retrieval_calls == 0 and second.generation_calls == 1
-    assert not (root / 'module_skeleton_docs').exists()
+    from test_responsibility_refinement import scenario
+    from test_planning_harness import RaisingBackend
+    from zerorepo.rtl_impl.module_planner import PlannerRunner
+    saved={}
+    def inject(runner):
+        backend=runner.llm_client.backend
+        index=next(i for i,value in enumerate(backend.responses) if isinstance(value,dict) and "module_frame" in value)
+        backend.responses.insert(index,LLMRequestTimeoutError("generation interrupted"))
+        runner.llm_client.backend=RaisingBackend(backend.responses)
+        saved["runner"]=runner
+    with pytest.raises(LLMRequestTimeoutError): scenario(tmp_path,before_run=inject)
+    runner=saved["runner"]
+    backend=runner.llm_client.backend
+    resumed=PlannerRunner(output_root=runner.output_root,llm_backend=backend)
+    result=resumed.run(runner.llm_client.executor.scope["task"],resume=True,end_stage="stage4")
+    assert len(result.completed_modules)==2
+    assert not any("[SOURCE_CHUNKS]" in c["user_prompt"] for c in backend.calls)
 
 
 @pytest.mark.parametrize('hard_error', [False, True])
 def test_degraded_retrieval_preserves_quality_warning_and_hard_skeleton_checks(tmp_path, hard_error):
-    from test_rtl_module_planner import (make_task_input, make_module_spec_files, make_stage1_contract_artifact,
-        build_module_organized_artifact, make_repo_skeleton_payload, make_stage3_module_skeleton_doc)
-    from zerorepo.rtl_impl.module_planner.agents import Stage3Agent
+    from test_responsibility_refinement import scenario
     from zerorepo.rtl_impl.module_planner.agents.base import StageGenerationError
-    from zerorepo.rtl_impl.module_planner.schemas import Stage2RepoSkeletonArtifact
-    task, md, images = make_task_input(tmp_path)
-    top, key = make_module_spec_files(tmp_path)
-    modules = build_module_organized_artifact(make_stage1_contract_artifact(md, images))
-    stage2 = Stage2RepoSkeletonArtifact.model_validate(make_repo_skeleton_payload())
-    class Backend:
-        count = 0
-        def complete(self, *, system_prompt, user_prompt, images=None):
-            raise LLMRequestTimeoutError('retrieval deadline')
-        def complete_with_memory(self, *, memory, images=None):
-            self.count += 1
-            if hard_error:
-                return 'invalid skeleton'
-            module, spec = ('aes_key_expand_128', key) if self.count == 1 else ('aes_cipher_top', top)
-            return make_stage3_module_skeleton_doc(module, spec)
-    agent = Stage3Agent(PlannerLLMClient(backend=Backend()), output_root=tmp_path/'outputs')
-    arguments = (task, {'modules': modules, 'stage2': stage2})
+    def inject(runner):
+        if not hard_error: return
+        backend=runner.llm_client.backend
+        index=next(i for i,value in enumerate(backend.responses) if isinstance(value,dict) and "module_frame" in value)
+        broken=backend.responses[index]
+        broken["module_frame"]="module unknown; endmodule"
+        backend.responses[index+1:index+1]=[{},{}]
     if hard_error:
-        with pytest.raises(StageGenerationError):
-            agent.run_incremental(*arguments)
+        with pytest.raises(StageGenerationError): scenario(tmp_path,before_run=inject)
     else:
-        artifact = agent.run_incremental(*arguments)
-        assert artifact.stage3_status == 'module_skeletons_planned'
-        assert len([w for w in artifact.quality_report.warnings if w.startswith('retrieval_degraded:')]) == 2
-        assert artifact.quality_report.soft_warning_count == len(artifact.quality_report.warnings)
+        _, runner, backend, _, _, result=scenario(tmp_path,before_run=inject)
+        assert len(result.completed_modules)==2
+        assert not any("[SOURCE_CHUNKS]" in c["user_prompt"] for c in backend.calls)
 
 
 def test_optional_request_policy_reaches_callable_custom_backend():

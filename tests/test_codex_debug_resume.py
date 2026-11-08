@@ -206,7 +206,7 @@ def test_each_system_invocation_grants_30_more_with_cumulative_history(tmp_path,
     from zerorepo.rtl_impl.debug_agent.system_debug_runner import SystemDebugRunner
     from zerorepo.rtl_impl.debug_agent.debug_runner import RtlDebugConfig
     from zerorepo.rtl_impl.repo_react.schemas import RepoReActResult
-    workdir=tmp_path/'system';generated=workdir/'generated';generated.mkdir(parents=True)
+    workdir=tmp_path/'system/simulation';generated=workdir.parent/'candidates/generated';generated.mkdir(parents=True)
     (generated/'top.v').write_text(INITIAL_RTL)
     spec=tmp_path/'source.md';spec.write_text('top specification\n')
     verifier=tmp_path/'oracle/verify.py';verifier.parent.mkdir()
@@ -238,7 +238,7 @@ def test_each_system_invocation_grants_30_more_with_cumulative_history(tmp_path,
     assert len({d.run_id for d in descriptors})==1
     assert [d.codex_episode for d in descriptors]==[1,2,3]
     assert descriptors[-1].codex_session_id=='same-session'
-    private=workdir/'codex_private'
+    private=workdir.parent/'state/codex_private'
     assert json.loads((private/'session_state.json').read_text())['counters']['validation_trials']==74
     status=json.loads((private/'debug_status.json').read_text())
     assert status['budgets']['validation_trials_this_launch']==30

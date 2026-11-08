@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from rtl_artifact_test_utils import write_artifact_text
+from zerorepo.rtl_impl.artifact_layout import artifact_dir
 
 import pytest
 
@@ -28,14 +30,14 @@ class FakeLLM:
 
 
 def _diagnostic(root: Path, module: str) -> dict:
-    return json.loads((root / "outputs" / "stage6_syntax_repair" / f"{module}.json").read_text(encoding="utf-8"))
+    return json.loads((artifact_dir(root / "outputs", "debug") / module / "reports" / "stage6_syntax_repair.json").read_text(encoding="utf-8"))
 
 
 def test_stage6_records_pass_without_retry(tmp_path: Path, monkeypatch) -> None:
     code = "module parent(input clk); endmodule"
     llm = FakeLLM([code])
     agent = Stage6MergeAgent(llm, output_root=tmp_path / "outputs", workspace_root=tmp_path / "workspace")
-    rtl_path = tmp_path / "workspace" / "merged" / "parent.v"
+    rtl_path = artifact_dir(tmp_path / "workspace", "merged") / "parent.v"
     monkeypatch.setattr(
         stage6_merge_agent_mod,
         "check_syntax",
@@ -62,7 +64,7 @@ def test_stage6_delegates_syntax_failure_to_debug_without_retry(tmp_path: Path, 
     bad_code = "module parent(input clk); child u(.bad_port(clk)); endmodule"
     llm = FakeLLM([bad_code, "module parent(input clk); endmodule"])
     agent = Stage6MergeAgent(llm, output_root=tmp_path / "outputs", workspace_root=tmp_path / "workspace")
-    rtl_path = tmp_path / "workspace" / "merged" / "parent.v"
+    rtl_path = artifact_dir(tmp_path / "workspace", "merged") / "parent.v"
     monkeypatch.setattr(
         stage6_merge_agent_mod,
         "check_syntax",
@@ -100,10 +102,10 @@ def test_stage6_rejects_invalid_raw_output_without_overwriting_merged(
 ) -> None:
     llm = FakeLLM([raw_response])
     agent = Stage6MergeAgent(llm, output_root=tmp_path / "outputs", workspace_root=tmp_path / "workspace")
-    rtl_path = tmp_path / "workspace" / "merged" / "parent.v"
+    rtl_path = artifact_dir(tmp_path / "workspace", "merged") / "parent.v"
     rtl_path.parent.mkdir(parents=True)
     original = "module parent; wire preserved; endmodule\n"
-    rtl_path.write_text(original, encoding="utf-8")
+    write_artifact_text(rtl_path, original, encoding="utf-8")
 
     with pytest.raises(ValueError, match="Existing merged RTL was preserved"):
         agent._invoke_raw_with_repair(

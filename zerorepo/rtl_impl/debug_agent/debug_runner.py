@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from zerorepo.rtl_impl.artifact_layout import ArtifactLayout, artifact_path, artifact_dir
+from zerorepo.rtl_impl.artifact_retention import ArtifactRetention
+
 import asyncio
 import hashlib
 import json
@@ -145,6 +148,11 @@ class ModuleDebugResult:
     reason: str = ""
 
 
+def _publish_validated_rtl(path: Path, text: str) -> None:
+    from zerorepo.rtl_impl.module_planner.utils.artifact_store import atomic_write_text
+    atomic_write_text(path, text)
+
+
 class ModuleDebugRunner:
     pre_debug_syntax_max_attempts = 5
 
@@ -157,13 +165,15 @@ class ModuleDebugRunner:
         repo_root: str | Path | None = None,
         logger: Any | None = None,
         kg_service: Any | None = None,
+        retention: str = "compact",
         initial_result_recorder: Callable[[str, str | Path, ModuleDebugResult], Any] | None = None,
     ) -> None:
         self.config = config or RtlDebugConfig.from_env()
         self.workspace_root = Path(workspace_root)
+        self.retention = ArtifactRetention(ArtifactLayout(self.workspace_root), retention)
         self.output_root = Path(output_root) if output_root is not None else None
         self.repo_root = Path(repo_root) if repo_root is not None else Path.cwd()
-        self.debug_root = self.workspace_root / "debug"
+        self.debug_root = artifact_dir(self.workspace_root, "debug")
         self.logger = logger
         self.kg_service = kg_service
         self.initial_result_recorder = initial_result_recorder
@@ -196,7 +206,7 @@ class ModuleDebugRunner:
                 ),
             )
 
-        workdir = (self.debug_root / module_name).resolve()
+        workdir = (self.debug_root / module_name / "simulation").resolve()
         try:
             self._ensure_toolchain_path()
             self._prepare_workdir(
@@ -314,7 +324,7 @@ class ModuleDebugRunner:
             trace_report = workdir / "trace_report.json"
             debug_sim_output = workdir / "debug_sim_output.json"
             if final_pass:
-                shutil.copyfile(final_rtl, Path(merged_file))
+                _publish_validated_rtl(Path(merged_file), final_rtl.read_text(encoding="utf-8"))
                 return ModuleDebugResult(
                     module=module_name,
                     status="fixed",
@@ -325,8 +335,6 @@ class ModuleDebugRunner:
                     trace_report_path=str(trace_report) if trace_report.exists() else "",
                     sim_output_path=str(debug_sim_output) if debug_sim_output.exists() else str(workdir / "initial_sim_output.json"),
                 )
-            if final_rtl.is_file():
-                shutil.copyfile(final_rtl, Path(merged_file))
             return ModuleDebugResult(
                 module=module_name,
                 status="fail",
@@ -371,7 +379,7 @@ class ModuleDebugRunner:
             )
 
         merged_path = Path(merged_file)
-        workdir = (self.debug_root / module_name).resolve()
+        workdir = (self.debug_root / module_name / "simulation").resolve()
         try:
             self._ensure_toolchain_path()
             self._prepare_syntax_gate_workdir(
@@ -413,7 +421,7 @@ class ModuleDebugRunner:
             )
             final_rtl = workdir / "rtl.sv"
             if syntax_passed and final_rtl.is_file():
-                shutil.copyfile(final_rtl, merged_path)
+                _publish_validated_rtl(merged_path, final_rtl.read_text(encoding="utf-8"))
                 status: DebugStatus = "fixed"
                 reason = ""
             else:
@@ -461,6 +469,7 @@ class ModuleDebugRunner:
         if not merged_file.is_file():
             raise FileNotFoundError(f"Merged RTL not found: {merged_file}")
         if workdir.exists():
+            self.retention.snapshot_debug_scratch(workdir)
             shutil.rmtree(workdir)
         workdir.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(merged_file, workdir / "rtl.sv")
@@ -499,6 +508,7 @@ class ModuleDebugRunner:
         if not merged_file.is_file():
             raise FileNotFoundError(f"Merged RTL not found: {merged_file}")
         if workdir.exists():
+            self.retention.snapshot_debug_scratch(workdir)
             shutil.rmtree(workdir)
         workdir.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(merged_file, workdir / "rtl.sv")
@@ -546,12 +556,9 @@ class ModuleDebugRunner:
 
     def _global_define_files_for_syntax_gate(self) -> list[tuple[Path, str]]:
         """Resolve manifest-listed headers for an isolated syntax workdir."""
-        manifest_path = self.workspace_root / "global_defines_manifest.json"
+        manifest_path = artifact_path(self.workspace_root, "global_defines_manifest.json")
         if not manifest_path.is_file():
-            legacy_path = self.workspace_root / "merged" / "global_defines_manifest.json"
-            if not legacy_path.is_file():
-                return []
-            manifest_path = legacy_path
+            return []
         try:
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         except Exception as exc:  # noqa: BLE001
@@ -1093,7 +1100,7 @@ class ModuleDebugRunner:
             spec_paths = []
         output_root = self.output_root
         if output_root is None:
-            candidate = self.workspace_root.parent / "outputs"
+            candidate = self.workspace_root
             output_root = candidate if candidate.exists() else None
         runner = RepoReActRunner(
             cfg,
@@ -1152,7 +1159,7 @@ class ModuleDebugRunner:
             spec_paths = []
         output_root = self.output_root
         if output_root is None:
-            candidate = self.workspace_root.parent / "outputs"
+            candidate = self.workspace_root
             output_root = candidate if candidate.exists() else None
         runner = RepoReActRunner(
             cfg,

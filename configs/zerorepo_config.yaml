@@ -7,14 +7,13 @@
 llm:
   stream: true
   stream_include_usage: true
-  model: "gpt-6.1-sol"
+  model: "deepseek-flash"
   max_tokens: 65536
   temperature: 0.6
   reasoning_effort: "high"
   provider: "openai"
-  # Never commit real keys — export ZEROREPO_API_KEY in your shell instead.
-  api_key: "${ZEROREPO_API_KEY}"
-  base_url: "https://www.inroi.shop/v1"
+  api_key: "${DEEPSEEK_API_KEY}"
+  base_url: "https://api.deepseek.com"
   # api_version: ""
   # tenant_id: ""
   # token_scope: ""
@@ -75,6 +74,8 @@ rtl_kg:
 # RTL Module Planner Configuration
 # ============================================================================
 rtl_module_planner:
+  artifacts:
+    retention: compact  # compact: recovery + latest diagnostics; full: all traces
   retrieval_limits:
     max_chunks: 24
     chunk_chars: 6000
@@ -88,15 +89,27 @@ rtl_module_planner:
       first_content_timeout_seconds: 120
       idle_timeout_seconds: 120
       max_retries: 1
+      retry_first_content_timeout: true
+      retry_idle_timeout: true
     generation:
       total_timeout_seconds: 600
-      first_content_timeout_seconds: 120
+      first_content_timeout_seconds: 240
       idle_timeout_seconds: 120
       max_retries: 1
+      retry_first_content_timeout: true
+      retry_idle_timeout: true
     stages:
+      stage3_module_skeletons:
+        total_timeout_seconds: 1200
+        first_content_timeout_seconds: 480
+        reasoning_timeout_seconds: 900
       stage5_codegen:
         first_content_timeout_seconds: 240
         retry_first_content_timeout: true
+  execution_policy:
+    node_timeout_seconds: 1800
+    max_api_attempts: 10
+    max_prompt_chars: 256000
   temporal_planning:
     # Enabled by default in code; set false only for baseline/ablation runs.
     enabled: true

@@ -1,18 +1,14 @@
 from __future__ import annotations
 
+from zerorepo.rtl_impl.artifact_layout import ArtifactLayout
+
 import json
-import re
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from zerorepo.rtl_impl.retrieval_agent import BlockSpecRetriever, BlockSpecRetrievalResult
-from zerorepo.rtl_impl.retrieval_agent.utils import interface_block_refs
 
-from ..prompts import stage4_module_plan
 from ..schemas import (
-    ModulePlanArtifact,
     ModulePlanRecord,
-    ModuleSpecBlocks,
     ModuleSkeletonExport,
     PlannerTaskInput,
     Stage3ModuleSkeletonArtifact,
@@ -20,15 +16,13 @@ from ..schemas import (
     Stage4SpecBlocksArtifact,
 )
 from .base import BaseStageAgent, model_dump, validate_model
-from ..utils.artifact_store import atomic_write_json
-from ..utils.local_repair import REPAIR_POLICY_VERSION, fingerprint
-from ..utils.codegen_repair import ModulePlanRepairAdapter
+from ..utils.responsibility_planning import module_context, refinement_issues
 
 
 class Stage4ModulePlanAgent(BaseStageAgent):
     stage_name = "stage4_module_plans"
     output_model = Stage4ModulePlansArtifact
-    system_role = stage4_module_plan.SYSTEM_ROLE
+    system_role = "Deterministic Stage3 task assembly"
     allow_best_effort_quality_fallback = False
     plans_dirname = "module_plan_json"
     retrieval_dirname = "block_spec_retrieval_json"
@@ -40,16 +34,10 @@ class Stage4ModulePlanAgent(BaseStageAgent):
         artifact_sink=None,
         logger=None,
         output_root: str | Path | None = None,
-        block_spec_retriever: BlockSpecRetriever | None = None,
         planning_context_retriever: Any | None = None,
     ):
         super().__init__(llm_client, context_provider, artifact_sink, logger)
         self.output_root = Path(output_root) if output_root is not None else None
-        self.block_spec_retriever = block_spec_retriever or BlockSpecRetriever(
-            llm_client=self.llm_client,
-            logger=self.logger,
-            output_root=self.output_root,
-        )
         self.planning_context_retriever = planning_context_retriever
         self.cache_enabled = True
 
@@ -87,97 +75,15 @@ class Stage4ModulePlanAgent(BaseStageAgent):
             if module_name not in record_by_module:
                 raise ValueError(f"Stage4 module planning requires skeleton record for `{module_name}`")
 
-            skeleton_path = self._resolve_output_path(record_by_module[module_name].doc_file)
-            skeleton_markdown = skeleton_path.read_text(encoding="utf-8").replace("\r\n", "\n").strip()
-            skeleton_blocks = _extract_skeleton_blocks(skeleton_markdown)
-            spec_block_ids = {item.block_id for item in module_spec_by_name[module_name].blocks}
-            interface_spec_ids = _find_interface_spec_block_ids(module_spec_by_name[module_name])
             skeleton_context = self._read_skeleton_export_context(record_by_module[module_name])
-            retrieval_result = self._retrieve_with_cache(
-                module_name=module_name,
-                module_spec=module_spec_by_name[module_name],
-                module_skeleton=skeleton_markdown,
-                skeleton_blocks=skeleton_blocks,
-                skeleton_context=skeleton_context,
-            )
-            expected_spec_refs_by_id = {
-                selection.id: list(selection.spec_refs)
-                for selection in retrieval_result.selections
-            }
-            planning_kg_context = ""
-            if self.planning_context_retriever is not None:
-                try:
-                    context = self.planning_context_retriever.get_module_context(
-                        module_name,
-                        require_spec=True,
-                        require_skeleton=True,
-                        expected_fingerprints={
-                            "spec_context": str(getattr(stage3, "input_fingerprint", "") or ""),
-                            "skeleton": str(getattr(stage3, "input_fingerprint", "") or "")
-                        },
-                    )
-                    planning_kg_context = self.planning_context_retriever.to_prompt_json(
-                        self._without_temporal_compat_fields(context)
-                    )
-                except Exception as exc:
-                    mode = str(getattr(self.planning_context_retriever.kg_service, "mode", "required"))
-                    if mode == "required":
-                        raise
-                    self.logger.warning(
-                        "[%s] Planning KG context unavailable for %s; using sidecars: %s",
-                        self.stage_name,
-                        module_name,
-                        exc,
-                    )
-            prompt = stage4_module_plan.build_prompt(
-                module_name=module_name,
-                module_skeleton=skeleton_markdown,
-                module_spec_blocks=self.to_pretty_json(module_spec_by_name[module_name]),
-                required_subtasks=self.to_pretty_json(
-                    [
-                        {
-                            "id": block.subtask_id,
-                            "target": block.target,
-                            "spec_refs": expected_spec_refs_by_id[block.subtask_id],
-                        }
-                        for block in skeleton_blocks
-                    ]
-                ),
-                planning_kg_context=planning_kg_context,
-                stage_context=self.to_pretty_json(
-                    {
-                        "task_id": task.task_id,
-                        "module": module_name,
-                        "skeleton_doc_file": str(skeleton_path),
-                        "module_interface_spec_refs": interface_spec_ids,
-                        "block_spec_retrieval_file": self._retrieval_relative_path(module_name),
-                        "block_spec_retrieval_fallback_used": retrieval_result.fallback_used,
-                    }
-                ),
-            )
-            self.logger.info(
-                "[%s] Planning module %s from skeleton doc %s with %d spec block(s)",
-                self.stage_name,
-                module_name,
-                skeleton_path,
-                len(spec_block_ids),
-            )
-            def validator(candidate):
-                return self._validate_module_plan(
-                    candidate,
-                    expected_module=module_name,
-                    expected_blocks=skeleton_blocks,
-                    valid_spec_ids=spec_block_ids,
-                    expected_spec_refs_by_id=expected_spec_refs_by_id,
-                )
-            adapter = ModulePlanRepairAdapter(
-                module=module_name,
-                required=[{"id": block.subtask_id, "target": block.target, "spec_refs": expected_spec_refs_by_id[block.subtask_id]} for block in skeleton_blocks],
-                context=f"{stage4_module_plan.SCHEMA_AND_RULES}\nModule: {module_name}\nModule skeleton:\n{skeleton_markdown}\nPlanning context:\n{planning_kg_context}",
-                source_blocks=[model_dump(item) for item in module_spec_by_name[module_name].blocks],
-                validator=validator,
-            )
-            module_plan = self._invoke_local_repair(prompt=prompt, images=[], adapter=adapter).artifact
+            if skeleton_context is None or skeleton_context.schema_version != "module_skeleton_export_v3":
+                raise ValueError(f"{module_name}: Stage4 requires authoritative v3 skeleton JSON")
+            issues = refinement_issues(skeleton_context, module_context(partial_artifacts["stage2_decomposition"], module_name), partial_artifacts["stage2_input"])
+            if issues:
+                raise ValueError(f"{module_name}: invalid Stage3 refinement: {[i.message for i in issues]}")
+            from ..utils.task_assembly import assemble_plan
+            module_plan, retrieval_payload = assemble_plan(skeleton_context, module_spec_by_name[module_name])
+            self.logger.info("[%s] Assembled %d tasks for %s without an LLM request", self.stage_name, len(module_plan.subtasks), module_name)
             plan_file = self._plan_relative_path(module_name)
             retrieval_file = self._retrieval_relative_path(module_name)
             records.append(ModulePlanRecord(module=module_name, plan_file=plan_file))
@@ -190,9 +96,9 @@ class Stage4ModulePlanAgent(BaseStageAgent):
                         "plan_file": plan_file,
                         "plan_payload": model_dump(module_plan),
                         "retrieval_file": retrieval_file,
-                        "retrieval_payload": model_dump(retrieval_result),
+                        "retrieval_payload": retrieval_payload,
                         "manifest": {
-                            "schema_version": "module_plans_v1",
+                            "schema_version": "module_plans_v3",
                             "task_id": task.task_id,
                             "input_fingerprint": str(partial_artifacts.get("stage4_input_fingerprint") or ""),
                             "module_order": list(stage3.module_order),
@@ -205,6 +111,7 @@ class Stage4ModulePlanAgent(BaseStageAgent):
                 )
 
         artifact = Stage4ModulePlansArtifact(
+            schema_version="module_plans_v3",
             task_id=task.task_id,
             input_fingerprint=str(partial_artifacts.get("stage4_input_fingerprint") or ""),
             module_order=list(stage3.module_order),
@@ -222,36 +129,6 @@ class Stage4ModulePlanAgent(BaseStageAgent):
         self.artifact_sink.record_stage_output(self.stage_name, artifact, task)
         return artifact
 
-    def _retrieve_with_cache(self, **arguments):
-        key = fingerprint({"policy": REPAIR_POLICY_VERSION, "module": arguments["module_name"],
-                           "spec": arguments["module_spec"], "skeleton": arguments["module_skeleton"],
-                           "context": arguments["skeleton_context"]})
-        path = (self.output_root / ".repair_cache" / "block_spec" / f"{arguments['module_name']}.json") if self.output_root else None
-        if path and self.cache_enabled and path.exists():
-            try:
-                cached = json.loads(path.read_text(encoding="utf-8"))
-                if cached["input_fingerprint"] == key:
-                    result = BlockSpecRetrievalResult.model_validate(cached["result"])
-                    if result.module != arguments["module_name"]:
-                        raise ValueError("Cached retrieval module mismatch")
-                    expected = {block.subtask_id: block.target for block in arguments["skeleton_blocks"]}
-                    valid = {item.block_id for item in arguments["module_spec"].blocks}
-                    if len(result.selections) != len(expected) or {item.id for item in result.selections} != set(expected):
-                        raise ValueError("Cached retrieval identities mismatch")
-                    if any(item.target != expected[item.id] or not set(item.spec_refs) <= valid for item in result.selections):
-                        raise ValueError("Cached retrieval references mismatch")
-                    self.logger.info("[%s] Reusing block retrieval for %s", self.stage_name, result.module)
-                    return result
-            except (ValueError, KeyError, TypeError) as exc:
-                self.logger.info("[%s] Ignoring invalid retrieval cache: %s", self.stage_name, exc)
-        result = self.block_spec_retriever.select_block_spec_refs(**arguments)
-        if path:
-            atomic_write_json(path, {"input_fingerprint": key, "result": model_dump(result)})
-        return result
-
-    def build_prompt(self, task_input: PlannerTaskInput, partial_artifacts: Dict[str, Any], stage_context: Dict[str, Any]):
-        raise NotImplementedError("Stage4ModulePlanAgent uses a custom per-module flow.")
-
     def validate_quality(
         self,
         artifact: Stage4ModulePlansArtifact,
@@ -260,7 +137,7 @@ class Stage4ModulePlanAgent(BaseStageAgent):
     ) -> List[str]:
         stage3 = self._get_stage3_artifact(partial_artifacts)
         errors: List[str] = []
-        if artifact.schema_version != "module_plans_v1":
+        if artifact.schema_version not in {"module_plans_v3"}:
             errors.append("schema_version must remain module_plans_v1")
         if artifact.task_id != task_input.task_id:
             errors.append(f"task_id must remain {task_input.task_id}")
@@ -279,48 +156,6 @@ class Stage4ModulePlanAgent(BaseStageAgent):
             expected_file = self._plan_relative_path(record.module)
             if record.plan_file != expected_file:
                 errors.append(f"{record.module}: plan_file must be {expected_file}")
-        return errors
-
-    def _validate_module_plan(
-        self,
-        artifact: ModulePlanArtifact,
-        *,
-        expected_module: str,
-        expected_blocks: List["_SkeletonBlock"],
-        valid_spec_ids: set[str],
-        expected_spec_refs_by_id: Dict[str, List[str]] | None = None,
-    ) -> List[str]:
-        errors: List[str] = []
-        expected_refs = expected_spec_refs_by_id or {}
-        if artifact.schema_version != "module_plan_v1":
-            errors.append("schema_version must remain module_plan_v1")
-        if artifact.module != expected_module:
-            errors.append(f"module must be {expected_module}")
-        if len(artifact.subtasks) != len(expected_blocks):
-            errors.append(f"expected {len(expected_blocks)} subtasks, got {len(artifact.subtasks)}")
-        for index, expected_block in enumerate(expected_blocks):
-            if index >= len(artifact.subtasks):
-                break
-            subtask = artifact.subtasks[index]
-            if subtask.id != expected_block.subtask_id:
-                errors.append(f"subtask {index + 1}: id must be {expected_block.subtask_id}")
-            if not _target_matches_block(subtask.target, expected_block):
-                errors.append(f"{subtask.id}: target must reference skeleton placeholder {expected_block.target}")
-            unknown_refs = [item for item in subtask.spec_refs if item not in valid_spec_ids]
-            if unknown_refs:
-                errors.append(f"{subtask.id}: unknown spec_refs {unknown_refs}")
-            if not subtask.spec_refs:
-                errors.append(f"{subtask.id}: spec_refs must not be empty")
-            if subtask.id in expected_refs and subtask.spec_refs != expected_refs[subtask.id]:
-                errors.append(
-                    f"{subtask.id}: spec_refs must exactly match block retrieval output {expected_refs[subtask.id]}"
-                )
-            if len(subtask.constraints) > 3:
-                errors.append(f"{subtask.id}: constraints must contain at most 3 items")
-            if subtask.timing_obligation_ids:
-                errors.append(f"{subtask.id}: timing_obligation_ids compatibility field must be empty")
-            if subtask.logical_value_tags:
-                errors.append(f"{subtask.id}: logical_value_tags compatibility field must be empty")
         return errors
 
     def _get_stage3_artifact(self, partial_artifacts: Dict[str, Any]) -> Stage3ModuleSkeletonArtifact:
@@ -375,105 +210,8 @@ class Stage4ModulePlanAgent(BaseStageAgent):
             )
             return None
 
-    @classmethod
-    def _without_temporal_compat_fields(cls, value: Any) -> Any:
-        """Keep old KG artifacts readable without reinjecting the retired timing plan."""
-        retired = {
-            "architecture_timing",
-            "temporal_facts",
-            "timing_bindings",
-            "timing_check",
-            "timing_obligation_ids",
-            "logical_value_tags",
-            "module_obligations",
-            "block_obligations",
-        }
-        if isinstance(value, dict):
-            return {
-                key: cls._without_temporal_compat_fields(item)
-                for key, item in value.items()
-                if key not in retired
-            }
-        if isinstance(value, list):
-            return [cls._without_temporal_compat_fields(item) for item in value]
-        return value
-
     def _plan_relative_path(self, module_name: str) -> str:
-        return f"{self.plans_dirname}/{module_name}.json"
+        return ArtifactLayout(self.output_root or Path(".")).module_relative(4, module_name, "plan.json")
 
     def _retrieval_relative_path(self, module_name: str) -> str:
-        return f"{self.retrieval_dirname}/{module_name}.json"
-
-
-class _SkeletonBlock:
-    def __init__(self, block_id: str, block_label: str, block_kind: str, target: str, raw_text: str):
-        self.block_id = block_id
-        self.block_label = block_label
-        self.block_kind = block_kind
-        self.target = target
-        self.raw_text = raw_text
-
-    @property
-    def subtask_id(self) -> str:
-        return f"{self.block_id}_{self.block_label}"
-
-
-def _extract_skeleton_blocks(skeleton_markdown: str) -> List[_SkeletonBlock]:
-    markers = re.findall(r"<block:\s*([^>]+?)\s*>", skeleton_markdown)
-    marker_by_key: Dict[str, str] = {}
-    for marker in markers:
-        marker_text = marker.strip()
-        target = f"<block: {marker_text}>"
-        marker_by_key.setdefault(marker_text, target)
-        marker_by_key.setdefault(_normalize_block_marker(marker_text), target)
-    blocks: List[_SkeletonBlock] = []
-    for subsection in re.split(r"^###\s+Block\s*$", skeleton_markdown, flags=re.MULTILINE)[1:]:
-        block_id_match = re.search(r"^\s*[-*]\s+block_id:\s*(\S+)\s*$", subsection, flags=re.MULTILINE)
-        label_match = re.search(r"^\s*[-*]\s+block_label:\s*(\S+)\s*$", subsection, flags=re.MULTILINE)
-        kind_match = re.search(r"^\s*[-*]\s+block_kind:\s*(\S+)\s*$", subsection, flags=re.MULTILINE)
-        if not block_id_match or not label_match:
-            continue
-        block_id = block_id_match.group(1).strip()
-        block_label = label_match.group(1).strip()
-        block_kind = kind_match.group(1).strip() if kind_match else ""
-        subtask_id = f"{block_id}_{block_label}"
-        target = (
-            marker_by_key.get(subtask_id)
-            or marker_by_key.get(block_label)
-            or marker_by_key.get(_normalize_block_marker(subtask_id))
-            or marker_by_key.get(_normalize_block_marker(block_label))
-        )
-        if target is None:
-            target = f"<block: {block_label}>"
-        blocks.append(
-            _SkeletonBlock(
-                block_id=block_id,
-                block_label=block_label,
-                block_kind=block_kind,
-                target=target,
-                raw_text=subsection,
-            )
-        )
-    if not blocks:
-        raise ValueError("Module skeleton markdown must contain at least one `### Block` subsection")
-    return blocks
-
-
-def _target_matches_block(target: str, expected_block: _SkeletonBlock) -> bool:
-    normalized_target = _normalize_block_marker(target)
-    candidates = {
-        _normalize_block_marker(expected_block.target),
-        _normalize_block_marker(expected_block.block_label),
-        _normalize_block_marker(expected_block.subtask_id),
-    }
-    return normalized_target in candidates
-
-
-def _normalize_block_marker(value: str) -> str:
-    normalized = value.strip().lower()
-    normalized = re.sub(r"[^a-z0-9]+", "_", normalized)
-    return normalized.strip("_")
-
-
-def _find_interface_spec_block_ids(module_spec: ModuleSpecBlocks) -> List[str]:
-    return interface_block_refs(module_spec)
+        return ArtifactLayout(self.output_root or Path(".")).module_relative(4, module_name, "spec_refs.json")

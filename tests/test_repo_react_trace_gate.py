@@ -4,6 +4,7 @@ import asyncio
 import inspect
 import json
 from pathlib import Path
+from zerorepo.rtl_impl.artifact_layout import ArtifactLayout
 from types import SimpleNamespace
 from zerorepo.rtl_impl.debug_agent.bash_tools import CommandResult
 from zerorepo.rtl_impl.debug_agent.debug_runner import RtlDebugConfig
@@ -891,10 +892,10 @@ def test_improved_patch_entry_is_distilled_to_long_term_memory(tmp_path: Path) -
         }
     )
 
-    memory_files = list((tmp_path / "rtl_memory" / "cases").glob("debug_m_y_improved_1.md"))
+    memory_files = list((ArtifactLayout(tmp_path).directory("rtl_memory") / "cases").glob("debug_m_y_improved_1.md"))
     assert len(memory_files) == 1
     assert "assign y = delayed_clk;" in memory_files[0].read_text(encoding="utf-8")
-    assert "debug_m_y_improved_1" in (tmp_path / "rtl_memory" / "MEMORY.md").read_text(encoding="utf-8")
+    assert "debug_m_y_improved_1" in (ArtifactLayout(tmp_path).directory("rtl_memory") / "MEMORY.md").read_text(encoding="utf-8")
 
 
 def test_promising_mixed_signal_delta_is_kept_despite_total_mismatch_regression(tmp_path: Path, monkeypatch: object) -> None:

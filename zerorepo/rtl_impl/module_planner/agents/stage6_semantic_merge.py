@@ -6,6 +6,7 @@ import re
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
+from zerorepo.rtl_impl.artifact_layout import ArtifactLayout
 from typing import Any
 
 from agentscope.memory import InMemoryMemory
@@ -121,6 +122,7 @@ def _tool_schema(name: str, description: str, properties: dict[str, Any], requir
 class SemanticMergeState:
     """跨 ReAct 步骤的共享状态。"""
     # 路径
+    artifact_layout: ArtifactLayout
     module_name: str
     merged_file: Path           # Final output path (merged/{module}.v)
     draft_file: Path            # Temporary draft path outside merged/
@@ -269,7 +271,7 @@ class Stage6MergeTools:
 
     def _load_learned_rules(self) -> list[dict[str, Any]]:
         """加载前序模块的 merge report 作为跨模块经验。"""
-        reports_dir = self.state.merged_file.parent.parent / "merge_reports"
+        reports_dir = self.state.artifact_layout.directory("merge_reports")
         if not reports_dir.is_dir():
             return []
         rules: list[dict[str, Any]] = []
@@ -510,7 +512,7 @@ class Stage6MergeTools:
     def _ensure_journal(self) -> None:
         if self.state.journal is None:
             self.state.journal = MergeJournal(
-                self.state.merged_file.parent.parent / "merge_journal" / self.state.module_name
+                self.state.artifact_layout.directory("merge_journal") / self.state.module_name
             )
 
     @observed('tool', '写入并预检模块合并候选', tool='write_rtl', registered_tool=False,
@@ -1071,7 +1073,7 @@ class Stage6MergeRunner:
         # 确保 journal 初始化
         if state.journal is None:
             state.journal = MergeJournal(
-                state.merged_file.parent.parent / "merge_journal" / state.module_name
+                state.artifact_layout.directory("merge_journal") / state.module_name
             )
 
         from zerorepo.rtl_impl.module_planner.prompts.stage6_merge import (

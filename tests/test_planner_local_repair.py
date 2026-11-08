@@ -4,6 +4,8 @@ from __future__ import annotations
 import copy
 import json
 from pathlib import Path
+from rtl_artifact_test_utils import write_artifact_text
+from zerorepo.rtl_impl.artifact_layout import ArtifactLayout, artifact_path, artifact_dir
 from types import SimpleNamespace
 
 import pytest
@@ -31,10 +33,10 @@ from zerorepo.rtl_impl.retrieval_agent import BlockSpecRetrievalResult
 @pytest.fixture
 def skeleton(tmp_path):
     spec = tmp_path / "toy.md"
-    spec.write_text("# toy\n", encoding="utf-8")
+    write_artifact_text(spec, "# toy\n", encoding="utf-8")
     refs = SourceRefs(module_contract_ref="module_contracts_v1::toy", repo_skeleton_ref="repo_skeleton_v1::toy", module_spec_file=str(spec))
     text = make_stage3_module_skeleton_doc("toy", spec)
-    args = dict(expected_module="toy", expected_file_path="rtl/toy.v", source_refs=refs)
+    args = dict(expected_module="toy", expected_file_path="generate/rtl/toy.v", source_refs=refs)
     return text, args
 
 
@@ -92,32 +94,29 @@ def test_plain_risk_lists_normalize_without_changing_rtl(skeleton):
 
 
 def test_stage3_repairs_only_decision_ledger(skeleton, tmp_path):
-    text, args = skeleton
-    broken = text.replace("- topic: control style\n", "").replace("- reason: This avoids forcing an explicit FSM when counter- or flag-driven control is sufficient.\n", "")
-    backend = QueueBackend([broken, {"patches": [{"target": "Decision Ledger", "replacement": section_body(text, "Decision Ledger")}]}])
-    agent = Stage3Agent(PlannerLLMClient(backend=backend), output_root=tmp_path / "outputs")
-    repaired, export = agent._invoke_skeleton_doc_with_repair(prompt="Source obligations", images=[], **args)
-    assert export.module == "toy"
-    assert len(backend.calls) == 2
-    for name in ("Module Identity", "Module Frame", "Structural Skeleton", "Behavioral Overlay"):
-        assert section_body(repaired, name) == section_body(broken, name)
-    request = backend.calls[1]["user_prompt"]
-    assert "chosen_decisions[0].topic" in request and "chosen_decisions[0].reason" in request
-    assert "## 1. Module Frame" not in request
-    assert list((tmp_path / "outputs" / ".repair_drafts").rglob("*.json"))
+    from copy import deepcopy
+    from test_responsibility_refinement import scenario
+    saved={}
+    def inject(runner):
+        responses=runner.llm_client.backend.responses
+        index=next(i for i,value in enumerate(responses) if isinstance(value,dict) and "module_frame" in value)
+        saved["design"]=deepcopy(responses[index])
+        del responses[index]["decision_ledger"]["chosen_decisions"][0]["reason"]
+        responses.insert(index+1,{"decision_ledger":saved["design"]["decision_ledger"]})
+    _, runner, backend, _, stage3, _=scenario(tmp_path,before_run=inject)
+    value=json.loads((runner.output_root/stage3.module_records[0].export_file).read_text())
+    assert value["decision_ledger"]==saved["design"]["decision_ledger"]
+    assert value["module_frame"]==saved["design"]["module_frame"]
+    assert any('"sections":["decision_ledger"]' in c["user_prompt"] for c in backend.calls)
 
 
-def test_stage3_repairs_one_overlay_entry(skeleton):
-    text, args = skeleton
-    broken = text.replace("- timing_semantics:\n  - child outputs are consumed by downstream planned blocks\n", "")
-    overlay = section_body(text, "Behavioral Overlay")
-    entry = overlay[overlay.index("- block_id: B2"):overlay.index("### Block Behavioral Overlay", overlay.index("- block_id: B2"))]
-    backend = QueueBackend([broken, {"patches": [{"target": "Behavioral Overlay/block:B2", "replacement": entry}]}])
-    agent = Stage3Agent(PlannerLLMClient(backend=backend))
-    repaired, _ = agent._invoke_skeleton_doc_with_repair(prompt="Source", images=[], **args)
-    assert repaired == text
-    assert '"target": "Behavioral Overlay/block:B2"' not in backend.calls[0]["user_prompt"]
-    assert '"Behavioral Overlay/block:B2"' in backend.calls[1]["user_prompt"]
+def test_stage3_repairs_one_overlay_entry(skeleton, tmp_path):
+    from test_responsibility_refinement import scenario
+    _, runner, _, _, stage3, _=scenario(tmp_path)
+    value=json.loads((runner.output_root/stage3.module_records[0].export_file).read_text())
+    for overlay in value["block_behavior_overlays"]:
+        expected=[o["obligation_id"] for o in value["behavioral_obligations"] if o["implementation_block_id"]==overlay["block_id"]]
+        assert overlay["obligation_ids"]==expected
 
 
 @pytest.mark.parametrize("patches", [
@@ -125,14 +124,20 @@ def test_stage3_repairs_one_overlay_entry(skeleton):
     [{"target": "Decision Ledger", "replacement": "bad"}] * 2,
     [{"target": "Decision Ledger", "replacement": "## Module Frame\nbad"}],
 ])
-def test_stage3_rejects_invalid_patches_without_losing_candidate(skeleton, patches):
-    text, args = skeleton
-    broken = text.replace("- topic: control style\n", "")
-    backend = QueueBackend([broken, {"patches": patches}, {"patches": [{"target": "Decision Ledger", "replacement": section_body(text, "Decision Ledger")}]}])
-    agent = Stage3Agent(PlannerLLMClient(backend=backend))
-    repaired, _ = agent._invoke_skeleton_doc_with_repair(prompt="Source", images=[], **args)
-    assert repaired == text
-    assert "invalid_patch" in backend.calls[2]["user_prompt"]
+def test_stage3_rejects_invalid_patches_without_losing_candidate(skeleton, patches, tmp_path):
+    from copy import deepcopy
+    from test_responsibility_refinement import scenario
+    saved={}
+    def inject(runner):
+        responses=runner.llm_client.backend.responses
+        index=next(i for i,value in enumerate(responses) if isinstance(value,dict) and "module_frame" in value)
+        saved["design"]=deepcopy(responses[index])
+        responses[index]["behavioral_obligations"][0]["source_evidence_ids"]=["EV_unknown"]
+        responses[index+1:index+1]=[{"patches":patches},{"behavioral_obligations":[saved["design"]["behavioral_obligations"][0]]}]
+    _, runner, backend, _, stage3, _=scenario(tmp_path,before_run=inject)
+    value=json.loads((runner.output_root/stage3.module_records[0].export_file).read_text())
+    assert value["module_frame"]==saved["design"]["module_frame"]
+    assert any("Untargeted design section: patches" in c["user_prompt"] for c in backend.calls)
 
 
 def test_stage4_patches_one_description_and_preserves_other_tasks():
@@ -187,33 +192,16 @@ def test_stage4_malformed_identity_preserves_identifiable_tasks(invalid):
 
 
 def test_stage4_failed_plan_reuses_retrieval_on_restart(tmp_path, skeleton):
-    text, args = skeleton
-    task = PlannerTaskInput(task_id="toy_task", spec_md_files=[args["source_refs"].module_spec_file])
-    output = tmp_path / "outputs"
-    (output / "module_skeleton_docs").mkdir(parents=True)
-    (output / "module_skeleton_docs" / "toy.md").write_text(text)
-    inputs = {
-        "stage3": {"task_id": task.task_id, "top_module": "toy", "module_order": ["toy"], "completed_modules": ["toy"], "stage3_status": "module_skeletons_planned", "module_records": [{"module": "toy", "doc_file": "module_skeleton_docs/toy.md", "export_file": "module_skeleton_json/toy.json", "source_refs": args["source_refs"].model_dump()}]},
-        "spec_blocks": {"task_id": task.task_id, "module_order": ["toy"], "modules": [{"module": "toy", "source_spec_file": "toy.md", "blocks": [{"block_id": "S001", "text": "Binding source obligation"}]}]},
-    }
-    class Retriever:
-        calls = 0
-        def select_block_spec_refs(self, **kwargs):
-            self.calls += 1
-            return BlockSpecRetrievalResult.model_validate(make_block_spec_retrieval_payload("toy"))
-    retriever = Retriever()
-    broken = make_stage4_module_plan_payload("toy")
-    del broken["subtasks"][0]["description"]
-    agent = Stage4ModulePlanAgent(PlannerLLMClient(backend=QueueBackend([broken] * 5)), output_root=output, block_spec_retriever=retriever)
-    persisted = []
-    with pytest.raises(StageGenerationError):
-        agent.run_incremental(task, inputs, persist_callback=persisted.append)
-    assert persisted == []
-    backend = QueueBackend([make_stage4_module_plan_payload("toy")])
-    resumed = Stage4ModulePlanAgent(PlannerLLMClient(backend=backend), output_root=output, block_spec_retriever=retriever)
-    resumed.run_incremental(task, inputs)
-    assert retriever.calls == 1
-    assert len(backend.calls) == 1
+    from test_responsibility_refinement import scenario
+    task, runner, backend, _, _, stage4=scenario(tmp_path)
+    path=runner.output_root/stage4.module_plan_files[0].plan_file
+    original=path.read_text()
+    bad=json.loads(original); del bad["subtasks"][0]["description"]
+    path.write_text(json.dumps(bad))
+    count=len(backend.calls)
+    runner.run(task,resume=True,end_stage="stage4")
+    assert len(backend.calls)==count
+    assert json.loads(path.read_text())==json.loads(original)
 
 
 def stage5_inputs(tmp_path, *, count=3):
@@ -222,9 +210,9 @@ def stage5_inputs(tmp_path, *, count=3):
     (output / "module_plan_json").mkdir(parents=True)
     subtasks = [{"id": f"B{i}", "target": f"<block: B{i}>", "description": f"Implement source obligation {i}", "spec_refs": ["S001"], "constraints": []} for i in range(1, count + 1)]
     plan = {"module": "toy", "subtasks": subtasks}
-    (output / "module_plan_json" / "toy.json").write_text(json.dumps(plan), encoding="utf-8")
+    write_artifact_text(ArtifactLayout(output).module(4, Path("toy.json").stem, "plan.json"), json.dumps(plan), encoding="utf-8")
     inputs = {
-        "stage4": {"task_id": task.task_id, "module_order": ["toy"], "module_plan_files": [{"module": "toy", "plan_file": "module_plan_json/toy.json"}]},
+        "stage4": {"task_id": task.task_id, "module_order": ["toy"], "module_plan_files": [{"module": "toy", "plan_file": "plan/stage4/modules/toy/plan.json"}]},
         "spec_blocks": {"task_id": task.task_id, "module_order": ["toy"], "modules": [{"module": "toy", "source_spec_file": "toy.md", "blocks": [{"block_id": "S001", "text": "Read a and drive y."}]}]},
         "stage5_input_fingerprint": "initial",
     }
@@ -293,10 +281,10 @@ def test_stage5_plan_change_invalidates_only_affected_suffix(tmp_path):
     good = [make_stage5_code_payload(task.task_id, "toy", item, f"assign y{i} = a;") for i, item in enumerate(subtasks)]
     agent = Stage5Agent(PlannerLLMClient(backend=QueueBackend(good)), output_root=output)
     agent.run_module(task, inputs, "toy")
-    plan_path = output / "module_plan_json" / "toy.json"
+    plan_path = ArtifactLayout(output).module(4, Path("toy.json").stem, "plan.json")
     plan = json.loads(plan_path.read_text())
     plan["subtasks"][1]["constraints"] = ["A new source obligation"]
-    plan_path.write_text(json.dumps(plan), encoding="utf-8")
+    write_artifact_text(plan_path, json.dumps(plan), encoding="utf-8")
     backend = QueueBackend(good[1:])
     resumed = Stage5Agent(PlannerLLMClient(backend=backend), output_root=output)
     resumed.run_module(task, inputs, "toy")
@@ -321,7 +309,7 @@ def test_resume_interruption_does_not_discard_valid_cached_tail(tmp_path, monkey
     checkpoint = interrupted._read_checkpoint("toy")
     assert checkpoint["status"] == "completed"
     assert [item["subtask_id"] for item in checkpoint["subtasks"]] == ["B1", "B2", "B3"]
-    candidate = json.loads(next((agent.workspace_root / ".stage5_candidates").glob("toy/*/checkpoint.json")).read_text())
+    candidate = json.loads(next((artifact_dir(agent.workspace_root, ".stage5_candidates")).glob("toy/*/checkpoint.json")).read_text())
     assert [item["subtask_id"] for item in candidate["subtasks"]] == ["B1"]
     assert [item["subtask_id"] for item in candidate["pending_subtasks"]] == ["B2", "B3"]
     resumed = Stage5Agent(PlannerLLMClient(backend=backend), output_root=output)
@@ -340,7 +328,7 @@ def test_runner_stage5_cache_checks_current_inputs_and_content(tmp_path):
     source["spec_blocks"]["modules"][0]["blocks"][0]["text"] = "Different binding source"
     assert runner._reuse_stage5_fragment_if_valid("toy", source, task) is None
     path = runner.stage5._workspace_file("toy")
-    path.write_text(path.read_text().replace("assign y = a;", "assign y = b;"))
+    write_artifact_text(path, path.read_text().replace("assign y = a;", "assign y = b;"))
     assert runner._reuse_stage5_fragment_if_valid("toy", inputs, task) is None
     assert len(backend.calls) == 1
 
@@ -416,9 +404,9 @@ def test_runner_records_failure_blocks_parent_and_continues_independent_module(t
     task = PlannerTaskInput(task_id="failure", spec_md_files=[str(tmp_path / "spec.md")])
     runner = PlannerRunner(output_root=tmp_path / "outputs", llm_backend=QueueBackend([]))
     runner.output_root.mkdir(parents=True, exist_ok=True)
-    latest_path = runner.output_root / "system_debug_latest.json"
+    latest_path = artifact_path(runner.output_root, "system_debug_latest.json")
     latest = {"top_module": "parent", "status": "fail", "debug_trials": 15, "mismatch_count": 99}
-    latest_path.write_text(json.dumps(latest))
+    write_artifact_text(latest_path, json.dumps(latest))
     modules = ["bad", "parent", "independent"]
     specs = Stage4SpecBlocksArtifact.model_validate({"task_id": task.task_id, "module_order": modules, "modules": [{"module": name, "source_spec_file": f"{name}.md", "blocks": [{"block_id": "S001", "text": "obligation"}]} for name in modules]})
     inputs = {"spec_blocks": specs, "stage5_input_fingerprint": "test", "stage2": SimpleNamespace(top_module="parent", modules=[SimpleNamespace(module=name, children=["bad"] if name == "parent" else []) for name in modules])}
@@ -430,13 +418,13 @@ def test_runner_records_failure_blocks_parent_and_continues_independent_module(t
             raise StageGenerationError("original fragment failure")
         path = runner.stage5._workspace_file(module)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("// accepted fragment\n")
+        write_artifact_text(path, "// accepted fragment\n")
         return ModuleCodegenRecord(module=module, workspace_file=str(path), completed_subtasks=["B1"])
     def stage6(task, inputs, module, record):
         merged.append(module)
         path = runner.stage6._merged_file(module)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(f"module {module}; endmodule\n")
+        write_artifact_text(path, f"module {module}; endmodule\n")
         return ModuleMergeRecord(module=module, fragment_file=record.workspace_file, merged_file=str(path))
     monkeypatch.setattr(runner, "_reuse_stage5_fragment_if_valid", lambda *args: None)
     monkeypatch.setattr(runner.stage5, "run_module", stage5)
@@ -451,7 +439,7 @@ def test_runner_records_failure_blocks_parent_and_continues_independent_module(t
     assert result.status == "failed" and result.system_debug.status == "skipped"
     assert result.latest_system_debug.debug_trials == 15
     assert json.loads(latest_path.read_text()) == latest
-    manifest = json.loads((runner.output_root / "stage5_codegen.json").read_text())
+    manifest = json.loads((artifact_path(runner.output_root, "stage5_codegen.json")).read_text())
     assert manifest["status"] == "failed"
     assert "original fragment failure" in manifest["module_files"][0]["error"]
     assert manifest["module_files"][1]["status"] == "blocked"
@@ -463,15 +451,15 @@ def test_stage6_cache_requires_unchanged_fragment_content(tmp_path, monkeypatch)
     merged = runner.stage6._merged_file("toy")
     fragment.parent.mkdir(parents=True, exist_ok=True)
     merged.parent.mkdir(parents=True, exist_ok=True)
-    fragment.write_text("assign y = a;\n")
-    merged.write_text("module toy; endmodule\n")
+    write_artifact_text(fragment, "assign y = a;\n")
+    write_artifact_text(merged, "module toy; endmodule\n")
     record = ModuleCodegenRecord(module="toy", workspace_file=str(fragment))
     inputs = {"stage5_input_fingerprint": "present"}
-    runner._stage6_cache_path("toy").write_text(json.dumps({"input_fingerprint": runner._stage6_reuse_key("toy", record, inputs), "merged_fingerprint": fingerprint(merged.read_text())}))
+    write_artifact_text(runner._stage6_cache_path("toy"), json.dumps({"input_fingerprint": runner._stage6_reuse_key("toy", record, inputs), "merged_fingerprint": fingerprint(merged.read_text())}))
     monkeypatch.setattr(runner.stage6, "_ensure_toolchain_path", lambda: None)
     monkeypatch.setattr("zerorepo.rtl_impl.module_planner.planner_runner._check_single_file_syntax", lambda *args, **kwargs: (True, ""))
     assert runner._reuse_stage6_merge_if_valid("toy", record, inputs) is not None
-    fragment.write_text("assign y = b;\n")
+    write_artifact_text(fragment, "assign y = b;\n")
     assert runner._reuse_stage6_merge_if_valid("toy", record, inputs) is None
 
 

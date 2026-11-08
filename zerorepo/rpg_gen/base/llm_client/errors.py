@@ -10,7 +10,7 @@ class LLMRequestError(RuntimeError):
 
 
 class LLMRequestTimeoutError(LLMRequestError):
-    """A bounded request timed out; only explicit no-content policies may retry."""
+    """A supervised deadline expired; explicit timeout policies decide retries."""
 
 
 class IncompleteLLMResponseError(LLMRequestError):

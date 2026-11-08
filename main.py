@@ -114,6 +114,16 @@ Supported LLM Models:
         help="Specify execution phase: 'all'=full pipeline, 'design'=design only, 'implementation'=implementation only, 'rtl'=RTL full pipeline with resume, 'rtl_phase1'=RTL SpecFacts parsing, 'rtl_phase2'=RTL Module Contract Realization (requires Phase 1 output), 'rtl_planner'=run the standalone RTL module planner"
     )
 
+    stop_group = parser.add_mutually_exclusive_group()
+    stop_group.add_argument(
+        "--plan", dest="rtl_stop_after", action="store_const", const="plan",
+        help="RTL planner: stop after Stage4 and the planning gate, before code generation",
+    )
+    stop_group.add_argument(
+        "--generate", dest="rtl_stop_after", action="store_const", const="generate",
+        help="RTL planner: stop after module generation, merge and syntax repair, before system debug",
+    )
+
     parser.add_argument(
         "--rtl-spec",
         type=str,
@@ -135,7 +145,10 @@ Supported LLM Models:
         version="ZeroRepo 1.0.0"
     )
     
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.rtl_stop_after and args.phase != "rtl_planner":
+        parser.error("--plan and --generate require --phase rtl_planner")
+    return args
 
 
 def validate_args(args) -> bool:
@@ -152,7 +165,8 @@ def validate_args(args) -> bool:
     # Check checkpoint directory
     checkpoint_path = Path(args.checkpoint)
     try:
-        checkpoint_path.mkdir(parents=True, exist_ok=True)
+        if args.phase != "rtl_planner":
+            checkpoint_path.mkdir(parents=True, exist_ok=True)
     except Exception as e:
         errors.append(f"Cannot create checkpoint directory {checkpoint_path}: {e}")
     
@@ -197,6 +211,8 @@ def setup_logging(args) -> logging.Logger:
     logger.info("💾 Checkpoint directory: %s", args.checkpoint)
     logger.info("📁 Target repository: %s", args.repo)
     logger.info("🔧 Execution phase: %s", args.phase)
+    if getattr(args, "rtl_stop_after", None):
+        logger.info("⏸️ RTL stop after: %s", args.rtl_stop_after)
     logger.info("📊 Log level: %s", level_name)
 
     if getattr(args, "force_rebuild", False):
@@ -207,6 +223,41 @@ def setup_logging(args) -> logging.Logger:
         logger.info("🧪 Dry run mode enabled")
 
     return logger
+
+
+def _run_rtl_planner_case(runner, task_input, args, logger, project_name):
+    """Dispatch a cumulative RTL target and report only the stages it executed."""
+    target = getattr(args, "rtl_stop_after", None)
+    result = runner.run(
+        task_input, resume=args.resume, end_stage="stage4" if target == "plan" else "stage6",
+        force_rebuild=args.force_rebuild, run_system_debug=target != "generate",
+    )
+    layout = runner.layout
+    if target == "plan":
+        logger.info("✅ RTL planning completed for %s (Stage4 planning gate passed)", project_name)
+        logger.info("  - plans: %s", layout.case_root / "plan")
+        logger.info("  - planning gate: %s", layout.artifact("planning_gate_report.json"))
+        return result
+
+    if result.status != "completed":
+        failures = "; ".join(
+            f"{record.module}: {record.error}"
+            for record in result.module_files if record.status != "completed"
+        )
+        raise RuntimeError(f"RTL module planner incomplete; checkpoints retained for resume: {failures}")
+    label = "generation" if target == "generate" else "full pipeline"
+    logger.info("✅ RTL %s completed for %s", label, project_name)
+    logger.info("  - final RTL: %s", layout.rtl)
+    logger.info("  - generation report: %s", layout.artifact("stage6_merge.json"))
+    pending = [record.module for record in result.debug_files if record.status in {"fail", "error"}]
+    if pending:
+        logger.warning("  - modules awaiting syntax repair: %s", ", ".join(pending))
+    unchecked = [record.module for record in result.debug_files if record.status in {"disabled", "skipped"}]
+    if unchecked:
+        logger.warning("  - modules with syntax checking disabled or skipped: %s", ", ".join(unchecked))
+    if target == "generate":
+        logger.info("  - system debug skipped by request; resume without --plan/--generate to continue")
+    return result
 
 def run_zerorepo(args, logger: logging.Logger) -> bool:
     """Run ZeroRepo main pipeline"""
@@ -285,8 +336,13 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
 
                 # Create checkpoint directory
                 spec_output_dir = spec.output_dir
-                spec_checkpoint_dir = spec_output_dir / ".zerorepo"
-                spec_checkpoint_dir.mkdir(parents=True, exist_ok=True)
+                if args.phase == "rtl_planner":
+                    from zerorepo.rtl_impl.artifact_layout import ArtifactLayout
+                    case_layout = ArtifactLayout(spec_output_dir.resolve())
+                    spec_checkpoint_dir = case_layout.checkpoint
+                else:
+                    spec_checkpoint_dir = spec_output_dir / ".zerorepo"
+                    spec_checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
                 if args.phase == "rtl_planner":
                     from zerorepo.rpg_gen.base.llm_client import LLMConfig
@@ -305,11 +361,22 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
                             "nor config['llm'] is available."
                         )
 
-                    planner_output_root = spec_checkpoint_dir / "module_planner" / "outputs"
-                    planner_output_root.mkdir(parents=True, exist_ok=True)
-                    workspace_dir = planner_output_root.parent.parent / "workspace"
-                    merged_dir = workspace_dir / "merged"
+                    from zerorepo.rtl_impl.artifact_retention import ArtifactRetention
+                    planner_output_root = case_layout.case_root
+                    artifact_config = (config.get("rtl_module_planner", {}) or {}).get("artifacts", {})
+                    ArtifactRetention(case_layout, (artifact_config or {}).get("retention", "compact")).initialize(spec.project_name)
+                    merged_dir = case_layout.rtl
                     merged_dir.mkdir(parents=True, exist_ok=True)
+                    if not args.log_file:
+                        # Each batch case owns its log; no placeholder _temp case.
+                        for handler in list(logger.handlers):
+                            if getattr(handler, "_rtl_case_log", False):
+                                logger.removeHandler(handler)
+                                handler.close()
+                        case_log = logging.FileHandler(planner_output_root / "run.log", encoding="utf-8")
+                        case_log._rtl_case_log = True
+                        case_log.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+                        logger.addHandler(case_log)
 
                     kg_service = None
                     rtl_kg_cfg = config.get("rtl_kg", {}) or {}
@@ -392,8 +459,10 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
 
                     planner_runner = PlannerRunner(
                         output_root=planner_output_root,
+                        artifacts=artifact_config,
                         llm_config=planner_llm_config,
                         request_policy=(config.get("rtl_module_planner", {}) or {}).get("request_policy"),
+                        execution_policy=(config.get("rtl_module_planner", {}) or {}).get("execution_policy"),
                         retrieval_limits=(config.get("rtl_module_planner", {}) or {}).get("retrieval_limits"),
                         debug_config=RtlDebugConfig.from_mapping(
                             config.get("rtl_debug", {}) or {},
@@ -413,39 +482,7 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
                             .get("failure_policy", "degrade")
                         ),
                     )
-                    merge_artifact = planner_runner.run(task_input, resume=args.resume, end_stage="stage6",
-                                                        force_rebuild=args.force_rebuild)
-                    if merge_artifact.status != "completed":
-                        failures = "; ".join(
-                            f"{record.module}: {record.error}"
-                            for record in merge_artifact.module_files if record.status != "completed"
-                        )
-                        raise RuntimeError(f"RTL module planner incomplete; checkpoints retained for resume: {failures}")
-                    stage1_artifact_path = planner_output_root / "contracts.json"
-                    modules_artifact_path = planner_output_root / "modules.json"
-                    repo_skeleton_artifact_path = planner_output_root / "repo_skeleton.json"
-                    module_skeletons_artifact_path = planner_output_root / "module_skeletons.json"
-                    spec_blocks_artifact_path = planner_output_root / "spec_blocks.json"
-                    module_plans_artifact_path = planner_output_root / "module_plans.json"
-                    stage5_codegen_artifact_path = planner_output_root / "stage5_codegen.json"
-                    stage6_merge_artifact_path = planner_output_root / "stage6_merge.json"
-                    module_plan_json_dir = planner_output_root / "module_plan_json"
-                    fragments_dir = workspace_dir / "fragments"
-
-                    logger.info("✅ RTL module planner completed for %s", spec.project_name)
-                    logger.info("  - planner outputs root: %s", planner_output_root)
-                    logger.info("  - stage1 contracts artifact: %s", stage1_artifact_path)
-                    logger.info("  - module-organized artifact: %s", modules_artifact_path)
-                    logger.info("  - repo skeleton artifact: %s", repo_skeleton_artifact_path)
-                    logger.info("  - module skeletons artifact: %s", module_skeletons_artifact_path)
-                    logger.info("  - spec blocks artifact: %s", spec_blocks_artifact_path)
-                    logger.info("  - module plans artifact: %s", module_plans_artifact_path)
-                    logger.info("  - module plan json dir: %s", module_plan_json_dir)
-                    logger.info("  - stage5 codegen artifact: %s", stage5_codegen_artifact_path)
-                    logger.info("  - stage6 merge artifact: %s", stage6_merge_artifact_path)
-                    logger.info("  - stage5 fragments dir: %s", fragments_dir)
-                    logger.info("  - stage6 merged dir: %s", merged_dir)
-                    logger.info("  - Stage6 merged modules: %s module(s)", len(merge_artifact.module_files))
+                    _run_rtl_planner_case(planner_runner, task_input, args, logger, spec.project_name)
                     continue
 
                 # Check for resume - if Phase 1 outputs exist, skip Phase 1
@@ -733,11 +770,18 @@ def run_zerorepo(args, logger: logging.Logger) -> bool:
                 logger.info(f"{'='*60}")
             elif args.phase == "rtl_planner":
                 logger.info(f"\n{'='*60}")
-                logger.info(f"🎉 RTL module planner completed for {len(specs)} project(s)")
-                logger.info("  - outputs: .zerorepo/module_planner/outputs/contracts.json")
-                logger.info("  - outputs: .zerorepo/module_planner/outputs/modules.json")
-                logger.info("  - outputs: .zerorepo/module_planner/outputs/spec_blocks.json")
-                logger.info("  - outputs: .zerorepo/module_planner/outputs/module_plans.json")
+                target = getattr(args, "rtl_stop_after", None)
+                label = {"plan": "planning", "generate": "generation"}.get(target, "full pipeline")
+                logger.info("🎉 RTL %s completed for %s project(s)", label, len(specs))
+                logger.info("  - planning: <case>/plan/stage1 through stage4")
+                if target != "plan":
+                    logger.info("  - final RTL: <case>/generate/rtl")
+                    logger.info("  - module syntax results: <case>/generate/metadata/stage6_merge.json")
+                if target is None:
+                    logger.info("  - debug: <case>/debug")
+                else:
+                    logger.info("  - stopped after %s; resume without stop flags to continue", target)
+                logger.info("  - recovery: retain the entire case directory")
                 logger.info(f"{'='*60}")
 
             return True

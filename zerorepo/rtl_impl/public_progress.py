@@ -77,12 +77,15 @@ def request_progress_callback(emit, step, options):
             summary='本次请求未收到有效正文，正在按请求策略重试；共用原请求时间预算。'
         elif count:
             summary=f'正在接收模型输出，已收到{count}个有效字符；本次请求剩余{remaining}秒。'
+        elif phase=='reasoning':
+            reasoning=max(0,int(snapshot.get('reasoning_chars',0)))
+            summary=f'模型正在推理，已收到{reasoning}个推理字符，尚未返回正文；本次请求剩余{remaining}秒。'
         else:
             wait='等待模型服务建立响应' if phase=='awaiting_headers' else '模型连接已建立，等待有效正文'
             summary=f'{wait}；已等待{int(elapsed)}秒，首段输出上限{int(options.first_content_timeout_seconds)}秒；本次请求剩余{remaining}秒。'
         emit('model.progress',stage=step['stage'],action_id=step['action_id'],substage=step['substage'],
              purpose_summary=step['label'],result_summary=f'第{attempt}次请求 · '+summary,
-             elapsed_ms=round(elapsed*1000),status='running',reason_code='request_retrying' if status=='retrying' else 'request_waiting' if not count else 'request_streaming')
+             elapsed_ms=round(elapsed*1000),status='running',reason_code='request_retrying' if status=='retrying' else 'request_reasoning' if phase=='reasoning' and not count else 'request_waiting' if not count else 'request_streaming')
     return progress
 
 
@@ -93,6 +96,8 @@ def request_failure_summary(exc):
         return {
             'first_content_timeout':'等待模型首段有效输出超时，当前请求已结束。',
             'content_idle_timeout':'模型输出中断，超过连续无有效正文的等待上限，当前请求已结束。',
+            'reasoning_timeout':'模型持续推理，但未在推理阶段时限内返回正文，当前请求已结束。',
+            'reasoning_idle_timeout':'模型推理流中断，超过连续无有效推理的等待上限，当前请求已结束。',
             'total_timeout':'已达到单次模型请求的总时限，当前请求已结束。',
         }.get(reason,'模型请求超时，当前请求已结束。')+' 本轮未完成，已保留已有材料；不代表整轮任务预算已耗尽。'
     if isinstance(exc,LLMResponseTruncatedError):

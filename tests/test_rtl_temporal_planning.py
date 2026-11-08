@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from rtl_artifact_test_utils import write_artifact_text
+from zerorepo.rtl_impl.artifact_layout import ArtifactLayout, artifact_path
 from unittest.mock import Mock
 
 import pytest
@@ -54,7 +56,7 @@ class QueueBackend:
 
 def _task(tmp_path: Path) -> tuple[PlannerTaskInput, Path]:
     spec = tmp_path / "toy.md"
-    spec.write_text(
+    write_artifact_text(spec,
         "\n".join(
             [
                 "# Toy",
@@ -205,14 +207,14 @@ def _repo_payload() -> dict:
                 "reset_style": "active-low asynchronous",
             },
             "hierarchy": [],
-            "file_map": {"toy": "rtl/toy.v"},
+            "file_map": {"toy": "generate/rtl/toy.v"},
             "cross_module_alignment": [],
             "global_data_conventions": [],
         },
         "modules": [
             {
                 "module": "toy",
-                "file_path": "rtl/toy.v",
+                "file_path": "generate/rtl/toy.v",
                 "role": "state update controller",
                 "kind": "top_controller",
                 "source_kind": "inferred_from_spec",
@@ -285,13 +287,24 @@ def _stage2_candidate(style: str, *, grounded: bool) -> dict:
     }
 
 
-def _stage2_decomposition_responses() -> list[dict]:
-    return [
-        _stage2_responsibilities(),
+def _stage2_decomposition_responses(spec_path) -> list[dict]:
+    responses = [
+        {**_stage2_responsibilities(), "responsibilities": [{**_stage2_responsibilities()["responsibilities"][0],
+          "source_refs": [{"source_file": str(spec_path), "quote": spec_path.read_text()}],
+          "state_accesses": [{"state_id": "state", "role": "commit"}]}],
+          "state_objects": [{"state_id": "state", "name": "state", "owner_responsibility_id": "RU_TOY_UPDATE",
+             "source_refs": [{"source_file": str(spec_path), "quote": spec_path.read_text()}]}]},
         _stage2_candidate("conservative", grounded=False),
         _stage2_candidate("balanced", grounded=True),
         _stage2_candidate("modular", grounded=False),
     ]
+
+    from zerorepo.rtl_impl.module_planner.utils.evidence import EvidenceRegistry
+    from zerorepo.rtl_impl.module_planner.module_organizer import build_stage2_planning_input_from_task
+    registry = EvidenceRegistry(build_stage2_planning_input_from_task(task_input=PlannerTaskInput(task_id="toy", spec_md_files=[str(spec_path)])))
+    for group in ("responsibilities", "state_objects"):
+        for item in responses[0][group]: item["source_evidence_ids"] = list(registry.entries)
+    return responses
 
 
 def _architecture_payload() -> dict:
@@ -339,7 +352,7 @@ def test_planner_runner_temporal_planning_is_disabled_by_default(tmp_path):
     assert runner.temporal_planning_enabled is False
     assert artifact.schema_version == "stage1_contracts_v1"
     assert not (output_root / "global_temporal_facts.json").exists()
-    assert (output_root / "contracts.json").exists()
+    assert (artifact_path(output_root, "contracts.json")).exists()
     assert len(backend.calls) == 1
 
 
@@ -422,17 +435,17 @@ def test_stage2_temporal_normalizes_legacy_fields_and_accepts_declared_objects(t
     repo_payload = _repo_payload()
     repo_payload["top_module"] = "consumer"
     repo_payload["global_invariants"]["file_map"] = {
-        "producer": "rtl/producer.v",
-        "consumer": "rtl/consumer.v",
+        "producer": "generate/rtl/producer.v",
+        "consumer": "generate/rtl/consumer.v",
     }
     repo_payload["modules"] = [
         {
             **repo_payload["modules"][0],
             "module": "producer",
-            "file_path": "rtl/producer.v",
+            "file_path": "generate/rtl/producer.v",
             "kind": "leaf_stateful",
         },
-        {**repo_payload["modules"][0], "module": "consumer", "file_path": "rtl/consumer.v"},
+        {**repo_payload["modules"][0], "module": "consumer", "file_path": "generate/rtl/consumer.v"},
     ]
     repo_payload["planning_decisions"]["generation_order"] = ["producer", "consumer"]
     repo = Stage2RepoSkeletonArtifact.model_validate(repo_payload)
@@ -486,7 +499,7 @@ def test_legacy_temporal_artifact_is_ignored_and_preserved_on_resume(tmp_path):
     output_root.mkdir()
     legacy_path = output_root / "global_temporal_facts.json"
     legacy_text = '{"legacy":true}\n'
-    legacy_path.write_text(legacy_text, encoding="utf-8")
+    write_artifact_text(legacy_path, legacy_text, encoding="utf-8")
     runner = PlannerRunner(
         output_root=output_root,
         llm_backend=QueueBackend([_stage1_facts_payload(task.spec_md_files[0])]),
@@ -553,7 +566,7 @@ def test_stage3_timing_binding_prompt_lists_all_fields_enums_and_valid_example()
 
 def test_stage2_completion_does_not_run_or_write_temporal_sidecars(tmp_path):
     task, spec_path = _task(tmp_path)
-    backend = QueueBackend([_stage1_facts_payload(spec_path), *_stage2_decomposition_responses()])
+    backend = QueueBackend([_stage1_facts_payload(spec_path), *_stage2_decomposition_responses(spec_path)])
     output_root = tmp_path / "outputs"
     runner = PlannerRunner(output_root=output_root, llm_backend=backend)
 
@@ -576,8 +589,8 @@ def test_stage2_completion_does_not_run_or_write_temporal_sidecars(tmp_path):
     assert isinstance(resumed, Stage2RepoSkeletonArtifact)
     assert resume_backend.calls == []
 
-    spec_path.write_text(spec_path.read_text(encoding="utf-8") + "\nAdditional timing clarification.", encoding="utf-8")
-    changed_backend = QueueBackend([_stage1_facts_payload(spec_path), *_stage2_decomposition_responses()])
+    write_artifact_text(spec_path, spec_path.read_text(encoding="utf-8") + "\nAdditional timing clarification.", encoding="utf-8")
+    changed_backend = QueueBackend([_stage1_facts_payload(spec_path), *_stage2_decomposition_responses(spec_path)])
     PlannerRunner(output_root=output_root, llm_backend=changed_backend).run(
         task,
         resume=True,
@@ -592,8 +605,8 @@ def test_stage2_ignores_existing_architecture_timing_sidecar(tmp_path):
     output_root.mkdir()
     sidecar = output_root / "architecture_timing_contract.json"
     original = '{"legacy":"do-not-touch"}\n'
-    sidecar.write_text(original, encoding="utf-8")
-    backend = QueueBackend([_stage1_facts_payload(spec_path), *_stage2_decomposition_responses()])
+    write_artifact_text(sidecar, original, encoding="utf-8")
+    backend = QueueBackend([_stage1_facts_payload(spec_path), *_stage2_decomposition_responses(spec_path)])
     runner = PlannerRunner(output_root=output_root, llm_backend=backend)
 
     runner.run(task, end_stage="stage2")
@@ -605,9 +618,9 @@ def test_stage2_ignores_existing_architecture_timing_sidecar(tmp_path):
 def test_degraded_architecture_skips_stage3_timing_llm(tmp_path):
     task, spec_path = _task(tmp_path)
     output_root = tmp_path / "outputs"
-    export_path = output_root / "module_skeleton_json" / "toy.json"
+    export_path = ArtifactLayout(output_root).module(3, Path("toy.json").stem, "skeleton.json")
     export_path.parent.mkdir(parents=True)
-    export_path.write_text(json.dumps(_skeleton("toy").model_dump()), encoding="utf-8")
+    write_artifact_text(export_path, json.dumps(_skeleton("toy").model_dump()), encoding="utf-8")
     stage3 = Stage3ModuleSkeletonArtifact.model_validate(
         {
             "task_id": "toy",
@@ -620,8 +633,8 @@ def test_degraded_architecture_skips_stage3_timing_llm(tmp_path):
             "module_records": [
                 {
                     "module": "toy",
-                    "doc_file": "module_skeleton_docs/toy.md",
-                    "export_file": "module_skeleton_json/toy.json",
+                    "doc_file": "plan/stage3/modules/toy/skeleton.md",
+                    "export_file": "plan/stage3/modules/toy/skeleton.json",
                     "source_refs": {
                         "module_contract_ref": "modules::toy",
                         "repo_skeleton_ref": "repo::toy",
@@ -684,7 +697,7 @@ def _skeleton(module: str, seq_block: str = "B2") -> ModuleSkeletonExport:
     return ModuleSkeletonExport.model_validate(
         {
             "module": module,
-            "file_path": f"rtl/{module}.v",
+            "file_path": f"generate/rtl/{module}.v",
             "source_refs": {
                 "module_contract_ref": f"modules::{module}",
                 "repo_skeleton_ref": f"repo::{module}",
@@ -730,12 +743,12 @@ def test_stage3_5_detects_registered_same_edge_transfer():
     repo_payload = _repo_payload()
     repo_payload["top_module"] = "consumer"
     repo_payload["global_invariants"]["file_map"] = {
-        "producer": "rtl/producer.v",
-        "consumer": "rtl/consumer.v",
+        "producer": "generate/rtl/producer.v",
+        "consumer": "generate/rtl/consumer.v",
     }
     repo_payload["modules"] = [
-        {**repo_payload["modules"][0], "module": "producer", "file_path": "rtl/producer.v", "kind": "leaf_stateful"},
-        {**repo_payload["modules"][0], "module": "consumer", "file_path": "rtl/consumer.v"},
+        {**repo_payload["modules"][0], "module": "producer", "file_path": "generate/rtl/producer.v", "kind": "leaf_stateful"},
+        {**repo_payload["modules"][0], "module": "consumer", "file_path": "generate/rtl/consumer.v"},
     ]
     repo_payload["planning_decisions"]["generation_order"] = ["producer", "consumer"]
     repo = Stage2RepoSkeletonArtifact.model_validate(repo_payload)
@@ -1059,147 +1072,22 @@ def test_runner_does_not_block_after_failed_timing_check(tmp_path):
 
 
 def test_stage4_and_stage5_ignore_legacy_timing_bindings_and_emit_empty_compat_fields(tmp_path):
-    task, _ = _task(tmp_path)
-    output_root = tmp_path / "outputs"
-    (output_root / "module_skeleton_docs").mkdir(parents=True)
-    (output_root / "module_skeleton_json").mkdir(parents=True)
-    skeleton_doc = "\n".join(
-        [
-            "# MODULE_SKELETON_DOC v1",
-            "## 1. Module Frame",
-            "```verilog",
-            "// <block: update>",
-            "```",
-            "## 2. Structural Skeleton",
-            "### Block",
-            "- block_id: B2",
-            "- block_label: update",
-            "- block_kind: seq",
-        ]
-    )
-    (output_root / "module_skeleton_docs" / "toy.md").write_text(skeleton_doc, encoding="utf-8")
-    (output_root / "module_skeleton_json" / "toy.json").write_text(
-        json.dumps(_skeleton("toy").model_dump()),
-        encoding="utf-8",
-    )
-    stage3 = {
-        "task_id": "toy",
-        "top_module": "toy",
-        "module_order": ["toy"],
-        "completed_modules": ["toy"],
-        "resume_cursor": 1,
-        "stage3_status": "module_skeletons_planned",
-        "global_summary": ["toy"],
-        "module_records": [
-            {
-                "module": "toy",
-                "doc_file": "module_skeleton_docs/toy.md",
-                "export_file": "module_skeleton_json/toy.json",
-                "source_refs": {
-                    "module_contract_ref": "modules::toy",
-                    "repo_skeleton_ref": "repo::toy",
-                    "module_spec_file": "toy.md",
-                },
-                "block_ids": ["B2"],
-            }
-        ],
-    }
-    spec_blocks = {
-        "task_id": "toy",
-        "module_order": ["toy"],
-        "modules": [
-            {
-                "module": "toy",
-                "source_spec_file": "toy.md",
-                "blocks": [
-                    {"block_id": "S001", "text": "Interface: input clk and state update."}
-                ],
-            }
-        ],
-    }
-    retrieval = {
-        "schema_version": "block_spec_retrieval_v1",
-        "module": "toy",
-        "selections": [
-            {
-                "id": "B2_update",
-                "target": "<block: update>",
-                "spec_refs": ["S001"],
-                "selection_reason": ["Update behavior."],
-            }
-        ],
-        "fallback_used": False,
-        "fallback_reason": "",
-    }
-    plan = {
-        "module": "toy",
-        "subtasks": [
-            {
-                "id": "B2_update",
-                "target": "<block: update>",
-                "description": "Implement the registered state update.",
-                "spec_refs": ["S001"],
-                "constraints": [],
-            }
-        ],
-    }
-    stage4_backend = QueueBackend([retrieval, plan])
-    stage4_agent = Stage4ModulePlanAgent(
-        PlannerLLMClient(backend=stage4_backend),
-        output_root=output_root,
-    )
-    stage4 = stage4_agent.run_incremental(
-        task,
-        {"stage3": stage3, "spec_blocks": spec_blocks, "timing_bindings": {"legacy": True}},
-        persist_callback=lambda payload: (
-            (output_root / payload["plan_file"]).parent.mkdir(parents=True, exist_ok=True),
-            (output_root / payload["plan_file"]).write_text(json.dumps(payload["plan_payload"]), encoding="utf-8"),
-        )
-        if payload.get("module")
-        else None,
-    )
-    assert "timing_obligation_ids" not in stage4_backend.calls[1]["user_prompt"]
-    assert "logical_value_tags" not in stage4_backend.calls[1]["user_prompt"]
-
-    stage5_response = {
-        "task_id": "toy",
-        "module": "toy",
-        "subtask_id": "B2_update",
-        "target": "<block: update>",
-        "spec_refs": ["S001"],
-        "code": "always @(posedge clk) begin\n  state_reg <= state_reg;\nend",
-        "contract": {
-            "writes": ["state_reg"],
-            "reads": ["state_reg"],
-            "clocking": "posedge clk",
-            "reset_behavior": "none",
-            "hold_behavior": "holds outside update",
-            "latency": "one-cycle",
-            "assumptions": [],
-        },
-    }
-    stage5_backend = QueueBackend([stage5_response])
-    stage5_agent = Stage5Agent(
-        PlannerLLMClient(backend=stage5_backend),
-        output_root=output_root,
-        workspace_root=tmp_path / "workspace",
-    )
-    stage5_agent.run_incremental(
-        task,
-        {
-            "stage4": stage4,
-            "spec_blocks": spec_blocks,
-            "timing_bindings": {"legacy": True},
-        },
-    )
-
-    assert "TIMING_OBLIGATIONS" not in stage5_backend.calls[0]["user_prompt"]
-    assert "timing_obligation_ids" not in stage5_backend.calls[0]["user_prompt"]
-    assert "logical_value_tags" not in stage5_backend.calls[0]["user_prompt"]
-    contracts = json.loads(
-        (tmp_path / "workspace" / "fragments" / "toy_contracts.json").read_text(encoding="utf-8")
-    )
-    assert contracts["contracts"][0]["timing_obligation_ids"] == []
+    from test_responsibility_refinement import scenario
+    legacy={}
+    def prepare(runner):
+        for name in ("global_temporal_facts.json", "architecture_timing_contract.json", "module_timing_bindings.json"):
+            path=runner.output_root/name
+            path.parent.mkdir(parents=True,exist_ok=True)
+            path.write_text('{"legacy":"preserve"}')
+            legacy[path]=path.read_bytes()
+    _,runner,backend,_,_,stage4=scenario(tmp_path,end_stage="stage5",before_run=prepare)
+    for record in stage4.module_plan_files:
+        plan=json.loads((runner.output_root/record.plan_file).read_text())
+        assert all(t["timing_obligation_ids"]==[] and t["logical_value_tags"]==[] for t in plan["subtasks"])
+    for path,body in legacy.items(): assert path.read_bytes()==body
+    assert not runner.temporal_planning_enabled
+    prompts=[call["user_prompt"] for call in backend.calls if "[CURRENT_SUBTASK]" in call["user_prompt"]]
+    assert prompts and all("[MODULE_TIMING_BINDING]" not in prompt for prompt in prompts)
 
 
 def test_stage5_rejects_nonempty_legacy_timing_ids(tmp_path):

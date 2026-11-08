@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import shutil
 from pathlib import Path
+from rtl_artifact_test_utils import write_artifact_text
+from zerorepo.rtl_impl.artifact_layout import artifact_path, artifact_dir
 
 import pytest
 
@@ -21,7 +23,7 @@ def _runner(tmp_path: Path) -> ModuleDebugRunner:
 def _write_debug_workdir(tmp_path: Path) -> Path:
     workdir = tmp_path / "workspace" / "debug" / "sdc_controller"
     workdir.mkdir(parents=True)
-    (workdir / "rtl.sv").write_text(
+    write_artifact_text(workdir / "rtl.sv",
         "\n".join(
             [
                 "module sdc_controller(input clk, input [3:0] sd_dat_dat_i);",
@@ -35,7 +37,7 @@ def _write_debug_workdir(tmp_path: Path) -> Path:
         + "\n",
         encoding="utf-8",
     )
-    (workdir / "support.sv").write_text(
+    write_artifact_text(workdir / "support.sv",
         "\n".join(
             [
                 "module sd_data_serial_host(",
@@ -54,8 +56,8 @@ def _write_debug_workdir(tmp_path: Path) -> Path:
         + "\n",
         encoding="utf-8",
     )
-    (workdir / "sd_defines.v").write_text("`define SD_BUS_W 4\n", encoding="utf-8")
-    (workdir / "tb.sv").write_text("module tb; endmodule\n", encoding="utf-8")
+    write_artifact_text(workdir / "sd_defines.v", "`define SD_BUS_W 4\n", encoding="utf-8")
+    write_artifact_text(workdir / "tb.sv", "module tb; endmodule\n", encoding="utf-8")
     return workdir
 
 
@@ -172,10 +174,10 @@ def test_repair_debug_workspace_syntax_failure_is_non_fatal(tmp_path: Path, monk
 def test_run_module_runs_pre_debug_syntax_gate_before_sim_review(tmp_path: Path, monkeypatch) -> None:
     oracle_dir = tmp_path / "oracle" / "m" / "verification"
     oracle_dir.mkdir(parents=True)
-    (oracle_dir / "m_testbench.sv").write_text("module tb; endmodule\n", encoding="utf-8")
-    merged_file = tmp_path / "workspace" / "merged" / "m.v"
+    write_artifact_text(oracle_dir / "m_testbench.sv", "module tb; endmodule\n", encoding="utf-8")
+    merged_file = artifact_dir(tmp_path / "workspace", "merged") / "m.v"
     merged_file.parent.mkdir(parents=True)
-    merged_file.write_text("module m; endmodule\n", encoding="utf-8")
+    write_artifact_text(merged_file, "module m; endmodule\n", encoding="utf-8")
     events: list[str] = []
 
     class PassingReviewer:
@@ -214,11 +216,11 @@ def test_run_module_runs_pre_debug_syntax_gate_before_sim_review(tmp_path: Path,
 
 def test_run_module_syntax_gate_does_not_require_oracle_or_sim_review(tmp_path: Path, monkeypatch) -> None:
     workspace = tmp_path / "workspace"
-    merged_dir = workspace / "merged"
+    merged_dir = artifact_dir(workspace, "merged")
     merged_dir.mkdir(parents=True)
     merged_file = merged_dir / "m.v"
-    merged_file.write_text("module m(output y);\nassign y = 1'b0;\nendmodule\n", encoding="utf-8")
-    (merged_dir / "child.v").write_text("module child(output y);\nassign y = 1'b0;\nendmodule\n", encoding="utf-8")
+    write_artifact_text(merged_file, "module m(output y);\nassign y = 1'b0;\nendmodule\n", encoding="utf-8")
+    write_artifact_text(merged_dir / "child.v", "module child(output y);\nassign y = 1'b0;\nendmodule\n", encoding="utf-8")
     events: list[str] = []
 
     class FailingReviewer:
@@ -256,19 +258,19 @@ def test_run_module_syntax_gate_does_not_require_oracle_or_sim_review(tmp_path: 
 
 def test_syntax_gate_stages_manifest_headers_and_excludes_them_from_support(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
-    merged_dir = workspace / "merged"
+    merged_dir = artifact_dir(workspace, "merged")
     merged_dir.mkdir(parents=True)
     merged_file = merged_dir / "m.v"
-    merged_file.write_text(
+    write_artifact_text(merged_file,
         '`include "e203_defines.v"\nmodule m(output [`E203_W-1:0] y); assign y = 0; endmodule\n',
         encoding="utf-8",
     )
     config_text = "`define E203_W 8\n"
     defines_text = '`include "config.v"\n'
-    (merged_dir / "config.v").write_text(config_text, encoding="utf-8")
-    (merged_dir / "e203_defines.v").write_text(defines_text, encoding="utf-8")
-    (merged_dir / "child.v").write_text("module child; endmodule\n", encoding="utf-8")
-    (workspace / "global_defines_manifest.json").write_text(
+    write_artifact_text(merged_dir / "config.v", config_text, encoding="utf-8")
+    write_artifact_text(merged_dir / "e203_defines.v", defines_text, encoding="utf-8")
+    write_artifact_text(merged_dir / "child.v", "module child; endmodule\n", encoding="utf-8")
+    write_artifact_text(artifact_path(workspace, "global_defines_manifest.json"),
         json.dumps(
             {
                 "schema_version": "global_defines_manifest_v1",
@@ -314,24 +316,24 @@ def test_syntax_gate_stages_manifest_headers_and_excludes_them_from_support(tmp_
 
 def test_staged_nested_headers_lint_before_and_after_candidate_patch(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
-    merged_dir = workspace / "merged"
+    merged_dir = artifact_dir(workspace, "merged")
     merged_dir.mkdir(parents=True)
     merged_file = merged_dir / "m.v"
-    merged_file.write_text(
+    write_artifact_text(merged_file,
         '`include "e203_defines.v"\n'
         "module m(output [`E203_W-1:0] y);\n"
         "child u_child(.y(y));\n"
         "endmodule\n",
         encoding="utf-8",
     )
-    (merged_dir / "config.v").write_text("`define E203_W 8\n", encoding="utf-8")
-    (merged_dir / "e203_defines.v").write_text('`include "config.v"\n', encoding="utf-8")
-    (merged_dir / "child.v").write_text(
+    write_artifact_text(merged_dir / "config.v", "`define E203_W 8\n", encoding="utf-8")
+    write_artifact_text(merged_dir / "e203_defines.v", '`include "config.v"\n', encoding="utf-8")
+    write_artifact_text(merged_dir / "child.v",
         '`include "e203_defines.v"\n'
         "module child(output [`E203_W-1:0] y); assign y = 0; endmodule\n",
         encoding="utf-8",
     )
-    (workspace / "global_defines_manifest.json").write_text(
+    write_artifact_text(artifact_path(workspace, "global_defines_manifest.json"),
         json.dumps(
             {
                 "schema_version": "global_defines_manifest_v1",
@@ -359,7 +361,7 @@ def test_staged_nested_headers_lint_before_and_after_candidate_patch(tmp_path: P
     initial_passed, initial_output = check_syntax(str(workdir / "rtl.sv"), top_module="m")
     assert initial_passed, initial_output
 
-    (workdir / "rtl.sv").write_text(
+    write_artifact_text(workdir / "rtl.sv",
         '`include "e203_defines.v"\n'
         "module m(output [`E203_W-1:0] y);\n"
         "wire [`E203_W-1:0] child_y;\n"
@@ -374,10 +376,10 @@ def test_staged_nested_headers_lint_before_and_after_candidate_patch(tmp_path: P
 
 def test_run_module_syntax_gate_repairs_and_writes_back_to_merged(tmp_path: Path, monkeypatch) -> None:
     workspace = tmp_path / "workspace"
-    merged_dir = workspace / "merged"
+    merged_dir = artifact_dir(workspace, "merged")
     merged_dir.mkdir(parents=True)
     merged_file = merged_dir / "m.v"
-    merged_file.write_text("module m(output y)\nassign y = 1'b0;\nendmodule\n", encoding="utf-8")
+    write_artifact_text(merged_file, "module m(output y)\nassign y = 1'b0;\nendmodule\n", encoding="utf-8")
     syntax_results = iter([(False, "%Error: syntax"), (True, "{}")])
 
     def fake_check_syntax(_path: str, top_module=None) -> tuple[bool, str]:
@@ -385,7 +387,7 @@ def test_run_module_syntax_gate_repairs_and_writes_back_to_merged(tmp_path: Path
 
     def fake_repair(self, *, workdir: Path, **_kwargs) -> tuple[bool, str, int]:
         repaired = "module m(output y);\nassign y = 1'b1;\nendmodule\n"
-        (workdir / "rtl.sv").write_text(repaired, encoding="utf-8")
+        write_artifact_text(workdir / "rtl.sv", repaired, encoding="utf-8")
         return True, repaired, 1
 
     monkeypatch.setattr(debug_runner_module, "check_syntax", fake_check_syntax)

@@ -7,6 +7,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from zerorepo.rtl_impl.artifact_layout import ArtifactLayout
+
 from test_planner_local_repair import stage5_inputs
 from test_rtl_module_planner import QueueBackend, make_stage5_code_payload
 from zerorepo.rtl_impl.module_planner.agents import Stage5Agent, Stage6MergeAgent
@@ -173,7 +175,7 @@ def test_patch_rejection_diagnostics_are_saved_and_used_in_next_request(tmp_path
     backend = QueueBackend([payload, wrong, good])
     agent = Stage5Agent(PlannerLLMClient(backend=backend), output_root=output)
     agent.run_module(task, inputs, "toy")
-    draft = json.loads(next((output / ".repair_drafts").rglob("attempt_2.json")).read_text())
+    draft = json.loads(next(ArtifactLayout(output).traces("stage5_codegen", "repairs").rglob("attempt_2.json")).read_text())
     diagnostics = draft["patch_diagnostics"]
     assert diagnostics["allowed_targets"] == ["contract.writes"]
     assert diagnostics["received_targets"] == ["contract"]

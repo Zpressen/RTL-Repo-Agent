@@ -4,8 +4,16 @@ from typing import Any, List, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from .planning import TaskPlanningContract
+
 
 class ModulePlanSubtask(BaseModel):
+    responsibility_ids: List[str] = Field(default_factory=list)
+    obligation_ids: List[str] = Field(default_factory=list)
+    supporting_obligation_ids: List[str] = Field(default_factory=list)
+    depends_on_task_ids: List[str] = Field(default_factory=list)
+    constraint_refs: List[str] = Field(default_factory=list)
+    task_contract: TaskPlanningContract = Field(default_factory=TaskPlanningContract)
     id: str = Field(..., min_length=1)
     target: str = Field(..., min_length=1)
     description: str = Field(..., min_length=1)

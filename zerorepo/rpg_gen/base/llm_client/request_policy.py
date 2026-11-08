@@ -23,14 +23,23 @@ class LLMRequestOptions:
     slow_chars_per_second: float = 2
     max_retries: int = 1
     retry_first_content_timeout: bool = False
+    retry_idle_timeout: bool = False
     max_tokens: int | None = None
     stage: str = ""
     module: str = ""
     repair_attempt: int = 1
+    request_id: str = ""
+    case_id: str = ""
+    node_id: str = ""
+    operation: str = ""
+    attempt_callback: Callable[[dict], None] | None = None
     draft_root: str | Path | None = None
     progress_callback: Callable[[dict], None] | None = None
     # Private incremental content consumer; public adapters must project fields.
     content_callback: Callable[[str], None] | None = None
+    # Optional absolute answer deadline while the stream supplies actual
+    # reasoning text. Empty events never activate this allowance.
+    reasoning_timeout_seconds: float | None = None
 
     def __post_init__(self):
         for name in ("total_timeout_seconds", "first_content_timeout_seconds", "idle_timeout_seconds",
@@ -39,6 +48,8 @@ class LLMRequestOptions:
                 raise ValueError(f"{name} must be positive")
         if self.max_retries < 0 or self.max_tokens is not None and self.max_tokens < 1:
             raise ValueError("Invalid request retry/token budget")
+        if self.reasoning_timeout_seconds is not None and self.reasoning_timeout_seconds <= 0:
+            raise ValueError("reasoning_timeout_seconds must be positive")
 
 
 def atomic_text(path, value):
@@ -61,12 +72,15 @@ class RequestProgress:
         self.log = log
         self.started = time.monotonic()
         self.deadline = self.started + options.total_timeout_seconds
-        self.request_id = uuid4().hex
+        self.request_id = options.request_id or uuid4().hex
         self.status = "started"
         self.phase = "awaiting_headers"
         self.attempt = 0
         self.text = ""
         self.chunks = 0
+        self.content_chunks = self.reasoning_chunks = self.empty_chunks = 0
+        self.reasoning_chars = 0
+        self.first_reasoning = self.last_reasoning = None
         self.effective_chars = 0
         self.first_content = None
         self.last_content = self.started
@@ -83,15 +97,20 @@ class RequestProgress:
         self.attempt += 1
         self.text = ""
         self.chunks = 0
+        self.content_chunks = self.reasoning_chunks = self.empty_chunks = 0
+        self.reasoning_chars = 0
+        self.first_reasoning = self.last_reasoning = None
         self.effective_chars = 0
         self.first_content = None
         self.attempt_started = self.last_content = time.monotonic()
         self.samples = deque([(self.attempt_started, 0)])
         self.phase = "awaiting_headers"
         self.status = "running"
+        if self.options.attempt_callback is not None:
+            self.options.attempt_callback({"request_id": self.request_id, "attempt": self.attempt})
         self.publish()
 
-    def content(self, text):
+    def content(self, text, *, reasoning_chars=0):
         self.chunks += 1
         if text:
             self.text += text
@@ -100,6 +119,7 @@ class RequestProgress:
         # Preserve whitespace verbatim, but it is not evidence that generation
         # has started or is progressing. Heartbeats cannot extend a deadline.
         if text and text.strip():
+            self.content_chunks += 1
             now = time.monotonic()
             if self.first_content is None:
                 self.first_content = now
@@ -107,6 +127,18 @@ class RequestProgress:
             self.effective_chars += len(text)
             self.phase = "streaming"
             self.samples.append((now, self.effective_chars))
+        if reasoning_chars:
+            # Keep counts only: private reasoning never enters the answer,
+            # partial drafts, callbacks or persisted diagnostic text.
+            self.reasoning_chunks += 1
+            self.reasoning_chars += reasoning_chars
+            self.last_reasoning = time.monotonic()
+            if self.first_reasoning is None:
+                self.first_reasoning = self.last_reasoning
+            if self.first_content is None:
+                self.phase = "reasoning"
+        if not (text and text.strip()) and not reasoning_chars:
+            self.empty_chunks += 1
 
     def publish(self, status=None):
         if status:
@@ -121,12 +153,19 @@ class RequestProgress:
                 and rate < self.options.slow_chars_per_second)
         snapshot = {
             "request_id": self.request_id, "stage": self.options.stage, "module": self.options.module,
+            "case_id": self.options.case_id, "node_id": self.options.node_id, "operation": self.options.operation,
             "repair_attempt": self.options.repair_attempt, "attempt": self.attempt,
-            "status": self.status, "waiting_phase": self.phase, "chunks": self.chunks,
+            "status": self.status, "updated_at_ns": time.time_ns(), "waiting_phase": self.phase, "chunks": self.chunks,
             "content_chars": len(self.text), "elapsed_seconds": round(now - self.started, 3),
             "effective_content_chars": self.effective_chars,
+            "content_chunks": self.content_chunks, "reasoning_chunks": self.reasoning_chunks,
+            "empty_chunks": self.empty_chunks, "reasoning_chars": self.reasoning_chars,
+            "first_reasoning_seconds": round(self.first_reasoning - self.attempt_started, 3) if self.first_reasoning is not None else None,
             "attempt_elapsed_seconds": round(now - self.attempt_started, 3),
+            "first_content_seconds": round(self.first_content - self.attempt_started, 3) if self.first_content is not None else None,
             "first_content_timeout_seconds": self.options.first_content_timeout_seconds,
+            "reasoning_timeout_seconds": self.options.reasoning_timeout_seconds,
+            "total_timeout_seconds": self.options.total_timeout_seconds,
             "idle_timeout_seconds": self.options.idle_timeout_seconds,
             "remaining_seconds": round(max(0, self.deadline - now), 3),
             "recent_chars_per_second": round(rate, 3), "slow": slow, **self.diagnostics,
@@ -148,6 +187,12 @@ class RequestProgress:
             return "total_timeout"
         if self.phase == "retry_delay":
             return None
+        if self.first_content is None and self.first_reasoning is not None and self.options.reasoning_timeout_seconds is not None:
+            if now - self.attempt_started >= self.options.reasoning_timeout_seconds:
+                return "reasoning_timeout"
+            if now - self.last_reasoning >= self.options.idle_timeout_seconds:
+                return "reasoning_idle_timeout"
+            return None
         if self.first_content is None and now - self.attempt_started >= self.options.first_content_timeout_seconds:
             return "first_content_timeout"
         if self.first_content is not None and now - self.last_content >= self.options.idle_timeout_seconds:
@@ -157,6 +202,9 @@ class RequestProgress:
     def next_wakeup(self):
         content_deadline = (self.attempt_started + self.options.first_content_timeout_seconds
                             if self.first_content is None else self.last_content + self.options.idle_timeout_seconds)
+        if self.first_content is None and self.first_reasoning is not None and self.options.reasoning_timeout_seconds is not None:
+            content_deadline = min(self.attempt_started + self.options.reasoning_timeout_seconds,
+                                   self.last_reasoning + self.options.idle_timeout_seconds)
         if self.phase == "retry_delay":
             content_deadline = self.deadline
         return max(0.001, min(self.deadline, content_deadline, self.next_progress) - time.monotonic())

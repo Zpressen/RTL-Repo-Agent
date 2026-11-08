@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from zerorepo.rtl_impl.artifact_layout import ArtifactLayout, artifact_dir
+
 import json
 import os
 import re
@@ -69,7 +71,7 @@ class Stage6MergeAgent(BaseStageAgent):
         super().__init__(llm_client, context_provider, artifact_sink, logger)
         self.output_root = Path(output_root) if output_root is not None else None
         self.workspace_root = Path(workspace_root) if workspace_root is not None else self._default_workspace_root()
-        self.merge_context_retriever = MergeContextRetriever(llm_client=self.llm_client, logger=self.logger)
+        self.merge_context_retriever = MergeContextRetriever(llm_client=self.llm_client, logger=self.logger, output_root=self.output_root)
         self.kg_service = kg_service
         self.planning_context_retriever = planning_context_retriever
         self.oracle_root = Path(oracle_root).expanduser()
@@ -331,8 +333,8 @@ class Stage6MergeAgent(BaseStageAgent):
             and item.get("must_include")
             and str(item.get("name") or "").endswith((".v", ".sv"))
         ]
-        contracts_file = fragment_file.with_name(f"{module_name}_contracts.json")
-        draft_file = self.workspace_root / "merge_drafts" / f"{module_name}_draft.v"
+        contracts_file = ArtifactLayout(self.workspace_root).stage5_contracts(module_name)
+        draft_file = artifact_dir(self.workspace_root, "merge_drafts") / f"{module_name}_draft.v"
 
         # 读取 module_plan（如有）
         module_plan_str = ""
@@ -344,6 +346,7 @@ class Stage6MergeAgent(BaseStageAgent):
             module_plan_str = ""
 
         state = SemanticMergeState(
+            artifact_layout=ArtifactLayout(self.workspace_root),
             module_name=module_name,
             merged_file=merged_file,
             draft_file=draft_file,
@@ -372,7 +375,7 @@ class Stage6MergeAgent(BaseStageAgent):
 
         # 检查前序模块是否已有 merge report（用于跨模块学习）
         learned_rules_available = False
-        reports_dir = self.workspace_root / "merge_reports"
+        reports_dir = artifact_dir(self.workspace_root, "merge_reports")
         if reports_dir.is_dir():
             others = [p for p in reports_dir.glob("*.json") if p.stem != module_name]
             if others:
@@ -422,14 +425,9 @@ class Stage6MergeAgent(BaseStageAgent):
             merged = fallback(None)
 
         # 写 merge report
-        report_path = self.workspace_root / "merge_reports" / f"{module_name}_merge_report.json"
+        report_path = artifact_dir(self.workspace_root, "merge_reports") / f"{module_name}_merge_report.json"
         try:
             report = tools.write_merge_report(report_path)
-            if self.output_root is not None:
-                self._write_json(
-                    (self.output_root / "merge_reports" / f"{module_name}_merge_report.json").resolve(),
-                    report,
-                )
         except Exception as exc:
             self.logger.warning(
                 "[%s] Failed to write semantic merge report for %s: %s",
@@ -465,8 +463,8 @@ class Stage6MergeAgent(BaseStageAgent):
                 errors.append(f"{record.module}: fragment_file must end with {record.module}_fragments.v")
             if merged_path.name != f"{record.module}.v":
                 errors.append(f"{record.module}: merged_file must end with {record.module}.v")
-            if merged_path.parent.name != "merged":
-                errors.append(f"{record.module}: merged_file must be under a merged directory")
+            if merged_path.parent.resolve() != ArtifactLayout(self.workspace_root).rtl.resolve():
+                errors.append(f"{record.module}: merged_file must be under generate/rtl")
             if not fragment_path.exists():
                 errors.append(f"{record.module}: fragment_file does not exist at {fragment_path}")
             if not merged_path.exists():
@@ -494,11 +492,12 @@ class Stage6MergeAgent(BaseStageAgent):
         self._ensure_toolchain_path()
         from zerorepo.rtl_impl.public_progress import public_step
         with public_step(self.stage_name, module=module_name, json_output=False):
-            raw = raw_override if raw_override is not None else self.llm_client.complete(
-                system_prompt=self.system_role,
-                user_prompt=prompt,
-                images=None,
-            )
+            arguments = dict(system_prompt=self.system_role, user_prompt=prompt, images=None)
+            options = getattr(self.llm_client, "request_options", None)
+            if options:
+                arguments["request_options"] = options(stage=self.stage_name, module=module_name,
+                    output_root=self.output_root)
+            raw = raw_override if raw_override is not None else self.llm_client.complete(**arguments)
         self._log_llm_raw_output(raw, attempt_label="initial")
         if not isinstance(raw, str):
             raise ValueError(
@@ -601,14 +600,14 @@ class Stage6MergeAgent(BaseStageAgent):
         if self.output_root is None:
             return
         self._write_json(
-            (self.output_root / "stage6_syntax_repair" / f"{module_name}.json").resolve(),
+            (artifact_dir(self.output_root, "debug") / module_name / "reports" / "stage6_syntax_repair.json").resolve(),
             {
                 "schema_version": "stage6_syntax_diagnostic_v1",
                 "module": module_name,
                 "status": status,
                 "syntax_passed": bool(syntax_passed),
                 "delegated_to": "ModuleDebugRunner.repo_react_syntax",
-                "merged_file": str(rtl_path),
+                "merged_file": str(rtl_path.relative_to(self.output_root.resolve())) if rtl_path.is_relative_to(self.output_root.resolve()) else str(rtl_path),
                 "syntax_summary": self._summarize_syntax_output(syntax_output),
             },
         )
@@ -655,18 +654,16 @@ class Stage6MergeAgent(BaseStageAgent):
     def _read_module_skeleton_context(self, record: Any | None) -> tuple[str, str | None]:
         if record is None:
             return "", None
-        doc_file = getattr(record, "doc_file", None)
-        if not doc_file:
-            return "", None
-        path = self._resolve_output_path(str(doc_file))
-        if not path.exists():
-            self.logger.warning("[%s] Module skeleton doc is missing: %s", self.stage_name, path)
-            return "", str(path)
-        text = path.read_text(encoding="utf-8").replace("\r\n", "\n").strip()
-        return _extract_module_frame_section(text), str(path)
+        export_file = getattr(record, "export_file", None)
+        if not export_file:
+            raise ValueError("Module skeleton requires authoritative JSON")
+        path = self._resolve_output_path(str(export_file))
+        from ..schemas import ModuleSkeletonExport
+        export = ModuleSkeletonExport.model_validate_json(path.read_text(encoding="utf-8"))
+        return export.module_frame, str(path)
 
     def _merged_file(self, module_name: str) -> Path:
-        return (self.workspace_root / "merged" / f"{module_name}.v").resolve()
+        return (artifact_dir(self.workspace_root, "merged") / f"{module_name}.v").resolve()
 
     def _write_text(self, path: Path, text: str) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -690,19 +687,15 @@ class Stage6MergeAgent(BaseStageAgent):
         return (self.output_root / path).resolve()
 
     def _default_workspace_root(self) -> Path:
-        if self.output_root is None:
-            return Path(self.workspace_dirname)
-        if self.output_root.name == "outputs" and self.output_root.parent.name == "module_planner":
-            return (self.output_root.parent.parent / self.workspace_dirname).resolve()
-        return (self.output_root.parent / self.workspace_dirname).resolve()
+        return (self.output_root or Path(".")).resolve()
 
     def _merge_retrieval_file(self, module_name: str) -> Path:
         root = self.output_root if self.output_root is not None else Path(".")
-        return (root / self.merge_retrieval_dirname / f"{module_name}.json").resolve()
+        return (artifact_dir(root, self.merge_retrieval_dirname) / f"{module_name}.json").resolve()
 
     def _merge_child_context_file(self, module_name: str) -> Path:
         root = self.output_root if self.output_root is not None else Path(".")
-        return (root / self.merge_child_context_dirname / f"{module_name}.json").resolve()
+        return (artifact_dir(root, self.merge_child_context_dirname) / f"{module_name}.json").resolve()
 
     def _read_merge_retrieval_if_valid(
         self,
@@ -781,7 +774,7 @@ class Stage6MergeAgent(BaseStageAgent):
             return None
 
     def _merge_cache_stamp(self, module, kind):
-        return (self.output_root or Path(".")) / ".repair_cache" / "stage6_retrieval" / f"{module}_{kind}.json"
+        return ArtifactLayout(self.output_root or Path(".")).cache("stage6_retrieval") / f"{module}_{kind}.json"
 
     def _write_merge_cache_stamp(self, module, kind, key, payload):
         atomic_write_json(self._merge_cache_stamp(module, kind), {

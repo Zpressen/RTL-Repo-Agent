@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from rtl_artifact_test_utils import write_artifact_text
 
 import pytest
 
@@ -44,7 +45,7 @@ def _repo_skeleton():
         "modules": [
             {
                 "module": "leaf",
-                "file_path": "rtl/leaf.v",
+                "file_path": "generate/rtl/leaf.v",
                 "role": "worker",
                 "kind": "leaf_combinational",
                 "parents": ["top"],
@@ -52,7 +53,7 @@ def _repo_skeleton():
             },
             {
                 "module": "top",
-                "file_path": "rtl/top.v",
+                "file_path": "generate/rtl/top.v",
                 "role": "controller",
                 "kind": "top_controller",
                 "parents": [],
@@ -66,7 +67,7 @@ def _skeleton(module="top"):
     return {
         "schema_version": "module_skeleton_export_v1",
         "module": module,
-        "file_path": f"rtl/{module}.v",
+        "file_path": f"generate/rtl/{module}.v",
         "structural_blocks": [
             {"block_id": "B1", "block_kind": "decl"},
             {"block_id": "B2", "block_kind": "inst"},
@@ -89,6 +90,150 @@ def _plan(module="top"):
     }
 
 
+def _seven_module_sidecars(tmp_path):
+    names = [f"m{index}" for index in range(7)]
+    repo = {"input_fingerprint": "stage2-fp", "top_module": names[-1], "module_order": names,
+            "modules": [{"module": name, "file_path": f"generate/rtl/{name}.v"} for name in names]}
+    skeletons = {"input_fingerprint": "stage3-fp", "module_records": []}
+    plans = {"input_fingerprint": "stage4-fp", "module_plan_files": []}
+    for name in names:
+        spec_file = f"plan/stage3/modules/{name}/spec_context.json"
+        export_file = f"plan/stage3/modules/{name}/skeleton.json"
+        plan_file = f"plan/stage4/modules/{name}/plan.json"
+        write_artifact_text(tmp_path / spec_file, json.dumps({"blocks": [{"block_id": "S1",
+            "text": f"Behavior for {name}", "source_file": "spec.md", "source_chunk_ids": [name]}]}))
+        write_artifact_text(tmp_path / export_file, json.dumps(_skeleton(name)))
+        write_artifact_text(tmp_path / plan_file, json.dumps(_plan(name)))
+        skeletons["module_records"].append({"module": name, "spec_context_file": spec_file, "export_file": export_file})
+        plans["module_plan_files"].append({"module": name, "plan_file": plan_file})
+    return repo, skeletons, plans
+
+
+def test_seven_module_rebuild_syncs_once_and_skips_unchanged_writes(tmp_path, monkeypatch):
+    from zerorepo.rtl_impl.module_planner.utils import artifact_store
+    repo, skeletons, plans = _seven_module_sidecars(tmp_path)
+    service = FakeKgService(tmp_path / "projection.json")
+    writer = PlanningGraphWriter(service, tmp_path)
+    writes = []
+    original_write = artifact_store.atomic_write_json
+    def record_write(path, payload):
+        writes.append(path)
+        original_write(path, payload)
+    monkeypatch.setattr(artifact_store, "atomic_write_json", record_write)
+    writer.ensure_projection({}, repo, skeletons, plans)
+    assert len(service.upserts) == 1
+    nodes, edges = service.upserts[0]
+    assert len(nodes) == 28 and len(edges) == 21
+    assert len({node["uid"] for node in nodes}) == 28
+    assert len([n for n in nodes if n["kind"] == "ModulePlan"]) == 7
+    initial_writes = len(writes)
+    assert initial_writes > 0
+    writer.ensure_projection({}, repo, skeletons, plans)
+    assert len(service.upserts) == 1
+    assert len(writes) == initial_writes
+
+
+@pytest.mark.parametrize("mode", ["required", "optional"])
+def test_failed_batch_keeps_local_progress_and_retries_same_snapshot(tmp_path, mode):
+    class FailOnce(FakeKgService):
+        attempts = 0
+        def upsert_planning_projection(self, nodes, edges):
+            self.attempts += 1
+            if self.attempts == 1:
+                raise RuntimeError("Neo4j unavailable")
+            return super().upsert_planning_projection(nodes, edges)
+    repo, skeletons, plans = _seven_module_sidecars(tmp_path)
+    service = FailOnce(tmp_path / "projection.json")
+    service.mode = mode
+    writer = PlanningGraphWriter(service, tmp_path)
+    if mode == "required":
+        with pytest.raises(RuntimeError, match="Neo4j unavailable"):
+            writer.ensure_projection({}, repo, skeletons, plans)
+    else:
+        writer.ensure_projection({}, repo, skeletons, plans)
+    local = json.loads(service.planning_projection_path.read_text())
+    assert len([n for n in local["nodes"] if n["kind"] == "ModulePlan"]) == 7
+    writer.ensure_projection({}, repo, skeletons, plans)
+    assert service.attempts == 2 and len(service.upserts) == 1
+    writer.ensure_projection({}, repo, skeletons, plans)
+    assert service.attempts == 2
+
+
+def test_partial_sync_failure_invalidates_old_acknowledgement(tmp_path):
+    class PartialFailure(FakeKgService):
+        attempts = 0
+        def upsert_planning_projection(self, nodes, edges):
+            self.attempts += 1
+            # Treat the failed update as potentially applied before the error.
+            result = super().upsert_planning_projection(nodes, edges)
+            if self.attempts == 2:
+                raise RuntimeError("connection lost after writing nodes")
+            return result
+    service = PartialFailure(tmp_path / "projection.json")
+    writer = PlanningGraphWriter(service, tmp_path)
+    original = _repo_skeleton()
+    writer.upsert_module_anchors({}, original)
+    changed = _repo_skeleton()
+    changed["modules"][0]["role"] = "changed"
+    with pytest.raises(RuntimeError, match="connection lost"):
+        writer.upsert_module_anchors({}, changed)
+    writer.upsert_module_anchors({}, original)
+    assert service.attempts == 3
+    assert next(n for n in service.upserts[-1][0] if n["name"] == "leaf")["role"] == "worker"
+
+
+def test_new_writer_or_run_resynchronizes_even_when_local_snapshot_matches(tmp_path):
+    repo, skeletons, plans = _seven_module_sidecars(tmp_path)
+    service = FakeKgService(tmp_path / "projection.json")
+    PlanningGraphWriter(service, tmp_path).ensure_projection({}, repo, skeletons, plans)
+    restored = PlanningGraphWriter(service, tmp_path)
+    restored.ensure_projection({}, repo, skeletons, plans)
+    assert len(service.upserts) == 2
+    restored.begin_run()
+    restored.ensure_projection({}, repo, skeletons, plans)
+    assert len(service.upserts) == 3
+
+
+def test_changed_spec_syncs_full_snapshot_including_removal(tmp_path):
+    repo, skeletons, plans = _seven_module_sidecars(tmp_path)
+    service = FakeKgService(tmp_path / "projection.json")
+    writer = PlanningGraphWriter(service, tmp_path)
+    writer.ensure_projection({}, repo, skeletons, plans)
+    old_ids = {n["uid"] for n in service.upserts[-1][0] if n["kind"] == "SpecFragment"}
+    spec = tmp_path / skeletons["module_records"][0]["spec_context_file"]
+    write_artifact_text(spec, json.dumps({"blocks": []}))
+    writer.ensure_projection({}, repo, skeletons, plans)
+    assert len(service.upserts) == 2
+    nodes, edges = service.upserts[-1]
+    assert len(old_ids - {n["uid"] for n in nodes}) == 1
+    assert len([n for n in nodes if n["kind"] == "Module"]) == 7
+    assert len([n for n in nodes if n["kind"] == "ModulePlan"]) == 7
+    persisted = json.loads(service.planning_projection_path.read_text())
+    assert nodes == persisted["nodes"] and edges == persisted["edges"]
+
+
+def test_runner_defers_module_sync_and_reuses_completed_planning(tmp_path):
+    from test_responsibility_refinement import scenario, report
+    services = []
+    def attach(runner):
+        service = FakeKgService(runner.output_root / "plan/state/kg/planning_kg_projection.json")
+        services.append(service)
+        runner.planning_graph_writer = PlanningGraphWriter(service, runner.output_root)
+    case = scenario(tmp_path, before_run=attach)
+    task, runner, backend, *_ = case
+    service = services[0]
+    assert report(case)["status"] == "passed"
+    assert len(service.upserts) == 3  # Once at each of Stage2, Stage3 and Stage4.
+    kinds = [{node["kind"] for node in nodes} for nodes, _edges in service.upserts]
+    assert kinds[0] == {"Module"}
+    assert "ModuleSkeleton" in kinds[1] and "ModulePlan" not in kinds[1]
+    assert "ModulePlan" in kinds[2]
+    calls = len(backend.calls)
+    runner.run(task, resume=True, end_stage="stage4")
+    assert len(backend.calls) == calls
+    assert len(service.upserts) == 4  # One fresh acknowledgement for the new run.
+
+
 def test_planning_projection_is_module_centered_and_idempotent(tmp_path):
     service = FakeKgService(tmp_path / "planning_kg_projection.json")
     writer = PlanningGraphWriter(service, tmp_path)
@@ -106,7 +251,7 @@ def test_planning_projection_is_module_centered_and_idempotent(tmp_path):
         ],
     }
     writer.upsert_spec_fragments(
-        {"task_id": "t1"}, "top", context, artifact_path="module_spec_context_json/top.json"
+        {"task_id": "t1"}, "top", context, artifact_path="plan/stage3/modules/top/spec_context.json"
     )
     writer.upsert_module_skeleton({"task_id": "t1"}, "top", _skeleton(), input_fingerprint="s3")
     writer.upsert_module_plan({"task_id": "t1"}, "top", _plan(), input_fingerprint="s4")
@@ -222,12 +367,12 @@ def test_stage5_planning_context_keeps_only_selected_links_and_unique_metadata(t
             },
         ],
         "skeleton": {
-            "artifact_path": "module_skeleton_json/top.json",
+            "artifact_path": "plan/stage3/modules/top/skeleton.json",
             "content_hash": "sk-hash",
             "input_fingerprint": "s3",
         },
         "plan": {
-            "artifact_path": "module_plan_json/top.json",
+            "artifact_path": "plan/stage4/modules/top/plan.json",
             "content_hash": "plan-hash",
             "input_fingerprint": "s4",
             "skeleton_content_hash": "sk-hash",
@@ -240,7 +385,7 @@ def test_stage5_planning_context_keeps_only_selected_links_and_unique_metadata(t
         "child_code_interfaces": [
             {
                 "module": "leaf",
-                "actual_path": "rtl/leaf.v",
+                "actual_path": "generate/rtl/leaf.v",
                 "implementation_status": "planned",
                 "ports": [{"name": "a", "direction": "input", "width": "8"}],
             },
@@ -310,14 +455,14 @@ def test_code_snapshot_merges_into_planned_module_uid(tmp_path):
                 "repo_uid": "demo@unit",
                 "kind": "Module",
                 "name": "top",
-                "expected_path": "rtl/top.v",
+                "expected_path": "generate/rtl/top.v",
                 "planned_children": ["leaf"],
                 "implementation_status": "planned",
             }
         ],
         "edges": [],
     }
-    service.planning_projection_path.write_text(json.dumps(projection), encoding="utf-8")
+    write_artifact_text(service.planning_projection_path, json.dumps(projection), encoding="utf-8")
     nodes, _ = service._merge_planning_projection(
         [
             {
@@ -335,7 +480,7 @@ def test_code_snapshot_merges_into_planned_module_uid(tmp_path):
     )
     module = next(item for item in nodes if item["kind"] == "Module")
     assert module["uid"] == canonical_module_uid("demo@unit", "top")
-    assert module["expected_path"] == "rtl/top.v"
+    assert module["expected_path"] == "generate/rtl/top.v"
     assert module["actual_path"] == "top.v"
     assert module["planned_children"] == ["leaf"]
     assert module["implementation_status"] == "materialized"
@@ -365,7 +510,7 @@ def test_text_fallback_uses_same_canonical_module_uid(tmp_path):
 def test_tree_sitter_and_text_fallback_module_uids_match(tmp_path):
     rtl = tmp_path / "nested" / "top.v"
     rtl.parent.mkdir()
-    rtl.write_text("module top(input a, output y); assign y = a; endmodule\n", encoding="utf-8")
+    write_artifact_text(rtl, "module top(input a, output y); assign y = a; endmodule\n", encoding="utf-8")
     graph = KnowledgeGraphRTL.build(tmp_path)
     parsed = next(item for item in graph.neo4j_nodes() if item.get("kind") == "Module")
 
@@ -391,8 +536,8 @@ def test_tree_sitter_and_text_fallback_module_uids_match(tmp_path):
 
 
 def test_duplicate_rtl_module_definitions_are_rejected(tmp_path):
-    (tmp_path / "a.v").write_text("module same; endmodule\n", encoding="utf-8")
-    (tmp_path / "b.v").write_text("module same; endmodule\n", encoding="utf-8")
+    write_artifact_text(tmp_path / "a.v", "module same; endmodule\n", encoding="utf-8")
+    write_artifact_text(tmp_path / "b.v", "module same; endmodule\n", encoding="utf-8")
     with pytest.raises(ValueError, match="Duplicate RTL Module definition"):
         KnowledgeGraphRTL.build(tmp_path)
 

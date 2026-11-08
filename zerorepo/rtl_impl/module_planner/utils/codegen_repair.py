@@ -7,24 +7,36 @@ from types import SimpleNamespace
 
 from ..schemas import ModulePlanArtifact, SubtaskCodeArtifact
 from .local_repair import ArtifactIssue, JsonRepairAdapter, strict_json
+from .prompt_context import shared_input_prompt
 
 
 class ModulePlanRepairAdapter(JsonRepairAdapter):
-    def __init__(self, *, module, required, context, source_blocks, validator):
+    def __init__(self, *, module, required, context, source_blocks, validator, schema_version="module_plan_v1", input_sections=None):
         super().__init__(ModulePlanArtifact, context)
         self.module = module
+        self.schema_version = schema_version
         self.required = required
         self.source_blocks = source_blocks
         self.validator = validator
         self.ambiguous = False
         self.safe_ids = set()
+        self.input_sections = input_sections
+
+    def initial_request(self, prompt):
+        if self.input_sections is None:
+            return prompt
+        instructions, separator, _ = prompt.partition("\nInput:\n")
+        if not separator:
+            raise ValueError("Stage4 structured input requires the complete prompt instruction boundary")
+        shared = shared_input_prompt(instructions, self.input_sections)
+        return shared if len(shared) < len(prompt) else prompt
 
     def _safe_item(self, item):
         return isinstance(item, dict) and isinstance(item.get("id"), str) and item["id"] in self.safe_ids
 
     def normalize(self, payload):
         changes = []
-        for key, expected in (("module", self.module), ("schema_version", "module_plan_v1")):
+        for key, expected in (("module", self.module), ("schema_version", self.schema_version)):
             if payload.get(key) != expected:
                 payload[key] = expected
                 changes.append(f"Assembled authoritative {key}")
@@ -121,7 +133,7 @@ class ModulePlanRepairAdapter(JsonRepairAdapter):
         required = [item for item in self.required if not selected_ids or item["id"] in selected_ids]
         refs = {ref for item in required for ref in item["spec_refs"]}
         blocks = [item for item in self.source_blocks if item["block_id"] in refs]
-        return self.context + "\nRequired identities:\n" + json.dumps(required, ensure_ascii=False) + "\nRelevant specification blocks:\n" + json.dumps(blocks, ensure_ascii=False)
+        return {"source_context": self.context, "required_identities": required, "relevant_specification_blocks": blocks}
 
     def get(self, payload, target):
         if target == "subtasks:unresolved":

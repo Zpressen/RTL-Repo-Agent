@@ -50,6 +50,12 @@ Hard rules:
 - Do not settle unresolved implementation choices in the skeleton.
   If the spec leaves a choice open, record the structural role and uncertainty instead of choosing a concrete implementation form.
 - Keep the document compact, implementation-oriented, and planning-only.
+- Prompt evidence_ref IDs refer to the Mandatory responsibility evidence table.
+  For obligation source_refs, copy complete SourceEvidence objects from that
+  table verbatim. Do not return evidence_ref objects as obligation source_refs.
+- Every state_model entry requires object, storage_kind and representation. If no
+  state objects exist, use state_model: [] instead of pseudo-entries such as
+  owned_persistent_state: none. Do not invent storage or timing to fill fields.
 
 Internal self-check before writing:
 - Every important registered object mentioned in the skeleton must have a structural owner.
@@ -66,7 +72,7 @@ EXAMPLE_OUTPUT = """
 
 ## 0. Module Identity
 - module_name: example_module
-- file_path: rtl/example_module.v
+- file_path: generate/rtl/example_module.v
 - source_refs:
   - module_contract_ref: module_contracts_v1::example_module
   - repo_skeleton_ref: repo_skeleton_v1::example_module
@@ -182,9 +188,31 @@ def build_prompt(
     module_contract_json: str,
     repo_module_json: str,
     boundary_contract_json: str = "{}",
+    responsibility_context_json: str = "",
     stage_context: str = "",
 ) -> str:
-    return f"""
+    refinement_rules = ""
+    if responsibility_context_json:
+        from ..schemas import BehaviorObligation
+        import json
+        refinement_rules = (
+            "\nENHANCED PLANNING RULES (override v1 examples):\n"
+            "Start with # MODULE_SKELETON_DOC v2. Retain the five top-level sections.\n"
+            "Inside Behavioral Overlay add exactly one ### Behavioral Obligations subsection containing a json-fenced ARRAY.\n"
+            "Each owned responsibility requires at least one obligation with a unique obligation_id, a parent_responsibility_id, "
+            "and one implementation_block_id. Inherit exact source_refs from that responsibility or an applicable constraint.\n"
+            "A primary block cannot be decl/meta; inst can only implement local integration, never child-owned behavior. "
+            "Use supporting_block_ids for declaration/computation support. Each persistent state needs a commit; commit, "
+            "reset and hold belong to one seq block. Cover every parent RU state_access and every applicable constraint.\n"
+            "Only generation-order prerequisites belong in block depends_on; do not encode runtime hardware feedback there.\n"
+            "Copy parent RU clock_domain/reset_behavior/protocol verbatim; unspecified values are inherited by the program. "
+            "Do not guess missing clock/reset/protocol/timing facts: use unspecified. Do not emit derived Overlay ID lists: "
+            "the program assembles them from obligations.\nBehaviorObligation schema:\n"
+            + json.dumps(BehaviorObligation.model_json_schema(), ensure_ascii=False)
+            + "\nAuthoritative module responsibilities, constraints and state objects:\n" + responsibility_context_json
+        )
+    prompt = f"""
+{refinement_rules}
 Generate exactly one `MODULE_SKELETON_DOC v1` for `{module_name}`.
 
 Formatting rules:
@@ -260,3 +288,8 @@ Selected logical boundary contracts for this module:
 Additional stage context:
 {stage_context or "None"}
 """.strip()
+
+    if responsibility_context_json:
+        prompt = prompt.replace("MODULE_SKELETON_DOC v1", "MODULE_SKELETON_DOC v2")
+        prompt += "\nThe example illustrates formatting only. Emit actual Behavioral Obligations from the authoritative RU set, using the supplied schema."
+    return prompt

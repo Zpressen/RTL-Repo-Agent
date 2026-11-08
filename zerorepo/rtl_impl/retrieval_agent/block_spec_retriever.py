@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+from zerorepo.rtl_impl.artifact_layout import ArtifactLayout
 from typing import Any, List
 
 from pydantic import BaseModel
@@ -68,6 +70,9 @@ class BlockSpecRetriever:
             )
             return result
         except Exception as exc:  # noqa: BLE001 - retrieval fallback should preserve Stage4 behavior.
+            from zerorepo.rtl_impl.module_planner.utils.execution import fatal_request_error
+            if fatal_request_error(exc):
+                raise
             if self.logger is not None:
                 self.logger.warning(
                     "[block_spec_retrieval] Falling back to full spec for %s: %s",
@@ -244,7 +249,14 @@ class BlockSpecRetriever:
         return json.dumps(self._json_ready(payload), ensure_ascii=False, indent=2)
 
     def _print_console(self, *, title: str, body: str) -> None:
-        print(f"\n========== {title} ==========\n{body}\n========== END {title} ==========\n", flush=True)
+        if self.logger:
+            self.logger.info("[%s] %s (%d chars)", type(self).__name__, title, len(body))
+        root = getattr(self, "output_root", None)
+        if root is not None and getattr(self.llm_client, "retention", "compact") == "full":
+            path = ArtifactLayout(root).traces(getattr(self, "stage_name", "stage6_retrieval"), "events") / "retrieval.jsonl"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps({"title": title, "body": body}, ensure_ascii=False) + "\n")
 
     def _json_ready(self, payload: Any) -> Any:
         if isinstance(payload, BaseModel):

@@ -4,6 +4,7 @@ import json
 from typing import Any, Dict, List, Literal
 
 from pydantic import BaseModel, Field, model_validator
+from .planning import SourceEvidence
 
 class TextGrounding(BaseModel):
     source_md_file: str = Field(default="")
@@ -228,6 +229,9 @@ class PlanningFactsContract(BaseModel):
 
 
 class ModuleContractsBundle(BaseModel):
+    responsibility_ids: List[str] = Field(default_factory=list)
+    applicable_constraint_ids: List[str] = Field(default_factory=list)
+    responsibility_source_refs: List[SourceEvidence] = Field(default_factory=list)
     module: str = Field(..., min_length=1)
     is_top_module: bool = Field(default=False)
     facts: List[ExtractedFact] = Field(default_factory=list)
@@ -258,6 +262,8 @@ class ModuleOrganizationArtifact(BaseModel):
 
 class Stage1ContractsArtifact(BaseModel):
     schema_version: str = Field(default="stage1_contracts_v1")
+    planning_policy_version: str = ""
+    input_fingerprint: str = ""
     task_id: str = Field(..., min_length=1)
     stage1_status: str = Field(default="initialized")
     completed_rounds: List[str] = Field(default_factory=list)

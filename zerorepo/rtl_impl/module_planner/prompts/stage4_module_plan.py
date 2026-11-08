@@ -74,6 +74,11 @@ def build_prompt(
 {SCHEMA_AND_RULES}
 
 Mandatory target rules:
+0. When REQUIRED_SUBTASKS contains obligation metadata, use schema_version=module_plan_v2.
+   Responsibility IDs, obligation IDs, supporting obligation IDs, generation dependencies,
+   constraint references and task_contract are authoritative program-assembled metadata.
+   Copy them exactly. Do not reinterpret, truncate or generate replacement obligations.
+   The short constraints list is supplementary; task_contract carries all mandatory requirements.
 1. Use REQUIRED_SUBTASKS as the source of truth for every `id`, `target`, and `spec_refs`.
 2. Copy those values exactly as written in REQUIRED_SUBTASKS.
 3. Do not infer target or spec refs from other inputs.

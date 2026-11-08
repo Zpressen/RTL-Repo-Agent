@@ -8,7 +8,7 @@ from typing import Any, Dict, Iterable, Mapping, Optional
 from zerorepo.rtl_impl.process_observer import observed
 
 
-PLANNING_SCHEMA_VERSION = "planning_kg_projection_v1"
+PLANNING_SCHEMA_VERSION = "planning_kg_projection_v2_harness"
 PLANNING_RELATIONSHIPS = frozenset({"SPECIFIES", "HAS_SKELETON", "HAS_PLAN"})
 
 
@@ -55,12 +55,18 @@ class PlanningGraphWriter:
         self.output_root = Path(output_root)
         self.logger = logger or logging.getLogger(__name__)
         self.projection_path = Path(kg_service.planning_projection_path)
+        self._synced_fingerprint: Optional[str] = None
+
+    def begin_run(self) -> None:
+        # An on-disk projection cannot prove the database still contains it.
+        # Each run resynchronizes once, including after a database reset.
+        self._synced_fingerprint = None
 
     @property
     def enabled(self) -> bool:
         return bool(self.kg_service and self.kg_service.is_enabled())
 
-    def upsert_module_anchors(self, task: Any, repo_skeleton: Any) -> None:
+    def upsert_module_anchors(self, task: Any, repo_skeleton: Any, *, sync: bool = True) -> None:
         if not self.enabled:
             return
         task_data = _payload(task)
@@ -117,7 +123,7 @@ class PlanningGraphWriter:
                 "implementation_status": str(previous.get("implementation_status") or "planned"),
             }
             self._replace_node(projection, node)
-        self._commit(projection)
+        self._commit(projection, sync=sync)
 
     def upsert_spec_fragments(
         self,
@@ -127,6 +133,7 @@ class PlanningGraphWriter:
         *,
         artifact_path: str = "",
         input_fingerprint: str = "",
+        sync: bool = True,
     ) -> None:
         if not self.enabled:
             return
@@ -185,7 +192,7 @@ class PlanningGraphWriter:
             for item in projection["nodes"]
             if item.get("kind") != "SpecFragment" or item.get("uid") in referenced
         ]
-        self._commit(projection)
+        self._commit(projection, sync=sync)
 
     def upsert_module_skeleton(
         self,
@@ -196,6 +203,7 @@ class PlanningGraphWriter:
         artifact_path: str = "",
         input_fingerprint: str = "",
         spec_context_fingerprint: str = "",
+        sync: bool = True,
     ) -> None:
         if not self.enabled:
             return
@@ -227,7 +235,7 @@ class PlanningGraphWriter:
             },
         )
         self._replace_edge(projection, _edge("HAS_SKELETON", module_uid, uid))
-        self._commit(projection)
+        self._commit(projection, sync=sync)
 
     def upsert_module_plan(
         self,
@@ -237,6 +245,7 @@ class PlanningGraphWriter:
         *,
         artifact_path: str = "",
         input_fingerprint: str = "",
+        sync: bool = True,
     ) -> None:
         if not self.enabled:
             return
@@ -271,7 +280,7 @@ class PlanningGraphWriter:
             },
         )
         self._replace_edge(projection, _edge("HAS_PLAN", module_uid, uid))
-        self._commit(projection)
+        self._commit(projection, sync=sync)
 
     def ensure_projection(
         self,
@@ -280,10 +289,10 @@ class PlanningGraphWriter:
         module_skeletons: Any = None,
         module_plans: Any = None,
     ) -> None:
-        """Rebuild missing projection data exclusively from authoritative sidecars."""
+        """Rebuild from sidecars, persisting locally and syncing one snapshot."""
         if not self.enabled:
             return
-        self.upsert_module_anchors(task, repo_skeleton)
+        self.upsert_module_anchors(task, repo_skeleton, sync=False)
         skeleton_manifest = _payload(module_skeletons)
         for record in skeleton_manifest.get("module_records") or []:
             module = str(record.get("module") or "")
@@ -296,6 +305,7 @@ class PlanningGraphWriter:
                     self._read_json(self.output_root / spec_rel),
                     artifact_path=spec_rel,
                     input_fingerprint=str(skeleton_manifest.get("input_fingerprint") or ""),
+                    sync=False,
                 )
             if export_rel and (self.output_root / export_rel).exists():
                 self.upsert_module_skeleton(
@@ -305,6 +315,7 @@ class PlanningGraphWriter:
                     artifact_path=export_rel,
                     input_fingerprint=str(skeleton_manifest.get("input_fingerprint") or ""),
                     spec_context_fingerprint=self._module_spec_fingerprint(module),
+                    sync=False,
                 )
         plan_manifest = _payload(module_plans)
         for record in plan_manifest.get("module_plan_files") or []:
@@ -317,7 +328,9 @@ class PlanningGraphWriter:
                     self._read_json(self.output_root / rel),
                     artifact_path=rel,
                     input_fingerprint=str(plan_manifest.get("input_fingerprint") or ""),
+                    sync=False,
                 )
+        self._sync(self._load())
 
     def _module_spec_fingerprint(self, module: str) -> str:
         target = _module_uid(self.kg_service.repo_uid, module)
@@ -336,7 +349,7 @@ class PlanningGraphWriter:
     def _load(self) -> Dict[str, Any]:
         if self.projection_path.exists():
             data = self._read_json(self.projection_path)
-            if data.get("repo_uid") == self.kg_service.repo_uid:
+            if data.get("repo_uid") == self.kg_service.repo_uid and data.get("schema_version") == PLANNING_SCHEMA_VERSION:
                 data.setdefault("nodes", [])
                 data.setdefault("edges", [])
                 return data
@@ -365,17 +378,31 @@ class PlanningGraphWriter:
         projection["edges"] = [item for item in projection["edges"] if item.get("uid") != edge["uid"]]
         projection["edges"].append(edge)
 
-    def _commit(self, projection: Dict[str, Any]) -> None:
+    def _commit(self, projection: Dict[str, Any], *, sync: bool = True) -> None:
         projection["schema_version"] = PLANNING_SCHEMA_VERSION
         projection["repo_uid"] = self.kg_service.repo_uid
         projection["nodes"] = sorted(projection["nodes"], key=lambda item: str(item.get("uid") or ""))
         projection["edges"] = sorted(projection["edges"], key=lambda item: str(item.get("uid") or ""))
-        self.projection_path.parent.mkdir(parents=True, exist_ok=True)
-        temp = self.projection_path.with_name(f"{self.projection_path.name}.tmp")
-        temp.write_text(json.dumps(projection, ensure_ascii=False, indent=2), encoding="utf-8")
-        temp.replace(self.projection_path)
+        previous = self._read_json(self.projection_path) if self.projection_path.exists() else None
+        if previous != projection:
+            from zerorepo.rtl_impl.module_planner.utils.artifact_store import atomic_write_json
+            atomic_write_json(self.projection_path, projection)
+        if sync:
+            self._sync(projection)
+
+    def _sync(self, projection: Dict[str, Any]) -> None:
+        content_fingerprint = _fingerprint(projection)
+        if content_fingerprint == self._synced_fingerprint:
+            self.logger.debug("[planning_kg] Skipped unchanged projection already synced this run")
+            return
+        # A failed upsert can partially alter Neo4j. Invalidate the previous
+        # acknowledgement too, so even a local rollback must synchronize again.
+        self._synced_fingerprint = None
         try:
             self.kg_service.upsert_planning_projection(projection["nodes"], projection["edges"])
+            self._synced_fingerprint = content_fingerprint
+            self.logger.info("[planning_kg] Synced projection: %d nodes, %d edges",
+                             len(projection["nodes"]), len(projection["edges"]))
         except Exception as exc:
             if str(getattr(self.kg_service, "mode", "required")) == "required":
                 raise

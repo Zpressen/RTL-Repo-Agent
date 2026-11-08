@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import wraps
 import inspect
+import logging
 import re
 import time
 from uuid import uuid4
@@ -35,7 +36,10 @@ def is_observing():
 def emit_public(event_type, **fields):
     sink = _sink.get()
     if sink is not None:
-        sink.emit(event_type, stage=_stage.get(), **fields)
+        try:
+            sink.emit(event_type, stage=_stage.get(), **fields)
+        except Exception as exc:
+            logging.getLogger(__name__).warning("Public observer failed (%s); execution continues", type(exc).__name__)
 
 
 def public_emitter():
@@ -80,12 +84,17 @@ def observed(kind,label,*,stage=None,tool=None,summarize=None,registered_tool=Tr
                 if isinstance(module,str) and re.fullmatch(r'[A-Za-z_][\w.$:-]{0,100}',module):
                     fields['context_refs']={'module_ref':module}
                 if isinstance(bound.get('time'),int):fields['purpose_summary']+=f' · t={bound["time"]}'
-            sink.emit(kind+'.started',**fields)
+            try:
+                sink.emit(kind+'.started',**fields)
+            except Exception as exc:
+                logging.getLogger(__name__).warning("Public observer start failed (%s); execution continues", type(exc).__name__)
+                return None
             token=_parent.set(action)
             return sink,fields,started,token
         def finish(record,result=None,error=False,exception=None):
             if record is None:return result
             sink,fields,started,token=record
+            original_result = result
             try:
                 failed=error or isinstance(result,dict) and (result.get('status') in {'error','failed','rejected','kg_unavailable','unavailable','unsupported','missing_vcd'} or result.get('success') is False)
                 if kind=='tool' and isinstance(result,dict):
@@ -108,7 +117,9 @@ def observed(kind,label,*,stage=None,tool=None,summarize=None,registered_tool=Tr
                     summary=summarize(result)
                 if kind == 'model' and not failed:
                     from .public_progress import split_public_result, artifact_result
-                    result, progress, payload = split_public_result(result)
+                    displayed_result, progress, payload = split_public_result(result)
+                    if not str(fields.get('substage', '')).startswith(('stage1', 'stage2', 'stage3', 'stage4')):
+                        result = displayed_result
                     summary = artifact_result(payload)
                     if isinstance(payload,dict) and payload.get('plan_style') in {'conservative','balanced','modular'}:
                         style={'conservative':'保守方案','balanced':'均衡方案','modular':'模块化方案'}[payload['plan_style']]
@@ -119,6 +130,9 @@ def observed(kind,label,*,stage=None,tool=None,summarize=None,registered_tool=Tr
                 sink.emit(kind+('.failed' if failed else '.completed'),**fields,status='failed' if failed else 'completed',
                     elapsed_ms=round((time.monotonic_ns()-started)/1000000),result_summary=summary,**extra)
                 return result
+            except Exception as exc:
+                logging.getLogger(__name__).warning("Public observer finish failed (%s); execution continues", type(exc).__name__)
+                return original_result
             finally:_parent.reset(token)
         if inspect.iscoroutinefunction(fn):
             @wraps(fn)

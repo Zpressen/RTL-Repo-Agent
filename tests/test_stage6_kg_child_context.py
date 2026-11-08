@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from rtl_artifact_test_utils import write_artifact_text
+from zerorepo.rtl_impl.artifact_layout import artifact_dir
 
 from zerorepo.rtl_impl.retrieval_agent.schemas import MergeContextRetrievalResult
 from zerorepo.rtl_impl.module_planner.agents.stage6_merge_agent import Stage6MergeAgent
@@ -72,7 +74,7 @@ class FakeKgService:
 def _write_child_module(repo_path: Path, module_name: str = "aes_sbox") -> Path:
     repo_path.mkdir(parents=True, exist_ok=True)
     path = repo_path / f"{module_name}.v"
-    path.write_text(
+    write_artifact_text(path,
         "\n".join(
             [
                 f"module {module_name}(",
@@ -90,7 +92,7 @@ def _write_child_module(repo_path: Path, module_name: str = "aes_sbox") -> Path:
 
 
 def test_stage6_builds_full_code_context_for_small_verified_child(tmp_path):
-    repo_path = tmp_path / "merged"
+    repo_path = artifact_dir(tmp_path, "merged")
     _write_child_module(repo_path)
     agent = Stage6MergeAgent(
         llm_client=FakeLLM(),
@@ -116,7 +118,7 @@ def test_stage6_builds_full_code_context_for_small_verified_child(tmp_path):
 
 
 def test_stage6_uses_interface_only_for_candidate_child(tmp_path):
-    repo_path = tmp_path / "merged"
+    repo_path = artifact_dir(tmp_path, "merged")
     _write_child_module(repo_path)
     agent = Stage6MergeAgent(
         llm_client=FakeLLM(),
@@ -139,7 +141,7 @@ def test_stage6_uses_interface_only_for_candidate_child(tmp_path):
 
 
 def test_stage6_merge_prompt_includes_kg_child_context(tmp_path):
-    repo_path = tmp_path / "merged"
+    repo_path = artifact_dir(tmp_path, "merged")
     _write_child_module(repo_path)
     agent = Stage6MergeAgent(
         llm_client=FakeLLM(),
@@ -184,7 +186,7 @@ def test_stage6_child_context_is_non_blocking_without_kg(tmp_path):
 
 
 def test_stage6_skips_kg_lookup_when_retrieval_declines_child_context(tmp_path):
-    repo_path = tmp_path / "merged"
+    repo_path = artifact_dir(tmp_path, "merged")
     _write_child_module(repo_path)
     kg_service = FakeKgService(repo_path, passed=True)
     agent = Stage6MergeAgent(
@@ -212,7 +214,7 @@ def test_stage6_skips_kg_lookup_when_retrieval_declines_child_context(tmp_path):
 
 
 def test_stage6_uses_kg_lookup_when_retrieval_requests_child_context(tmp_path):
-    repo_path = tmp_path / "merged"
+    repo_path = artifact_dir(tmp_path, "merged")
     _write_child_module(repo_path)
     kg_service = FakeKgService(repo_path, passed=True)
     agent = Stage6MergeAgent(

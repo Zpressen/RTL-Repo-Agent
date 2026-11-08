@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from zerorepo.rtl_impl.artifact_layout import artifact_dir
+
 import asyncio
 import json
 import os
@@ -1950,7 +1952,7 @@ class RepoReActRunner:
         self.reset()
         self._configure_scope_defaults(inp)
         inp.debug_workdir.mkdir(parents=True, exist_ok=True)
-        journal = RepoReActJournal(inp.workspace_root / "repo_react" / inp.module_name)
+        journal = RepoReActJournal(artifact_dir(inp.workspace_root, "repo_react") / inp.module_name)
         first_fail = _extract_first_fail_time(inp.sim_failed_log)
         state = RepoReActToolState(
             input=inp,

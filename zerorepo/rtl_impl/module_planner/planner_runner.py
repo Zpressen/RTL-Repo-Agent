@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+from zerorepo.rtl_impl.artifact_layout import LAYOUT_VERSION, ArtifactLayout, artifact_path, artifact_dir
+from zerorepo.rtl_impl.artifact_retention import ArtifactRetention
+
 import json
+import logging
+from contextlib import contextmanager
 import re
 from pathlib import Path
 from typing import Any, Dict, Literal, Optional
@@ -70,8 +75,10 @@ from .schemas import (
     TimingBindingCheckArtifact,
 )
 from .utils import PlannerLLMClient, canonical_fingerprint, check_temporal_bindings, get_planner_logger
+from .utils.responsibility_planning import POLICY_VERSION, artifact_content, planning_report, ledger_errors, plan_sidecar_errors
 from .utils.artifact_store import atomic_write_json
 from .utils.local_repair import REPAIR_POLICY_VERSION, fingerprint
+from .utils.execution import PLANNING_POLICY_VERSION
 from .utils import resolve_module_spec_text
 
 
@@ -107,6 +114,8 @@ def _check_single_file_syntax(rtl_path: str, top_module: str | None = None) -> t
 
 
 class PlannerRunner:
+    """Run the RTL pipeline; output_root is the case root shared by all stages."""
+
     CONTRACTS_FILENAME = "contracts.json"
     MODULES_FILENAME = "modules.json"
     REPO_SKELETON_FILENAME = "repo_skeleton.json"
@@ -122,7 +131,7 @@ class PlannerRunner:
     TIMING_BINDING_CHECK_FILENAME = "timing_binding_check.json"
     TIMING_BINDING_CHECK_RULESET_VERSION = "stage3_5_refinement_v2"
     INTERFACE_PLANNING_POLICY_VERSION = "facts_top_interface_v1"
-    PIPELINE_POLICY_VERSION = "stage2_multi_candidate_decomposition_v3"
+    PIPELINE_POLICY_VERSION = f"artifact_layout_v{LAYOUT_VERSION}_stage2_multi_candidate_decomposition_v4_" + POLICY_VERSION + "_" + PLANNING_POLICY_VERSION
     MODULE_SKELETON_DOCS_DIRNAME = "module_skeleton_docs"
     MODULE_SKELETON_JSON_DIRNAME = "module_skeleton_json"
     MODULE_PLAN_JSON_DIRNAME = "module_plan_json"
@@ -144,12 +153,18 @@ class PlannerRunner:
         temporal_failure_policy: Literal["strict", "degrade"] = "degrade",
         request_policy: dict | None = None,
         retrieval_limits: dict | None = None,
+        artifacts: dict | None = None,
+        execution_policy: dict | None = None,
     ):
-        self.output_root = Path(output_root)
+        self.output_root = Path(output_root).resolve()
+        self.layout = ArtifactLayout(self.output_root)
+        self.retention = ArtifactRetention(self.layout, (artifacts or {}).get("retention", "compact"))
         self.logger = logger or get_planner_logger("rtl_module_planner.runner")
         self.context_provider = context_provider or NullPlanningContextProvider()
         self.artifact_sink = artifact_sink or NullPlanningArtifactSink()
         self.llm_client = PlannerLLMClient(llm_config=llm_config, backend=llm_backend, request_policy=request_policy)
+        self.llm_client.configure_execution(self.output_root, execution_policy)
+        self.llm_client.retention = self.retention.mode
         self.kg_service = kg_service
         self.checkpoint_dir = Path(checkpoint_dir) if checkpoint_dir is not None else self._default_checkpoint_dir()
         self.planning_graph_writer = (
@@ -246,8 +261,12 @@ class PlannerRunner:
         # Persist request status/partial responses for early stages as well.
         for agent in (self.stage1, self.stage1_temporal, self.stage2, self.stage2_temporal):
             agent.output_root = self.output_root
+        for agent in (self.stage1, self.stage2, self.stage3, self.stage4_spec_blocks,
+                      self.stage4_module_plans, self.stage5, self.stage6):
+            agent.layout = self.layout
         self.debug_runner = ModuleDebugRunner(
             config=debug_config,
+            retention=self.retention.mode,
             workspace_root=self.stage6.workspace_root,
             output_root=self.output_root,
             repo_root=Path.cwd(),
@@ -257,6 +276,7 @@ class PlannerRunner:
         )
         self.system_debug_runner = SystemDebugRunner(
             config=debug_config,
+            retention=self.retention.mode,
             workspace_root=self.stage6.workspace_root,
             output_root=self.output_root,
             repo_root=Path.cwd(),
@@ -279,12 +299,67 @@ class PlannerRunner:
             else None
         )
 
-    def run(
+    @contextmanager
+    def _case_logging(self):
+        target = self.output_root / "run.log"
+        handler = None
+        if not any(isinstance(h, logging.FileHandler) and Path(h.baseFilename).resolve() == target
+                   for h in self.logger.handlers):
+            handler = logging.FileHandler(target, encoding="utf-8")
+            handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+            self.logger.addHandler(handler)
+        try:
+            yield
+        finally:
+            if handler is not None:
+                self.logger.removeHandler(handler)
+                handler.close()
+
+    def run(self, task_input, resume=False, end_stage="stage1", force_rebuild=False,
+            run_system_debug: bool = True):
+        """Run through end_stage; Stage6 can stop after module syntax handling."""
+        task = task_input if isinstance(task_input, PlannerTaskInput) else validate_model(PlannerTaskInput, task_input)
+        self.llm_client.executor.begin_run(task, resume=resume and not force_rebuild)
+        if self.planning_graph_writer is not None:
+            self.planning_graph_writer.begin_run()
+        self._current_task = task
+        self.retention.initialize(task.task_id)
+        with self._case_logging():
+            try:
+                result = self._run(task, resume=resume, end_stage=end_stage, force_rebuild=force_rebuild,
+                                   run_system_debug=run_system_debug)
+            except Exception:
+                self.logger.exception("RTL pipeline failed; diagnostic and recovery artifacts retained")
+                try:
+                    self.retention.compact(set())
+                except (OSError, ValueError):
+                    self.logger.warning("Failed-request compaction deferred; artifacts retained")
+                raise
+        stages = ["stage1_contracts", "stage2_repo_skeleton", "stage3_module_skeletons",
+                  "stage4_module_plans", "stage5_codegen", "stage6_merge"]
+        completed = stages[:int(end_stage[-1])]
+        # Stage names used by retrieval and architecture requests are also owned
+        # by their stage; do not collect any request from an unfinished stage.
+        for group in ("plan", "generate"):
+            root = self.output_root / group / "traces/requests"
+            for directory in root.iterdir() if root.is_dir() else []:
+                if any(directory.name.startswith(f"stage{n}") for n in range(1, int(end_stage[-1]) + 1)):
+                    completed.append(directory.name)
+        if any(getattr(r, "status", "completed") != "completed" for r in getattr(result, "module_files", [])):
+            completed = [s for s in completed if not s.startswith(("stage5", "stage6"))]
+        try:
+            self.retention.compact(set(completed))
+        except (OSError, ValueError) as exc:
+            self.logger.warning("Artifact compaction deferred; recovery files retained: %s", exc)
+        return result
+
+    def _run(
         self,
         task_input: PlannerTaskInput | Dict[str, Any],
         resume: bool = False,
         end_stage: str = "stage1",
         force_rebuild: bool = False,
+        run_system_debug: bool = True,
     ) -> Stage1ContractsArtifact | Stage2RepoSkeletonArtifact | Stage3ModuleSkeletonArtifact | Stage4ModulePlansArtifact | Stage5CodegenArtifact | Stage6MergeArtifact:
         if end_stage not in {"stage1", "stage2", "stage3", "stage4", "stage5", "stage6"}:
             raise NotImplementedError("module_planner currently supports end_stage in {'stage1', 'stage2', 'stage3', 'stage4', 'stage5', 'stage6'} only.")
@@ -292,12 +367,11 @@ class PlannerRunner:
         resume = resume and not force_rebuild
         self._allow_debug_generation_reuse = resume
         task = task_input if isinstance(task_input, PlannerTaskInput) else validate_model(PlannerTaskInput, task_input)
-        self.stage3.module_spec_context_retriever.cache_enabled = resume
-        self.stage4_spec_blocks.module_spec_context_retriever.cache_enabled = resume
         self.stage4_module_plans.cache_enabled = resume
         artifacts: Dict[str, Any] = {}
         existing_contracts = self._read_contracts_if_valid(task) if resume else None
-        if existing_contracts is not None:
+        if existing_contracts is not None and existing_contracts.stage1_status == "contracts_completed":
+            self.llm_client.executor.reuse(self.stage1.stage_name, "", "contracts")
             self.logger.info(
                 "[rtl_module_planner] Resume reused stage1 contracts artifact from %s",
                 self._contracts_path(),
@@ -306,15 +380,23 @@ class PlannerRunner:
         else:
             stage1_contracts = self.stage1.run_incremental(
                 task,
-                {},
+                {"stage1": existing_contracts} if existing_contracts is not None else {},
                 persist_callback=self._write_payload,
             )
+        stage1_contracts.planning_policy_version = PLANNING_POLICY_VERSION
+        stage1_contracts.input_fingerprint = self._stage1_fingerprint(task)
+        # Use the same semantic view in the first run and after disk restore.
+        # Derived grounding is compacted on disk; authoritative fact grounding
+        # remains intact. Otherwise downstream repair prompts change on resume.
+        stage1_contracts = validate_model(Stage1ContractsArtifact, self._compact_stage1_payload(model_dump(stage1_contracts)))
         artifacts["stage1"] = stage1_contracts
         stage2_input = build_stage2_planning_input(
             stage1_artifact=stage1_contracts,
             task_input=task,
         )
 
+        self._stage2_planning_input = stage2_input
+        self._current_task = task
         if end_stage == "stage1":
             return stage1_contracts
 
@@ -326,6 +408,7 @@ class PlannerRunner:
                 # disk. Fingerprints must use the same compact semantic view
                 # before and after resume, while retaining authoritative fact
                 # ledger grounding and all interface values.
+                "stage2_templates": self._stage_templates("stage2"),
                 "stage2_input": self._drop_text_grounding(
                     stage2_fingerprint_payload,
                     preserve_fact_ledger=True,
@@ -339,12 +422,13 @@ class PlannerRunner:
                 stage2_input_fingerprint
             )
             existing_repo_skeleton = (
-                self._read_repo_skeleton_if_valid(stage2_input_fingerprint)
+                self._read_repo_skeleton_if_valid(stage2_input_fingerprint, existing_decomposition)
                 if existing_decomposition is not None
                 and existing_decomposition.status in {"selected", "selected_with_degradation"}
                 else None
             )
             if existing_repo_skeleton is not None and existing_decomposition is not None:
+                self.llm_client.executor.reuse(self.stage2.stage_name, "", "selected_architecture")
                 self.logger.info(
                     "[rtl_module_planner] Resume reused stage2 decomposition and repo skeleton artifacts",
                 )
@@ -384,34 +468,45 @@ class PlannerRunner:
         modules_artifact = build_module_organized_artifact_from_repo_skeleton(
             stage1_artifact=stage1_contracts,
             repo_skeleton=repo_skeleton,
+            decomposition=stage2_decomposition,
         )
         self._write_modules_payload(model_dump(modules_artifact))
         if self.planning_graph_writer is not None:
             self.planning_graph_writer.upsert_module_anchors(task, repo_skeleton)
 
+        self._current_planning_inputs = {"stage2_input": stage2_input, "stage2_decomposition": stage2_decomposition,
+                                         "modules": modules_artifact, "stage2": repo_skeleton}
+        self.stage3._refinement_decomposition = stage2_decomposition
+        self.stage3._refinement_input = stage2_input
         if end_stage == "stage2":
             return repo_skeleton
 
         module_skeletons = None
-        stage3_input_fingerprint = canonical_fingerprint(
-            {
-                "repair_policy": REPAIR_POLICY_VERSION,
-                "modules": self._drop_text_grounding(
-                    model_dump(modules_artifact),
-                    preserve_fact_ledger=True,
-                ),
-                "repo_skeleton": repo_skeleton,
-                "stage2_decomposition": stage2_decomposition,
-                "interface_policy": self.INTERFACE_PLANNING_POLICY_VERSION,
-                "pipeline_policy": self.PIPELINE_POLICY_VERSION,
-            }
-        )
+        stage3_input_fingerprint = self._stage3_fingerprint(modules_artifact, repo_skeleton, stage2_decomposition)
+        def update_sources(decomposition):
+            self._write_stage2_decomposition_payload(model_dump(decomposition))
+            rebuilt = build_module_organized_artifact_from_repo_skeleton(
+                stage1_artifact=stage1_contracts, repo_skeleton=repo_skeleton, decomposition=decomposition)
+            modules_artifact.modules = rebuilt.modules
+            self._write_modules_payload(model_dump(modules_artifact))
+            active = getattr(self.stage3, "_active_manifest", None)
+            if active is not None:
+                for record in active.module_records:
+                    if not self.stage3._record_is_reusable(record, expected_module=record.module,
+                            expected_spec_path=record.source_refs.module_spec_file):
+                        raise ValueError(f"Source addition invalidated completed skeleton: {record.module}")
+                active.input_fingerprint = self._stage3_fingerprint(modules_artifact, repo_skeleton, decomposition)
+                self._write_module_skeletons_payload(model_dump(active))
+        self.stage3.source_update_callback = update_sources
+
 
         if resume:
             existing_stage3 = self._read_module_skeletons_if_valid(
                 stage3_input_fingerprint
             )
             if existing_stage3 is not None:
+                for record in existing_stage3.module_records:
+                    self.llm_client.executor.reuse(self.stage3.stage_name, record.module, "module_skeleton")
                 if existing_stage3.stage3_status == "module_skeletons_planned":
                     self.logger.info(
                         "[rtl_module_planner] Resume reused stage3 module skeleton artifact from %s",
@@ -440,7 +535,7 @@ class PlannerRunner:
                 persist_callback=self._write_stage3_outputs,
                 spec_context_persist_callback=self._write_stage3_spec_context,
             )
-            module_skeletons.input_fingerprint = stage3_input_fingerprint
+            module_skeletons.input_fingerprint = self._stage3_fingerprint(modules_artifact, repo_skeleton, stage2_decomposition)
             self._write_module_skeletons_payload(model_dump(module_skeletons))
         if self.planning_graph_writer is not None:
             self.planning_graph_writer.ensure_projection(
@@ -469,12 +564,15 @@ class PlannerRunner:
                 spec_blocks = existing_spec_blocks
             else:
                 spec_blocks = self.stage4_spec_blocks.run(task, spec_stage_inputs)
-                self._write_spec_blocks_payload(model_dump(spec_blocks))
         else:
             spec_blocks = self.stage4_spec_blocks.run(task, spec_stage_inputs)
-            self._write_spec_blocks_payload(model_dump(spec_blocks))
+        spec_blocks.planning_policy_version = PLANNING_POLICY_VERSION
+        spec_blocks.input_fingerprint = self._spec_blocks_fingerprint(spec_stage_inputs)
+        self._write_spec_blocks_payload(model_dump(spec_blocks))
 
         module_plan_stage_inputs = {
+            "stage2_input": stage2_input,
+            "stage2_decomposition": stage2_decomposition,
             "modules": modules_artifact,
             "stage2": repo_skeleton,
             "stage3": module_skeletons,
@@ -483,6 +581,7 @@ class PlannerRunner:
         stage4_input_fingerprint = canonical_fingerprint(
             {
                 "repair_policy": REPAIR_POLICY_VERSION,
+                "stage4_templates": self._stage_templates("stage4"),
                 "inputs": self._drop_text_grounding(
                     {
                         key: model_dump(value) if hasattr(value, "model_dump") else value
@@ -491,6 +590,7 @@ class PlannerRunner:
                     preserve_fact_ledger=True,
                 ),
                 "pipeline_policy": self.PIPELINE_POLICY_VERSION,
+                "skeleton_bodies": artifact_content(self.output_root, module_skeletons),
             }
         )
         module_plan_stage_inputs["stage4_input_fingerprint"] = stage4_input_fingerprint
@@ -501,6 +601,8 @@ class PlannerRunner:
                 stage4_input_fingerprint,
             )
             if existing_module_plans is not None and existing_module_plans.stage4_status == "module_plans_planned":
+                for record in existing_module_plans.module_plan_files:
+                    self.llm_client.executor.reuse(self.stage4_module_plans.stage_name, record.module, "module_plan")
                 self.logger.info(
                     "[rtl_module_planner] Resume reused stage4 module plans artifact from %s",
                     self._module_plans_path(),
@@ -532,10 +634,18 @@ class PlannerRunner:
                 module_skeletons=module_skeletons,
                 module_plans=module_plans,
             )
+        report = planning_report(self.output_root, stage2_input, stage2_decomposition, repo_skeleton,
+                                 modules_artifact, module_skeletons, module_plans)
+        self._write_json_payload(report, artifact_path(self.output_root, "planning_gate_report.json"))
+        if report["status"] != "passed":
+            raise ValueError(f"Planning gate failed before code generation: {report['errors']}")
         if end_stage == "stage4":
             return module_plans
 
         codegen_stage_inputs = {
+            "stage2_input": stage2_input,
+            "stage2_decomposition": stage2_decomposition,
+            "planning_gate_report": report,
             "modules": modules_artifact,
             "stage2": repo_skeleton,
             "stage3": module_skeletons,
@@ -545,6 +655,8 @@ class PlannerRunner:
         codegen_stage_inputs["stage5_input_fingerprint"] = canonical_fingerprint(
             {
                 "stage4": module_plans,
+                "planning_gate_fingerprint": report["input_fingerprint"],
+                "planning_bodies": artifact_content(self.output_root, module_skeletons, module_plans),
                 "repair_policy": REPAIR_POLICY_VERSION,
                 "pipeline_policy": self.PIPELINE_POLICY_VERSION,
             }
@@ -568,7 +680,8 @@ class PlannerRunner:
                 persist_callback=self._write_stage5_codegen_outputs,
             )
 
-        return self._run_stage6_per_module(task, codegen_stage_inputs, spec_blocks)
+        return self._run_stage6_per_module(task, codegen_stage_inputs, spec_blocks,
+                                           run_system_debug=run_system_debug)
 
     def _report_timing_check(
         self,
@@ -589,6 +702,8 @@ class PlannerRunner:
             with open(path, "r", encoding="utf-8") as f:
                 payload = json.load(f)
             artifact = validate_model(Stage1ContractsArtifact, payload)
+            if artifact.planning_policy_version != PLANNING_POLICY_VERSION or artifact.input_fingerprint != self._stage1_fingerprint(task):
+                raise ValueError("Stage1 planning policy/source fingerprint changed; replanning required")
             if artifact.task_id != task.task_id:
                 raise ValueError("stage1 contracts task_id mismatch")
             quality_errors = self.stage1.validate_quality(artifact, task, {})
@@ -604,15 +719,36 @@ class PlannerRunner:
             return None
 
     def _write_payload(self, payload: Dict[str, Any]) -> Path:
+        payload = dict(payload)
+        if getattr(self, "_current_task", None) is not None:
+            payload.update(planning_policy_version=PLANNING_POLICY_VERSION,
+                           input_fingerprint=self._stage1_fingerprint(self._current_task))
         directory = self.output_root
         directory.mkdir(parents=True, exist_ok=True)
         path = self._contracts_path()
-        tmp_path = path.with_name(f"{path.name}.tmp")
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(self._compact_stage1_payload(payload), f, indent=2, ensure_ascii=False)
-        tmp_path.replace(path)
+        self._write_json_payload(self._compact_stage1_payload(payload), path)
         self.logger.info("[rtl_module_planner] Wrote stage1 contracts artifact to %s", path)
         return path
+
+    def _stage3_fingerprint(self, modules, repo, decomposition):
+        return canonical_fingerprint({"repair_policy": REPAIR_POLICY_VERSION,
+            "stage3_templates": self._stage_templates("stage3"),
+            "modules": self._drop_text_grounding(model_dump(modules), preserve_fact_ledger=True),
+            "repo_skeleton": repo, "stage2_decomposition": decomposition,
+            "interface_policy": self.INTERFACE_PLANNING_POLICY_VERSION,
+            "pipeline_policy": self.PIPELINE_POLICY_VERSION})
+
+    def _stage_templates(self, stage):
+        from .utils.execution import template_fingerprint
+        return {"template": template_fingerprint(stage), "model": self.llm_client.executor.model}
+
+    def _stage1_fingerprint(self, task):
+        sources = {str(Path(p).resolve()): Path(p).read_text(encoding="utf-8").replace("\r\n", "\n") for p in task.spec_md_files}
+        scope = self.llm_client.executor.scope
+        if scope.get("sources") and {p: fingerprint(t) for p, t in sources.items()} != scope["sources"]:
+            raise ValueError("Input specification changed during this planning invocation")
+        return canonical_fingerprint({"policy": PLANNING_POLICY_VERSION, "templates": self._stage_templates("stage1"),
+            "task": model_dump(task), "sources": sources, "images": scope.get("images", {})})
 
     def _read_temporal_facts_if_valid(self, expected_input_fingerprint: str) -> GlobalTemporalFactsArtifact | None:
         path = self._temporal_facts_path()
@@ -919,14 +1055,11 @@ class PlannerRunner:
         directory = self.output_root
         directory.mkdir(parents=True, exist_ok=True)
         path = self._modules_path()
-        tmp_path = path.with_name(f"{path.name}.tmp")
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(self._compact_stage1_payload(payload), f, indent=2, ensure_ascii=False)
-        tmp_path.replace(path)
+        self._write_json_payload(self._compact_stage1_payload(payload), path)
         self.logger.info("[rtl_module_planner] Wrote module-organized artifact to %s", path)
         return path
 
-    def _read_repo_skeleton_if_valid(self, expected_input_fingerprint: str | None = None) -> Any | None:
+    def _read_repo_skeleton_if_valid(self, expected_input_fingerprint: str | None = None, decomposition=None) -> Any | None:
         path = self._repo_skeleton_path()
         if not path.exists():
             return None
@@ -934,8 +1067,20 @@ class PlannerRunner:
             with open(path, "r", encoding="utf-8") as f:
                 payload = json.load(f)
             artifact = validate_model(Stage2RepoSkeletonArtifact, payload)
+            if artifact.schema_version != "repo_skeleton_v2":
+                raise ValueError("legacy repository skeleton requires Stage2 replanning")
             if expected_input_fingerprint is not None and artifact.input_fingerprint != expected_input_fingerprint:
                 raise ValueError("repo skeleton input fingerprint mismatch")
+            if decomposition is not None:
+                candidate = decomposition.selected_candidate()
+                if candidate is None:
+                    raise ValueError("missing selected architecture")
+                actual = {m.module: sorted(m.responsibility_ids) for m in artifact.modules}
+                required = {r.responsibility_id for r in decomposition.responsibilities if r.ownership_required}
+                expected = {m.module: sorted(set(m.responsibility_ids) & required) for m in candidate.modules}
+                quality = self.stage2.validate_quality(artifact, self._current_task, {"stage2_input": self._stage2_planning_input})
+                if actual != expected or quality:
+                    raise ValueError(f"saved repo skeleton differs from selected architecture: {quality}")
             return artifact
         except Exception as exc:
             self.logger.warning(
@@ -951,10 +1096,7 @@ class PlannerRunner:
         directory = self.output_root
         directory.mkdir(parents=True, exist_ok=True)
         path = self._repo_skeleton_path()
-        tmp_path = path.with_name(f"{path.name}.tmp")
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(self._compact_repo_skeleton_payload(payload), f, indent=2, ensure_ascii=False)
-        tmp_path.replace(path)
+        self._write_json_payload(self._compact_repo_skeleton_payload(payload), path)
         self.logger.info("[rtl_module_planner] Wrote repo skeleton artifact to %s", path)
         return path
 
@@ -969,10 +1111,22 @@ class PlannerRunner:
             with open(path, "r", encoding="utf-8") as f:
                 payload = json.load(f)
             artifact = validate_model(Stage2DecompositionArtifact, payload)
+            if artifact.schema_version != "stage2_decomposition_v2":
+                raise ValueError("legacy responsibility decomposition requires Stage2 replanning")
             if expected_input_fingerprint is not None and artifact.input_fingerprint != expected_input_fingerprint:
                 raise ValueError("stage2 decomposition input fingerprint mismatch")
+            if artifact.responsibilities and hasattr(self, "_stage2_planning_input"):
+                errors = ledger_errors(artifact, self._stage2_planning_input)
+                if errors:
+                    raise ValueError(f"invalid saved responsibility ledger: {errors}")
             if artifact.status in {"selected", "selected_with_degradation"} and artifact.selected_candidate() is None:
                 raise ValueError("stage2 decomposition selected candidate is missing")
+            if artifact.status in {"selected", "selected_with_degradation"} and hasattr(self, "_stage2_planning_input"):
+                evaluation = self.stage2._evaluate_candidate(candidate=artifact.selected_candidate(),
+                    locked_top=artifact.locked_top, responsibilities=artifact.responsibilities,
+                    stage2_input=self._stage2_planning_input)
+                if evaluation.fatal_violations:
+                    raise ValueError(f"invalid saved architecture: {evaluation.fatal_violations}")
             return artifact
         except Exception as exc:
             self.logger.warning(
@@ -996,8 +1150,18 @@ class PlannerRunner:
             with open(path, "r", encoding="utf-8") as f:
                 payload = json.load(f)
             artifact = validate_model(Stage3ModuleSkeletonArtifact, payload)
+            if artifact.schema_version != "stage3_skeleton_json_v3":
+                raise ValueError("legacy Stage3 artifact requires replanning")
             if expected_input_fingerprint is not None and artifact.input_fingerprint != expected_input_fingerprint:
                 raise ValueError("module skeleton input fingerprint mismatch")
+            for i, record in enumerate(artifact.module_records):
+                if not self.stage3._record_is_reusable(record, expected_module=record.module,
+                                                       expected_spec_path=record.source_refs.module_spec_file):
+                    artifact.module_records = artifact.module_records[:i]
+                    artifact.completed_modules = artifact.completed_modules[:i]
+                    artifact.resume_cursor = i
+                    artifact.stage3_status = "module_skeletons_in_progress"
+                    break
             return artifact
         except Exception as exc:
             self.logger.warning(
@@ -1015,6 +1179,8 @@ class PlannerRunner:
             with open(path, "r", encoding="utf-8") as f:
                 payload = json.load(f)
             artifact = validate_model(Stage4SpecBlocksArtifact, payload)
+            if artifact.planning_policy_version != PLANNING_POLICY_VERSION or artifact.input_fingerprint != self._spec_blocks_fingerprint(partial_artifacts):
+                raise ValueError("Stage4 spec block planning policy/input changed")
             quality_errors = self.stage4_spec_blocks.validate_quality(artifact, task, partial_artifacts)
             if quality_errors:
                 raise ValueError(quality_errors)
@@ -1026,6 +1192,15 @@ class PlannerRunner:
                 exc,
             )
             return None
+
+    def _spec_blocks_fingerprint(self, inputs):
+        from .utils.spec_mapping import SPEC_MAPPING_POLICY_VERSION
+        stage3 = inputs.get("stage3")
+        return canonical_fingerprint({"policy": PLANNING_POLICY_VERSION,
+            "spec_mapping_policy": SPEC_MAPPING_POLICY_VERSION,
+            "stage3": stage3, "stage2": inputs.get("stage2"),
+            "sources": self.llm_client.executor.scope.get("sources", {}),
+            "skeletons": artifact_content(self.output_root, stage3) if stage3 is not None else {}})
 
     def _read_module_plans_if_valid(
         self,
@@ -1040,20 +1215,32 @@ class PlannerRunner:
             with open(path, "r", encoding="utf-8") as f:
                 payload = json.load(f)
             artifact = validate_model(Stage4ModulePlansArtifact, payload)
+            if artifact.schema_version != "module_plans_v3":
+                raise ValueError("legacy Stage4 artifact requires replanning")
             if expected_input_fingerprint is not None and artifact.input_fingerprint != expected_input_fingerprint:
                 raise ValueError("module plans input fingerprint mismatch")
             quality_errors = self.stage4_module_plans.validate_quality(artifact, task, partial_artifacts)
             if quality_errors:
                 raise ValueError(quality_errors)
-            for record in artifact.module_plan_files:
-                plan_path = self.output_root / record.plan_file
-                if not plan_path.exists():
-                    raise FileNotFoundError(f"missing module plan sidecar: {plan_path}")
-                with open(plan_path, "r", encoding="utf-8") as f:
-                    plan_payload = json.load(f)
-                plan = validate_model(ModulePlanArtifact, plan_payload)
-                if plan.module != record.module:
-                    raise ValueError(f"{plan_path}: module must be {record.module}, got {plan.module}")
+            for index, record in enumerate(list(artifact.module_plan_files)):
+                try:
+                    plan_path = self.output_root / record.plan_file
+                    plan = ModulePlanArtifact.model_validate_json(plan_path.read_text(encoding="utf-8"))
+                    if plan.module != record.module or plan.schema_version != "module_plan_v3":
+                        raise ValueError(f"{plan_path}: invalid module identity or legacy schema")
+                    skeleton_record = next(r for r in partial_artifacts["stage3"].module_records if r.module == record.module)
+                    export = ModuleSkeletonExport.model_validate_json((self.output_root / skeleton_record.export_file).read_text())
+                    errors = plan_sidecar_errors(self.output_root, plan, export,
+                        "",
+                        partial_artifacts.get("spec_blocks") or Stage4SpecBlocksArtifact.model_validate_json((artifact_path(self.output_root, "spec_blocks.json")).read_text()))
+                except (OSError, ValueError, KeyError, TypeError, StopIteration) as exc:
+                    errors = [str(exc)]
+                if errors:
+                    artifact.module_plan_files = artifact.module_plan_files[:index]
+                    artifact.completed_modules = artifact.completed_modules[:index]
+                    artifact.resume_cursor = index
+                    artifact.stage4_status = "module_plans_in_progress"
+                    break
             return artifact
         except Exception as exc:
             self.logger.warning(
@@ -1067,10 +1254,7 @@ class PlannerRunner:
         directory = self.output_root
         directory.mkdir(parents=True, exist_ok=True)
         path = self._module_skeletons_path()
-        tmp_path = path.with_name(f"{path.name}.tmp")
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(payload, f, indent=2, ensure_ascii=False)
-        tmp_path.replace(path)
+        self._write_json_payload(payload, path)
         self.logger.info("[rtl_module_planner] Wrote stage3 module skeleton artifact to %s", path)
         return path
 
@@ -1078,10 +1262,7 @@ class PlannerRunner:
         directory = self.output_root
         directory.mkdir(parents=True, exist_ok=True)
         path = self._spec_blocks_path()
-        tmp_path = path.with_name(f"{path.name}.tmp")
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(payload, f, indent=2, ensure_ascii=False)
-        tmp_path.replace(path)
+        self._write_json_payload(payload, path)
         self.logger.info("[rtl_module_planner] Wrote stage4 spec blocks artifact to %s", path)
         return path
 
@@ -1089,10 +1270,7 @@ class PlannerRunner:
         directory = self.output_root
         directory.mkdir(parents=True, exist_ok=True)
         path = self._module_plans_path()
-        tmp_path = path.with_name(f"{path.name}.tmp")
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(payload, f, indent=2, ensure_ascii=False)
-        tmp_path.replace(path)
+        self._write_json_payload(payload, path)
         self.logger.info("[rtl_module_planner] Wrote stage4 module plans artifact to %s", path)
         return path
 
@@ -1100,10 +1278,7 @@ class PlannerRunner:
         directory = self.output_root
         directory.mkdir(parents=True, exist_ok=True)
         path = self._stage5_codegen_path()
-        tmp_path = path.with_name(f"{path.name}.tmp")
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(payload, f, indent=2, ensure_ascii=False)
-        tmp_path.replace(path)
+        self._write_json_payload(self.layout.paths(payload), path)
         self.logger.info("[rtl_module_planner] Wrote stage5 codegen artifact to %s", path)
         return path
 
@@ -1118,7 +1293,7 @@ class PlannerRunner:
             return None
         try:
             with open(path, "r", encoding="utf-8") as f:
-                artifact = validate_model(Stage5CodegenArtifact, json.load(f))
+                artifact = validate_model(Stage5CodegenArtifact, self.layout.paths(json.load(f), absolute=True))
             if artifact.input_fingerprint != expected_input_fingerprint:
                 raise ValueError("stage5 codegen input fingerprint mismatch")
             for record in artifact.module_files:
@@ -1141,10 +1316,7 @@ class PlannerRunner:
         directory = self.output_root
         directory.mkdir(parents=True, exist_ok=True)
         path = self._stage6_merge_path()
-        tmp_path = path.with_name(f"{path.name}.tmp")
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(payload, f, indent=2, ensure_ascii=False)
-        tmp_path.replace(path)
+        self._write_json_payload(self.layout.paths(payload), path)
         self.logger.info("[rtl_module_planner] Wrote stage6 merge artifact to %s", path)
         return path
 
@@ -1161,6 +1333,7 @@ class PlannerRunner:
                     payload["plan_payload"],
                     artifact_path=payload["plan_file"],
                     input_fingerprint=str(payload.get("input_fingerprint") or ""),
+                    sync=False,
                 )
             self.logger.info("[rtl_module_planner] Wrote stage4 module plan sidecar for %s", module_name)
         return self._write_module_plans_payload(payload["manifest"])
@@ -1176,8 +1349,8 @@ class PlannerRunner:
         if module_name:
             doc_file = payload["doc_file"]
             export_file = payload["export_file"]
-            self._write_text_payload(payload["doc_text"], self.output_root / doc_file)
             self._write_json_payload(payload["export_payload"], self.output_root / export_file)
+            self._write_text_payload(payload["doc_text"], self.output_root / doc_file)
             if "spec_context_file" in payload and "spec_context_payload" in payload:
                 self._write_json_payload(payload["spec_context_payload"], self.output_root / payload["spec_context_file"])
             if self.planning_graph_writer is not None:
@@ -1188,6 +1361,7 @@ class PlannerRunner:
                     artifact_path=export_file,
                     input_fingerprint=str(payload.get("input_fingerprint") or ""),
                     spec_context_fingerprint=self.planning_graph_writer._module_spec_fingerprint(module_name),
+                    sync=False,
                 )
             self.logger.info(
                 "[rtl_module_planner] Wrote stage3 module doc/json sidecars for %s",
@@ -1205,17 +1379,14 @@ class PlannerRunner:
                 payload["spec_context_payload"],
                 artifact_path=str(payload["spec_context_file"]),
                 input_fingerprint=str(payload.get("input_fingerprint") or ""),
+                sync=False,
             )
         return path
 
     @observed('tool', '写入模块规划材料', tool='write_planning_material', registered_tool=False,
               summarize=lambda r: '已写入 '+r.name+'。')
     def _write_json_payload(self, payload: Dict[str, Any], path: Path) -> Path:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = path.with_name(f"{path.name}.tmp")
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(payload, f, indent=2, ensure_ascii=False)
-        tmp_path.replace(path)
+        atomic_write_json(path, payload)
         return path
 
     @observed('tool', '写入模块骨架文档', tool='write_planning_material', registered_tool=False,
@@ -1229,52 +1400,53 @@ class PlannerRunner:
         return path
 
     def _contracts_path(self) -> Path:
-        return self.output_root / self.CONTRACTS_FILENAME
+        return self.layout.artifact(self.CONTRACTS_FILENAME)
 
     def _temporal_facts_path(self) -> Path:
-        return self.output_root / self.GLOBAL_TEMPORAL_FACTS_FILENAME
+        return self.layout.artifact(self.GLOBAL_TEMPORAL_FACTS_FILENAME)
 
     def _architecture_timing_path(self) -> Path:
-        return self.output_root / self.ARCHITECTURE_TIMING_CONTRACT_FILENAME
+        return self.layout.artifact(self.ARCHITECTURE_TIMING_CONTRACT_FILENAME)
 
     def _timing_bindings_path(self) -> Path:
-        return self.output_root / self.MODULE_TIMING_BINDINGS_FILENAME
+        return self.layout.artifact(self.MODULE_TIMING_BINDINGS_FILENAME)
 
     def _timing_binding_check_path(self) -> Path:
-        return self.output_root / self.TIMING_BINDING_CHECK_FILENAME
+        return self.layout.artifact(self.TIMING_BINDING_CHECK_FILENAME)
 
     def _module_timing_binding_relative_path(self, module_name: str) -> str:
         return f"{self.MODULE_TIMING_BINDING_JSON_DIRNAME}/{module_name}.json"
 
     def _modules_path(self) -> Path:
-        return self.output_root / self.MODULES_FILENAME
+        return self.layout.artifact(self.MODULES_FILENAME)
 
     def _repo_skeleton_path(self) -> Path:
-        return self.output_root / self.REPO_SKELETON_FILENAME
+        return self.layout.artifact(self.REPO_SKELETON_FILENAME)
 
     def _stage2_decomposition_path(self) -> Path:
-        return self.output_root / self.STAGE2_DECOMPOSITION_FILENAME
+        return self.layout.artifact(self.STAGE2_DECOMPOSITION_FILENAME)
 
     def _module_skeletons_path(self) -> Path:
-        return self.output_root / self.MODULE_SKELETONS_FILENAME
+        return self.layout.artifact(self.MODULE_SKELETONS_FILENAME)
 
     def _spec_blocks_path(self) -> Path:
-        return self.output_root / self.SPEC_BLOCKS_FILENAME
+        return self.layout.artifact(self.SPEC_BLOCKS_FILENAME)
 
     def _module_plans_path(self) -> Path:
-        return self.output_root / self.MODULE_PLANS_FILENAME
+        return self.layout.artifact(self.MODULE_PLANS_FILENAME)
 
     def _stage5_codegen_path(self) -> Path:
-        return self.output_root / self.STAGE5_CODEGEN_FILENAME
+        return self.layout.artifact(self.STAGE5_CODEGEN_FILENAME)
 
     def _stage6_merge_path(self) -> Path:
-        return self.output_root / self.STAGE6_MERGE_FILENAME
+        return self.layout.artifact(self.STAGE6_MERGE_FILENAME)
 
     def _run_stage6_per_module(
         self,
         task: PlannerTaskInput,
         codegen_stage_inputs: Dict[str, Any],
         spec_blocks: Stage4SpecBlocksArtifact,
+        run_system_debug: bool = True,
     ) -> Stage6MergeArtifact:
         stage5_records = []
         stage6_records = []
@@ -1326,7 +1498,10 @@ class PlannerRunner:
                 stage6_records.append(ModuleMergeRecord(module=module_name, status="blocked", error=reason, fragment_file=stage5_record.workspace_file))
                 debug_records.append(ModuleDebugResult(module=module_name, status="skipped", reason=reason))
                 continue
-            stage6_record = self._reuse_stage6_merge_if_valid(module_name, stage5_record, codegen_stage_inputs)
+            stage6_record = self._reuse_stage6_merge_if_valid(
+                module_name, stage5_record, codegen_stage_inputs,
+                allow_pending_syntax=getattr(self, "_allow_debug_generation_reuse", False),
+            )
             if stage6_record is not None:
                 self.logger.info(
                     "[rtl_module_planner] Resume reused stage6 merged RTL for module %s from %s",
@@ -1470,7 +1645,16 @@ class PlannerRunner:
         repo_skeleton = codegen_stage_inputs.get("stage2")
         top_module = str(getattr(repo_skeleton, "top_module", "") or "")
         system_debug_result = None
-        if not failed_modules:
+        if not run_system_debug:
+            system_debug_result = SystemDebugRecord(
+                top_module=top_module, status="skipped",
+                reason="System debug not requested: stopped after generation and module syntax handling (--generate).",
+            )
+            pending = [item.module for item in debug_records if item.status in {"fail", "error"}]
+            self.logger.info("[rtl_module_planner] Generation finished; system debug skipped by request")
+            if pending:
+                self.logger.warning("[rtl_module_planner] Modules awaiting syntax repair: %s", pending)
+        elif not failed_modules:
             try:
                 self._prepare_debug_generation(task, codegen_stage_inputs, stage6_records)
                 system_spec_text = self._build_system_spec_text(task)
@@ -1507,14 +1691,14 @@ class PlannerRunner:
 
         current_debug = (model_dump(system_debug_result) if isinstance(system_debug_result, SystemDebugRecord)
                          else system_debug_result_to_dict(system_debug_result)) if system_debug_result is not None else None
-        latest_debug_path = self.output_root / "system_debug_latest.json"
+        latest_debug_path = artifact_path(self.output_root, "system_debug_latest.json")
         latest_debug = None
-        if current_debug and current_debug.get("status") not in {"skipped", "disabled"}:
+        if run_system_debug and current_debug and current_debug.get("status") not in {"skipped", "disabled"}:
             latest_debug = current_debug
-            atomic_write_json(latest_debug_path, latest_debug)
-        elif latest_debug_path.is_file():
+            atomic_write_json(latest_debug_path, self.layout.paths(latest_debug))
+        elif run_system_debug and latest_debug_path.is_file():
             try:
-                latest_debug = json.loads(latest_debug_path.read_text())
+                latest_debug = self.layout.paths(json.loads(latest_debug_path.read_text()), absolute=True)
             except (OSError, ValueError):
                 self.logger.warning("[rtl_module_planner] Latest system debug record is unreadable")
         stage6_artifact = Stage6MergeArtifact(
@@ -1674,7 +1858,7 @@ class PlannerRunner:
             "query_errors",
         )
         report["status"] = "pass" if not any(report[key] for key in issue_keys) else "warn"
-        path = self.output_root / "planning_code_consistency.json"
+        path = artifact_path(self.output_root, "planning_code_consistency.json")
         self._write_json_payload(report, path)
         self.logger.info("[rtl_module_planner] Wrote planning/code consistency report to %s", path)
         return path
@@ -1759,14 +1943,14 @@ class PlannerRunner:
             return None
 
     def _stage6_cache_path(self, module_name):
-        return self.stage6._merged_file(module_name).with_suffix(".inputs.json")
+        return self.layout.merge_inputs(module_name)
 
     def _stage6_reuse_key(self, module_name, stage5_record, inputs, dependency_root=None):
         stage3 = inputs.get("stage3")
         record = next((item for item in getattr(stage3, "module_records", []) if item.module == module_name), None)
         skeleton = ""
         if record:
-            path = Path(record.doc_file)
+            path = Path(record.export_file)
             path = path if path.is_absolute() else self.output_root / path
             skeleton = path.read_text(encoding="utf-8") if path.is_file() else ""
         specs = inputs.get("spec_blocks")
@@ -1777,16 +1961,16 @@ class PlannerRunner:
         for child in getattr(repo_module, "children", []):
             path = Path(dependency_root) / f"{child}.v" if dependency_root else self.stage6._merged_file(child)
             children[child] = path.read_text(encoding="utf-8") if path.is_file() else ""
-        return fingerprint({"policy": REPAIR_POLICY_VERSION, "module": module_name,
+        return fingerprint({"layout_version": LAYOUT_VERSION, "policy": REPAIR_POLICY_VERSION, "module": module_name,
                             "fragments": Path(stage5_record.workspace_file).read_text(encoding="utf-8"),
                             "skeleton": skeleton, "spec": spec, "children": children})
 
     def _debug_generation_binding_path(self):
-        return self.output_root / ".repair_cache" / "accepted_debug_generation.json"
+        return ArtifactLayout(self.output_root).cache("accepted_debug_generation.json")
 
     def _debug_generation_private(self, inputs):
         top = inputs["stage2"].top_module
-        return self.stage5.workspace_root / "debug_system" / top / "codex_private"
+        return artifact_dir(self.stage5.workspace_root, "debug_system") / top / "state" / "codex_private"
 
     def _debug_generation_state(self, task, inputs):
         """Verify the private accepted tree and original debug source binding."""
@@ -1845,7 +2029,7 @@ class PlannerRunner:
             dependency_files = {n: origin / f"{n}.v" for n in names}
             checked = {**inputs, "_stage5_dependency_files": dependency_files}
             records = {n: self.stage5.run_module(task, checked, n, reuse_only=True) for n in names}
-            merged = workspace / "merged"
+            merged = artifact_dir(workspace, "merged")
             current = {f"{n}.v": tree_manifest(merged).get(f"{n}.v") for n in names}
             expected = {f"{n}.v": state["accepted_manifest"][f"{n}.v"] for n in names}
             known = [{f"{n}.v": tree_manifest(origin).get(f"{n}.v") for n in names}, expected]
@@ -1881,7 +2065,7 @@ class PlannerRunner:
             sources = generation_sources(self.output_root, self.stage5.workspace_root, inputs, task)
             self._debug_generation_origin = save_origin(self.stage5.workspace_root, sources,
                 {Path(r.merged_file).name: Path(r.merged_file).read_text() for r in records})
-            atomic_write_json(self.output_root / ".repair_cache" / "pending_debug_generation.json", {
+            atomic_write_json(ArtifactLayout(self.output_root).cache("pending_debug_generation.json"), {
                 "origin_path": str(self._debug_generation_origin.relative_to(self.stage5.workspace_root)),
                 "source_fingerprint": fingerprint(sources)})
         except (OSError, ValueError, KeyError, TypeError) as exc:
@@ -1910,7 +2094,7 @@ class PlannerRunner:
                 path = self._stage6_cache_path(n)
                 if path.is_file():
                     old = json.loads(path.read_text())
-                    atomic_write_json(self.output_root / ".repair_cache" / "stage6_history" / f"{n}_{fingerprint(old)}.json", old)
+                    atomic_write_json(ArtifactLayout(self.output_root).cache("stage6_history") / f"{n}_{fingerprint(old)}.json", old)
                 fragment = ModuleCodegenRecord(module=n, workspace_file=str(self.stage5._workspace_file(n)))
                 atomic_write_json(path, {"input_fingerprint": self._stage6_reuse_key(n, fragment, inputs),
                     "merged_fingerprint": fingerprint(self.stage6._merged_file(n).read_text()),
@@ -1925,8 +2109,10 @@ class PlannerRunner:
         module_name: str,
         stage5_record: ModuleCodegenRecord,
         codegen_stage_inputs=None,
+        *,
+        allow_pending_syntax: bool = False,
     ):
-        """Reuse existing stage6 merge if it exists, is non-empty, and passes Verilator syntax check."""
+        """Reuse a verified merge; resume may send an exact source match to syntax repair."""
         fragment_file = Path(stage5_record.workspace_file)
         merged_file = self.stage6._merged_file(module_name)
         if not fragment_file.is_file() or not merged_file.is_file():
@@ -1945,7 +2131,7 @@ class PlannerRunner:
                 # one-time dependency implementation update without rewriting RTL.
                 from .utils.stage5_sources import Stage5LogEvidence
                 from zerorepo.rtl_impl.port_contracts import ansi_module_ports
-                evidence = Stage5LogEvidence(self.output_root.parent.parent / "zerorepo.log")
+                evidence = Stage5LogEvidence(self.output_root / "run.log")
                 previous_interfaces = evidence._verified_stage6_children(module_name)
                 repo = codegen_stage_inputs.get("stage2")
                 repo_module = next((item for item in getattr(repo, "modules", []) if item.module == module_name), None)
@@ -1968,6 +2154,13 @@ class PlannerRunner:
                 module_name,
             )
             return None
+        # A syntax failure does not invalidate a fully bound generation result.
+        # The coordinator always runs the syntax gate afterwards with a fresh
+        # repair budget. Historical dependency migrations still require syntax.
+        if allow_pending_syntax and migration is None:
+            return ModuleMergeRecord(
+                module=module_name, fragment_file=str(fragment_file), merged_file=str(merged_file),
+            )
         self.stage6._ensure_toolchain_path()
         # check_syntax globs all .v files in the directory — use a temp copy
         # of just this module to avoid MULTITOP / cross-module errors.
@@ -1982,7 +2175,7 @@ class PlannerRunner:
             )
             return None
         if migration:
-            atomic_write_json(self.output_root / ".repair_cache" / "stage6_history" / f"{module_name}_{stamp['input_fingerprint']}.json", stamp)
+            atomic_write_json(ArtifactLayout(self.output_root).cache("stage6_history") / f"{module_name}_{stamp['input_fingerprint']}.json", stamp)
             atomic_write_json(self._stage6_cache_path(module_name), {
                 **stamp, "input_fingerprint": current_key, "migration_evidence": migration,
             })
@@ -2016,6 +2209,4 @@ class PlannerRunner:
         return compact
 
     def _default_checkpoint_dir(self) -> Path:
-        if self.output_root.name == "outputs" and self.output_root.parent.name == "module_planner":
-            return self.output_root.parent.parent
-        return self.output_root.parent
+        return self.layout.checkpoint

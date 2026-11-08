@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from zerorepo.rtl_impl.artifact_layout import ArtifactLayout, artifact_dir
+
 import copy
 import json
 import re
@@ -169,12 +171,20 @@ class Stage5Agent(BaseStageAgent):
         for key in ("parents", "children"):
             if key in responsibility:
                 responsibility[key] = sorted(responsibility[key] or [])
+        if partial_artifacts.get("stage2_decomposition") is not None:
+            from ..utils.responsibility_planning import module_context, task_errors
+            from ..schemas import ModuleSkeletonExport
+            responsibility["refinement"] = module_context(partial_artifacts["stage2_decomposition"], module_name)
+            record = next(r for r in stage3.module_records if r.module == module_name)
+            export = ModuleSkeletonExport.model_validate_json(self._resolve_output_path(record.export_file).read_text())
+            if task_errors(module_plan, export):
+                raise ValueError(f"{module_name}: task metadata differs from verified refinement")
         child_interfaces = []
         for child in sorted(module_info.get("children") or []):
             # Only the runner supplies this map after verifying a whole accepted
             # debug generation and its immutable original dependency contracts.
             child_path = Path(partial_artifacts.get("_stage5_dependency_files", {}).get(
-                child, self.workspace_root / "merged" / f"{child}.v"))
+                child, artifact_dir(self.workspace_root, "merged") / f"{child}.v"))
             if child_path.is_file():
                 ports = [{"name": p.name, "direction": p.direction, "width": p.width} for p in ansi_module_ports(child_path.read_text())]
             else:
@@ -242,7 +252,7 @@ class Stage5Agent(BaseStageAgent):
                 contract_payload = json.loads(self._contracts_file(module_name).read_text())
                 if fingerprint(text) == saved["fragment_fingerprint"] and fingerprint(contract_payload) == saved["contracts_fingerprint"]:
                     preserved = store.bundle(saved, text, contract_payload)
-                    atomic_write_json(self.workspace_root / ".stage5_history" / module_name / f"{fingerprint(saved)}.json", preserved)
+                    atomic_write_json(artifact_dir(self.workspace_root, ".stage5_history") / module_name / f"{fingerprint(saved)}.json", preserved)
             except (OSError, ValueError, KeyError, TypeError) as exc:
                 self.logger.info("[%s] Legacy checkpoint preservation unavailable: %s", self.stage_name, exc)
         if reuse_only:
@@ -279,9 +289,12 @@ class Stage5Agent(BaseStageAgent):
             current_subtask_payload = model_dump(subtask)
             current_subtask_payload.pop("timing_obligation_ids", None)
             current_subtask_payload.pop("logical_value_tags", None)
-            current_subtask_json = self.to_pretty_json(current_subtask_payload)
-            selected_spec_blocks_json = self.to_pretty_json(selected_blocks)
-            module_interface_spec_blocks_json = self.to_pretty_json(supplemental_interface_blocks)
+            # Whitespace outside JSON strings is not generation evidence.
+            # Preserve complete task contracts and source text, serialize once.
+            from ..utils.stage5_sources import task_prompt_context
+            current_subtask_json = json.dumps(task_prompt_context(current_subtask_payload), ensure_ascii=False, separators=(",", ":"))
+            selected_spec_blocks_json = json.dumps(selected_blocks, ensure_ascii=False, separators=(",", ":"))
+            module_interface_spec_blocks_json = json.dumps(supplemental_interface_blocks, ensure_ascii=False, separators=(",", ":"))
             global_defines_context = self._build_stage5_global_defines_summary(
                 relevant_texts=[
                     current_subtask_json,
@@ -338,7 +351,9 @@ class Stage5Agent(BaseStageAgent):
                 previous_module_snippets=previous_snippets,
                 global_defines_context=global_defines_context,
                 planning_kg_context=planning_kg_context,
-                stage_context=self.to_pretty_json(stage_context),
+                # Runtime file paths, counters and character totals belong in
+                # diagnostics below, not in every code-generation request.
+                stage_context="",
             )
             adapter = SubtaskCodeRepairAdapter(
                 task_id=task.task_id, module=module_name, subtask=subtask, context=prompt,
@@ -383,7 +398,7 @@ class Stage5Agent(BaseStageAgent):
                             provenance = {"kind": "canonical_dependency_order", "previous_source_fingerprint": entry["source_fingerprint"]}
                     else:
                         if self._source_evidence is None:
-                            self._source_evidence = Stage5LogEvidence(self.workspace_root.parent / "zerorepo.log")
+                            self._source_evidence = Stage5LogEvidence(self.workspace_root / "run.log")
                         provenance = self._source_evidence.proves_legacy(entry, legacy, responsibility, child_interfaces)
                         if provenance and skeleton_document is not None and not self._source_evidence.proves_full_skeleton(module_name):
                             provenance = None
@@ -457,7 +472,7 @@ class Stage5Agent(BaseStageAgent):
         )
 
     def _checkpoint_file(self, module_name):
-        return (self.workspace_root / "fragments" / f"{module_name}_checkpoint.json").resolve()
+        return ArtifactLayout(self.workspace_root).stage5_checkpoint(module_name).resolve()
 
     def _read_checkpoint(self, module_name, task_id=None):
         path = self._checkpoint_file(module_name)
@@ -475,7 +490,7 @@ class Stage5Agent(BaseStageAgent):
                 return {}
             if payload.get("bundle_path"):
                 Stage5Store(self.workspace_root).validate(payload)
-                publishing = self.workspace_root / ".stage5_publish" / f"{module_name}.json"
+                publishing = artifact_dir(self.workspace_root, ".stage5_publish") / f"{module_name}.json"
                 if publishing.exists():
                     Stage5Store(self.workspace_root).restore_aliases(payload)
                     publishing.unlink()
@@ -507,7 +522,7 @@ class Stage5Agent(BaseStageAgent):
             return
         # Immutable bundles make a crash between alias writes recoverable from
         # the previous active marker. The marker changes only after all writes.
-        publishing = self.workspace_root / ".stage5_publish" / f"{module_name}.json"
+        publishing = artifact_dir(self.workspace_root, ".stage5_publish") / f"{module_name}.json"
         atomic_write_json(publishing, {"candidate": marker.get("bundle_path")})
         atomic_write_text(self._workspace_file(module_name), fragments)
         self._write_contracts_file(module_name, contracts, input_fingerprint=input_fingerprint)
@@ -571,7 +586,7 @@ class Stage5Agent(BaseStageAgent):
         return path
 
     def _contracts_file(self, module_name: str) -> Path:
-        return (self.workspace_root / "fragments" / f"{module_name}_contracts.json").resolve()
+        return ArtifactLayout(self.workspace_root).stage5_contracts(module_name).resolve()
 
     def _extract_fragment_contract(self, code: str) -> FragmentContract:
         text = _strip_verilog_comments(code)
@@ -661,8 +676,8 @@ class Stage5Agent(BaseStageAgent):
             path = Path(record.workspace_file)
             if path.name != f"{record.module}_fragments.v":
                 errors.append(f"{record.module}: workspace_file must end with {record.module}_fragments.v")
-            if path.parent.name != "fragments":
-                errors.append(f"{record.module}: workspace_file must be under a fragments directory")
+            if path.parent.resolve() != ArtifactLayout(self.workspace_root).directory("fragments").resolve():
+                errors.append(f"{record.module}: workspace_file must be under generate/fragments")
             if not path.exists():
                 errors.append(f"{record.module}: workspace_file does not exist at {path}")
         return errors
@@ -729,15 +744,13 @@ class Stage5Agent(BaseStageAgent):
     def _read_module_skeleton_context(self, record: Any | None) -> tuple[str, str | None]:
         if record is None:
             return "", None
-        doc_file = getattr(record, "doc_file", None)
-        if not doc_file:
-            return "", None
-        path = self._resolve_output_path(str(doc_file))
-        if not path.exists():
-            self.logger.warning("[%s] Module skeleton doc is missing: %s", self.stage_name, path)
-            return "", str(path)
-        text = self._read_skeleton_file(path)
-        return _extract_module_frame_section(text), str(path)
+        export_file = getattr(record, "export_file", None)
+        if not export_file:
+            raise ValueError("Module skeleton requires authoritative JSON")
+        path = self._resolve_output_path(str(export_file))
+        from ..schemas import ModuleSkeletonExport
+        export = ModuleSkeletonExport.model_validate_json(path.read_text(encoding="utf-8"))
+        return export.module_frame, str(path)
 
     @observed('tool', '读取模块骨架文件', tool='read_context',
               summarize=lambda r: f'已读取骨架正文{len(r)}字，按原文件提取模块框架。')
@@ -895,7 +908,7 @@ class Stage5Agent(BaseStageAgent):
         )
 
     def _workspace_file(self, module_name: str) -> Path:
-        return (self.workspace_root / "fragments" / f"{module_name}_fragments.v").resolve()
+        return (artifact_dir(self.workspace_root, "fragments") / f"{module_name}_fragments.v").resolve()
 
     def _read_text_if_exists(self, path: Path) -> str:
         if not path.exists():
@@ -917,11 +930,7 @@ class Stage5Agent(BaseStageAgent):
         return (self.output_root / path).resolve()
 
     def _default_workspace_root(self) -> Path:
-        if self.output_root is None:
-            return Path(self.workspace_dirname)
-        if self.output_root.name == "outputs" and self.output_root.parent.name == "module_planner":
-            return (self.output_root.parent.parent / self.workspace_dirname).resolve()
-        return (self.output_root.parent / self.workspace_dirname).resolve()
+        return (self.output_root or Path(".")).resolve()
 
     def _get_stage4_artifact(self, partial_artifacts: Dict[str, Any]) -> Stage4ModulePlansArtifact:
         candidate = partial_artifacts.get("stage4") or partial_artifacts.get("module_plans")

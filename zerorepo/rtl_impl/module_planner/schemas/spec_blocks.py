@@ -8,6 +8,9 @@ from pydantic import BaseModel, Field, model_validator
 class SpecBlock(BaseModel):
     block_id: str = Field(..., min_length=1)
     text: str = Field(..., min_length=1)
+    source_evidence_ids: List[str] = Field(default_factory=list)
+    declaration_support: bool = False
+    integration_support: bool = False
 
 
 class ModuleSpecBlocks(BaseModel):
@@ -18,6 +21,8 @@ class ModuleSpecBlocks(BaseModel):
 
 class Stage4SpecBlocksArtifact(BaseModel):
     schema_version: str = Field(default="spec_blocks_v1")
+    planning_policy_version: str = ""
+    input_fingerprint: str = ""
     task_id: str = Field(..., min_length=1)
     module_order: List[str] = Field(..., min_length=1)
     modules: List[ModuleSpecBlocks] = Field(..., min_length=1)

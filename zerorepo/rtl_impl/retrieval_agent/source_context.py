@@ -9,7 +9,7 @@ import re
 import tempfile
 
 
-POLICY_VERSION = "module_spec_selection_v2"
+POLICY_VERSION = "module_spec_selection_v3_harness"
 
 
 def digest(value):

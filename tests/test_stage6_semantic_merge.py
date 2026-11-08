@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import shutil
 from pathlib import Path
+from rtl_artifact_test_utils import write_artifact_text
+from zerorepo.rtl_impl.artifact_layout import ArtifactLayout, artifact_path, artifact_dir
 
 import pytest
 
@@ -38,7 +40,7 @@ class FakeLLM:
 def test_official_define_file_is_copied_and_manifested(tmp_path: Path, monkeypatch) -> None:
     official = tmp_path / "RealBench" / "sdc" / "sd_defines" / "sd_defines.v"
     official.parent.mkdir(parents=True)
-    official.write_text("`define BIT_BLOCK 1044\n", encoding="utf-8")
+    write_artifact_text(official, "`define BIT_BLOCK 1044\n", encoding="utf-8")
     monkeypatch.setattr(global_defines_mod, "find_official_define_file", lambda _task, _module: official)
 
     task = PlannerTaskInput(task_id="sdc", spec_md_files=[str(tmp_path / "rtl_dataset" / "sdc" / "x.md")])
@@ -50,9 +52,9 @@ def test_official_define_file_is_copied_and_manifested(tmp_path: Path, monkeypat
     )
 
     assert entry is not None
-    merged = tmp_path / "workspace" / "merged" / "sd_defines.v"
+    merged = artifact_dir(tmp_path / "workspace", "merged") / "sd_defines.v"
     assert merged.read_text(encoding="utf-8") == official.read_text(encoding="utf-8")
-    manifest = json.loads((tmp_path / "workspace" / "global_defines_manifest.json").read_text(encoding="utf-8"))
+    manifest = json.loads((artifact_path(tmp_path / "workspace", "global_defines_manifest.json")).read_text(encoding="utf-8"))
     assert manifest["global_define_files"][0]["mode"] == "official_copy"
     assert manifest["global_define_files"][0]["must_include"] is True
 
@@ -73,8 +75,8 @@ def test_e203_canonical_headers_are_copied_from_matching_project(
     oracle_root = tmp_path / "RealBench"
     verification_dir = oracle_root / "e203_hbirdv2" / canonical_project / "verification"
     verification_dir.mkdir(parents=True)
-    (verification_dir / "config.v").write_text("`define E203_CFG_XLEN 32\n", encoding="utf-8")
-    (verification_dir / "e203_defines.v").write_text(
+    write_artifact_text(verification_dir / "config.v", "`define E203_CFG_XLEN 32\n", encoding="utf-8")
+    write_artifact_text(verification_dir / "e203_defines.v",
         '`include "config.v"\n`define E203_XLEN `E203_CFG_XLEN\n',
         encoding="utf-8",
     )
@@ -92,9 +94,9 @@ def test_e203_canonical_headers_are_copied_from_matching_project(
     assert entries[0]["included_by"] == ["e203_defines.v"]
     assert entries[1]["must_include"] is True
     assert Path(entries[0]["source"]).parent == verification_dir.resolve()
-    assert (workspace / "merged" / "config.v").read_text(encoding="utf-8") == "`define E203_CFG_XLEN 32\n"
+    assert (artifact_dir(workspace, "merged") / "config.v").read_text(encoding="utf-8") == "`define E203_CFG_XLEN 32\n"
 
-    manifest = json.loads((workspace / "global_defines_manifest.json").read_text(encoding="utf-8"))
+    manifest = json.loads((artifact_path(workspace, "global_defines_manifest.json")).read_text(encoding="utf-8"))
     assert [item["name"] for item in manifest["global_define_files"]] == ["config.v", "e203_defines.v"]
     context = build_global_defines_context(workspace)
     assert "## config.v" in context
@@ -104,7 +106,7 @@ def test_e203_canonical_headers_are_copied_from_matching_project(
 def test_e203_canonical_headers_fail_atomically_when_one_is_missing(tmp_path: Path) -> None:
     verification_dir = tmp_path / "RealBench" / "e203_hbirdv2" / "e203_ifu" / "verification"
     verification_dir.mkdir(parents=True)
-    (verification_dir / "config.v").write_text("`define E203_CFG_XLEN 32\n", encoding="utf-8")
+    write_artifact_text(verification_dir / "config.v", "`define E203_CFG_XLEN 32\n", encoding="utf-8")
     workspace = tmp_path / "workspace"
 
     with pytest.raises(FileNotFoundError, match="e203_defines.v"):
@@ -114,8 +116,8 @@ def test_e203_canonical_headers_fail_atomically_when_one_is_missing(tmp_path: Pa
             workspace_root=workspace,
         )
 
-    assert not (workspace / "global_defines_manifest.json").exists()
-    assert not (workspace / "merged").exists()
+    assert not (artifact_path(workspace, "global_defines_manifest.json")).exists()
+    assert not (artifact_dir(workspace, "merged")).exists()
 
 
 def test_stage5_macro_summary_resolves_conditions_dependencies_and_undefined_macros(
@@ -123,12 +125,12 @@ def test_stage5_macro_summary_resolves_conditions_dependencies_and_undefined_mac
 ) -> None:
     verification_dir = tmp_path / "RealBench" / "e203_hbirdv2" / "e203_ifu" / "verification"
     verification_dir.mkdir(parents=True)
-    (verification_dir / "config.v").write_text(
+    write_artifact_text(verification_dir / "config.v",
         "`define E203_CFG_MODE_2\n"
         "`define E203_CFG_ADDR_SIZE 32\n",
         encoding="utf-8",
     )
-    (verification_dir / "e203_defines.v").write_text(
+    write_artifact_text(verification_dir / "e203_defines.v",
         '`include "config.v"\n'
         "`ifdef E203_CFG_MODE_1\n"
         "  `define E203_DEPTH 1\n"
@@ -174,10 +176,10 @@ def test_stage5_macro_summary_resolves_conditions_dependencies_and_undefined_mac
 
 def test_stage5_macro_summary_obeys_budget_without_partial_entries(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
-    merged = workspace / "merged"
+    merged = artifact_dir(workspace, "merged")
     merged.mkdir(parents=True)
     defines = merged / "defs.v"
-    defines.write_text(
+    write_artifact_text(defines,
         "\n".join(f"`define FEATURE_{index:03d} {index}" for index in range(100)) + "\n",
         encoding="utf-8",
     )
@@ -224,17 +226,17 @@ def test_stage5_contract_fallback_extracts_writes_and_reads(tmp_path: Path) -> N
 
 def _make_merge_tools(tmp_path: Path, monkeypatch) -> tuple[Stage6MergeTools, dict]:
     workspace = tmp_path / "workspace"
-    merged_dir = workspace / "merged"
-    fragments_dir = workspace / "fragments"
+    merged_dir = artifact_dir(workspace, "merged")
+    fragments_dir = artifact_dir(workspace, "fragments")
     merged_dir.mkdir(parents=True)
     fragments_dir.mkdir(parents=True)
-    (merged_dir / "config.v").write_text("`define CFG_WIDTH 8\n", encoding="utf-8")
-    (merged_dir / "e203_defines.v").write_text(
+    write_artifact_text(merged_dir / "config.v", "`define CFG_WIDTH 8\n", encoding="utf-8")
+    write_artifact_text(merged_dir / "e203_defines.v",
         '`include "config.v"\n`define E203_WIDTH `CFG_WIDTH\n',
         encoding="utf-8",
     )
     fragment_file = fragments_dir / "m_fragments.v"
-    fragment_file.write_text("assign y = a;\n", encoding="utf-8")
+    write_artifact_text(fragment_file, "assign y = a;\n", encoding="utf-8")
     manifest = {
         "schema_version": "global_defines_manifest_v1",
         "global_define_files": [
@@ -264,9 +266,10 @@ def _make_merge_tools(tmp_path: Path, monkeypatch) -> tuple[Stage6MergeTools, di
 
     monkeypatch.setattr(semantic_mod, "check_syntax", fake_check_syntax)
     state = SemanticMergeState(
+        artifact_layout=ArtifactLayout(workspace),
         module_name="m",
         merged_file=merged_dir / "m.v",
-        draft_file=workspace / "merge_drafts" / "m_draft.v",
+        draft_file=artifact_dir(workspace, "merge_drafts") / "m_draft.v",
         fragment_file=fragment_file,
         contracts_file=None,
         global_defines_manifest=manifest,
@@ -328,7 +331,7 @@ def test_stage6_rejects_fallback_redefinition_of_authoritative_macro(tmp_path: P
 def test_stage6_static_check_does_not_require_interface_contract(tmp_path: Path, monkeypatch) -> None:
     tools, _ = _make_merge_tools(tmp_path, monkeypatch)
     tools.state.draft_file.parent.mkdir(parents=True)
-    tools.state.draft_file.write_text(
+    write_artifact_text(tools.state.draft_file,
         '`include "e203_defines.v"\n'
         "module m(input a, output extra);\nassign extra = a;\nendmodule\n",
         encoding="utf-8",
@@ -340,7 +343,7 @@ def test_stage6_static_check_does_not_require_interface_contract(tmp_path: Path,
     assert result["structure"]["outputs"] == ["extra"]
     assert "extra" in result["structure"]["output_drivers"]
 
-    tools.state.draft_file.write_text(
+    write_artifact_text(tools.state.draft_file,
         '`include "e203_defines.v"\nmodule m(input a);\nendmodule\n',
         encoding="utf-8",
     )
@@ -351,7 +354,7 @@ def test_stage6_static_check_does_not_require_interface_contract(tmp_path: Path,
 def test_stage6_static_check_resolves_manifest_and_local_macros(tmp_path: Path, monkeypatch) -> None:
     tools, _ = _make_merge_tools(tmp_path, monkeypatch)
     tools.state.draft_file.parent.mkdir(parents=True)
-    tools.state.draft_file.write_text(
+    write_artifact_text(tools.state.draft_file,
         '`include "e203_defines.v"\n'
         "`define LOCAL_WIDTH 2\n"
         "module m(input a, output y);\n"
@@ -365,7 +368,7 @@ def test_stage6_static_check_resolves_manifest_and_local_macros(tmp_path: Path, 
     resolved = tools.run_static_rtl_check("draft")
     assert not any("unresolved macro" in error for error in resolved["errors"])
 
-    tools.state.draft_file.write_text(
+    write_artifact_text(tools.state.draft_file,
         "module m(input a, output y);\n"
         "wire [`MISSING_WIDTH-1:0] missing_bus;\n"
         "assign y = a;\n"
@@ -379,7 +382,7 @@ def test_stage6_static_check_resolves_manifest_and_local_macros(tmp_path: Path, 
 def test_stage6_structure_parse_failure_is_fatal(tmp_path: Path, monkeypatch) -> None:
     tools, _ = _make_merge_tools(tmp_path, monkeypatch)
     tools.state.draft_file.parent.mkdir(parents=True)
-    tools.state.draft_file.write_text(
+    write_artifact_text(tools.state.draft_file,
         "module m(input a, output y); assign y = a; endmodule\n",
         encoding="utf-8",
     )
@@ -400,17 +403,17 @@ def test_stage6_structure_parse_failure_is_fatal(tmp_path: Path, monkeypatch) ->
 
 @pytest.mark.skipif(shutil.which("verilator") is None, reason="Verilator is not available")
 def test_verilator_resolves_transitive_canonical_header_include(tmp_path: Path) -> None:
-    merged_dir = tmp_path / "merged"
+    merged_dir = artifact_dir(tmp_path, "merged")
     draft_dir = tmp_path / "draft"
     merged_dir.mkdir()
     draft_dir.mkdir()
-    (merged_dir / "config.v").write_text("`define E203_CFG_WIDTH 8\n", encoding="utf-8")
-    (merged_dir / "e203_defines.v").write_text(
+    write_artifact_text(merged_dir / "config.v", "`define E203_CFG_WIDTH 8\n", encoding="utf-8")
+    write_artifact_text(merged_dir / "e203_defines.v",
         '`include "config.v"\n`define E203_WIDTH `E203_CFG_WIDTH\n',
         encoding="utf-8",
     )
     rtl_path = draft_dir / "m.v"
-    rtl_path.write_text(
+    write_artifact_text(rtl_path,
         '`include "e203_defines.v"\n'
         "module m(input [`E203_WIDTH-1:0] a, output [`E203_WIDTH-1:0] y);\n"
         "assign y = a;\n"

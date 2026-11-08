@@ -4,6 +4,8 @@ from __future__ import annotations
 import copy
 import json
 from pathlib import Path
+from rtl_artifact_test_utils import write_artifact_text
+from zerorepo.rtl_impl.artifact_layout import ArtifactLayout, artifact_dir
 from types import SimpleNamespace
 
 import pytest
@@ -102,13 +104,13 @@ def test_child_ports_are_untruncated_sorted_authoritative_inputs(tmp_path):
     kg = MutablePlanningKG()
     task, output, inputs, _, _, backend, agent = setup_agent(tmp_path, kg=kg)
     inputs["stage2"] = {"modules": [{"module": "toy", "role": "Drive y", "children": ["child"]}]}
-    child = agent.workspace_root / "merged" / "child.v"
+    child = artifact_dir(agent.workspace_root, "merged") / "child.v"
     child.parent.mkdir(parents=True)
-    child.write_text("module child(input a, output [3:0] y); endmodule\n")
+    write_artifact_text(child, "module child(input a, output [3:0] y); endmodule\n")
     agent.run_module(task, inputs, "toy")
-    child.write_text("module child(output [3:0] y, input a); endmodule\n")
+    write_artifact_text(child, "module child(output [3:0] y, input a); endmodule\n")
     assert agent.run_module(task, inputs, "toy", reuse_only=True).status == "completed"
-    child.write_text("module child(output [7:0] y, input a); endmodule\n")
+    write_artifact_text(child, "module child(output [7:0] y, input a); endmodule\n")
     with pytest.raises(ValueError, match="stale"):
         agent.run_module(task, inputs, "toy", reuse_only=True)
     assert len(backend.calls) == 1
@@ -117,10 +119,10 @@ def test_child_ports_are_untruncated_sorted_authoritative_inputs(tmp_path):
 def test_full_skeleton_behavior_changes_invalidate_even_with_same_frame(tmp_path, monkeypatch):
     task, _, inputs, _, _, backend, agent = setup_agent(tmp_path)
     doc = tmp_path / "skeleton.md"
-    doc.write_text("module toy; endmodule\nBehavior: synchronous reset\n")
+    write_artifact_text(doc, "module toy; endmodule\nBehavior: synchronous reset\n")
     monkeypatch.setattr(agent, "_read_module_skeleton_context", lambda record: ("module toy; endmodule", str(doc)))
     agent.run_module(task, inputs, "toy")
-    doc.write_text("module toy; endmodule\nBehavior: asynchronous reset\n")
+    write_artifact_text(doc, "module toy; endmodule\nBehavior: asynchronous reset\n")
     with pytest.raises(ValueError, match="stale"):
         agent.run_module(task, inputs, "toy", reuse_only=True)
     assert len(backend.calls) == 1
@@ -136,13 +138,13 @@ def test_true_source_changes_and_source_checksum_fail_closed(tmp_path, component
     elif component == "role":
         inputs["stage2"]["modules"][0]["role"] = "Changed responsibility"
     elif component == "plan":
-        path = output / "module_plan_json" / "toy.json"
+        path = ArtifactLayout(output).module(4, Path("toy.json").stem, "plan.json")
         data = json.loads(path.read_text()); data["subtasks"][0]["constraints"] = ["Changed"]
-        path.write_text(json.dumps(data))
+        write_artifact_text(path, json.dumps(data))
     else:
         marker = agent._checkpoint_file("toy")
         data = json.loads(marker.read_text()); data["subtasks"][0]["source_snapshot"]["skeleton"] = "tampered"
-        marker.write_text(json.dumps(data))
+        write_artifact_text(marker, json.dumps(data))
     with pytest.raises(ValueError):
         agent.run_module(task, inputs, "toy", reuse_only=True)
     assert len(backend.calls) == 1
@@ -153,9 +155,9 @@ def test_failed_new_generation_preserves_complete_files_and_resumes_candidate(tm
     agent.run_module(task, inputs, "toy")
     paths = [agent._checkpoint_file("toy"), agent._workspace_file("toy"), agent._contracts_file("toy")]
     before = [p.read_bytes() for p in paths]
-    plan_path = output / "module_plan_json" / "toy.json"
+    plan_path = ArtifactLayout(output).module(4, Path("toy.json").stem, "plan.json")
     plan = json.loads(plan_path.read_text()); plan["subtasks"][1]["constraints"] = ["New source"]
-    plan_path.write_text(json.dumps(plan))
+    write_artifact_text(plan_path, json.dumps(plan))
     backend = QueueBackend([payloads[1]])
     original = backend.complete_with_memory
     calls = 0
@@ -205,7 +207,7 @@ def test_bundle_corruption_is_not_accepted(tmp_path):
     agent.run_module(task, inputs, "toy")
     marker = agent._read_checkpoint("toy")
     bundle = agent.workspace_root / marker["bundle_path"] / "toy_fragments.v"
-    bundle.write_text("tampered")
+    write_artifact_text(bundle, "tampered")
     assert agent._read_checkpoint("toy") == {}
 
 
@@ -216,13 +218,13 @@ def test_legacy_migration_requires_reproducible_old_source_hash(tmp_path, valid)
     marker = agent._read_checkpoint("toy")
     entry = marker["subtasks"][0]
     source = entry["source_snapshot"]
-    old = {k: v for k, v in source.items() if k not in {"fingerprint_version", "responsibility", "child_interfaces"}}
+    old = {k: v for k, v in source.items() if k not in {"fingerprint_version", "layout_version", "responsibility", "child_interfaces"}}
     old["planning_kg"] = ""
     entry["input_fingerprint"] = fingerprint(old) if valid else "unknown"
     for key in ["fingerprint_version", "source_fingerprint", "source_snapshot"]:
         entry.pop(key)
     marker.pop("bundle_path")
-    agent._checkpoint_file("toy").write_text(json.dumps(marker))
+    write_artifact_text(agent._checkpoint_file("toy"), json.dumps(marker))
     if valid:
         assert agent.run_module(task, inputs, "toy", reuse_only=True).status == "completed"
         assert agent._read_checkpoint("toy")["subtasks"][0]["migration_evidence"]["kind"] == "legacy_hash_verified"

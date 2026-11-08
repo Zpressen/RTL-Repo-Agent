@@ -27,6 +27,7 @@ from ..schemas import (
     TopResolutionOutput,
 )
 from .base import BaseStageAgent, model_dump, validate_model
+from ..utils.responsibility_planning import ledger_errors, ledger_issues, module_context
 
 
 class Stage2Agent(BaseStageAgent):
@@ -61,6 +62,10 @@ class Stage2Agent(BaseStageAgent):
         self._last_quality_errors = []
         task = task_input if isinstance(task_input, PlannerTaskInput) else validate_model(PlannerTaskInput, task_input)
         stage2_input = self._get_stage2_input(partial_artifacts)
+        if not stage2_input.source_specs:
+            from ..module_organizer import build_stage2_planning_input_from_task
+            stage2_input.source_specs = build_stage2_planning_input_from_task(task_input=task).source_specs
+            partial_artifacts = {**partial_artifacts, "stage2_input": stage2_input}
         stage_context = self.context_provider.get_stage_context(self.stage_name, task, partial_artifacts)
         prompt_context = self._build_stage2_prompt_context(stage2_input)
         if stage_context:
@@ -77,7 +82,6 @@ class Stage2Agent(BaseStageAgent):
         if decomposition is not None and (
             decomposition.task_id != task.task_id
             or decomposition.input_fingerprint != input_fingerprint
-            or decomposition.status == "failed"
         ):
             decomposition = None
 
@@ -102,6 +106,7 @@ class Stage2Agent(BaseStageAgent):
                     top_evidence=top_evidence,
                 )
             decomposition = Stage2DecompositionArtifact(
+                schema_version="stage2_decomposition_v2",
                 task_id=task.task_id,
                 input_fingerprint=input_fingerprint,
                 status="top_locked",
@@ -118,17 +123,23 @@ class Stage2Agent(BaseStageAgent):
         if decomposition.responsibilities:
             responsibility_ledger = ResponsibilityLedgerOutput(
                 responsibilities=list(decomposition.responsibilities),
+                state_objects=list(decomposition.state_objects),
                 global_clocking_notes=list(decomposition.global_clocking_notes),
                 global_data_conventions=list(decomposition.global_data_conventions),
             )
         else:
-            responsibility_ledger = self._extract_responsibilities(
-                task=task,
-                partial_artifacts=partial_artifacts,
-                prompt_context=prompt_context,
-                locked_top=locked_top,
-            )
+            try:
+                responsibility_ledger = self._extract_responsibilities(
+                    task=task, partial_artifacts=partial_artifacts,
+                    prompt_context=prompt_context, locked_top=locked_top,
+                )
+            except Exception as exc:
+                decomposition.status = "failed"
+                decomposition.failure_reasons = [str(exc)]
+                self._persist_decomposition(decomposition, decomposition_persist_callback)
+                raise
             decomposition.responsibilities = list(responsibility_ledger.responsibilities)
+            decomposition.state_objects = list(responsibility_ledger.state_objects)
             decomposition.global_clocking_notes = list(responsibility_ledger.global_clocking_notes)
             decomposition.global_data_conventions = list(responsibility_ledger.global_data_conventions)
             decomposition.status = "responsibilities_extracted"
@@ -137,10 +148,21 @@ class Stage2Agent(BaseStageAgent):
             )
             self._persist_decomposition(decomposition, decomposition_persist_callback)
 
+        resumed_errors = ledger_errors(responsibility_ledger, stage2_input)
+        if resumed_errors:
+            decomposition.status = "failed"
+            decomposition.failure_reasons = resumed_errors
+            self._persist_decomposition(decomposition, decomposition_persist_callback)
+            raise ValueError(f"Invalid responsibility ledger: {resumed_errors}")
         existing_candidates = {item.plan_style: item for item in decomposition.candidates}
         candidates: list[Stage2DecompositionCandidate] = []
         for plan_style in self.plan_styles:
             candidate = existing_candidates.get(plan_style)
+            if candidate is not None:
+                evaluation = self._evaluate_candidate(candidate=candidate, locked_top=locked_top,
+                    responsibilities=list(responsibility_ledger.responsibilities), stage2_input=stage2_input)
+                if evaluation.fatal_violations:
+                    candidate = None  # Resume its repair node; keep other verified candidates.
             if candidate is None:
                 candidate = self._generate_candidate(
                     task=task,
@@ -242,6 +264,7 @@ class Stage2Agent(BaseStageAgent):
         quality_validator: Callable[[Any], List[str]],
         output_name: str,
         allow_best_effort: bool = False,
+        prompt_view=None,
     ) -> Any:
         original_role = self.system_role
         original_output_name = getattr(self, "_retry_output_name", "JSON object")
@@ -249,7 +272,11 @@ class Stage2Agent(BaseStageAgent):
         self.system_role = system_role
         self._retry_output_name = output_name
         self.allow_best_effort_quality_fallback = allow_best_effort
-        self._log_stage_input(prompt=prompt, images=[], stage_context={"substage": output_name})
+        if prompt_view:
+            self.logger.info("[%s] Prepared canonical input for %s (%d chars); API request uses projected context",
+                             self.stage_name, output_name, len(prompt))
+        else:
+            self._log_stage_input(prompt=prompt, images=[], stage_context={"substage": output_name})
         try:
             artifact = self._invoke_with_repair(
                 prompt,
@@ -258,6 +285,7 @@ class Stage2Agent(BaseStageAgent):
                 partial_artifacts,
                 output_model=output_model,
                 quality_validator=quality_validator,
+                prompt_view=prompt_view,
             )
         finally:
             self.system_role = original_role
@@ -382,13 +410,59 @@ class Stage2Agent(BaseStageAgent):
         prompt_context: Dict[str, Any],
         locked_top: LockedTopModule,
     ) -> ResponsibilityLedgerOutput:
+        from ..utils.evidence import EvidenceRegistry, ResponsibilityLedgerDraft, draft_schema
+        planning_input = self._get_stage2_input(partial_artifacts)
+        registry = EvidenceRegistry(planning_input)
+        registry.planning_input = planning_input
+        root = getattr(self.llm_client, "output_root", None)
+        if root is not None:
+            registry.save(root)
+        compact_context = {k: v for k, v in prompt_context.items() if k not in {
+            "primary_source_spec", "responsibility_source_specs", "responsibility_facts", "architecture_facts"}}
+        compact_context["facts"] = prompt_context.get("responsibility_facts", [])
+        compact_context["architecture_fact_ids"] = [item["fact_id"] for item in prompt_context.get("architecture_facts", [])]
+        compact_context["evidence_catalog"] = registry.prompt_catalog()
         prompt = stage2_decomposition.build_responsibility_prompt(
-            prompt_context_json=self.to_pretty_json(prompt_context),
+            prompt_context_json=self._to_compact_json(compact_context),
             locked_top_json=self.to_pretty_json(locked_top),
+            evidence_ids=True,
         )
+        output_rules = ("\nOUTPUT OVERRIDE: Return ResponsibilityLedgerDraft using source_evidence_ids for every RU and state. "
+                   "Do not emit quotes, line numbers, hashes or source_refs; the program resolves IDs to exact original evidence.\n"
+                   + json.dumps(draft_schema(), ensure_ascii=False, separators=(",", ":")))
+        prompt += output_rules
+
+        def responsibility_prompt_view(scope):
+            from ..utils.local_repair import fingerprint
+            # The complete initial input remains the checkpoint identity. A
+            # request needs the complete original sources and current ledger,
+            # not a second copy of Stage1's derived prose about those sources.
+            repair_view = {k: v for k, v in compact_context.items() if k != "facts"}
+            facts = compact_context["facts"]
+            repair_view["fact_ids"] = [f["fact_id"] for f in facts if f.get("fact_id")]
+            repair_view["canonical_fact_fingerprint"] = fingerprint(facts)
+            repair_view["fact_context_note"] = (
+                "Stage1 fact prose is derived from the complete evidence_catalog below. "
+                "Preserve valid fact references; use the original evidence to repair only the requested entities. "
+                "Select exact EV IDs from evidence_catalog.entries[].id; do not invent IDs. "
+                "Remove repeated IDs within each source_evidence_ids list.")
+            wire_prompt = stage2_decomposition.build_responsibility_prompt(
+                prompt_context_json=self._to_compact_json(repair_view),
+                locked_top_json=self.to_pretty_json(locked_top), evidence_ids=True)
+            # The historical illustrative object omits mandatory state/access
+            # and EV fields. The real JSON schema below is the sole output
+            # shape; avoid both the duplicate example and its conflicting cues.
+            rules, marker, example = wire_prompt.partition("Return exactly one JSON object with:")
+            _, context_marker, source_context = example.partition("Stage2 prompt context:")
+            if marker and context_marker:
+                wire_prompt = (rules + "Return exactly one ResponsibilityLedgerDraft object matching the JSON schema below.\n\n"
+                               + context_marker + source_context)
+            return wire_prompt + output_rules
+        self.logger.info("[%s] Prepared canonical responsibility input (%d chars); API request uses projected context",
+                         self.stage_name, len(prompt))
         known_fact_ids = self._known_fact_ids(self._get_stage2_input(partial_artifacts))
 
-        def validate(output: ResponsibilityLedgerOutput) -> List[str]:
+        def additional_errors(output: ResponsibilityLedgerOutput) -> List[str]:
             errors: list[str] = []
             ids = [item.responsibility_id for item in output.responsibilities]
             duplicates = sorted({item for item in ids if ids.count(item) > 1})
@@ -419,15 +493,52 @@ class Stage2Agent(BaseStageAgent):
                     )
             return errors
 
-        return self._invoke_stage_model(
-            system_role=stage2_decomposition.RESPONSIBILITY_SYSTEM_ROLE,
-            prompt=prompt,
-            output_model=ResponsibilityLedgerOutput,
-            task=task,
-            partial_artifacts=partial_artifacts,
-            quality_validator=validate,
-            output_name="responsibility_ledger",
-        )
+        def validate(output: ResponsibilityLedgerOutput) -> List[str]:
+            return ledger_errors(output, planning_input) + additional_errors(output)
+
+        old_role, old_name = self.system_role, getattr(self, "_retry_output_name", "")
+        self.system_role = stage2_decomposition.RESPONSIBILITY_SYSTEM_ROLE
+        self._retry_output_name = "responsibility_ledger"
+        try:
+            from ..utils.planning_session import PlanningSession, ledger_scope
+            from ..utils.local_repair import ArtifactIssue, model_issues
+            def inspect(payload):
+                draft, issues = model_issues(ResponsibilityLedgerDraft, payload)
+                if issues:
+                    return None, issues
+                for group, key in (("responsibilities", "responsibility_id"), ("state_objects", "state_id")):
+                    for item in getattr(draft, group):
+                        try:
+                            registry.expand(item.source_evidence_ids)
+                        except ValueError as exc:
+                            issues.append(ArtifactIssue(f"{group}[{getattr(item, key)}]", "invalid_evidence", str(exc),
+                                category="source", unit_id=getattr(item, key),
+                                expected={"allowed_evidence_ids_from": "evidence_catalog.entries[].id"}))
+                if issues:
+                    return None, issues
+                resolved = registry.resolve(draft)
+                issues = ledger_issues(resolved, planning_input)
+                issues.extend(ArtifactIssue("ledger", "invalid_ledger", message, category="hardware")
+                              for message in additional_errors(resolved))
+                for issue in issues:
+                    issue.stage, issue.module = self.stage_name, task.task_id
+                return resolved, issues
+            if getattr(self.llm_client, "executor", None) is None:
+                # An injected stand-alone model double has no durable case root.
+                # Runner production always installs the bounded executor.
+                return self._invoke_stage_model(system_role=self.system_role, prompt=prompt,
+                    output_model=ResponsibilityLedgerOutput, task=task, partial_artifacts=partial_artifacts,
+                    quality_validator=validate, output_name="responsibility_ledger")
+            result = PlanningSession(self).execute(module=task.task_id, prompt=prompt, context={},
+                validate=inspect, operation="responsibility_ledger", scope_builder=ledger_scope,
+                prompt_view=responsibility_prompt_view)
+            if result.status != "validated":
+                from .base import StageGenerationError
+                raise StageGenerationError("Stage2 responsibility ledger needs_repair: " + "; ".join(i.message for i in result.issues or []))
+            registry.save(root)
+            return result.artifact
+        finally:
+            self.system_role, self._retry_output_name = old_role, old_name
 
     def _generate_candidate(
         self,
@@ -442,13 +553,25 @@ class Stage2Agent(BaseStageAgent):
         candidate_prompt_context = self._build_candidate_prompt_context(prompt_context)
         prompt_context_json = self._to_compact_json(candidate_prompt_context)
         locked_top_json = self._to_compact_json(locked_top)
-        responsibility_ledger_json = self._to_compact_json(responsibility_ledger)
+        from ..utils.evidence import deduplicate_evidence, EvidenceRegistry
+        ledger_view = deduplicate_evidence(model_dump(responsibility_ledger))
+        responsibility_ledger_json = self._to_compact_json(ledger_view)
         prompt = stage2_decomposition.build_candidate_prompt(
             plan_style=plan_style,
             prompt_context_json=prompt_context_json,
             locked_top_json=locked_top_json,
             responsibility_ledger_json=responsibility_ledger_json,
         )
+        # Provenance hashes and repeated absolute paths are checked locally.
+        # Architecture reasoning keeps every cited original quote, line range
+        # and EV identity through the indexed catalog instead of full sidecars.
+        registry = EvidenceRegistry(self._get_stage2_input(partial_artifacts))
+        registry.register_tree(responsibility_ledger)
+        compact_ledger = {key: value for key, value in ledger_view.items() if key != "evidence"}
+        compact_ledger["evidence_catalog"] = registry.prompt_catalog(ledger_view.get("evidence", {}).keys())
+        wire_prompt = stage2_decomposition.build_candidate_prompt(
+            plan_style=plan_style, prompt_context_json=prompt_context_json,
+            locked_top_json=locked_top_json, responsibility_ledger_json=self._to_compact_json(compact_ledger))
         fixed_chars = max(
             0,
             len(prompt)
@@ -494,6 +617,7 @@ class Stage2Agent(BaseStageAgent):
             quality_validator=validate,
             output_name=f"{plan_style}_candidate",
             allow_best_effort=True,
+            prompt_view=lambda _scope: wire_prompt,
         )
 
     def _evaluate_candidate(
@@ -518,6 +642,8 @@ class Stage2Agent(BaseStageAgent):
                         f"module `{module.module}` references unknown responsibility `{responsibility_id}`"
                     )
                     continue
+                if not ru_by_id[responsibility_id].ownership_required:
+                    fatal.append(f"module `{module.module}` must not own constraint-only responsibility `{responsibility_id}`")
                 owners[responsibility_id].append(module.module)
 
         if candidate.top_module != locked_top.module:
@@ -589,6 +715,17 @@ class Stage2Agent(BaseStageAgent):
                     f"{sorted(set(unknown_boundary_rus))}"
                 )
 
+        for boundary in candidate.boundary_contracts:
+            for ru_id in boundary.producer_responsibility_ids:
+                if owners.get(ru_id) != [boundary.producer_module]:
+                    fatal.append(f"boundary `{boundary.boundary_id}` producer responsibility `{ru_id}` has inconsistent ownership")
+            for ru_id in boundary.consumer_responsibility_ids:
+                if owners.get(ru_id) != [boundary.consumer_module]:
+                    fatal.append(f"boundary `{boundary.boundary_id}` consumer responsibility `{ru_id}` has inconsistent ownership")
+        boundary_ids = [b.boundary_id for b in candidate.boundary_contracts]
+        if len(boundary_ids) != len(set(boundary_ids)):
+            fatal.append("duplicate boundary IDs")
+
         cross_dependencies: list[tuple[ResponsibilityUnit, Any, str, str]] = []
         cut_weight = 0
         total_coupling_weight = 0
@@ -618,12 +755,18 @@ class Stage2Agent(BaseStageAgent):
                     for item in matches
                     if item.producer_module == source_module and item.consumer_module == target_module
                 ]
-                if not matches:
+                if not matches and dependency.dependency_kind in {"data", "control"}:
                     fatal.append(
                         "missing boundary contract for cross-module dependency "
                         f"`{responsibility.responsibility_id}->{dependency.target_responsibility_id}` "
                         f"({source_module}->{target_module})"
                     )
+                if dependency.dependency_kind in {"data", "control"} and matches:
+                    transferred = {obj for item in matches for obj in item.transferred_objects}
+                    if not set(dependency.transferred_objects) <= transferred:
+                        fatal.append(f"boundary contract omits transferred objects for `{responsibility.responsibility_id}->{dependency.target_responsibility_id}`")
+                if dependency.partition_constraint == "must_colocate":
+                    fatal.append(f"must_colocate dependency `{dependency.dependency_id}` is split across modules")
                 if dependency.coupling_strength == "strong":
                     strong_coupling_cut_count += 1
                     hard.append(
@@ -720,9 +863,17 @@ class Stage2Agent(BaseStageAgent):
             if isinstance(values, str):
                 values = [values]
             values = [fact.object.get("module"), *values]
+            if fact.predicate.strip().lower() in {
+                "is_module", "defines_module", "is_top_module", "top_module", "is_explicit_generation_target",
+            }:
+                values.append(fact.object.get("target_module") or fact.object.get("name") or fact.subject or fact.module)
             modules.update(str(item).strip() for item in values if str(item or "").strip())
         legacy = stage2_input.legacy_contract_projection
-        if legacy is not None:
+        # Native Stage1 projections include module-valued *scopes* of facts.
+        # A filename fallback attached to a definition of a concept is not an
+        # explicit RTL module declaration. Use actual identity/relation facts
+        # above; only genuine legacy inputs need the projected module list.
+        if legacy is not None and not stage2_input.fact_ledger.facts:
             modules.update(str(item).strip() for item in legacy.structure_contract.modules if str(item).strip())
         return {item for item in modules if item}
 
@@ -959,6 +1110,9 @@ class Stage2Agent(BaseStageAgent):
                 rationale=list(output.rationale),
             )
         except Exception as exc:
+            from ..utils.execution import fatal_request_error
+            if fatal_request_error(exc):
+                raise
             self.logger.warning("[%s] %s failed: %s", self.stage_name, output_name, exc)
             return Stage2SelectionPass(
                 presentation_order=presentation_order,
@@ -1014,6 +1168,9 @@ class Stage2Agent(BaseStageAgent):
                 rationale=list(output.rationale),
             )
         except Exception as exc:
+            from ..utils.execution import fatal_request_error
+            if fatal_request_error(exc):
+                raise
             self.logger.warning("[%s] architecture adjudication failed: %s", self.stage_name, exc)
             return Stage2AdjudicationPass(candidate_ids=candidate_ids, error=str(exc))
 
@@ -1026,12 +1183,20 @@ class Stage2Agent(BaseStageAgent):
                 "responsibility_id": item.responsibility_id,
                 "description": item.description,
                 "ownership_required": item.ownership_required,
+                "applies_to_responsibility_ids": list(item.applies_to_responsibility_ids),
                 "owned_state": list(item.owned_state),
+                "state_accesses": [access.model_dump() for access in item.state_accesses],
+                "clock_domain": item.clock_domain,
+                "reset_behavior": item.reset_behavior,
                 "protocol": item.protocol,
                 "timing_class": item.timing_class,
                 "dependencies": [
                     {
                         "target_responsibility_id": dependency.target_responsibility_id,
+                        "dependency_id": dependency.dependency_id,
+                        "dependency_kind": dependency.dependency_kind,
+                        "partition_constraint": dependency.partition_constraint,
+                        "timing_relation": dependency.timing_relation,
                         "coupling_strength": dependency.coupling_strength,
                         "transferred_objects": list(dependency.transferred_objects),
                     }
@@ -1275,7 +1440,9 @@ class Stage2Agent(BaseStageAgent):
             modules_payload.append(
                 {
                     "module": module_name,
-                    "file_path": f"rtl/{module_name}.v",
+                    "responsibility_ids": [r.responsibility_id for r in module_rus if r.ownership_required],
+                    "applicable_constraint_ids": [r.responsibility_id for r in responsibilities if not r.ownership_required and set(r.applies_to_responsibility_ids).intersection(candidate_module.responsibility_ids)],
+                    "file_path": f"generate/rtl/{module_name}.v",
                     "role": candidate_module.role,
                     "kind": kind,
                     "source_kind": self._normalized_evidence_source_kind(
@@ -1320,6 +1487,7 @@ class Stage2Agent(BaseStageAgent):
         return validate_model(
             Stage2RepoSkeletonArtifact,
             {
+                "schema_version": "repo_skeleton_v2",
                 "task_id": task.task_id,
                 "source_schema_version": stage2_input.schema_version,
                 "stage2_status": "repo_skeleton_planned",
@@ -1333,7 +1501,7 @@ class Stage2Agent(BaseStageAgent):
                     },
                     "hierarchy": hierarchy_payload,
                     "file_map": {
-                        module_name: f"rtl/{module_name}.v"
+                        module_name: f"generate/rtl/{module_name}.v"
                         for module_name in generation_order
                     },
                     "cross_module_alignment": boundary_alignment,
@@ -1535,6 +1703,8 @@ class Stage2Agent(BaseStageAgent):
                 else None
             ),
             "supplemental_source_specs": supplemental,
+            "responsibility_source_specs": [{"path": item.path, "markdown": item.markdown} for item in stage2_input.source_specs if primary is None or item.path != primary.path],
+            "responsibility_facts": [f.model_dump(exclude={"text_grounding", "image_grounding"}) for f in stage2_input.fact_ledger.facts],
             "top_module_hint": top_module,
             "known_module_candidates": known_modules,
             "architecture_facts": architecture_facts,
@@ -1545,7 +1715,7 @@ class Stage2Agent(BaseStageAgent):
     @staticmethod
     def _build_candidate_prompt_context(prompt_context: Dict[str, Any]) -> Dict[str, Any]:
         """Remove source markdown after Stage2A has established the shared behavior baseline."""
-        candidate_context = dict(prompt_context)
+        candidate_context = {k: v for k, v in prompt_context.items() if k not in {"responsibility_source_specs", "responsibility_facts"}}
         primary = prompt_context.get("primary_source_spec")
         if isinstance(primary, dict):
             candidate_context["primary_source_spec"] = {
@@ -1737,7 +1907,7 @@ class Stage2Agent(BaseStageAgent):
 
         if artifact.task_id != task_input.task_id:
             errors.append(f"task_id must remain {task_input.task_id}")
-        if artifact.schema_version != "repo_skeleton_v1":
+        if artifact.schema_version not in {"repo_skeleton_v1", "repo_skeleton_v2"}:
             errors.append("schema_version must remain repo_skeleton_v1")
         if artifact.source_schema_version != stage2_input.schema_version:
             errors.append(f"source_schema_version must remain {stage2_input.schema_version}")
@@ -1761,7 +1931,7 @@ class Stage2Agent(BaseStageAgent):
         if missing_file_map:
             errors.append(f"global_invariants.file_map must cover all planned modules: missing {missing_file_map}")
         for module in planned_modules:
-            expected_path = f"rtl/{module}.v"
+            expected_path = f"generate/rtl/{module}.v"
             actual_path = file_map.get(module, "")
             if actual_path != expected_path:
                 errors.append(f"global_invariants.file_map[{module}] must be `{expected_path}`")
@@ -1807,7 +1977,7 @@ class Stage2Agent(BaseStageAgent):
             errors.append(f"planning_decisions.shared_modules must include explicit shared modules {missing_shared}")
 
         for module_entry in artifact.modules:
-            expected_path = f"rtl/{module_entry.module}.v"
+            expected_path = f"generate/rtl/{module_entry.module}.v"
             if module_entry.file_path != expected_path:
                 errors.append(f"modules[{module_entry.module}].file_path must be `{expected_path}`")
             if not module_entry.role.strip():

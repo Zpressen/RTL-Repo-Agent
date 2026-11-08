@@ -47,6 +47,8 @@ class GlobalInvariants(BaseModel):
 
 
 class RepoModuleSkeleton(BaseModel):
+    responsibility_ids: List[str] = Field(default_factory=list)
+    applicable_constraint_ids: List[str] = Field(default_factory=list)
     module: str = Field(..., min_length=1)
     file_path: str = Field(default="")
     role: str = Field(default="")
